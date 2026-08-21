@@ -1,28 +1,50 @@
+import { useEffect, useState } from "react";
+import { getProperties } from "./features/properties/propertyService.js";
+
 const content = {
   productName: "CleanFlow",
   productDescription: "Operations platform",
   buildLabel: "Foundation build",
+  loadingMessage: "Loading properties…",
+  errorMessage: "Unable to load properties.",
+  emptyMessage: "No properties found.",
+  propertyLabel: "Property",
+  unnamedProperty: "Unnamed property",
 };
 
-const jobs = [
-  {
-    id: 1,
-    name: "Pacific Beach Condo",
-    status: "Unassigned",
-  },
-  {
-    id: 2,
-    name: "La Jolla House",
-    status: "In Progress",
-  },
-  {
-    id: 3,
-    name: "Mission Beach",
-    status: "Offered",
-  },
-];
-
 function App() {
+  const [properties, setProperties] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadProperties() {
+      try {
+        const loadedProperties = await getProperties();
+
+        if (isCurrent) {
+          setProperties(loadedProperties);
+        }
+      } catch {
+        if (isCurrent) {
+          setHasError(true);
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadProperties();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
   return (
     <main className="app-shell">
       <section className="foundation" aria-labelledby="page-title">
@@ -34,20 +56,44 @@ function App() {
           <span className="badge">{content.buildLabel}</span>
         </header>
 
-        {jobs.map((job) => (
-          <article
-            key={job.id}
-            className="job-card"
-            aria-label={`${job.name} - ${job.status}`}
-          >
-            <h2>{job.name}</h2>
+        {isLoading && (
+          <p className="state-card" role="status">
+            {content.loadingMessage}
+          </p>
+        )}
 
-            <p className="job-card__status">
-              <span className="status-dot" aria-hidden="true" />
-              {job.status}
-            </p>
-          </article>
-        ))}
+        {!isLoading && hasError && (
+          <p className="state-card state-card--error" role="alert">
+            {content.errorMessage}
+          </p>
+        )}
+
+        {!isLoading && !hasError && properties.length === 0 && (
+          <p className="state-card">{content.emptyMessage}</p>
+        )}
+
+        {!isLoading && !hasError && properties.length > 0 && (
+          <div className="property-list">
+            {properties.map((property) => {
+              const propertyName = property.name || content.unnamedProperty;
+
+              return (
+                <article
+                  key={property.id}
+                  className="property-card"
+                  aria-label={propertyName}
+                >
+                  <h2>{propertyName}</h2>
+
+                  <p className="property-card__label">
+                    <span className="status-dot" aria-hidden="true" />
+                    {content.propertyLabel}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
     </main>
   );
