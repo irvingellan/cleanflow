@@ -23,8 +23,8 @@ A manager should be able to operate a cleaning business from a central dashboard
 
 Potential flow:
 
-Reservation / manual job
-→ job
+Reservation / manual intake
+→ Cleaning Job
 → cleaner availability
 → manager assignment
 → instructions and reminders
@@ -44,6 +44,7 @@ Current tools/processes include combinations of:
 - Hospitable
 - Guesty
 - previously Turno
+- previously Taskbird
 - Zelle
 - Relay
 - Airbnb-related payment flows

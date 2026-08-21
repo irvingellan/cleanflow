@@ -22,6 +22,8 @@ She currently performs several roles herself, including:
 
 A significant portion of the work currently happens through WhatsApp and a large Notion database.
 
+Notion is currently the only place where Gabriela can see cleaning jobs from all clients together. Individual clients and reservation platforms expose only parts of the operation, so maintaining this combined view requires manual administrative work.
+
 ## Current clients and job intake
 
 Different clients use different systems.
@@ -32,11 +34,21 @@ Current examples include:
 2. A client using Hospitable connected to Airbnb. Gabriela has calendar access and manually identifies upcoming cleanings.
 3. A client using Guesty connected to Airbnb. This is newer in her workflow.
 
-Turno was previously used with one client but is no longer being used in that relationship.
+Gabriela currently has to reconcile reservation activity across these sources manually. A future CleanFlow capability should synchronize reservations from Guesty and Hospitable, including:
 
-One discovery question that remains important is:
+- new reservations
+- date changes
+- cancellations
 
-Why did Turno not eliminate the operational pain that still exists?
+This synchronization is important future work, not part of the first vertical slice.
+
+## Confirmed limitations of prior tools
+
+Turno previously provided property instructions and owner-defined checklists. However, cleaners could not reliably access the workflow. Gabriela often received cleaner photos and information outside Turno, then uploaded 30 or more photos and completed the checklist herself. The tool therefore shifted substantial execution work back to the manager instead of removing it.
+
+Taskbird team invitations were also unreliable. Invitation failures and access friction made it harder to onboard cleaners into the operational workflow.
+
+These findings reinforce that a cleaner-facing workflow must be low-friction, reliable on mobile web and validated with the people who will actually use it. Authentication and authorization for cleaner links remain open architecture decisions for the real flow.
 
 ## Cleaner coordination
 
@@ -69,7 +81,11 @@ Cleaners can respond as interested or declined. In the interface, these response
 
 Gabriela can then manually choose who receives the job.
 
-The system may eventually recommend cleaners, but the manager should retain control unless later research supports automation.
+Cleaner assignment must remain manager-controlled. Expressing interest never assigns the job.
+
+Cleaners may express interest without seeing which other cleaners were invited, which cleaners responded or how many other cleaners expressed interest. The manager can see the responses needed to make the assignment.
+
+The system may eventually recommend cleaners, but recommendations must not silently take assignment control away from the manager.
 
 ## Instructions
 
@@ -107,6 +123,8 @@ Information that generally belongs permanently to a property, such as:
 - default checklist
 - standard photo requirements
 
+Selecting a known property for a cleaning should populate its reusable information, including persistent instructions, access information, checklist, supply requirements and pricing defaults. Job-specific changes must remain possible without silently rewriting the property's defaults or historical operations.
+
 ### Job information
 
 Information specific to one cleaning, such as:
@@ -133,6 +151,8 @@ After / during cleaning, Gabriela may need:
 - issues
 - start/end times for hourly work
 - completion confirmation
+
+A cleaning commonly produces 30 or more photos. Those photos are operational deliverables: they ultimately need to be organized and delivered to the relevant property owner/client, not merely stored for internal viewing.
 
 Some cleaning jobs are fixed-price.
 
@@ -174,6 +194,16 @@ This creates two conceptually separate concerns:
 
 They should not be modeled as the same state.
 
+The financial workflow needs to show these dimensions explicitly rather than hiding them behind one generic financial status:
+
+- invoice pending or sent
+- client payment pending or received
+- cleaner payout pending or paid
+- relevant totals
+- profit
+
+Bank-transfer payment reconciliation is a major administrative pain point, particularly when one transfer covers multiple amounts. Automated reconciliation remains a future capability and requires more workflow discovery before implementation.
+
 ## Top pain points identified by Gabriela
 
 When asked what three tasks she would eliminate immediately, she chose:
@@ -183,6 +213,14 @@ When asked what three tasks she would eliminate immediately, she chose:
 3. Automatically send job instructions and reminders after assignment.
 
 These are important priorities, but they do not automatically define implementation order.
+
+Additional discovery confirmed three major administrative pain points:
+
+1. Reconciling new reservations, date changes and cancellations across reservation platforms.
+2. Reconciling bank-transfer payments with the work or invoices they cover.
+3. Generating invoices manually.
+
+Reservation synchronization, automated invoice generation and payment reconciliation are important future capabilities. They do not replace the first operational vertical slice in the current roadmap.
 
 ## Manager experience
 
@@ -212,6 +250,15 @@ Examples:
 
 This suggests CleanFlow should provide task-specific views instead of forcing one giant table to represent every workflow.
 
+The manager also needs a unified historical operations view with filters for:
+
+- date range
+- client
+- cleaner
+- property
+
+This should preserve the cross-client visibility that only Notion currently provides.
+
 ## Worker / cleaner experience
 
 Cleaner experience should be:
@@ -239,6 +286,8 @@ Potential cleaner actions:
 - upload photos
 - report supplies
 - finish cleaning
+
+Cleaner-facing job pages should expose the relevant property instructions, access information and checklist for the assigned cleaning. Sensitive access details must be protected by the eventual cleaner-link authentication and authorization design.
 
 ## Realtime operations
 
@@ -283,6 +332,14 @@ Examples:
 - cleaner assignment changes
 - job must be reopened
 - job completed manually
+
+Common issue categories confirmed through discovery include:
+
+- access, key or code problems
+- missing supplies
+- broken or non-working items
+- unusually heavy cleaning
+- miscellaneous unexpected situations
 
 Admin overrides should be explicit and auditable.
 

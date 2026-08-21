@@ -6,6 +6,17 @@ It is NOT yet a final Firestore schema.
 
 We first model the business domain, then determine the best persistence structure.
 
+## Core business distinctions
+
+These concepts must remain distinct:
+
+- **Client** — the business/customer that engages and pays the cleaning operation.
+- **Property** — the physical location with reusable operational information and defaults.
+- **Reservation** — a guest stay, usually originating in an external reservation platform.
+- **Cleaning Job (Job)** — the specific unit of cleaning work that is scheduled, offered, assigned, executed and completed.
+
+A Client may be associated with multiple Properties. A Property may have multiple Reservations over time and multiple Cleaning Jobs over time. A Reservation may create or change the need for a Cleaning Job, but the Reservation and Job are not the same record and do not share one lifecycle.
+
 ## Organization
 
 Represents one business using CleanFlow.
@@ -77,12 +88,16 @@ Conceptual fields:
 - parking instructions
 - lockbox details
 - supply location
+- supply requirements
 - default checklist reference
 - standard photo requirements
+- pricing defaults
 - operational notes
 - active status
 
 Sensitive property-access data may require special permission handling.
+
+Selecting a Property for a new Job should populate these reusable values. Job-specific values should preserve what applied to that operation so later Property edits do not silently change completed-job history. The exact snapshot/version strategy remains an implementation decision.
 
 ## Cleaner
 
@@ -106,11 +121,11 @@ Conceptual fields:
 
 Avoid prematurely encoding subjective ranking logic until discovery supports it.
 
-## Job
+## Reservation
 
-Represents one specific cleaning/turnover.
+Represents a guest stay or booking received from an external platform or entered manually.
 
-A job references a property.
+A Reservation is an intake/source record, not the operational Cleaning Job. New reservations, date changes and cancellations may affect cleaning work and must eventually be reconciled explicitly.
 
 Conceptual fields:
 
@@ -118,6 +133,39 @@ Conceptual fields:
 - organizationId
 - clientId
 - propertyId
+- source
+- externalReference
+- sourceStatus
+- checkInAt
+- checkOutAt
+- guestCount
+- cancelledAt if applicable
+- lastSyncedAt if applicable
+- createdAt
+- updatedAt
+
+Possible source examples:
+
+- manual
+- Hospitable
+- Guesty
+- future integration
+
+Provider-specific statuses should not be copied blindly into the Job lifecycle.
+
+## Job
+
+Represents one specific cleaning/turnover.
+
+A Job references a Property and may reference the Reservation that created or affected the need for cleaning. A manually created Job may have no Reservation.
+
+Conceptual fields:
+
+- id
+- organizationId
+- clientId
+- propertyId
+- reservationId if applicable
 - scheduledDate
 - scheduledStart
 - assignedCleanerId
@@ -132,6 +180,8 @@ Conceptual fields:
 - createdAt
 - source
 - externalReference
+
+The Job should retain the effective instructions, checklist association and pricing/compensation values used for that operation, whether through snapshots, version references or another documented strategy. This protects historical accuracy when Property defaults change later.
 
 Possible source examples:
 
@@ -223,6 +273,16 @@ Possible issue statuses:
 - open
 - resolved
 
+Confirmed issue type categories include:
+
+- access/key/code
+- missing supplies
+- broken/non-working item
+- unusually heavy cleaning
+- miscellaneous/unexpected
+
+The model should allow descriptive details and should not require every unexpected situation to fit a narrow predefined category.
+
 ## Checklist Template
 
 Represents a reusable checklist.
@@ -260,6 +320,8 @@ Represents metadata about an uploaded file.
 
 The binary should live in object storage, not directly in Firestore.
 
+A cleaning commonly produces 30 or more photos. Photo records must support job-level organization and eventual delivery to the relevant property owner/client. Upload completion and client delivery are different states.
+
 Conceptual fields:
 
 - id
@@ -270,6 +332,9 @@ Conceptual fields:
 - type
 - createdAt
 - metadata
+- deliveryStatus if applicable
+- deliveredAt if applicable
+- deliveryReference if applicable
 
 ## Activity / Audit Event
 
@@ -315,16 +380,51 @@ Conceptual fields:
 - organizationId
 - clientId
 - period
-- status
+- deliveryStatus
+- paymentStatus
 - lineItems
 - subtotal
 - adjustments
 - total
 - issuedAt
+- sentAt
 - dueAt
 - paidAt
 
+Conceptual invoice delivery states:
+
+- pending
+- sent
+
+Conceptual client payment states:
+
+- pending
+- received
+
+Invoice delivery and client payment must not be collapsed into one status. A sent invoice may still be unpaid, and a received payment may require reconciliation before it can be allocated confidently.
+
 Do not implement invoice rules until billing workflows are better observed.
+
+## Client Payment / Reconciliation Record
+
+Represents money received from a client or payment channel and the work required to reconcile that money.
+
+This is distinct from an Invoice because a bank transfer may cover multiple jobs, invoices or periods.
+
+Conceptual fields:
+
+- id
+- organizationId
+- clientId
+- amount
+- receivedAt
+- paymentMethod
+- externalReference
+- reconciliationStatus
+- invoice/job allocation references
+- notes
+
+Exact reconciliation states and allocation rules require further discovery. Automated bank-transfer reconciliation is an important future capability, not part of the first vertical slice.
 
 ## Cleaner Payout
 
@@ -342,7 +442,18 @@ Conceptual fields:
 - paidAt
 - paymentMethod
 
+Conceptual payout states:
+
+- pending
+- paid
+
 Client invoice payment and cleaner payout must remain separate concepts.
+
+## Financial totals and profit
+
+Financial views need to expose relevant totals and profit. These should be calculated deterministically from the underlying client charges, cleaner compensation, adjustments, invoices, payments and payouts rather than maintained through unrelated manual status changes.
+
+The exact treatment of fees, taxes, refunds and partial payments still requires discovery. Until those rules are confirmed, `profit` is a reporting concept rather than a finalized persisted field.
 
 ## Important relationships
 
@@ -351,7 +462,15 @@ Conceptually:
 Organization
 → Clients
 → Properties
+
+Property
+→ Reservations
+
+Property
 → Jobs
+
+Reservation
+→ related Job if applicable
 
 Organization
 → Cleaners
@@ -381,6 +500,9 @@ Job / system actions
 Client
 → Invoices
 
+Client
+→ Payments / reconciliation records
+
 Cleaner
 → Payouts
 
@@ -397,6 +519,10 @@ The persistence schema should be designed around:
 - lifecycle
 - data ownership
 - future migration flexibility
+
+Historical operations require efficient filtering by date range, client, cleaner and property. Persistence and index design must account for those access patterns without coupling the UI directly to provider-specific queries.
+
+Future Guesty and Hospitable synchronization will also require stable external references, idempotent writes and an auditable approach to new reservations, date changes and cancellations.
 
 Some duplication/denormalization may be intentional in Firestore.
 

@@ -207,6 +207,8 @@ Large files such as photos should live in object storage.
 
 Database records should store metadata and storage references.
 
+Discovery confirms that a cleaning commonly produces 30 or more photos and that those photos ultimately need to reach the property owner/client. Upload state and client-delivery state must therefore remain distinguishable; storing a photo does not mean it has been delivered.
+
 Provider choice can evolve later.
 
 ---
@@ -220,6 +222,8 @@ Hospitable, Guesty, WhatsApp and other integrations are important future capabil
 First prove the internal operational workflow.
 
 External integrations should be added after the core domain is stable enough to receive their data.
+
+When Guesty and Hospitable synchronization is implemented, it must handle new reservations, date changes and cancellations without requiring routine manual reconciliation. Synchronization should preserve external references, be idempotent and audit meaningful changes.
 
 ---
 
@@ -241,6 +245,8 @@ A cleaner expresses interest or declines. The manager is responsible for assigni
 
 Assignment is represented on the Job, not by adding another Job Invite status.
 
+Cleaner responses are private from other cleaners. A cleaner must not see competing cleaners, their responses or the number of other interested cleaners.
+
 In the interface, `interested` may appear as “Tenho interesse” and `declined` as “Não posso”.
 
 ---
@@ -259,13 +265,15 @@ The initial Job lifecycle is:
 
 ---
 
-## DEC-016 — Manager selects invite recipients in the first vertical slice
+## DEC-016 — Manager controls cleaner assignment
 
 Status: Accepted
 
 For the first vertical slice, the manager manually selects which cleaners receive a job offer.
 
-Automatic eligibility rules and cleaner recommendations are deferred until later discovery and implementation.
+Cleaners may express interest, but interest never assigns the Job. The manager chooses the assigned cleaner.
+
+Automatic eligibility rules and cleaner recommendations are deferred until later discovery and implementation. Future recommendations may inform the manager but must not silently take assignment control away from the manager.
 
 ---
 
@@ -276,3 +284,47 @@ Status: Open
 Authentication and authorization for cleaner mobile links are intentionally undecided.
 
 This decision must be resolved before implementing the real cleaner mobile invite flow.
+
+Prior Turno and Taskbird experience confirms that unreliable access or team invitations can make the manager perform the cleaner's workflow on their behalf. The eventual access design must be tested for reliable, low-friction mobile use while still protecting property-access information.
+
+---
+
+## DEC-018 — Separate Reservation from Cleaning Job
+
+Status: Accepted
+
+A Reservation represents a guest stay received from Guesty, Hospitable or another source.
+
+A Cleaning Job represents the operational work that CleanFlow offers, assigns, executes and completes.
+
+The records may be related, but they must not be collapsed into one entity or lifecycle. A reservation date change or cancellation is an intake change that may require explicit reconciliation of a related Job. It does not alter the first vertical-slice Job lifecycle by itself.
+
+This separation allows future integrations to synchronize reservation facts without forcing provider-specific states into operational job logic.
+
+---
+
+## DEC-019 — Reuse Property defaults while preserving Job history
+
+Status: Accepted conceptually
+
+Selecting a Property for a Cleaning Job should populate its persistent instructions, access information, checklist, supply requirements and pricing defaults.
+
+Job-specific overrides must not silently change the Property. Later Property edits must not rewrite what applied to historical Jobs.
+
+The implementation may use snapshots, version references or another explicit strategy. The chosen persistence design must preserve historical accuracy and remain auditable.
+
+---
+
+## DEC-020 — Keep financial workflow states explicit and independent
+
+Status: Accepted conceptually
+
+The system must distinguish at least:
+
+- invoice pending/sent
+- client payment pending/received
+- cleaner payout pending/paid
+
+These dimensions must not be collapsed into one generic financial status. A sent invoice can remain unpaid, and a cleaner can be paid before the corresponding client payment is received.
+
+Financial totals and profit should be derived deterministically from underlying charges, compensation, adjustments and payment records. Automated invoicing and bank-transfer reconciliation remain future capabilities pending further workflow design.

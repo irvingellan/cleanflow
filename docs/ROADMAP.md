@@ -2,6 +2,8 @@
 
 This roadmap intentionally prioritizes learning and vertical slices over feature quantity.
 
+Discovery has confirmed that reservation reconciliation, bank-transfer payment reconciliation and manual invoice generation are major administrative pain points. They are important future capabilities, but they do not displace the first operational vertical slice or justify premature external integrations.
+
 ## Phase 0 — Discovery and architecture
 
 Status: In progress
@@ -12,6 +14,7 @@ Goals:
 - inspect Notion structure
 - understand current tools
 - map current-state operations
+- document why prior cleaner workflows in Turno and Taskbird created access and manager-workload friction
 - validate prototype concepts
 - document domain
 - establish repository architecture
@@ -68,6 +71,8 @@ The initial Job lifecycle for this slice is:
 
 Automatic cleaner eligibility/recommendation, `CONFIRMED`, `CANCELLED` and `REOPENED` are outside this slice.
 
+Cleaner interest remains private from other cleaners, and the manager retains assignment control.
+
 Authentication and authorization for cleaner mobile links must be decided before implementing the real mobile invite flow.
 
 This phase is intentionally more important than invoice, AI or external integrations.
@@ -78,10 +83,13 @@ Potential goals:
 
 - properties
 - permanent property instructions
+- reusable access information and supply requirements
+- pricing defaults populated when a property is selected
 - checklist templates
 - per-job checklist runs
+- historical preservation of the property values applied to each job
 - special instructions
-- cleaner mobile execution experience
+- cleaner mobile job pages exposing the relevant instructions and checklist
 
 ## Phase 4 — Photos and attachments
 
@@ -92,6 +100,9 @@ Potential goals:
 - compression strategy
 - thumbnails
 - photo requirements
+- reliable handling of 30 or more photos per cleaning
+- photo review and delivery to the property owner/client
+- delivery tracking separate from upload tracking
 - issue attachments
 - retention strategy
 
@@ -106,6 +117,8 @@ Potential goals:
 - needs attention
 - current jobs
 - upcoming jobs
+- unified cross-client job history
+- filters by date range, client, cleaner and property
 - realtime activity
 - issue management
 
@@ -119,11 +132,17 @@ Potential goals:
 
 - cleaner payout view
 - accounts receivable
-- invoice generation
+- explicit invoice pending/sent state
+- explicit client payment pending/received state
+- explicit cleaner payout pending/paid state
+- financial totals and profit
+- invoice generation and delivery
+- bank-transfer payment reconciliation
 - client-specific billing rules
-- payment status
 
 Do not directly process real payments initially unless explicitly scoped and reviewed.
+
+Automated invoice generation and automated payment reconciliation require additional discovery and should be introduced only after the underlying financial states and review workflows are reliable.
 
 ## Phase 7 — Notifications / WhatsApp
 
@@ -146,9 +165,15 @@ Potential targets:
 
 Goal:
 
-Automatically create/update CleanFlow jobs from reservation data.
+Synchronize Reservation records and explicitly reconcile related Cleaning Jobs when Guesty or Hospitable reports:
+
+- a new reservation
+- a date change
+- a cancellation
 
 Prefer these integrations before attempting direct Airbnb integration.
+
+Reservation and Cleaning Job must remain separate domain concepts. Provider synchronization must be idempotent, preserve external references and audit meaningful changes.
 
 ## Phase 9 — AI-assisted operations
 
