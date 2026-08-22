@@ -334,7 +334,8 @@ h1 {
 }
 
 .cleaning-form input,
-.cleaning-form textarea {
+.cleaning-form textarea,
+.cleaning-form select {
   width: 100%;
   border: 1px solid #cfdad4;
   border-radius: 10px;
@@ -344,7 +345,8 @@ h1 {
 }
 
 .cleaning-form input:focus,
-.cleaning-form textarea:focus {
+.cleaning-form textarea:focus,
+.cleaning-form select:focus {
   border-color: #527965;
   outline: 3px solid rgb(63 112 91 / 14%);
 }
@@ -426,6 +428,61 @@ h1 {
   color: #52645b;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.issues-section {
+  margin-top: 28px;
+  border-top: 1px solid #e3eae6;
+  padding-top: 20px;
+}
+
+.issues-section__header,
+.issues-section h3 {
+  display: flex;
+  align-items: center;
+}
+
+.issues-section__header {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.issues-section h3 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.issue-list {
+  display: grid;
+  gap: 10px;
+}
+
+.issue-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dce5e0;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.issue-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.issue-card p {
+  margin-bottom: 0;
+  color: #52645b;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.issue-card > span {
+  color: #6a756f;
+  font-size: 0.8125rem;
 }
 
 .offers-section {

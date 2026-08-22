@@ -5,6 +5,7 @@ import {
   getJobOffers,
   respondToJobOffer,
 } from "./features/jobs/jobOfferService.js";
+import { createIssue, getJobIssues } from "./features/issues/issueService.js";
 import {
   assignCleanerToJob,
   createJob,
@@ -43,6 +44,10 @@ const content = {
   loadingOffers: "Loading offers…",
   offersErrorMessage: "Unable to load offers.",
   emptyOffers: "No offers sent yet.",
+  loadingIssues: "Loading issues…",
+  issuesErrorMessage: "Unable to load issues.",
+  emptyIssues: "No issues reported.",
+  refreshIssues: "Refresh issues",
   refreshOffers: "Refresh offers",
   simulateOffer: "Simulate offer",
   cleanerOffer: "Cleaner offer",
@@ -57,6 +62,10 @@ const content = {
   cleaningInProgress: "Cleaning in progress",
   startCleaning: "Start cleaning",
   startCleaningError: "Unable to start cleaning.",
+  reportIssue: "Report issue",
+  submitIssue: "Submit issue",
+  createIssueError: "Unable to report issue.",
+  issueReported: "Issue reported",
 };
 
 function hasValue(value) {
@@ -115,6 +124,9 @@ function App() {
   const [jobOffers, setJobOffers] = useState([]);
   const [isLoadingOffers, setIsLoadingOffers] = useState(false);
   const [hasOffersError, setHasOffersError] = useState(false);
+  const [jobIssues, setJobIssues] = useState([]);
+  const [isLoadingIssues, setIsLoadingIssues] = useState(false);
+  const [hasIssuesError, setHasIssuesError] = useState(false);
   const [activeSection, setActiveSection] = useState("properties");
   const [view, setView] = useState("property-list");
   const [selectedProperty, setSelectedProperty] = useState(null);
@@ -203,6 +215,24 @@ function App() {
     }
   }
 
+  async function refreshJobIssues() {
+    if (!selectedJob) {
+      return;
+    }
+
+    setIsLoadingIssues(true);
+    setHasIssuesError(false);
+
+    try {
+      const loadedIssues = await getJobIssues(selectedJob.id);
+      setJobIssues(loadedIssues);
+    } catch {
+      setHasIssuesError(true);
+    } finally {
+      setIsLoadingIssues(false);
+    }
+  }
+
   async function assignCleaner(offer) {
     if (!selectedJob) {
       return;
@@ -256,6 +286,7 @@ function App() {
   useEffect(() => {
     if (view === "job-detail" && selectedJob) {
       refreshJobOffers();
+      refreshJobIssues();
     }
   }, [view, selectedJob]);
 
@@ -300,6 +331,7 @@ function App() {
     setCreatedJob(null);
     setOffersSentCount(null);
     setSelectedOffer(null);
+    setJobIssues([]);
     setView("property-list");
   }
 
@@ -309,6 +341,7 @@ function App() {
     setSelectedJob(null);
     setOffersSentCount(null);
     setSelectedOffer(null);
+    setJobIssues([]);
     setView("job-list");
   }
 
@@ -324,6 +357,9 @@ function App() {
     setJobOffers([]);
     setHasOffersError(false);
     setIsLoadingOffers(true);
+    setJobIssues([]);
+    setHasIssuesError(false);
+    setIsLoadingIssues(true);
     setSelectedOffer(null);
     setView("job-detail");
   }
@@ -348,6 +384,9 @@ function App() {
     setJobOffers([]);
     setHasOffersError(false);
     setIsLoadingOffers(true);
+    setJobIssues([]);
+    setHasIssuesError(false);
+    setIsLoadingIssues(true);
     setView("job-detail");
   }
 
@@ -418,9 +457,13 @@ function App() {
             offers={jobOffers}
             isLoadingOffers={isLoadingOffers}
             hasOffersError={hasOffersError}
+            issues={jobIssues}
+            isLoadingIssues={isLoadingIssues}
+            hasIssuesError={hasIssuesError}
             onBack={showJobs}
             onOfferToCleaners={showOfferCleaners}
             onRefreshOffers={refreshJobOffers}
+            onRefreshIssues={refreshJobIssues}
             onSimulateOffer={openCleanerOffer}
             onAssignCleaner={assignCleaner}
             onSimulateAssignedCleaner={openAssignedCleanerJob}
@@ -462,7 +505,20 @@ function App() {
             job={selectedJob}
             onBackToJob={returnToJobDetail}
             onStartCleaning={startCleaning}
+            onReportIssue={() => setView("issue-form")}
           />
+        )}
+
+        {view === "issue-form" && selectedJob && (
+          <IssueForm
+            job={selectedJob}
+            onBack={() => setView("cleaner-job")}
+            onSubmitted={() => setView("issue-success")}
+          />
+        )}
+
+        {view === "issue-success" && selectedJob && (
+          <IssueSuccess onBackToCleaning={() => setView("cleaner-job")} />
         )}
       </section>
     </main>
@@ -827,9 +883,13 @@ function JobDetail({
   offers,
   isLoadingOffers,
   hasOffersError,
+  issues,
+  isLoadingIssues,
+  hasIssuesError,
   onBack,
   onOfferToCleaners,
   onRefreshOffers,
+  onRefreshIssues,
   onSimulateOffer,
   onAssignCleaner,
   onSimulateAssignedCleaner,
@@ -843,9 +903,18 @@ function JobDetail({
     job.assignedCleanerId ||
       ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus),
   );
+  const canSimulateAssignedCleaner = ["ASSIGNED", "IN_PROGRESS"].includes(
+    job.operationalStatus,
+  );
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
+  const sortedIssues = [...issues].sort((firstIssue, secondIssue) => {
+    const firstCreatedAt = firstIssue.createdAt?.toMillis?.() || 0;
+    const secondCreatedAt = secondIssue.createdAt?.toMillis?.() || 0;
+
+    return secondCreatedAt - firstCreatedAt;
+  });
 
   async function assignCleaner(offer) {
     setAssigningCleanerId(offer.cleanerId);
@@ -904,6 +973,50 @@ function JobDetail({
           <p>{job.notes}</p>
         </section>
       )}
+
+      <section className="issues-section" aria-labelledby="issues-title">
+        <div className="issues-section__header">
+          <h3 id="issues-title">Issues</h3>
+          <button
+            className="button"
+            type="button"
+            onClick={onRefreshIssues}
+            disabled={isLoadingIssues}
+          >
+            {content.refreshIssues}
+          </button>
+        </div>
+
+        {isLoadingIssues && <StateCard message={content.loadingIssues} status="status" />}
+
+        {!isLoadingIssues && hasIssuesError && (
+          <StateCard message={content.issuesErrorMessage} status="alert" isError />
+        )}
+
+        {!isLoadingIssues && !hasIssuesError && sortedIssues.length === 0 && (
+          <StateCard message={content.emptyIssues} />
+        )}
+
+        {!isLoadingIssues && !hasIssuesError && sortedIssues.length > 0 && (
+          <div className="issue-list">
+            {sortedIssues.map((issue) => {
+              const createdAt = formatCreatedAt(issue.createdAt);
+
+              return (
+                <article key={issue.id} className="issue-card">
+                  <div className="issue-card__header">
+                    <strong>{issue.category || content.missingValue}</strong>
+                    <span className="status-badge">{issue.status || "OPEN"}</span>
+                  </div>
+                  <p>{issue.description || content.missingValue}</p>
+                  <span>Reported by {issue.cleanerName || content.missingValue}</span>
+                  {createdAt && <span>Reported {createdAt}</span>}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="offers-section" aria-labelledby="offers-title">
         <div className="offers-section__header">
@@ -975,7 +1088,7 @@ function JobDetail({
       </section>
 
       <div className="button-row">
-        {job.operationalStatus === "ASSIGNED" && (
+        {canSimulateAssignedCleaner && (
           <button className="button" type="button" onClick={onSimulateAssignedCleaner}>
             {content.simulateAssignedCleaner}
           </button>
@@ -1179,7 +1292,7 @@ function CleanerOfferSimulation({ job, offer, onBackToJob }) {
   );
 }
 
-function AssignedCleanerJob({ job, onBackToJob, onStartCleaning }) {
+function AssignedCleanerJob({ job, onBackToJob, onStartCleaning, onReportIssue }) {
   const [isStarting, setIsStarting] = useState(false);
   const [hasStartError, setHasStartError] = useState(false);
   const startedAt = formatCreatedAt(job.startedAt);
@@ -1248,6 +1361,113 @@ function AssignedCleanerJob({ job, onBackToJob, onStartCleaning }) {
           </button>
         </div>
       )}
+
+      {isInProgress && (
+        <div className="button-row">
+          <button className="button" type="button" onClick={onReportIssue}>
+            {content.reportIssue}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function IssueForm({ job, onBack, onSubmitted }) {
+  const [category, setCategory] = useState("ACCESS");
+  const [description, setDescription] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasSaveError, setHasSaveError] = useState(false);
+
+  async function submitIssue(event) {
+    event.preventDefault();
+    setIsSaving(true);
+    setHasSaveError(false);
+
+    try {
+      await createIssue({
+        jobId: job.id,
+        propertyId: job.propertyId,
+        cleanerId: job.assignedCleanerId,
+        cleanerName: job.assignedCleanerName,
+        category,
+        description,
+      });
+      onSubmitted();
+    } catch {
+      setHasSaveError(true);
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel cleaner-job-panel" aria-labelledby="issue-form-title">
+      <BackButton onClick={onBack} />
+
+      <p className="eyebrow">Cleaning issue</p>
+      <h2 id="issue-form-title" className="panel__title">
+        {content.reportIssue}
+      </h2>
+
+      <form className="cleaning-form" onSubmit={submitIssue}>
+        <label>
+          Category
+          <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            <option value="ACCESS">ACCESS</option>
+            <option value="SUPPLIES">SUPPLIES</option>
+            <option value="BROKEN_ITEM">BROKEN_ITEM</option>
+            <option value="HEAVY_CLEANING">HEAVY_CLEANING</option>
+            <option value="OTHER">OTHER</option>
+          </select>
+        </label>
+
+        <label>
+          Description
+          <textarea
+            rows="4"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            required
+          />
+        </label>
+
+        <label>
+          Reported by
+          <input type="text" value={job.assignedCleanerName || content.missingValue} readOnly />
+        </label>
+
+        {hasSaveError && (
+          <p className="form-error" role="alert">
+            {content.createIssueError}
+          </p>
+        )}
+
+        <div className="button-row">
+          <button className="button button--primary" type="submit" disabled={isSaving}>
+            {isSaving ? "Reporting…" : content.submitIssue}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function IssueSuccess({ onBackToCleaning }) {
+  return (
+    <section className="panel success-panel" aria-labelledby="issue-success-title">
+      <span className="success-mark" aria-hidden="true">
+        ✓
+      </span>
+      <p className="eyebrow">Cleaning issue</p>
+      <h2 id="issue-success-title" className="panel__title">
+        {content.issueReported}
+      </h2>
+
+      <div className="button-row">
+        <button className="button button--primary" type="button" onClick={onBackToCleaning}>
+          Back to cleaning
+        </button>
+      </div>
     </section>
   );
 }
