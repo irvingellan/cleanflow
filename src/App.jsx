@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { getCleaners } from "./features/cleaners/cleanerService.js";
-import { createJobOffers } from "./features/jobs/jobOfferService.js";
+import {
+  createJobOffers,
+  getJobOffers,
+  respondToJobOffer,
+} from "./features/jobs/jobOfferService.js";
 import { createJob, getJobs } from "./features/jobs/jobService.js";
 import { getProperties } from "./features/properties/propertyService.js";
 
@@ -31,6 +35,15 @@ const content = {
   sendOffers: "Send offers",
   sendOffersError: "Unable to send offers.",
   offersSent: "Offers sent",
+  loadingOffers: "Loading offers…",
+  offersErrorMessage: "Unable to load offers.",
+  emptyOffers: "No offers sent yet.",
+  refreshOffers: "Refresh offers",
+  simulateOffer: "Simulate offer",
+  cleanerOffer: "Cleaner offer",
+  interested: "Interested",
+  notAvailable: "Not available",
+  responseErrorMessage: "Unable to save your response.",
 };
 
 function hasValue(value) {
@@ -86,12 +99,16 @@ function App() {
   const [cleaners, setCleaners] = useState([]);
   const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
   const [hasCleanerError, setHasCleanerError] = useState(false);
+  const [jobOffers, setJobOffers] = useState([]);
+  const [isLoadingOffers, setIsLoadingOffers] = useState(false);
+  const [hasOffersError, setHasOffersError] = useState(false);
   const [activeSection, setActiveSection] = useState("properties");
   const [view, setView] = useState("property-list");
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
   const [offersSentCount, setOffersSentCount] = useState(null);
+  const [selectedOffer, setSelectedOffer] = useState(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -155,6 +172,30 @@ function App() {
     };
   }, [view]);
 
+  async function refreshJobOffers() {
+    if (!selectedJob) {
+      return;
+    }
+
+    setIsLoadingOffers(true);
+    setHasOffersError(false);
+
+    try {
+      const loadedOffers = await getJobOffers(selectedJob.id);
+      setJobOffers(loadedOffers);
+    } catch {
+      setHasOffersError(true);
+    } finally {
+      setIsLoadingOffers(false);
+    }
+  }
+
+  useEffect(() => {
+    if (view === "job-detail" && selectedJob) {
+      refreshJobOffers();
+    }
+  }, [view, selectedJob]);
+
   useEffect(() => {
     if (view !== "offer-cleaners") {
       return undefined;
@@ -195,6 +236,7 @@ function App() {
     setSelectedJob(null);
     setCreatedJob(null);
     setOffersSentCount(null);
+    setSelectedOffer(null);
     setView("property-list");
   }
 
@@ -203,6 +245,7 @@ function App() {
     setSelectedProperty(null);
     setSelectedJob(null);
     setOffersSentCount(null);
+    setSelectedOffer(null);
     setView("job-list");
   }
 
@@ -215,12 +258,29 @@ function App() {
   function openJob(job) {
     setActiveSection("jobs");
     setSelectedJob(job);
+    setJobOffers([]);
+    setHasOffersError(false);
+    setIsLoadingOffers(true);
+    setSelectedOffer(null);
     setView("job-detail");
   }
 
   function showOfferCleaners() {
     setOffersSentCount(null);
     setView("offer-cleaners");
+  }
+
+  function openCleanerOffer(offer) {
+    setSelectedOffer(offer);
+    setView("cleaner-offer");
+  }
+
+  function returnToJobDetail() {
+    setSelectedOffer(null);
+    setJobOffers([]);
+    setHasOffersError(false);
+    setIsLoadingOffers(true);
+    setView("job-detail");
   }
 
   return (
@@ -287,8 +347,13 @@ function App() {
         {view === "job-detail" && selectedJob && (
           <JobDetail
             job={selectedJob}
+            offers={jobOffers}
+            isLoadingOffers={isLoadingOffers}
+            hasOffersError={hasOffersError}
             onBack={showJobs}
             onOfferToCleaners={showOfferCleaners}
+            onRefreshOffers={refreshJobOffers}
+            onSimulateOffer={openCleanerOffer}
           />
         )}
 
@@ -298,7 +363,7 @@ function App() {
             cleaners={cleaners}
             isLoading={isLoadingCleaners}
             hasError={hasCleanerError}
-            onBack={() => setView("job-detail")}
+            onBack={returnToJobDetail}
             onSent={(count) => {
               setOffersSentCount(count);
               setView("offers-success");
@@ -309,8 +374,16 @@ function App() {
         {view === "offers-success" && selectedJob && offersSentCount !== null && (
           <OffersSuccess
             count={offersSentCount}
-            onBackToJob={() => setView("job-detail")}
+            onBackToJob={returnToJobDetail}
             onBackToJobs={showJobs}
+          />
+        )}
+
+        {view === "cleaner-offer" && selectedJob && selectedOffer && (
+          <CleanerOfferSimulation
+            job={selectedJob}
+            offer={selectedOffer}
+            onBackToJob={returnToJobDetail}
           />
         )}
       </section>
@@ -671,8 +744,20 @@ function JobList({ jobs, isLoading, hasError, onSelect }) {
   );
 }
 
-function JobDetail({ job, onBack, onOfferToCleaners }) {
+function JobDetail({
+  job,
+  offers,
+  isLoadingOffers,
+  hasOffersError,
+  onBack,
+  onOfferToCleaners,
+  onRefreshOffers,
+  onSimulateOffer,
+}) {
   const createdAt = formatCreatedAt(job.createdAt);
+  const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
+    (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
+  );
 
   return (
     <section className="panel" aria-labelledby="job-detail-title">
@@ -702,6 +787,55 @@ function JobDetail({ job, onBack, onOfferToCleaners }) {
           <p>{job.notes}</p>
         </section>
       )}
+
+      <section className="offers-section" aria-labelledby="offers-title">
+        <div className="offers-section__header">
+          <h3 id="offers-title">Offers</h3>
+          <button
+            className="button"
+            type="button"
+            onClick={onRefreshOffers}
+            disabled={isLoadingOffers}
+          >
+            {content.refreshOffers}
+          </button>
+        </div>
+
+        {isLoadingOffers && <StateCard message={content.loadingOffers} status="status" />}
+
+        {!isLoadingOffers && hasOffersError && (
+          <StateCard message={content.offersErrorMessage} status="alert" isError />
+        )}
+
+        {!isLoadingOffers && !hasOffersError && sortedOffers.length === 0 && (
+          <StateCard message={content.emptyOffers} />
+        )}
+
+        {!isLoadingOffers && !hasOffersError && sortedOffers.length > 0 && (
+          <div className="offer-status-list">
+            {sortedOffers.map((offer) => {
+              const respondedAt = formatCreatedAt(offer.respondedAt);
+
+              return (
+                <article key={offer.id} className="offer-status-item">
+                  <div>
+                    <strong>{offer.cleanerName || content.missingValue}</strong>
+                    {respondedAt && <span>Responded {respondedAt}</span>}
+                  </div>
+                  <span className="status-badge">{offer.status || "PENDING"}</span>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => onSimulateOffer(offer)}
+                  >
+                    {content.simulateOffer}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="button-row">
         <button
@@ -831,6 +965,74 @@ function OffersSuccess({ count, onBackToJob, onBackToJobs }) {
           Back to jobs
         </button>
       </div>
+    </section>
+  );
+}
+
+function CleanerOfferSimulation({ job, offer, onBackToJob }) {
+  const [offerStatus, setOfferStatus] = useState(offer.status || "PENDING");
+  const [isResponding, setIsResponding] = useState(false);
+  const [hasResponseError, setHasResponseError] = useState(false);
+
+  async function submitResponse(status) {
+    setIsResponding(true);
+    setHasResponseError(false);
+
+    try {
+      await respondToJobOffer({
+        jobId: job.id,
+        cleanerId: offer.cleanerId,
+        status,
+      });
+      setOfferStatus(status);
+    } catch {
+      setHasResponseError(true);
+    } finally {
+      setIsResponding(false);
+    }
+  }
+
+  return (
+    <section className="panel cleaner-offer-panel" aria-labelledby="cleaner-offer-title">
+      <BackButton onClick={onBackToJob} />
+
+      <p className="eyebrow">Development simulation</p>
+      <h2 id="cleaner-offer-title" className="panel__title">
+        {content.cleanerOffer}
+      </h2>
+
+      <dl className="detail-list">
+        <DetailItem label="Property" value={job.propertyName || content.unnamedProperty} />
+        <DetailItem label="Scheduled date" value={formatDate(job.scheduledDate)} />
+        <DetailItem label="Offer status" value={offerStatus} />
+      </dl>
+
+      {hasResponseError && (
+        <p className="form-error" role="alert">
+          {content.responseErrorMessage}
+        </p>
+      )}
+
+      {offerStatus === "PENDING" && (
+        <div className="button-row" aria-label="Offer response">
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={isResponding}
+            onClick={() => submitResponse("INTERESTED")}
+          >
+            {content.interested}
+          </button>
+          <button
+            className="button"
+            type="button"
+            disabled={isResponding}
+            onClick={() => submitResponse("DECLINED")}
+          >
+            {content.notAvailable}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

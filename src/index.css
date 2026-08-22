@@ -428,6 +428,66 @@ h1 {
   white-space: pre-wrap;
 }
 
+.offers-section {
+  margin-top: 28px;
+  border-top: 1px solid #e3eae6;
+  padding-top: 20px;
+}
+
+.offers-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.offers-section h3 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.offer-status-list {
+  display: grid;
+  gap: 10px;
+}
+
+.offer-status-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #dce5e0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.offer-status-item > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.offer-status-item strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offer-status-item div span {
+  color: #6a756f;
+  font-size: 0.75rem;
+}
+
+.offer-status-item .button {
+  padding: 8px 10px;
+  font-size: 0.8125rem;
+}
+
+.cleaner-offer-panel .form-error {
+  margin-top: 24px;
+}
+
 .success-panel {
   text-align: center;
 }
@@ -510,5 +570,14 @@ h1 {
 
   .panel {
     padding: 20px;
+  }
+
+  .offer-status-item {
+    grid-template-columns: 1fr auto;
+  }
+
+  .offer-status-item .button {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 }
