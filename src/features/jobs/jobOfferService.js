@@ -1,7 +1,9 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
+  runTransaction,
   serverTimestamp,
   updateDoc,
   writeBatch,
@@ -31,6 +33,17 @@ function offerDocument(jobId, cleanerId) {
     "offers",
     cleanerId,
   );
+}
+
+function jobDocument(jobId) {
+  return doc(db, "organizations", organizationId, "jobs", jobId);
+}
+
+function jobFromSnapshot(snapshot) {
+  return {
+    ...snapshot.data(),
+    id: snapshot.id,
+  };
 }
 
 export async function getJobOffers(jobId) {
@@ -70,4 +83,26 @@ export async function createJobOffers({ jobId, cleaners }) {
   }
 
   await batch.commit();
+
+  const reference = jobDocument(jobId);
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+
+    if (!snapshot.exists()) {
+      const error = new Error("Job not found.");
+      error.code = "job-not-found";
+      throw error;
+    }
+
+    if (snapshot.data().operationalStatus === "UNASSIGNED") {
+      transaction.update(reference, {
+        operationalStatus: "OFFERED",
+        offeredAt: serverTimestamp(),
+      });
+    }
+  });
+
+  const snapshot = await getDoc(reference);
+  return jobFromSnapshot(snapshot);
 }

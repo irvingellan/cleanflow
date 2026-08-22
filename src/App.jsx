@@ -542,7 +542,13 @@ function App() {
             isLoading={isLoadingCleaners}
             hasError={hasCleanerError}
             onBack={returnToJobDetail}
-            onSent={(count) => {
+            onSent={(count, updatedJob) => {
+              setSelectedJob(updatedJob);
+              setJobs((currentJobs) =>
+                currentJobs.map((job) =>
+                  job.id === updatedJob.id ? updatedJob : job,
+                ),
+              );
               setOffersSentCount(count);
               setView("offers-success");
             }}
@@ -1307,8 +1313,11 @@ function OfferCleaners({ job, cleaners, isLoading, hasError, onBack, onSent }) {
     setHasSendError(false);
 
     try {
-      await createJobOffers({ jobId: job.id, cleaners: selectedCleaners });
-      onSent(selectedCleaners.length);
+      const updatedJob = await createJobOffers({
+        jobId: job.id,
+        cleaners: selectedCleaners,
+      });
+      onSent(selectedCleaners.length, updatedJob);
     } catch {
       setHasSendError(true);
       setIsSending(false);
