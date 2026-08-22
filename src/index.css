@@ -485,6 +485,51 @@ h1 {
   font-size: 0.8125rem;
 }
 
+.issue-card__resolution-note {
+  border-top: 1px solid #e3eae6;
+  padding-top: 8px;
+}
+
+.issue-resolution-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 6px;
+  border-top: 1px solid #e3eae6;
+  padding-top: 14px;
+}
+
+.issue-resolution-form__summary {
+  display: grid;
+  gap: 4px;
+}
+
+.issue-resolution-form label {
+  display: grid;
+  gap: 8px;
+  color: #3d5b4e;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.issue-resolution-form textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #cfdad4;
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: #17251f;
+  background: #ffffff;
+}
+
+.issue-resolution-form textarea:focus {
+  border-color: #527965;
+  outline: 3px solid rgb(63 112 91 / 14%);
+}
+
+.issue-resolution-form .button-row {
+  margin-top: 0;
+}
+
 .offers-section {
   margin-top: 28px;
   border-top: 1px solid #e3eae6;

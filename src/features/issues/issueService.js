@@ -1,4 +1,12 @@
-import { addDoc, collection, getDocs, serverTimestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  runTransaction,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
@@ -21,13 +29,29 @@ function issuesCollection(jobId) {
   );
 }
 
+function issueDocument(jobId, issueId) {
+  return doc(
+    db,
+    "organizations",
+    organizationId,
+    "jobs",
+    jobId,
+    "issues",
+    issueId,
+  );
+}
+
+function mapIssue(issueSnapshot) {
+  return {
+    ...issueSnapshot.data(),
+    id: issueSnapshot.id,
+  };
+}
+
 export async function getJobIssues(jobId) {
   const snapshot = await getDocs(issuesCollection(jobId));
 
-  return snapshot.docs.map((issueDocument) => ({
-    ...issueDocument.data(),
-    id: issueDocument.id,
-  }));
+  return snapshot.docs.map(mapIssue);
 }
 
 export async function createIssue({
@@ -64,4 +88,37 @@ export async function createIssue({
 
   const issueDocument = await addDoc(issuesCollection(jobId), issue);
   return issueDocument.id;
+}
+
+export async function resolveIssue({ jobId, issueId, resolutionNote }) {
+  const issueReference = issueDocument(jobId, issueId);
+  const trimmedResolutionNote = resolutionNote.trim();
+
+  await runTransaction(db, async (transaction) => {
+    const issueSnapshot = await transaction.get(issueReference);
+
+    if (!issueSnapshot.exists()) {
+      const error = new Error("Issue not found.");
+      error.code = "issue-not-found";
+      throw error;
+    }
+
+    const issue = issueSnapshot.data();
+
+    if (issue.status !== "OPEN") {
+      const error = new Error("Issue is already resolved.");
+      error.code = "issue-not-open";
+      error.issue = mapIssue(issueSnapshot);
+      throw error;
+    }
+
+    transaction.update(issueReference, {
+      status: "RESOLVED",
+      resolvedAt: serverTimestamp(),
+      resolutionNote: trimmedResolutionNote,
+    });
+  });
+
+  const resolvedIssueSnapshot = await getDoc(issueReference);
+  return mapIssue(resolvedIssueSnapshot);
 }

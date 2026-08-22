@@ -5,7 +5,11 @@ import {
   getJobOffers,
   respondToJobOffer,
 } from "./features/jobs/jobOfferService.js";
-import { createIssue, getJobIssues } from "./features/issues/issueService.js";
+import {
+  createIssue,
+  getJobIssues,
+  resolveIssue,
+} from "./features/issues/issueService.js";
 import {
   assignCleanerToJob,
   completeInProgressJob,
@@ -70,6 +74,9 @@ const content = {
   submitIssue: "Submit issue",
   createIssueError: "Unable to report issue.",
   issueReported: "Issue reported",
+  resolveIssue: "Resolve issue",
+  resolveIssueError: "Unable to resolve issue.",
+  issueAlreadyResolvedError: "This issue is already resolved.",
 };
 
 function hasValue(value) {
@@ -310,6 +317,36 @@ function App() {
     }
   }
 
+  async function resolveJobIssue({ issueId, resolutionNote }) {
+    if (!selectedJob) {
+      return;
+    }
+
+    try {
+      const resolvedIssue = await resolveIssue({
+        jobId: selectedJob.id,
+        issueId,
+        resolutionNote,
+      });
+
+      setJobIssues((currentIssues) =>
+        currentIssues.map((issue) =>
+          issue.id === resolvedIssue.id ? resolvedIssue : issue,
+        ),
+      );
+    } catch (error) {
+      if (error.issue) {
+        setJobIssues((currentIssues) =>
+          currentIssues.map((issue) =>
+            issue.id === error.issue.id ? error.issue : issue,
+          ),
+        );
+      }
+
+      throw error;
+    }
+  }
+
   useEffect(() => {
     if (view === "job-detail" && selectedJob) {
       refreshJobOffers();
@@ -494,6 +531,7 @@ function App() {
             onSimulateOffer={openCleanerOffer}
             onAssignCleaner={assignCleaner}
             onSimulateAssignedCleaner={openAssignedCleanerJob}
+            onResolveIssue={resolveJobIssue}
           />
         )}
 
@@ -921,9 +959,14 @@ function JobDetail({
   onSimulateOffer,
   onAssignCleaner,
   onSimulateAssignedCleaner,
+  onResolveIssue,
 }) {
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
+  const [resolvingIssueId, setResolvingIssueId] = useState(null);
+  const [resolutionNote, setResolutionNote] = useState("");
+  const [isResolvingIssue, setIsResolvingIssue] = useState(false);
+  const [resolutionError, setResolutionError] = useState(null);
   const createdAt = formatCreatedAt(job.createdAt);
   const assignedAt = formatCreatedAt(job.assignedAt);
   const startedAt = formatCreatedAt(job.startedAt);
@@ -959,6 +1002,45 @@ function JobDetail({
       );
     } finally {
       setAssigningCleanerId(null);
+    }
+  }
+
+  function openResolutionForm(issue) {
+    setResolvingIssueId(issue.id);
+    setResolutionNote("");
+    setResolutionError(null);
+  }
+
+  function closeResolutionForm() {
+    setResolvingIssueId(null);
+    setResolutionNote("");
+    setResolutionError(null);
+  }
+
+  async function resolveSelectedIssue(event) {
+    event.preventDefault();
+
+    if (!resolvingIssueId) {
+      return;
+    }
+
+    setIsResolvingIssue(true);
+    setResolutionError(null);
+
+    try {
+      await onResolveIssue({
+        issueId: resolvingIssueId,
+        resolutionNote,
+      });
+      closeResolutionForm();
+    } catch (error) {
+      setResolutionError(
+        error.code === "issue-not-open"
+          ? content.issueAlreadyResolvedError
+          : content.resolveIssueError,
+      );
+    } finally {
+      setIsResolvingIssue(false);
     }
   }
 
@@ -1033,6 +1115,9 @@ function JobDetail({
           <div className="issue-list">
             {sortedIssues.map((issue) => {
               const createdAt = formatCreatedAt(issue.createdAt);
+              const resolvedAt = formatCreatedAt(issue.resolvedAt);
+              const isOpen = issue.status === "OPEN";
+              const isResolutionFormVisible = resolvingIssueId === issue.id;
 
               return (
                 <article key={issue.id} className="issue-card">
@@ -1043,6 +1128,64 @@ function JobDetail({
                   <p>{issue.description || content.missingValue}</p>
                   <span>Reported by {issue.cleanerName || content.missingValue}</span>
                   {createdAt && <span>Reported {createdAt}</span>}
+                  {resolvedAt && <span>Resolved {resolvedAt}</span>}
+                  {issue.status === "RESOLVED" && hasValue(issue.resolutionNote) && (
+                    <p className="issue-card__resolution-note">
+                      Resolution: {issue.resolutionNote}
+                    </p>
+                  )}
+
+                  {isOpen && !isResolutionFormVisible && (
+                    <div>
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => openResolutionForm(issue)}
+                      >
+                        {content.resolveIssue}
+                      </button>
+                    </div>
+                  )}
+
+                  {isOpen && isResolutionFormVisible && (
+                    <form className="issue-resolution-form" onSubmit={resolveSelectedIssue}>
+                      <p className="issue-resolution-form__summary">
+                        <strong>{issue.category || content.missingValue}</strong>
+                        <span>{issue.description || content.missingValue}</span>
+                      </p>
+                      <label>
+                        Resolution note (optional)
+                        <textarea
+                          name="resolutionNote"
+                          value={resolutionNote}
+                          onChange={(event) => setResolutionNote(event.target.value)}
+                          rows="3"
+                        />
+                      </label>
+                      {resolutionError && (
+                        <p className="form-error" role="alert">
+                          {resolutionError}
+                        </p>
+                      )}
+                      <div className="button-row">
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={isResolvingIssue}
+                          onClick={closeResolutionForm}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="button button--primary"
+                          type="submit"
+                          disabled={isResolvingIssue}
+                        >
+                          {isResolvingIssue ? "Resolving…" : content.resolveIssue}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </article>
               );
             })}
