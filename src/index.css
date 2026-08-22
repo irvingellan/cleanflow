@@ -484,6 +484,15 @@ h1 {
   font-size: 0.8125rem;
 }
 
+.offer-status-item > .offer-status-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.assignment-error {
+  margin-top: 14px;
+}
+
 .cleaner-offer-panel .form-error {
   margin-top: 24px;
 }
@@ -576,7 +585,7 @@ h1 {
     grid-template-columns: 1fr auto;
   }
 
-  .offer-status-item .button {
+  .offer-status-actions {
     grid-column: 1 / -1;
     justify-self: start;
   }

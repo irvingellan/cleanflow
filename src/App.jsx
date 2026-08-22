@@ -5,7 +5,11 @@ import {
   getJobOffers,
   respondToJobOffer,
 } from "./features/jobs/jobOfferService.js";
-import { createJob, getJobs } from "./features/jobs/jobService.js";
+import {
+  assignCleanerToJob,
+  createJob,
+  getJobs,
+} from "./features/jobs/jobService.js";
 import { getProperties } from "./features/properties/propertyService.js";
 
 const content = {
@@ -44,6 +48,9 @@ const content = {
   interested: "Interested",
   notAvailable: "Not available",
   responseErrorMessage: "Unable to save your response.",
+  assign: "Assign",
+  assignmentErrorMessage: "Unable to assign cleaner.",
+  alreadyAssignedErrorMessage: "This job is already assigned.",
 };
 
 function hasValue(value) {
@@ -187,6 +194,33 @@ function App() {
       setHasOffersError(true);
     } finally {
       setIsLoadingOffers(false);
+    }
+  }
+
+  async function assignCleaner(offer) {
+    if (!selectedJob) {
+      return;
+    }
+
+    try {
+      const assignedJob = await assignCleanerToJob(selectedJob.id, {
+        id: offer.cleanerId,
+        name: offer.cleanerName,
+      });
+
+      setSelectedJob(assignedJob);
+      setJobs((currentJobs) =>
+        currentJobs.map((job) => (job.id === assignedJob.id ? assignedJob : job)),
+      );
+    } catch (error) {
+      if (error.job) {
+        setSelectedJob(error.job);
+        setJobs((currentJobs) =>
+          currentJobs.map((job) => (job.id === error.job.id ? error.job : job)),
+        );
+      }
+
+      throw error;
     }
   }
 
@@ -354,6 +388,7 @@ function App() {
             onOfferToCleaners={showOfferCleaners}
             onRefreshOffers={refreshJobOffers}
             onSimulateOffer={openCleanerOffer}
+            onAssignCleaner={assignCleaner}
           />
         )}
 
@@ -753,11 +788,35 @@ function JobDetail({
   onOfferToCleaners,
   onRefreshOffers,
   onSimulateOffer,
+  onAssignCleaner,
 }) {
+  const [assigningCleanerId, setAssigningCleanerId] = useState(null);
+  const [assignmentError, setAssignmentError] = useState(null);
   const createdAt = formatCreatedAt(job.createdAt);
+  const assignedAt = formatCreatedAt(job.assignedAt);
+  const isAssigned = Boolean(
+    job.assignedCleanerId || job.operationalStatus === "ASSIGNED",
+  );
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
+
+  async function assignCleaner(offer) {
+    setAssigningCleanerId(offer.cleanerId);
+    setAssignmentError(null);
+
+    try {
+      await onAssignCleaner(offer);
+    } catch (error) {
+      setAssignmentError(
+        error.code === "job-already-assigned"
+          ? content.alreadyAssignedErrorMessage
+          : content.assignmentErrorMessage,
+      );
+    } finally {
+      setAssigningCleanerId(null);
+    }
+  }
 
   return (
     <section className="panel" aria-labelledby="job-detail-title">
@@ -778,6 +837,15 @@ function JobDetail({
         />
         <DetailItem label="Client price" value={formatPrice(job.clientPrice)} />
         <DetailItem label="Cleaner payout" value={formatPrice(job.cleanerPayout)} />
+        {isAssigned && (
+          <DetailItem
+            label="Assigned cleaner"
+            value={job.assignedCleanerName || content.missingValue}
+          />
+        )}
+        {isAssigned && (
+          <DetailItem label="Assigned time" value={assignedAt || content.missingValue} />
+        )}
         {createdAt && <DetailItem label="Created" value={createdAt} />}
       </dl>
 
@@ -823,17 +891,37 @@ function JobDetail({
                     {respondedAt && <span>Responded {respondedAt}</span>}
                   </div>
                   <span className="status-badge">{offer.status || "PENDING"}</span>
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => onSimulateOffer(offer)}
-                  >
-                    {content.simulateOffer}
-                  </button>
+                  <div className="offer-status-actions">
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => onSimulateOffer(offer)}
+                    >
+                      {content.simulateOffer}
+                    </button>
+                    {offer.status === "INTERESTED" && !isAssigned && (
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        disabled={assigningCleanerId !== null}
+                        onClick={() => assignCleaner(offer)}
+                      >
+                        {assigningCleanerId === offer.cleanerId
+                          ? "Assigning…"
+                          : content.assign}
+                      </button>
+                    )}
+                  </div>
                 </article>
               );
             })}
           </div>
+        )}
+
+        {assignmentError && (
+          <p className="form-error assignment-error" role="alert">
+            {assignmentError}
+          </p>
         )}
       </section>
 
