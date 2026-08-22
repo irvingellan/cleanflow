@@ -87,6 +87,28 @@ h1 {
   text-transform: uppercase;
 }
 
+.header-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.language-selector {
+  border: 1px solid #b8c9c1;
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: #3d5b4e;
+  background: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.language-selector:focus {
+  border-color: #527965;
+  outline: 3px solid rgb(63 112 91 / 14%);
+}
+
 .main-navigation {
   display: flex;
   gap: 8px;

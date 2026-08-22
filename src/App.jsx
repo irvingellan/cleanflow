@@ -18,6 +18,7 @@ import {
   getJobs,
   startAssignedJob,
 } from "./features/jobs/jobService.js";
+import { languageOptions, useTranslation } from "./i18n/translations.js";
 import { getProperties } from "./features/properties/propertyService.js";
 
 const content = {
@@ -135,6 +136,7 @@ function formatOperationalStatus(status) {
 }
 
 function App() {
+  const { language, setLanguage, translate } = useTranslation();
   const [properties, setProperties] = useState([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(true);
   const [hasPropertyError, setHasPropertyError] = useState(false);
@@ -527,12 +529,16 @@ function App() {
             <h1 id="page-title">{content.productName}</h1>
             <MainNavigation
               activeSection={activeSection}
+              translate={translate}
               onShowDashboard={showDashboard}
               onShowProperties={showProperties}
               onShowJobs={showJobs}
             />
           </div>
-          <span className="badge">{content.buildLabel}</span>
+          <div className="header-actions">
+            <LanguageSelector language={language} onChange={setLanguage} />
+            <span className="badge">{content.buildLabel}</span>
+          </div>
         </header>
 
         {view === "dashboard" && (
@@ -540,6 +546,7 @@ function App() {
             dashboardData={dashboardData}
             isLoading={isLoadingDashboard}
             hasError={hasDashboardError}
+            translate={translate}
             onRefresh={refreshDashboard}
             onOpenJob={openDashboardJob}
           />
@@ -672,7 +679,30 @@ function App() {
   );
 }
 
-function MainNavigation({ activeSection, onShowDashboard, onShowProperties, onShowJobs }) {
+function LanguageSelector({ language, onChange }) {
+  return (
+    <select
+      className="language-selector"
+      value={language}
+      aria-label="Language"
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {languageOptions.map((option) => (
+        <option key={option.code} value={option.code}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function MainNavigation({
+  activeSection,
+  translate,
+  onShowDashboard,
+  onShowProperties,
+  onShowJobs,
+}) {
   return (
     <nav className="main-navigation" aria-label="Main navigation">
       <button
@@ -681,7 +711,7 @@ function MainNavigation({ activeSection, onShowDashboard, onShowProperties, onSh
         aria-current={activeSection === "dashboard" ? "page" : undefined}
         onClick={onShowDashboard}
       >
-        {content.dashboardNavigation}
+        {translate("navigation.dashboard")}
       </button>
       <button
         className="navigation-button"
@@ -689,7 +719,7 @@ function MainNavigation({ activeSection, onShowDashboard, onShowProperties, onSh
         aria-current={activeSection === "properties" ? "page" : undefined}
         onClick={onShowProperties}
       >
-        {content.propertiesNavigation}
+        {translate("navigation.properties")}
       </button>
       <button
         className="navigation-button"
@@ -697,13 +727,13 @@ function MainNavigation({ activeSection, onShowDashboard, onShowProperties, onSh
         aria-current={activeSection === "jobs" ? "page" : undefined}
         onClick={onShowJobs}
       >
-        {content.jobsNavigation}
+        {translate("navigation.jobs")}
       </button>
     </nav>
   );
 }
 
-function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob }) {
+function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, onOpenJob }) {
   const [operationFilter, setOperationFilter] = useState("active");
 
   if (isLoading) {
@@ -715,7 +745,7 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
       <section className="dashboard-state" aria-live="polite">
         <StateCard message="Unable to load dashboard." status="alert" isError />
         <button className="button" type="button" onClick={onRefresh}>
-          Refresh dashboard
+          {translate("dashboard.refresh")}
         </button>
       </section>
     );
@@ -827,12 +857,12 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
         <div>
           <p className="eyebrow">Manager workspace</p>
           <h2 id="dashboard-title" className="dashboard__title">
-            Operations dashboard
+            {translate("dashboard.title")}
           </h2>
-          <p>Today’s cleaning operation at a glance.</p>
+          <p>{translate("dashboard.subtitle")}</p>
         </div>
         <button className="button" type="button" onClick={onRefresh}>
-          Refresh dashboard
+          {translate("dashboard.refresh")}
         </button>
       </div>
 
@@ -874,7 +904,7 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
               <div className="dashboard-panel__header">
                 <div>
                   <p className="eyebrow">Priorities</p>
-                  <h3 id="attention-title">Needs attention</h3>
+                  <h3 id="attention-title">{translate("dashboard.needsAttention")}</h3>
                 </div>
               </div>
 
@@ -908,7 +938,7 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
               <div className="dashboard-panel__header">
                 <div>
                   <p className="eyebrow">History</p>
-                  <h3 id="completed-title">Recently completed</h3>
+                  <h3 id="completed-title">{translate("dashboard.recentlyCompleted")}</h3>
                 </div>
               </div>
 
