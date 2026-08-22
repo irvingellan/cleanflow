@@ -370,6 +370,46 @@ h1 {
   font-weight: 700;
 }
 
+.offer-job-name {
+  margin: -12px 0 24px;
+  color: #52645b;
+  font-weight: 700;
+}
+
+.offer-form {
+  display: grid;
+  gap: 20px;
+}
+
+.cleaner-list {
+  display: grid;
+  gap: 10px;
+}
+
+.cleaner-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #dce5e0;
+  border-radius: 10px;
+  padding: 13px 14px;
+  color: #294638;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cleaner-option:has(input:checked) {
+  border-color: #7fa792;
+  background: #eef5f1;
+}
+
+.cleaner-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #315c49;
+}
+
 .notes-section {
   margin-top: 28px;
   border-top: 1px solid #e3eae6;

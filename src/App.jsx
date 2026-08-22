@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { getCleaners } from "./features/cleaners/cleanerService.js";
+import { createJobOffers } from "./features/jobs/jobOfferService.js";
 import { createJob, getJobs } from "./features/jobs/jobService.js";
 import { getProperties } from "./features/properties/propertyService.js";
 
@@ -10,10 +12,13 @@ const content = {
   jobsNavigation: "Jobs",
   loadingProperties: "Loading properties…",
   loadingJobs: "Loading jobs…",
+  loadingCleaners: "Loading cleaners…",
   propertyErrorMessage: "Unable to load properties.",
   jobErrorMessage: "Unable to load jobs.",
+  cleanerErrorMessage: "Unable to load cleaners.",
   emptyProperties: "No properties found.",
   emptyJobs: "No jobs found.",
+  emptyCleaners: "No active cleaners found.",
   propertyLabel: "Property",
   unnamedProperty: "Unnamed property",
   missingValue: "Not provided",
@@ -22,6 +27,10 @@ const content = {
   createCleaning: "Create cleaning",
   createCleaningError: "Unable to create cleaning.",
   successTitle: "Cleaning created",
+  offerToCleaners: "Offer to cleaners",
+  sendOffers: "Send offers",
+  sendOffersError: "Unable to send offers.",
+  offersSent: "Offers sent",
 };
 
 function hasValue(value) {
@@ -74,11 +83,15 @@ function App() {
   const [jobs, setJobs] = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [hasJobError, setHasJobError] = useState(false);
+  const [cleaners, setCleaners] = useState([]);
+  const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
+  const [hasCleanerError, setHasCleanerError] = useState(false);
   const [activeSection, setActiveSection] = useState("properties");
   const [view, setView] = useState("property-list");
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
+  const [offersSentCount, setOffersSentCount] = useState(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -142,11 +155,46 @@ function App() {
     };
   }, [view]);
 
+  useEffect(() => {
+    if (view !== "offer-cleaners") {
+      return undefined;
+    }
+
+    let isCurrent = true;
+    setIsLoadingCleaners(true);
+    setHasCleanerError(false);
+
+    async function loadCleaners() {
+      try {
+        const loadedCleaners = await getCleaners();
+
+        if (isCurrent) {
+          setCleaners(loadedCleaners);
+        }
+      } catch {
+        if (isCurrent) {
+          setHasCleanerError(true);
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoadingCleaners(false);
+        }
+      }
+    }
+
+    loadCleaners();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [view]);
+
   function showProperties() {
     setActiveSection("properties");
     setSelectedProperty(null);
     setSelectedJob(null);
     setCreatedJob(null);
+    setOffersSentCount(null);
     setView("property-list");
   }
 
@@ -154,6 +202,7 @@ function App() {
     setActiveSection("jobs");
     setSelectedProperty(null);
     setSelectedJob(null);
+    setOffersSentCount(null);
     setView("job-list");
   }
 
@@ -167,6 +216,11 @@ function App() {
     setActiveSection("jobs");
     setSelectedJob(job);
     setView("job-detail");
+  }
+
+  function showOfferCleaners() {
+    setOffersSentCount(null);
+    setView("offer-cleaners");
   }
 
   return (
@@ -231,7 +285,33 @@ function App() {
         )}
 
         {view === "job-detail" && selectedJob && (
-          <JobDetail job={selectedJob} onBack={showJobs} />
+          <JobDetail
+            job={selectedJob}
+            onBack={showJobs}
+            onOfferToCleaners={showOfferCleaners}
+          />
+        )}
+
+        {view === "offer-cleaners" && selectedJob && (
+          <OfferCleaners
+            job={selectedJob}
+            cleaners={cleaners}
+            isLoading={isLoadingCleaners}
+            hasError={hasCleanerError}
+            onBack={() => setView("job-detail")}
+            onSent={(count) => {
+              setOffersSentCount(count);
+              setView("offers-success");
+            }}
+          />
+        )}
+
+        {view === "offers-success" && selectedJob && offersSentCount !== null && (
+          <OffersSuccess
+            count={offersSentCount}
+            onBackToJob={() => setView("job-detail")}
+            onBackToJobs={showJobs}
+          />
         )}
       </section>
     </main>
@@ -591,7 +671,7 @@ function JobList({ jobs, isLoading, hasError, onSelect }) {
   );
 }
 
-function JobDetail({ job, onBack }) {
+function JobDetail({ job, onBack, onOfferToCleaners }) {
   const createdAt = formatCreatedAt(job.createdAt);
 
   return (
@@ -622,6 +702,135 @@ function JobDetail({ job, onBack }) {
           <p>{job.notes}</p>
         </section>
       )}
+
+      <div className="button-row">
+        <button
+          className="button button--primary"
+          type="button"
+          onClick={onOfferToCleaners}
+        >
+          {content.offerToCleaners}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function OfferCleaners({ job, cleaners, isLoading, hasError, onBack, onSent }) {
+  const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
+  const [isSending, setIsSending] = useState(false);
+  const [hasSendError, setHasSendError] = useState(false);
+
+  function toggleCleaner(cleanerId) {
+    setSelectedCleanerIds((currentIds) =>
+      currentIds.includes(cleanerId)
+        ? currentIds.filter((id) => id !== cleanerId)
+        : [...currentIds, cleanerId],
+    );
+  }
+
+  async function sendOffers(event) {
+    event.preventDefault();
+    const selectedCleaners = cleaners.filter((cleaner) =>
+      selectedCleanerIds.includes(cleaner.id),
+    );
+
+    if (selectedCleaners.length === 0) {
+      return;
+    }
+
+    setIsSending(true);
+    setHasSendError(false);
+
+    try {
+      await createJobOffers({ jobId: job.id, cleaners: selectedCleaners });
+      onSent(selectedCleaners.length);
+    } catch {
+      setHasSendError(true);
+      setIsSending(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-labelledby="offer-cleaners-title">
+      <BackButton onClick={onBack} />
+
+      <p className="eyebrow">Job offers</p>
+      <h2 id="offer-cleaners-title" className="panel__title">
+        {content.offerToCleaners}
+      </h2>
+      <p className="offer-job-name">
+        {job.propertyName || content.unnamedProperty}
+      </p>
+
+      {isLoading && <StateCard message={content.loadingCleaners} status="status" />}
+
+      {!isLoading && hasError && (
+        <StateCard message={content.cleanerErrorMessage} status="alert" isError />
+      )}
+
+      {!isLoading && !hasError && cleaners.length === 0 && (
+        <StateCard message={content.emptyCleaners} />
+      )}
+
+      {!isLoading && !hasError && cleaners.length > 0 && (
+        <form className="offer-form" onSubmit={sendOffers}>
+          <div className="cleaner-list">
+            {cleaners.map((cleaner) => (
+              <label key={cleaner.id} className="cleaner-option">
+                <input
+                  type="checkbox"
+                  checked={selectedCleanerIds.includes(cleaner.id)}
+                  onChange={() => toggleCleaner(cleaner.id)}
+                />
+                <span>{cleaner.name || content.missingValue}</span>
+              </label>
+            ))}
+          </div>
+
+          {hasSendError && (
+            <p className="form-error" role="alert">
+              {content.sendOffersError}
+            </p>
+          )}
+
+          <div className="button-row">
+            <button
+              className="button button--primary"
+              type="submit"
+              disabled={selectedCleanerIds.length === 0 || isSending}
+            >
+              {isSending ? "Sending…" : content.sendOffers}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function OffersSuccess({ count, onBackToJob, onBackToJobs }) {
+  return (
+    <section className="panel success-panel" aria-labelledby="offers-success-title">
+      <span className="success-mark" aria-hidden="true">
+        ✓
+      </span>
+      <p className="eyebrow">Job offers</p>
+      <h2 id="offers-success-title" className="panel__title">
+        {content.offersSent}
+      </h2>
+      <p className="success-panel__detail">
+        {count} {count === 1 ? "cleaner" : "cleaners"} received an offer.
+      </p>
+
+      <div className="button-row">
+        <button className="button button--primary" type="button" onClick={onBackToJob}>
+          Back to job
+        </button>
+        <button className="button" type="button" onClick={onBackToJobs}>
+          Back to jobs
+        </button>
+      </div>
     </section>
   );
 }
