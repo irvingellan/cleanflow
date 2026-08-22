@@ -555,6 +555,23 @@ h1 {
   margin-top: 24px;
 }
 
+.completion-confirmation {
+  margin-top: 20px;
+  border: 1px solid #dce5e0;
+  border-radius: 10px;
+  padding: 16px;
+  background: #f8faf9;
+}
+
+.completion-confirmation p {
+  margin-bottom: 0;
+  font-weight: 700;
+}
+
+.completion-confirmation .button-row {
+  margin-top: 16px;
+}
+
 .success-panel {
   text-align: center;
 }

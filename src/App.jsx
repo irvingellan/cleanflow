@@ -8,6 +8,7 @@ import {
 import { createIssue, getJobIssues } from "./features/issues/issueService.js";
 import {
   assignCleanerToJob,
+  completeInProgressJob,
   createJob,
   getJobs,
   startAssignedJob,
@@ -62,6 +63,9 @@ const content = {
   cleaningInProgress: "Cleaning in progress",
   startCleaning: "Start cleaning",
   startCleaningError: "Unable to start cleaning.",
+  completeCleaning: "Complete cleaning",
+  cleaningCompleted: "Cleaning completed",
+  completeCleaningError: "Unable to complete cleaning.",
   reportIssue: "Report issue",
   submitIssue: "Submit issue",
   createIssueError: "Unable to report issue.",
@@ -270,6 +274,29 @@ function App() {
       setSelectedJob(startedJob);
       setJobs((currentJobs) =>
         currentJobs.map((job) => (job.id === startedJob.id ? startedJob : job)),
+      );
+    } catch (error) {
+      if (error.job) {
+        setSelectedJob(error.job);
+        setJobs((currentJobs) =>
+          currentJobs.map((job) => (job.id === error.job.id ? error.job : job)),
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  async function completeCleaning() {
+    if (!selectedJob) {
+      return;
+    }
+
+    try {
+      const completedJob = await completeInProgressJob(selectedJob.id);
+      setSelectedJob(completedJob);
+      setJobs((currentJobs) =>
+        currentJobs.map((job) => (job.id === completedJob.id ? completedJob : job)),
       );
     } catch (error) {
       if (error.job) {
@@ -505,6 +532,7 @@ function App() {
             job={selectedJob}
             onBackToJob={returnToJobDetail}
             onStartCleaning={startCleaning}
+            onCompleteCleaning={completeCleaning}
             onReportIssue={() => setView("issue-form")}
           />
         )}
@@ -899,6 +927,7 @@ function JobDetail({
   const createdAt = formatCreatedAt(job.createdAt);
   const assignedAt = formatCreatedAt(job.assignedAt);
   const startedAt = formatCreatedAt(job.startedAt);
+  const completedAt = formatCreatedAt(job.completedAt);
   const isAssigned = Boolean(
     job.assignedCleanerId ||
       ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus),
@@ -961,8 +990,11 @@ function JobDetail({
         {isAssigned && (
           <DetailItem label="Assigned time" value={assignedAt || content.missingValue} />
         )}
-        {job.operationalStatus === "IN_PROGRESS" && (
+        {["IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus) && (
           <DetailItem label="Started time" value={startedAt || content.missingValue} />
+        )}
+        {job.operationalStatus === "COMPLETED" && (
+          <DetailItem label="Completed time" value={completedAt || content.missingValue} />
         )}
         {createdAt && <DetailItem label="Created" value={createdAt} />}
       </dl>
@@ -1292,11 +1324,23 @@ function CleanerOfferSimulation({ job, offer, onBackToJob }) {
   );
 }
 
-function AssignedCleanerJob({ job, onBackToJob, onStartCleaning, onReportIssue }) {
+function AssignedCleanerJob({
+  job,
+  onBackToJob,
+  onStartCleaning,
+  onCompleteCleaning,
+  onReportIssue,
+}) {
   const [isStarting, setIsStarting] = useState(false);
   const [hasStartError, setHasStartError] = useState(false);
+  const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] =
+    useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [hasCompletionError, setHasCompletionError] = useState(false);
   const startedAt = formatCreatedAt(job.startedAt);
+  const completedAt = formatCreatedAt(job.completedAt);
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
+  const isCompleted = job.operationalStatus === "COMPLETED";
 
   async function startCleaning() {
     setIsStarting(true);
@@ -1311,13 +1355,30 @@ function AssignedCleanerJob({ job, onBackToJob, onStartCleaning, onReportIssue }
     }
   }
 
+  async function completeCleaning() {
+    setIsCompleting(true);
+    setHasCompletionError(false);
+
+    try {
+      await onCompleteCleaning();
+    } catch {
+      setHasCompletionError(true);
+    } finally {
+      setIsCompleting(false);
+    }
+  }
+
   return (
     <section className="panel cleaner-job-panel" aria-labelledby="cleaner-job-title">
       <BackButton onClick={onBackToJob} />
 
       <p className="eyebrow">Development simulation</p>
       <h2 id="cleaner-job-title" className="panel__title">
-        {isInProgress ? content.cleaningInProgress : content.assignedCleaning}
+        {isCompleted
+          ? content.cleaningCompleted
+          : isInProgress
+            ? content.cleaningInProgress
+            : content.assignedCleaning}
       </h2>
 
       <dl className="detail-list">
@@ -1331,8 +1392,11 @@ function AssignedCleanerJob({ job, onBackToJob, onStartCleaning, onReportIssue }
           label="Operational status"
           value={job.operationalStatus || content.missingValue}
         />
-        {isInProgress && (
+        {(isInProgress || isCompleted) && (
           <DetailItem label="Started time" value={startedAt || content.missingValue} />
+        )}
+        {isCompleted && (
+          <DetailItem label="Completed time" value={completedAt || content.missingValue} />
         )}
       </dl>
 
@@ -1346,6 +1410,12 @@ function AssignedCleanerJob({ job, onBackToJob, onStartCleaning, onReportIssue }
       {hasStartError && (
         <p className="form-error" role="alert">
           {content.startCleaningError}
+        </p>
+      )}
+
+      {hasCompletionError && (
+        <p className="form-error" role="alert">
+          {content.completeCleaningError}
         </p>
       )}
 
@@ -1367,7 +1437,40 @@ function AssignedCleanerJob({ job, onBackToJob, onStartCleaning, onReportIssue }
           <button className="button" type="button" onClick={onReportIssue}>
             {content.reportIssue}
           </button>
+          {!isCompletionConfirmationVisible && (
+            <button
+              className="button button--primary"
+              type="button"
+              onClick={() => setIsCompletionConfirmationVisible(true)}
+            >
+              {content.completeCleaning}
+            </button>
+          )}
         </div>
+      )}
+
+      {isInProgress && isCompletionConfirmationVisible && (
+        <section className="completion-confirmation" aria-label="Complete cleaning confirmation">
+          <p>Complete this cleaning?</p>
+          <div className="button-row">
+            <button
+              className="button"
+              type="button"
+              disabled={isCompleting}
+              onClick={() => setIsCompletionConfirmationVisible(false)}
+            >
+              Cancel
+            </button>
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={isCompleting}
+              onClick={completeCleaning}
+            >
+              {isCompleting ? "Completing…" : content.completeCleaning}
+            </button>
+          </div>
+        </section>
       )}
     </section>
   );

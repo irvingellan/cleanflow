@@ -96,6 +96,37 @@ export async function startAssignedJob(jobId) {
   return jobFromSnapshot(snapshot);
 }
 
+export async function completeInProgressJob(jobId) {
+  const reference = jobDocument(jobId);
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+
+    if (!snapshot.exists()) {
+      const error = new Error("Job not found.");
+      error.code = "job-not-found";
+      throw error;
+    }
+
+    const job = snapshot.data();
+
+    if (job.operationalStatus !== "IN_PROGRESS") {
+      const error = new Error("This job cannot be completed from its current status.");
+      error.code = "invalid-job-transition";
+      error.job = jobFromSnapshot(snapshot);
+      throw error;
+    }
+
+    transaction.update(reference, {
+      operationalStatus: "COMPLETED",
+      completedAt: serverTimestamp(),
+    });
+  });
+
+  const snapshot = await getDoc(reference);
+  return jobFromSnapshot(snapshot);
+}
+
 export async function createJob({
   propertyId,
   propertyName,
