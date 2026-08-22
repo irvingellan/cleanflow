@@ -753,6 +753,7 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
       label: "Open issue",
       detail: `${formatIssueCategory(issue.category)} — ${issue.description}`,
       status: formatOperationalStatus(issue.job.operationalStatus),
+      action: "Review issue",
     })),
     ...sortByScheduledDate(offeredJobsWithInterest).map((job) => {
       const interestedNames = (offersByJob[job.id] || [])
@@ -767,6 +768,7 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
         label: "Cleaner interested",
         detail: interestedNames || "A cleaner is interested",
         status: formatOperationalStatus(job.operationalStatus),
+        action: "Review & assign",
       };
     }),
     ...sortByScheduledDate(
@@ -789,6 +791,8 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
           ? "No offers have been sent yet"
           : "No cleaner has expressed interest yet",
       status: formatOperationalStatus(job.operationalStatus),
+      action:
+        job.operationalStatus === "UNASSIGNED" ? "Send offers" : "Review offers",
     })),
   ];
   const filterOptions = {
@@ -891,6 +895,9 @@ function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob })
                       <small>
                         {item.status} · {formatDate(item.job.scheduledDate)}
                       </small>
+                      <span className="attention-item__action">
+                        {item.action} <span aria-hidden="true">→</span>
+                      </span>
                     </button>
                   ))}
                 </div>

@@ -324,6 +324,13 @@ button.summary-card {
   font-size: 0.8125rem;
 }
 
+.attention-item__action {
+  margin-top: 4px;
+  color: #315c49 !important;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
 .recent-item {
   display: grid;
   gap: 4px;
