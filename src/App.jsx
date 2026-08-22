@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCleaners } from "./features/cleaners/cleanerService.js";
+import { getOperationalDashboard } from "./features/dashboard/dashboardService.js";
 import {
   createJobOffers,
   getJobOffers,
@@ -23,6 +24,7 @@ const content = {
   productName: "CleanFlow",
   productDescription: "Operations platform",
   buildLabel: "Foundation build",
+  dashboardNavigation: "Dashboard",
   propertiesNavigation: "Properties",
   jobsNavigation: "Jobs",
   loadingProperties: "Loading properties…",
@@ -122,6 +124,16 @@ function formatCreatedAt(value) {
   }).format(value.toDate());
 }
 
+function formatOperationalStatus(status) {
+  return {
+    UNASSIGNED: "Unassigned",
+    OFFERED: "Offered",
+    ASSIGNED: "Assigned",
+    IN_PROGRESS: "In progress",
+    COMPLETED: "Completed",
+  }[status] || content.missingValue;
+}
+
 function App() {
   const [properties, setProperties] = useState([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(true);
@@ -138,8 +150,12 @@ function App() {
   const [jobIssues, setJobIssues] = useState([]);
   const [isLoadingIssues, setIsLoadingIssues] = useState(false);
   const [hasIssuesError, setHasIssuesError] = useState(false);
-  const [activeSection, setActiveSection] = useState("properties");
-  const [view, setView] = useState("property-list");
+  const [dashboardData, setDashboardData] = useState(null);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
+  const [hasDashboardError, setHasDashboardError] = useState(false);
+  const [activeSection, setActiveSection] = useState("dashboard");
+  const [view, setView] = useState("dashboard");
+  const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
@@ -173,6 +189,27 @@ function App() {
       isCurrent = false;
     };
   }, []);
+
+  async function refreshDashboard() {
+    setIsLoadingDashboard(true);
+    setHasDashboardError(false);
+
+    try {
+      const loadedDashboard = await getOperationalDashboard();
+      setDashboardData(loadedDashboard);
+      setJobs(loadedDashboard.jobs);
+    } catch {
+      setHasDashboardError(true);
+    } finally {
+      setIsLoadingDashboard(false);
+    }
+  }
+
+  useEffect(() => {
+    if (view === "dashboard") {
+      refreshDashboard();
+    }
+  }, [view]);
 
   useEffect(() => {
     if (view !== "job-list") {
@@ -399,6 +436,15 @@ function App() {
     setView("property-list");
   }
 
+  function showDashboard() {
+    setActiveSection("dashboard");
+    setSelectedProperty(null);
+    setSelectedJob(null);
+    setSelectedOffer(null);
+    setJobIssues([]);
+    setView("dashboard");
+  }
+
   function showJobs() {
     setActiveSection("jobs");
     setSelectedProperty(null);
@@ -417,6 +463,21 @@ function App() {
 
   function openJob(job) {
     setActiveSection("jobs");
+    setJobDetailOrigin("jobs");
+    setSelectedJob(job);
+    setJobOffers([]);
+    setHasOffersError(false);
+    setIsLoadingOffers(true);
+    setJobIssues([]);
+    setHasIssuesError(false);
+    setIsLoadingIssues(true);
+    setSelectedOffer(null);
+    setView("job-detail");
+  }
+
+  function openDashboardJob(job) {
+    setActiveSection("dashboard");
+    setJobDetailOrigin("dashboard");
     setSelectedJob(job);
     setJobOffers([]);
     setHasOffersError(false);
@@ -456,19 +517,33 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="foundation" aria-labelledby="page-title">
+      <section
+        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}`}
+        aria-labelledby="page-title"
+      >
         <header className="foundation__header">
           <div className="brand-block">
             <p className="eyebrow">{content.productDescription}</p>
             <h1 id="page-title">{content.productName}</h1>
             <MainNavigation
               activeSection={activeSection}
+              onShowDashboard={showDashboard}
               onShowProperties={showProperties}
               onShowJobs={showJobs}
             />
           </div>
           <span className="badge">{content.buildLabel}</span>
         </header>
+
+        {view === "dashboard" && (
+          <Dashboard
+            dashboardData={dashboardData}
+            isLoading={isLoadingDashboard}
+            hasError={hasDashboardError}
+            onRefresh={refreshDashboard}
+            onOpenJob={openDashboardJob}
+          />
+        )}
 
         {view === "property-list" && (
           <PropertyList
@@ -524,7 +599,7 @@ function App() {
             issues={jobIssues}
             isLoadingIssues={isLoadingIssues}
             hasIssuesError={hasIssuesError}
-            onBack={showJobs}
+            onBack={jobDetailOrigin === "dashboard" ? showDashboard : showJobs}
             onOfferToCleaners={showOfferCleaners}
             onRefreshOffers={refreshJobOffers}
             onRefreshIssues={refreshJobIssues}
@@ -597,9 +672,17 @@ function App() {
   );
 }
 
-function MainNavigation({ activeSection, onShowProperties, onShowJobs }) {
+function MainNavigation({ activeSection, onShowDashboard, onShowProperties, onShowJobs }) {
   return (
     <nav className="main-navigation" aria-label="Main navigation">
+      <button
+        className="navigation-button"
+        type="button"
+        aria-current={activeSection === "dashboard" ? "page" : undefined}
+        onClick={onShowDashboard}
+      >
+        {content.dashboardNavigation}
+      </button>
       <button
         className="navigation-button"
         type="button"
@@ -618,6 +701,342 @@ function MainNavigation({ activeSection, onShowProperties, onShowJobs }) {
       </button>
     </nav>
   );
+}
+
+function Dashboard({ dashboardData, isLoading, hasError, onRefresh, onOpenJob }) {
+  const [operationFilter, setOperationFilter] = useState("active");
+
+  if (isLoading) {
+    return <StateCard message="Loading dashboard…" status="status" />;
+  }
+
+  if (hasError) {
+    return (
+      <section className="dashboard-state" aria-live="polite">
+        <StateCard message="Unable to load dashboard." status="alert" isError />
+        <button className="button" type="button" onClick={onRefresh}>
+          Refresh dashboard
+        </button>
+      </section>
+    );
+  }
+
+  const jobs = dashboardData?.jobs || [];
+  const issues = dashboardData?.issues || [];
+  const offersByJob = dashboardData?.offersByJob || {};
+  const openIssues = issues.filter((issue) => issue.status === "OPEN");
+  const jobsNeedingAssignment = jobs.filter((job) =>
+    ["UNASSIGNED", "OFFERED"].includes(job.operationalStatus),
+  );
+  const inProgressJobs = jobs.filter(
+    (job) => job.operationalStatus === "IN_PROGRESS",
+  );
+  const completedJobs = jobs.filter(
+    (job) => job.operationalStatus === "COMPLETED",
+  );
+  const activeOperationJobs = jobs.filter((job) =>
+    ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"].includes(
+      job.operationalStatus,
+    ),
+  );
+  const offeredJobsWithInterest = jobs.filter(
+    (job) =>
+      job.operationalStatus === "OFFERED" &&
+      !job.assignedCleanerId &&
+      (offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED"),
+  );
+  const openIssueJobIds = new Set(openIssues.map((issue) => issue.job.id));
+  const attentionItems = [
+    ...sortIssuesByJobScheduledDate(openIssues).map((issue) => ({
+      id: `issue-${issue.id}`,
+      job: issue.job,
+      label: "Open issue",
+      detail: `${formatIssueCategory(issue.category)} — ${issue.description}`,
+      status: formatOperationalStatus(issue.job.operationalStatus),
+    })),
+    ...sortByScheduledDate(offeredJobsWithInterest).map((job) => {
+      const interestedNames = (offersByJob[job.id] || [])
+        .filter((offer) => offer.status === "INTERESTED")
+        .map((offer) => offer.cleanerName)
+        .filter(Boolean)
+        .join(", ");
+
+      return {
+        id: `interest-${job.id}`,
+        job,
+        label: "Cleaner interested",
+        detail: interestedNames || "A cleaner is interested",
+        status: formatOperationalStatus(job.operationalStatus),
+      };
+    }),
+    ...sortByScheduledDate(
+      jobsNeedingAssignment.filter(
+        (job) =>
+          job.operationalStatus === "UNASSIGNED" ||
+          !(offersByJob[job.id] || []).some(
+            (offer) => offer.status === "INTERESTED",
+          ),
+      ),
+    ).map((job) => ({
+      id: `needs-assignment-${job.id}`,
+      job,
+      label:
+        job.operationalStatus === "UNASSIGNED"
+          ? "Needs assignment"
+          : "Offers awaiting response",
+      detail:
+        job.operationalStatus === "UNASSIGNED"
+          ? "No offers have been sent yet"
+          : "No cleaner has expressed interest yet",
+      status: formatOperationalStatus(job.operationalStatus),
+    })),
+  ];
+  const filterOptions = {
+    active: {
+      label: "Active operation",
+      jobs: activeOperationJobs,
+    },
+    needsAssignment: {
+      label: "Needs assignment",
+      jobs: jobsNeedingAssignment,
+    },
+    inProgress: {
+      label: "In progress",
+      jobs: inProgressJobs,
+    },
+    completed: {
+      label: "Completed",
+      jobs: completedJobs,
+    },
+    openIssues: {
+      label: "Jobs with open issues",
+      jobs: jobs.filter((job) => openIssueJobIds.has(job.id)),
+    },
+  };
+  const visibleOperation = sortByScheduledDate(
+    filterOptions[operationFilter]?.jobs || [],
+  );
+
+  return (
+    <section className="dashboard" aria-labelledby="dashboard-title">
+      <div className="dashboard__intro">
+        <div>
+          <p className="eyebrow">Manager workspace</p>
+          <h2 id="dashboard-title" className="dashboard__title">
+            Operations dashboard
+          </h2>
+          <p>Today’s cleaning operation at a glance.</p>
+        </div>
+        <button className="button" type="button" onClick={onRefresh}>
+          Refresh dashboard
+        </button>
+      </div>
+
+      {jobs.length === 0 ? (
+        <StateCard message="No jobs available for this organization." />
+      ) : (
+        <>
+          <div className="dashboard-summary" aria-label="Operational summary">
+            <SummaryCard label="Total jobs" count={jobs.length} />
+            <SummaryCard
+              label="Needs assignment"
+              count={jobsNeedingAssignment.length}
+              isActive={operationFilter === "needsAssignment"}
+              onClick={() => setOperationFilter("needsAssignment")}
+            />
+            <SummaryCard
+              label="In progress"
+              count={inProgressJobs.length}
+              isActive={operationFilter === "inProgress"}
+              onClick={() => setOperationFilter("inProgress")}
+            />
+            <SummaryCard
+              label="Completed"
+              count={completedJobs.length}
+              isActive={operationFilter === "completed"}
+              onClick={() => setOperationFilter("completed")}
+            />
+            <SummaryCard
+              label="Open issues"
+              count={openIssues.length}
+              tone="attention"
+              isActive={operationFilter === "openIssues"}
+              onClick={() => setOperationFilter("openIssues")}
+            />
+          </div>
+
+          <div className="dashboard-grid">
+            <section className="dashboard-panel" aria-labelledby="attention-title">
+              <div className="dashboard-panel__header">
+                <div>
+                  <p className="eyebrow">Priorities</p>
+                  <h3 id="attention-title">Needs attention</h3>
+                </div>
+              </div>
+
+              {attentionItems.length === 0 ? (
+                <p className="dashboard-empty">No current items need attention.</p>
+              ) : (
+                <div className="attention-list">
+                  {attentionItems.map((item) => (
+                    <button
+                      key={item.id}
+                      className="attention-item"
+                      type="button"
+                      onClick={() => onOpenJob(item.job)}
+                    >
+                      <span className="attention-item__label">{item.label}</span>
+                      <strong>{item.job.propertyName || content.unnamedProperty}</strong>
+                      <span>{item.detail}</span>
+                      <small>
+                        {item.status} · {formatDate(item.job.scheduledDate)}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="dashboard-panel" aria-labelledby="completed-title">
+              <div className="dashboard-panel__header">
+                <div>
+                  <p className="eyebrow">History</p>
+                  <h3 id="completed-title">Recently completed</h3>
+                </div>
+              </div>
+
+              {completedJobs.length === 0 ? (
+                <p className="dashboard-empty">No completed cleanings yet.</p>
+              ) : (
+                <div className="recent-list">
+                  {sortByCompletedAt(completedJobs).map((job) => (
+                    <button
+                      key={job.id}
+                      className="recent-item"
+                      type="button"
+                      onClick={() => onOpenJob(job)}
+                    >
+                      <strong>{job.propertyName || content.unnamedProperty}</strong>
+                      <span>{formatDate(job.scheduledDate)}</span>
+                      <span>{job.assignedCleanerName || content.missingValue}</span>
+                      <small>{formatCreatedAt(job.completedAt) || "Completion time unavailable"}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <section className="dashboard-panel dashboard-panel--operation" aria-labelledby="operation-title">
+            <div className="dashboard-panel__header">
+              <div>
+                <p className="eyebrow">Schedule</p>
+                <h3 id="operation-title">Operation</h3>
+                <p className="dashboard-panel__subtitle">
+                  {filterOptions[operationFilter]?.label}
+                </p>
+              </div>
+              {operationFilter !== "active" && (
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => setOperationFilter("active")}
+                >
+                  Show active jobs
+                </button>
+              )}
+            </div>
+
+            {visibleOperation.length === 0 ? (
+              <p className="dashboard-empty">No jobs match this view.</p>
+            ) : (
+              <div className="operation-list">
+                {visibleOperation.map((job) => (
+                  <button
+                    key={job.id}
+                    className="operation-item"
+                    type="button"
+                    onClick={() => onOpenJob(job)}
+                  >
+                    <span>{formatDate(job.scheduledDate)}</span>
+                    <strong>{job.propertyName || content.unnamedProperty}</strong>
+                    <span className="operation-item__status">
+                      {formatOperationalStatus(job.operationalStatus)}
+                    </span>
+                    <span>{job.assignedCleanerName || "Not assigned"}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </section>
+  );
+}
+
+function SummaryCard({ label, count, tone, isActive, onClick }) {
+  const className = [
+    "summary-card",
+    tone ? `summary-card--${tone}` : "",
+    isActive ? "summary-card--active" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (!onClick) {
+    return (
+      <article className={className}>
+        <span>{label}</span>
+        <strong>{count}</strong>
+      </article>
+    );
+  }
+
+  return (
+    <button
+      className={className}
+      type="button"
+      aria-pressed={isActive}
+      onClick={onClick}
+    >
+      <span>{label}</span>
+      <strong>{count}</strong>
+    </button>
+  );
+}
+
+function sortByScheduledDate(items) {
+  return [...items].sort((firstItem, secondItem) =>
+    (firstItem.scheduledDate || "").localeCompare(secondItem.scheduledDate || ""),
+  );
+}
+
+function sortByCompletedAt(jobs) {
+  return [...jobs].sort((firstJob, secondJob) => {
+    const firstCompletedAt = firstJob.completedAt?.toMillis?.() || 0;
+    const secondCompletedAt = secondJob.completedAt?.toMillis?.() || 0;
+
+    return secondCompletedAt - firstCompletedAt;
+  });
+}
+
+function sortIssuesByJobScheduledDate(issues) {
+  return [...issues].sort((firstIssue, secondIssue) =>
+    (firstIssue.job.scheduledDate || "").localeCompare(
+      secondIssue.job.scheduledDate || "",
+    ),
+  );
+}
+
+function formatIssueCategory(category) {
+  return {
+    ACCESS: "Access",
+    SUPPLIES: "Supplies",
+    BROKEN_ITEM: "Broken item",
+    HEAVY_CLEANING: "Heavy cleaning",
+    OTHER: "Other",
+  }[category] || content.missingValue;
 }
 
 function PropertyList({ properties, isLoading, hasError, onSelect }) {
