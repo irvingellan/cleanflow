@@ -493,7 +493,8 @@ h1 {
   margin-top: 14px;
 }
 
-.cleaner-offer-panel .form-error {
+.cleaner-offer-panel .form-error,
+.cleaner-job-panel .form-error {
   margin-top: 24px;
 }
 

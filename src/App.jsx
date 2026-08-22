@@ -9,6 +9,7 @@ import {
   assignCleanerToJob,
   createJob,
   getJobs,
+  startAssignedJob,
 } from "./features/jobs/jobService.js";
 import { getProperties } from "./features/properties/propertyService.js";
 
@@ -51,6 +52,11 @@ const content = {
   assign: "Assign",
   assignmentErrorMessage: "Unable to assign cleaner.",
   alreadyAssignedErrorMessage: "This job is already assigned.",
+  simulateAssignedCleaner: "Simulate assigned cleaner",
+  assignedCleaning: "Assigned cleaning",
+  cleaningInProgress: "Cleaning in progress",
+  startCleaning: "Start cleaning",
+  startCleaningError: "Unable to start cleaning.",
 };
 
 function hasValue(value) {
@@ -224,6 +230,29 @@ function App() {
     }
   }
 
+  async function startCleaning() {
+    if (!selectedJob) {
+      return;
+    }
+
+    try {
+      const startedJob = await startAssignedJob(selectedJob.id);
+      setSelectedJob(startedJob);
+      setJobs((currentJobs) =>
+        currentJobs.map((job) => (job.id === startedJob.id ? startedJob : job)),
+      );
+    } catch (error) {
+      if (error.job) {
+        setSelectedJob(error.job);
+        setJobs((currentJobs) =>
+          currentJobs.map((job) => (job.id === error.job.id ? error.job : job)),
+        );
+      }
+
+      throw error;
+    }
+  }
+
   useEffect(() => {
     if (view === "job-detail" && selectedJob) {
       refreshJobOffers();
@@ -309,6 +338,11 @@ function App() {
     setView("cleaner-offer");
   }
 
+  function openAssignedCleanerJob() {
+    setSelectedOffer(null);
+    setView("cleaner-job");
+  }
+
   function returnToJobDetail() {
     setSelectedOffer(null);
     setJobOffers([]);
@@ -389,6 +423,7 @@ function App() {
             onRefreshOffers={refreshJobOffers}
             onSimulateOffer={openCleanerOffer}
             onAssignCleaner={assignCleaner}
+            onSimulateAssignedCleaner={openAssignedCleanerJob}
           />
         )}
 
@@ -419,6 +454,14 @@ function App() {
             job={selectedJob}
             offer={selectedOffer}
             onBackToJob={returnToJobDetail}
+          />
+        )}
+
+        {view === "cleaner-job" && selectedJob && (
+          <AssignedCleanerJob
+            job={selectedJob}
+            onBackToJob={returnToJobDetail}
+            onStartCleaning={startCleaning}
           />
         )}
       </section>
@@ -789,13 +832,16 @@ function JobDetail({
   onRefreshOffers,
   onSimulateOffer,
   onAssignCleaner,
+  onSimulateAssignedCleaner,
 }) {
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
   const createdAt = formatCreatedAt(job.createdAt);
   const assignedAt = formatCreatedAt(job.assignedAt);
+  const startedAt = formatCreatedAt(job.startedAt);
   const isAssigned = Boolean(
-    job.assignedCleanerId || job.operationalStatus === "ASSIGNED",
+    job.assignedCleanerId ||
+      ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus),
   );
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
@@ -845,6 +891,9 @@ function JobDetail({
         )}
         {isAssigned && (
           <DetailItem label="Assigned time" value={assignedAt || content.missingValue} />
+        )}
+        {job.operationalStatus === "IN_PROGRESS" && (
+          <DetailItem label="Started time" value={startedAt || content.missingValue} />
         )}
         {createdAt && <DetailItem label="Created" value={createdAt} />}
       </dl>
@@ -926,6 +975,11 @@ function JobDetail({
       </section>
 
       <div className="button-row">
+        {job.operationalStatus === "ASSIGNED" && (
+          <button className="button" type="button" onClick={onSimulateAssignedCleaner}>
+            {content.simulateAssignedCleaner}
+          </button>
+        )}
         <button
           className="button button--primary"
           type="button"
@@ -1118,6 +1172,79 @@ function CleanerOfferSimulation({ job, offer, onBackToJob }) {
             onClick={() => submitResponse("DECLINED")}
           >
             {content.notAvailable}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AssignedCleanerJob({ job, onBackToJob, onStartCleaning }) {
+  const [isStarting, setIsStarting] = useState(false);
+  const [hasStartError, setHasStartError] = useState(false);
+  const startedAt = formatCreatedAt(job.startedAt);
+  const isInProgress = job.operationalStatus === "IN_PROGRESS";
+
+  async function startCleaning() {
+    setIsStarting(true);
+    setHasStartError(false);
+
+    try {
+      await onStartCleaning();
+    } catch {
+      setHasStartError(true);
+    } finally {
+      setIsStarting(false);
+    }
+  }
+
+  return (
+    <section className="panel cleaner-job-panel" aria-labelledby="cleaner-job-title">
+      <BackButton onClick={onBackToJob} />
+
+      <p className="eyebrow">Development simulation</p>
+      <h2 id="cleaner-job-title" className="panel__title">
+        {isInProgress ? content.cleaningInProgress : content.assignedCleaning}
+      </h2>
+
+      <dl className="detail-list">
+        <DetailItem label="Property" value={job.propertyName || content.unnamedProperty} />
+        <DetailItem label="Scheduled date" value={formatDate(job.scheduledDate)} />
+        <DetailItem
+          label="Assigned cleaner"
+          value={job.assignedCleanerName || content.missingValue}
+        />
+        <DetailItem
+          label="Operational status"
+          value={job.operationalStatus || content.missingValue}
+        />
+        {isInProgress && (
+          <DetailItem label="Started time" value={startedAt || content.missingValue} />
+        )}
+      </dl>
+
+      {job.notes && (
+        <section className="notes-section" aria-label="Notes">
+          <h3>Notes</h3>
+          <p>{job.notes}</p>
+        </section>
+      )}
+
+      {hasStartError && (
+        <p className="form-error" role="alert">
+          {content.startCleaningError}
+        </p>
+      )}
+
+      {job.operationalStatus === "ASSIGNED" && (
+        <div className="button-row">
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={isStarting}
+            onClick={startCleaning}
+          >
+            {isStarting ? "Starting…" : content.startCleaning}
           </button>
         </div>
       )}
