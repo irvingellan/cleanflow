@@ -422,6 +422,80 @@ button.summary-card {
   gap: 12px;
 }
 
+.directory-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.directory-heading .list-title {
+  margin-bottom: 0;
+}
+
+.cleaner-directory {
+  display: grid;
+  gap: 12px;
+}
+
+.cleaner-directory-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.7fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  border: 1px solid #dce5e0;
+  border-radius: 16px;
+  padding: 18px 20px;
+  color: inherit;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgb(28 54 42 / 8%);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cleaner-directory-card:hover {
+  border-color: #b8c9c1;
+}
+
+.cleaner-directory-card:focus-visible {
+  outline: 3px solid rgb(63 112 91 / 24%);
+  outline-offset: 3px;
+}
+
+.cleaner-directory-card__identity {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cleaner-directory-card__identity strong {
+  overflow: hidden;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleaner-directory-card__identity span,
+.cleaner-directory-card > span:not(.status-badge) {
+  color: #6a756f;
+  font-size: 0.8125rem;
+}
+
+.cleaner-active-field {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.cleaner-active-field input {
+  width: 18px !important;
+  height: 18px;
+  margin: 0;
+  accent-color: #315c49;
+}
+
 .job-card {
   display: grid;
   grid-template-columns: minmax(110px, 0.9fr) minmax(0, 1.3fr) auto minmax(0, 1fr);
@@ -919,6 +993,24 @@ button.summary-card {
 
   .job-card {
     grid-template-columns: 1fr auto;
+  }
+
+  .directory-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .directory-heading .button {
+    justify-self: start;
+  }
+
+  .cleaner-directory-card {
+    grid-template-columns: 1fr auto;
+  }
+
+  .cleaner-directory-card > span:not(.status-badge) {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .job-card__summary {

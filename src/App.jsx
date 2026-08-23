@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getCleaners } from "./features/cleaners/cleanerService.js";
+import {
+  createCleaner,
+  getAllCleaners,
+  getCleaners,
+  updateCleaner,
+} from "./features/cleaners/cleanerService.js";
 import { getOperationalDashboard } from "./features/dashboard/dashboardService.js";
 import {
   createJobOffers,
@@ -32,6 +37,43 @@ function hasValue(value) {
 }
 
 const localeByLanguage = { en: "en-US", pt: "pt-BR", es: "es-ES" };
+const supportedCleanerLanguages = ["en", "pt", "es"];
+
+function normalizedCleanerLanguage(language) {
+  return supportedCleanerLanguages.includes(language) ? language : "en";
+}
+
+function normalizedCleanerText(value) {
+  return value === undefined || value === null ? "" : String(value);
+}
+
+function normalizeCleanerPhone(phone) {
+  return phone.trim().replace(/[\s()-]/g, "");
+}
+
+function createEmptyCleanerForm(defaultPreferredLanguage) {
+  return {
+    name: "",
+    phone: "",
+    preferredLanguage: normalizedCleanerLanguage(defaultPreferredLanguage),
+    active: true,
+  };
+}
+
+function cleanerToForm(cleaner, defaultPreferredLanguage) {
+  if (!cleaner) {
+    return createEmptyCleanerForm(defaultPreferredLanguage);
+  }
+
+  return {
+    name: normalizedCleanerText(cleaner.name),
+    phone: normalizedCleanerText(cleaner.phone),
+    preferredLanguage: normalizedCleanerLanguage(
+      cleaner.preferredLanguage || defaultPreferredLanguage,
+    ),
+    active: typeof cleaner.active === "boolean" ? cleaner.active : true,
+  };
+}
 
 function formatPrice(value, translate = null, language = "en") {
   if (!hasValue(value)) {
@@ -113,6 +155,9 @@ function App() {
   const [cleaners, setCleaners] = useState([]);
   const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
   const [hasCleanerError, setHasCleanerError] = useState(false);
+  const [directoryCleaners, setDirectoryCleaners] = useState([]);
+  const [isLoadingDirectoryCleaners, setIsLoadingDirectoryCleaners] = useState(false);
+  const [hasDirectoryCleanersError, setHasDirectoryCleanersError] = useState(false);
   const [jobOffers, setJobOffers] = useState([]);
   const [isLoadingOffers, setIsLoadingOffers] = useState(false);
   const [hasOffersError, setHasOffersError] = useState(false);
@@ -130,6 +175,8 @@ function App() {
   const [createdJob, setCreatedJob] = useState(null);
   const [offersSentCount, setOffersSentCount] = useState(null);
   const [selectedOffer, setSelectedOffer] = useState(null);
+  const [selectedCleaner, setSelectedCleaner] = useState(null);
+  const [savedCleaner, setSavedCleaner] = useState(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -178,6 +225,40 @@ function App() {
     if (view === "dashboard") {
       refreshDashboard();
     }
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== "cleaner-list") {
+      return undefined;
+    }
+
+    let isCurrent = true;
+    setIsLoadingDirectoryCleaners(true);
+    setHasDirectoryCleanersError(false);
+
+    async function loadDirectoryCleaners() {
+      try {
+        const loadedCleaners = await getAllCleaners();
+
+        if (isCurrent) {
+          setDirectoryCleaners(loadedCleaners);
+        }
+      } catch {
+        if (isCurrent) {
+          setHasDirectoryCleanersError(true);
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoadingDirectoryCleaners(false);
+        }
+      }
+    }
+
+    loadDirectoryCleaners();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [view]);
 
   useEffect(() => {
@@ -424,6 +505,30 @@ function App() {
     setView("job-list");
   }
 
+  function showCleaners() {
+    setActiveSection("cleaners");
+    setSelectedProperty(null);
+    setSelectedJob(null);
+    setSelectedCleaner(null);
+    setSavedCleaner(null);
+    setSelectedOffer(null);
+    setJobIssues([]);
+    setView("cleaner-list");
+  }
+
+  function openCleaner(cleaner) {
+    setActiveSection("cleaners");
+    setSelectedCleaner(cleaner);
+    setSavedCleaner(null);
+    setView("cleaner-edit");
+  }
+
+  function showNewCleaner() {
+    setSelectedCleaner(null);
+    setSavedCleaner(null);
+    setView("cleaner-create");
+  }
+
   function openProperty(property) {
     setActiveSection("properties");
     setSelectedProperty(property);
@@ -500,6 +605,7 @@ function App() {
               onShowDashboard={showDashboard}
               onShowProperties={showProperties}
               onShowJobs={showJobs}
+              onShowCleaners={showCleaners}
             />
           </div>
           <div className="header-actions">
@@ -562,6 +668,45 @@ function App() {
             hasError={hasJobError}
             onSelect={openJob}
           />
+        )}
+
+        {view === "cleaner-list" && (
+          <CleanerDirectory
+            cleaners={directoryCleaners}
+            isLoading={isLoadingDirectoryCleaners}
+            hasError={hasDirectoryCleanersError}
+            onSelect={openCleaner}
+            onCreate={showNewCleaner}
+          />
+        )}
+
+        {view === "cleaner-create" && (
+          <CleanerProfileForm
+            key="new-cleaner"
+            defaultPreferredLanguage={language}
+            onBack={showCleaners}
+            onSaved={(cleaner) => {
+              setSavedCleaner(cleaner);
+              setView("cleaner-success");
+            }}
+          />
+        )}
+
+        {view === "cleaner-edit" && selectedCleaner && (
+          <CleanerProfileForm
+            key={selectedCleaner.id}
+            cleaner={selectedCleaner}
+            defaultPreferredLanguage={language}
+            onBack={showCleaners}
+            onSaved={(cleaner) => {
+              setSavedCleaner(cleaner);
+              setView("cleaner-success");
+            }}
+          />
+        )}
+
+        {view === "cleaner-success" && savedCleaner && (
+          <CleanerProfileSuccess cleaner={savedCleaner} onBack={showCleaners} />
         )}
 
         {view === "job-detail" && selectedJob && (
@@ -671,6 +816,7 @@ function MainNavigation({
   onShowDashboard,
   onShowProperties,
   onShowJobs,
+  onShowCleaners,
 }) {
   return (
     <nav className="main-navigation" aria-label={translate("common.mainNavigation")}>
@@ -697,6 +843,14 @@ function MainNavigation({
         onClick={onShowJobs}
       >
         {translate("navigation.jobs")}
+      </button>
+      <button
+        className="navigation-button"
+        type="button"
+        aria-current={activeSection === "cleaners" ? "page" : undefined}
+        onClick={onShowCleaners}
+      >
+        {translate("navigation.cleaners")}
       </button>
     </nav>
   );
@@ -1378,6 +1532,237 @@ function JobList({ jobs, isLoading, hasError, onSelect }) {
             )}
           </button>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function preferredLanguageLabel(preferredLanguage, translate) {
+  return {
+    en: translate("language.english"),
+    pt: translate("language.portuguese"),
+    es: translate("language.spanish"),
+  }[preferredLanguage] || translate("common.notProvided");
+}
+
+function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate }) {
+  const { translate } = useTranslation();
+
+  if (isLoading) {
+    return <StateCard message={translate("cleaners.loading")} status="status" />;
+  }
+
+  if (hasError) {
+    return <StateCard message={translate("cleaners.error")} status="alert" isError />;
+  }
+
+  const sortedCleaners = [...cleaners].sort((firstCleaner, secondCleaner) =>
+    (firstCleaner.name || "").localeCompare(secondCleaner.name || ""),
+  );
+
+  return (
+    <section aria-labelledby="cleaners-title">
+      <div className="directory-heading">
+        <div>
+          <p className="eyebrow">{translate("navigation.cleaners")}</p>
+          <h2 id="cleaners-title" className="list-title">
+            {translate("cleaners.title")}
+          </h2>
+        </div>
+        <button className="button button--primary" type="button" onClick={onCreate}>
+          {translate("cleaners.new")}
+        </button>
+      </div>
+
+      {sortedCleaners.length === 0 ? (
+        <StateCard message={translate("cleaners.empty")} />
+      ) : (
+        <div className="cleaner-directory">
+          {sortedCleaners.map((cleaner) => (
+            <button
+              key={cleaner.id}
+              className="cleaner-directory-card"
+              type="button"
+              aria-label={translate("cleaners.edit", {
+                cleaner: cleaner.name || translate("common.notProvided"),
+              })}
+              onClick={() => onSelect(cleaner)}
+            >
+              <span className="cleaner-directory-card__identity">
+                <strong>{cleaner.name || translate("common.notProvided")}</strong>
+                <span>{cleaner.phone || translate("cleaners.noPhone")}</span>
+              </span>
+              <span>{preferredLanguageLabel(cleaner.preferredLanguage, translate)}</span>
+              <span className="status-badge">
+                {cleaner.active === false
+                  ? translate("common.inactive")
+                  : translate("common.active")}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CleanerProfileForm({ cleaner, defaultPreferredLanguage, onBack, onSaved }) {
+  const { translate } = useTranslation();
+  const isEditing = Boolean(cleaner);
+  const [formValues, setFormValues] = useState(() =>
+    cleanerToForm(cleaner, defaultPreferredLanguage),
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  useEffect(() => {
+    setFormValues(cleanerToForm(cleaner, defaultPreferredLanguage));
+    setFormError("");
+    setIsSaving(false);
+  }, [cleaner, defaultPreferredLanguage]);
+
+  function updateField(event) {
+    const { name, value, checked, type } = event.target;
+
+    setFormValues((currentValues) => ({
+      ...currentValues,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  }
+
+  async function saveCleaner(event) {
+    event.preventDefault();
+    const name = formValues.name.trim();
+    const phone = normalizeCleanerPhone(formValues.phone);
+
+    if (!name) {
+      setFormError(translate("cleaners.nameRequired"));
+      return;
+    }
+
+    if (!phone) {
+      setFormError(translate("cleaners.phoneRequired"));
+      return;
+    }
+
+    if (phone && !/^\+\d{7,15}$/.test(phone)) {
+      setFormError(translate("cleaners.phoneInvalid"));
+      return;
+    }
+
+    if (!supportedCleanerLanguages.includes(formValues.preferredLanguage)) {
+      setFormError(translate("cleaners.preferredLanguageRequired"));
+      return;
+    }
+
+    setIsSaving(true);
+    setFormError("");
+
+    try {
+      const cleanerValues = {
+        name,
+        phone,
+        preferredLanguage: formValues.preferredLanguage,
+        active: formValues.active,
+      };
+      const savedProfile = isEditing
+        ? await updateCleaner(cleaner.id, cleanerValues)
+        : await createCleaner(cleanerValues);
+
+      onSaved({ ...savedProfile, wasCreated: !isEditing });
+    } catch {
+      setFormError(
+        translate(isEditing ? "cleaners.updateError" : "cleaners.createError"),
+      );
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-labelledby="cleaner-profile-title">
+      <BackButton onClick={onBack} />
+      <p className="eyebrow">{translate("navigation.cleaners")}</p>
+      <h2 id="cleaner-profile-title" className="panel__title">
+        {translate(isEditing ? "cleaners.editTitle" : "cleaners.createTitle")}
+      </h2>
+
+      <form className="cleaning-form" noValidate onSubmit={saveCleaner}>
+        <label>
+          {translate("cleaners.name")}
+          <input name="name" value={formValues.name} onChange={updateField} required />
+        </label>
+
+        <label>
+          {translate("cleaners.phone")}
+          <input
+            type="tel"
+            name="phone"
+            value={formValues.phone}
+            placeholder={translate("cleaners.phoneExample")}
+            autoComplete="off"
+            inputMode="tel"
+            onChange={updateField}
+            required
+          />
+        </label>
+
+        <label>
+          {translate("cleaners.preferredLanguage")}
+          <select
+            name="preferredLanguage"
+            value={formValues.preferredLanguage}
+            onChange={updateField}
+            required
+          >
+            <option value="en">{translate("language.english")}</option>
+            <option value="pt">{translate("language.portuguese")}</option>
+            <option value="es">{translate("language.spanish")}</option>
+          </select>
+        </label>
+
+        <label className="cleaner-active-field">
+          <input
+            type="checkbox"
+            name="active"
+            checked={formValues.active}
+            onChange={updateField}
+          />
+          {translate("common.active")}
+        </label>
+
+        {formError && (
+          <p className="form-error" role="alert">
+            {formError}
+          </p>
+        )}
+
+        <div className="button-row">
+          <button className="button button--primary" type="submit" disabled={isSaving}>
+            {isSaving ? translate("cleaners.saving") : translate("cleaners.save")}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function CleanerProfileSuccess({ cleaner, onBack }) {
+  const { translate } = useTranslation();
+
+  return (
+    <section className="panel success-panel" aria-labelledby="cleaner-success-title">
+      <span className="success-mark" aria-hidden="true">
+        ✓
+      </span>
+      <p className="eyebrow">{translate("navigation.cleaners")}</p>
+      <h2 id="cleaner-success-title" className="panel__title">
+        {translate(cleaner.wasCreated ? "cleaners.created" : "cleaners.updated")}
+      </h2>
+      <p className="success-panel__detail">{cleaner.name}</p>
+      <div className="button-row">
+        <button className="button button--primary" type="button" onClick={onBack}>
+          {translate("cleaners.backToDirectory")}
+        </button>
       </div>
     </section>
   );
