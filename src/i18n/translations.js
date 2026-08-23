@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { createContext, createElement, useContext, useEffect, useMemo, useState } from "react";
 
 const languageStorageKey = "cleanflow-language";
+const TranslationContext = createContext(null);
 
 export const languageOptions = [
   { code: "en", label: "English" },
@@ -10,56 +11,74 @@ export const languageOptions = [
 
 const messages = {
   en: {
-    "navigation.dashboard": "Dashboard",
-    "navigation.properties": "Properties",
-    "navigation.jobs": "Jobs",
-    "dashboard.title": "Operations dashboard",
-    "dashboard.subtitle": "Today's cleaning operation at a glance.",
-    "dashboard.refresh": "Refresh dashboard",
-    "dashboard.needsAttention": "Needs attention",
-    "dashboard.recentlyCompleted": "Recently completed",
+    "brand.operationsPlatform": "Operations platform", "brand.foundationBuild": "Foundation build",
+    "navigation.dashboard": "Dashboard", "navigation.properties": "Properties", "navigation.jobs": "Jobs",
+    "common.language": "Language", "common.mainNavigation": "Main navigation", "common.back": "Back", "common.cancel": "Cancel", "common.notProvided": "Not provided", "common.property": "Property", "common.client": "Client", "common.cleaner": "Cleaner", "common.status": "Status", "common.notes": "Notes", "common.active": "Active", "common.inactive": "Inactive", "common.date": "Date", "common.error": "Error",
+    "status.unassigned": "Unassigned", "status.offered": "Offered", "status.assigned": "Assigned", "status.inProgress": "In progress", "status.completed": "Completed", "status.pending": "Pending", "status.interested": "Interested", "status.declined": "Not available", "status.open": "Open", "status.resolved": "Resolved",
+    "issueCategory.access": "Access", "issueCategory.supplies": "Supplies", "issueCategory.brokenItem": "Broken item", "issueCategory.heavyCleaning": "Heavy cleaning", "issueCategory.other": "Other",
+    "dashboard.title": "Operations dashboard", "dashboard.subtitle": "Today's cleaning operation at a glance.", "dashboard.refresh": "Refresh dashboard", "dashboard.loading": "Loading dashboard…", "dashboard.error": "Unable to load dashboard.", "dashboard.needsAttention": "Needs attention", "dashboard.recentlyCompleted": "Recently completed", "dashboard.activeOperation": "Active operation", "dashboard.needsAssignment": "Needs assignment", "dashboard.inProgress": "In progress", "dashboard.completed": "Completed", "dashboard.jobsWithOpenIssues": "Jobs with open issues", "dashboard.managerWorkspace": "Manager workspace", "dashboard.totalJobs": "Total jobs", "dashboard.openIssues": "Open issues", "dashboard.priorities": "Priorities", "dashboard.noAttention": "No items need attention right now.", "dashboard.history": "History", "dashboard.noCompleted": "No completed jobs yet.", "dashboard.completionUnavailable": "Completion time unavailable", "dashboard.schedule": "Schedule", "dashboard.operation": "Operation", "dashboard.showActiveJobs": "Show active jobs", "dashboard.noMatchingJobs": "No jobs match this filter.", "dashboard.notAssigned": "Not assigned", "dashboard.openIssue": "Open issue", "dashboard.cleanerInterested": "Cleaner interested", "dashboard.cleanerInterestedDescription": "A cleaner is interested.", "dashboard.offersAwaitingResponse": "Offers awaiting response", "dashboard.noOffers": "No offers have been sent.", "dashboard.noInterestedCleaners": "No cleaner has expressed interest yet.", "dashboard.reviewIssue": "Review issue", "dashboard.reviewAndAssign": "Review & assign", "dashboard.sendOffers": "Send offers", "dashboard.reviewOffers": "Review offers",
+    "properties.title": "Properties", "properties.loading": "Loading properties…", "properties.error": "Unable to load properties.", "properties.empty": "No properties found.", "properties.unnamed": "Unnamed property", "properties.view": "View {property}", "properties.details": "Property details", "properties.defaultClientPrice": "Default client price", "properties.defaultCleanerPrice": "Default cleaner payout", "properties.createCleaning": "Create cleaning",
+    "jobs.title": "Cleaning jobs", "jobs.loading": "Loading jobs…", "jobs.error": "Unable to load jobs.", "jobs.empty": "No jobs found.", "jobs.details": "Job details", "jobs.new": "New job", "jobs.scheduledDate": "Scheduled date", "jobs.operationalStatus": "Operational status", "jobs.clientPrice": "Client price", "jobs.cleanerPayout": "Cleaner payout", "jobs.assignedCleaner": "Assigned cleaner", "jobs.assignedTime": "Assigned time", "jobs.startedTime": "Started time", "jobs.completedTime": "Completed time", "jobs.createdTime": "Created", "jobs.create": "Create cleaning", "jobs.creating": "Creating…", "jobs.createError": "Unable to create cleaning.", "jobs.created": "Cleaning created", "jobs.saved": "Job saved", "jobs.viewJob": "View job", "jobs.backToProperties": "Back to properties", "jobs.backToJob": "Back to job", "jobs.backToJobs": "Back to jobs",
+    "offers.title": "Offers", "offers.offerToCleaners": "Offer to cleaners", "offers.loadingCleaners": "Loading cleaners…", "offers.cleanerError": "Unable to load cleaners.", "offers.emptyCleaners": "No active cleaners found.", "offers.send": "Send offers", "offers.sending": "Sending offers…", "offers.sendError": "Unable to send offers.", "offers.sent": "Offers sent", "offers.receivedOne": "{count} cleaner received an offer.", "offers.receivedMany": "{count} cleaners received offers.", "offers.loading": "Loading offers…", "offers.error": "Unable to load offers.", "offers.empty": "No offers sent yet.", "offers.refresh": "Refresh offers", "offers.responded": "Responded", "offers.simulateOffer": "Simulate offer", "offers.assign": "Assign", "offers.assigning": "Assigning…", "offers.assignmentError": "Unable to assign cleaner.", "offers.alreadyAssigned": "This job is already assigned.", "offers.simulateAssignedCleaner": "Simulate assigned cleaner",
+    "issues.title": "Issues", "issues.loading": "Loading issues…", "issues.error": "Unable to load issues.", "issues.empty": "No issues reported.", "issues.refresh": "Refresh issues", "issues.reportedBy": "Reported by {cleaner}", "issues.reported": "Reported", "issues.resolved": "Resolved", "issues.resolution": "Resolution", "issues.resolutionNote": "Resolution note (optional)", "issues.resolve": "Resolve issue", "issues.resolving": "Resolving…", "issues.resolveError": "Unable to resolve issue.", "issues.alreadyResolved": "This issue is already resolved.",
   },
   pt: {
-    "navigation.dashboard": "Painel",
-    "navigation.properties": "Propriedades",
-    "navigation.jobs": "Serviços",
-    "dashboard.title": "Painel de operações",
-    "dashboard.subtitle": "Visão geral das operações de limpeza de hoje.",
-    "dashboard.refresh": "Atualizar painel",
-    "dashboard.needsAttention": "Precisa de atenção",
-    "dashboard.recentlyCompleted": "Concluídos recentemente",
+    "brand.operationsPlatform": "Plataforma de operações", "brand.foundationBuild": "Versão inicial",
+    "navigation.dashboard": "Painel", "navigation.properties": "Propriedades", "navigation.jobs": "Serviços",
+    "common.language": "Idioma", "common.mainNavigation": "Navegação principal", "common.back": "Voltar", "common.cancel": "Cancelar", "common.notProvided": "Não informado", "common.property": "Propriedade", "common.client": "Cliente", "common.cleaner": "Cleaner", "common.status": "Status", "common.notes": "Observações", "common.active": "Ativa", "common.inactive": "Inativa", "common.date": "Data", "common.error": "Erro",
+    "status.unassigned": "Não atribuída", "status.offered": "Oferecida", "status.assigned": "Atribuída", "status.inProgress": "Em andamento", "status.completed": "Concluída", "status.pending": "Pendente", "status.interested": "Interessada", "status.declined": "Não disponível", "status.open": "Aberto", "status.resolved": "Resolvido",
+    "issueCategory.access": "Acesso", "issueCategory.supplies": "Suprimentos", "issueCategory.brokenItem": "Item quebrado", "issueCategory.heavyCleaning": "Limpeza pesada", "issueCategory.other": "Outro",
+    "dashboard.title": "Painel de operações", "dashboard.subtitle": "Visão geral das operações de limpeza de hoje.", "dashboard.refresh": "Atualizar painel", "dashboard.loading": "Carregando painel…", "dashboard.error": "Não foi possível carregar o painel.", "dashboard.needsAttention": "Precisa de atenção", "dashboard.recentlyCompleted": "Concluídos recentemente", "dashboard.activeOperation": "Operação em andamento", "dashboard.needsAssignment": "Precisa de atribuição", "dashboard.inProgress": "Em andamento", "dashboard.completed": "Concluídos", "dashboard.jobsWithOpenIssues": "Serviços com problemas em aberto", "dashboard.managerWorkspace": "Área da gerente", "dashboard.totalJobs": "Total de serviços", "dashboard.openIssues": "Problemas em aberto", "dashboard.priorities": "Prioridades", "dashboard.noAttention": "Nenhum item precisa de atenção agora.", "dashboard.history": "Histórico", "dashboard.noCompleted": "Ainda não há serviços concluídos.", "dashboard.completionUnavailable": "Horário de conclusão não disponível", "dashboard.schedule": "Agenda", "dashboard.operation": "Operação", "dashboard.showActiveJobs": "Mostrar serviços ativos", "dashboard.noMatchingJobs": "Nenhum serviço corresponde a este filtro.", "dashboard.notAssigned": "Não atribuída", "dashboard.openIssue": "Problema em aberto", "dashboard.cleanerInterested": "Cleaner interessada", "dashboard.cleanerInterestedDescription": "Uma cleaner demonstrou interesse.", "dashboard.offersAwaitingResponse": "Ofertas aguardando resposta", "dashboard.noOffers": "Nenhuma oferta foi enviada.", "dashboard.noInterestedCleaners": "Nenhuma cleaner demonstrou interesse ainda.", "dashboard.reviewIssue": "Revisar problema", "dashboard.reviewAndAssign": "Revisar e atribuir", "dashboard.sendOffers": "Enviar ofertas", "dashboard.reviewOffers": "Revisar ofertas",
+    "properties.title": "Propriedades", "properties.loading": "Carregando propriedades…", "properties.error": "Não foi possível carregar as propriedades.", "properties.empty": "Nenhuma propriedade encontrada.", "properties.unnamed": "Propriedade sem nome", "properties.view": "Ver {property}", "properties.details": "Detalhes da propriedade", "properties.defaultClientPrice": "Preço padrão para o cliente", "properties.defaultCleanerPrice": "Pagamento padrão da cleaner", "properties.createCleaning": "Criar limpeza",
+    "jobs.title": "Serviços de limpeza", "jobs.loading": "Carregando serviços…", "jobs.error": "Não foi possível carregar os serviços.", "jobs.empty": "Nenhum serviço encontrado.", "jobs.details": "Detalhes do serviço", "jobs.new": "Novo serviço", "jobs.scheduledDate": "Data agendada", "jobs.operationalStatus": "Status operacional", "jobs.clientPrice": "Preço para o cliente", "jobs.cleanerPayout": "Pagamento da cleaner", "jobs.assignedCleaner": "Cleaner responsável", "jobs.assignedTime": "Horário da atribuição", "jobs.startedTime": "Horário de início", "jobs.completedTime": "Horário de conclusão", "jobs.createdTime": "Criado em", "jobs.create": "Criar limpeza", "jobs.creating": "Criando…", "jobs.createError": "Não foi possível criar a limpeza.", "jobs.created": "Limpeza criada", "jobs.saved": "Serviço salvo", "jobs.viewJob": "Ver serviço", "jobs.backToProperties": "Voltar para propriedades", "jobs.backToJob": "Voltar para o serviço", "jobs.backToJobs": "Voltar para serviços",
+    "offers.title": "Ofertas", "offers.offerToCleaners": "Oferecer para cleaners", "offers.loadingCleaners": "Carregando cleaners…", "offers.cleanerError": "Não foi possível carregar as cleaners.", "offers.emptyCleaners": "Nenhuma cleaner ativa encontrada.", "offers.send": "Enviar ofertas", "offers.sending": "Enviando ofertas…", "offers.sendError": "Não foi possível enviar as ofertas.", "offers.sent": "Ofertas enviadas", "offers.receivedOne": "{count} cleaner recebeu uma oferta.", "offers.receivedMany": "{count} cleaners receberam ofertas.", "offers.loading": "Carregando ofertas…", "offers.error": "Não foi possível carregar as ofertas.", "offers.empty": "Nenhuma oferta enviada ainda.", "offers.refresh": "Atualizar ofertas", "offers.responded": "Respondeu em", "offers.simulateOffer": "Simular oferta", "offers.assign": "Atribuir", "offers.assigning": "Atribuindo…", "offers.assignmentError": "Não foi possível atribuir a cleaner.", "offers.alreadyAssigned": "Este serviço já está atribuído.", "offers.simulateAssignedCleaner": "Simular cleaner responsável",
+    "issues.title": "Problemas", "issues.loading": "Carregando problemas…", "issues.error": "Não foi possível carregar os problemas.", "issues.empty": "Nenhum problema relatado.", "issues.refresh": "Atualizar problemas", "issues.reportedBy": "Relatado por {cleaner}", "issues.reported": "Relatado em", "issues.resolved": "Resolvido em", "issues.resolution": "Resolução", "issues.resolutionNote": "Nota de resolução (opcional)", "issues.resolve": "Resolver problema", "issues.resolving": "Resolvendo…", "issues.resolveError": "Não foi possível resolver o problema.", "issues.alreadyResolved": "Este problema já foi resolvido.",
   },
   es: {
-    "navigation.dashboard": "Panel",
-    "navigation.properties": "Propiedades",
-    "navigation.jobs": "Servicios",
-    "dashboard.title": "Panel de operaciones",
-    "dashboard.subtitle": "Resumen de las operaciones de limpieza de hoy.",
-    "dashboard.refresh": "Actualizar panel",
-    "dashboard.needsAttention": "Requiere atención",
-    "dashboard.recentlyCompleted": "Completados recientemente",
+    "brand.operationsPlatform": "Plataforma de operaciones", "brand.foundationBuild": "Versión inicial",
+    "navigation.dashboard": "Panel", "navigation.properties": "Propiedades", "navigation.jobs": "Servicios",
+    "common.language": "Idioma", "common.mainNavigation": "Navegación principal", "common.back": "Volver", "common.cancel": "Cancelar", "common.notProvided": "No indicado", "common.property": "Propiedad", "common.client": "Cliente", "common.cleaner": "Cleaner", "common.status": "Estado", "common.notes": "Notas", "common.active": "Activa", "common.inactive": "Inactiva", "common.date": "Fecha", "common.error": "Error",
+    "status.unassigned": "Sin asignar", "status.offered": "Ofrecida", "status.assigned": "Asignada", "status.inProgress": "En progreso", "status.completed": "Completada", "status.pending": "Pendiente", "status.interested": "Interesada", "status.declined": "No disponible", "status.open": "Abierto", "status.resolved": "Resuelto",
+    "issueCategory.access": "Acceso", "issueCategory.supplies": "Suministros", "issueCategory.brokenItem": "Artículo dañado", "issueCategory.heavyCleaning": "Limpieza profunda", "issueCategory.other": "Otro",
+    "dashboard.title": "Panel de operaciones", "dashboard.subtitle": "Resumen de las operaciones de limpieza de hoy.", "dashboard.refresh": "Actualizar panel", "dashboard.loading": "Cargando panel…", "dashboard.error": "No se pudo cargar el panel.", "dashboard.needsAttention": "Requiere atención", "dashboard.recentlyCompleted": "Completados recientemente", "dashboard.activeOperation": "Operación en curso", "dashboard.needsAssignment": "Requiere asignación", "dashboard.inProgress": "En progreso", "dashboard.completed": "Completados", "dashboard.jobsWithOpenIssues": "Servicios con problemas abiertos", "dashboard.managerWorkspace": "Área de gestión", "dashboard.totalJobs": "Total de servicios", "dashboard.openIssues": "Problemas abiertos", "dashboard.priorities": "Prioridades", "dashboard.noAttention": "No hay elementos que requieran atención ahora.", "dashboard.history": "Historial", "dashboard.noCompleted": "Aún no hay servicios completados.", "dashboard.completionUnavailable": "Hora de finalización no disponible", "dashboard.schedule": "Calendario", "dashboard.operation": "Operación", "dashboard.showActiveJobs": "Mostrar servicios activos", "dashboard.noMatchingJobs": "Ningún servicio coincide con este filtro.", "dashboard.notAssigned": "Sin asignar", "dashboard.openIssue": "Problema abierto", "dashboard.cleanerInterested": "Cleaner interesada", "dashboard.cleanerInterestedDescription": "Una cleaner expresó interés.", "dashboard.offersAwaitingResponse": "Ofertas en espera de respuesta", "dashboard.noOffers": "No se han enviado ofertas.", "dashboard.noInterestedCleaners": "Ninguna cleaner ha expresado interés todavía.", "dashboard.reviewIssue": "Revisar problema", "dashboard.reviewAndAssign": "Revisar y asignar", "dashboard.sendOffers": "Enviar ofertas", "dashboard.reviewOffers": "Revisar ofertas",
+    "properties.title": "Propiedades", "properties.loading": "Cargando propiedades…", "properties.error": "No se pudieron cargar las propiedades.", "properties.empty": "No se encontraron propiedades.", "properties.unnamed": "Propiedad sin nombre", "properties.view": "Ver {property}", "properties.details": "Detalles de la propiedad", "properties.defaultClientPrice": "Precio predeterminado para el cliente", "properties.defaultCleanerPrice": "Pago predeterminado de la cleaner", "properties.createCleaning": "Crear limpieza",
+    "jobs.title": "Servicios de limpieza", "jobs.loading": "Cargando servicios…", "jobs.error": "No se pudieron cargar los servicios.", "jobs.empty": "No se encontraron servicios.", "jobs.details": "Detalles del servicio", "jobs.new": "Nuevo servicio", "jobs.scheduledDate": "Fecha programada", "jobs.operationalStatus": "Estado operativo", "jobs.clientPrice": "Precio para el cliente", "jobs.cleanerPayout": "Pago de la cleaner", "jobs.assignedCleaner": "Cleaner responsable", "jobs.assignedTime": "Hora de asignación", "jobs.startedTime": "Hora de inicio", "jobs.completedTime": "Hora de finalización", "jobs.createdTime": "Creado", "jobs.create": "Crear limpieza", "jobs.creating": "Creando…", "jobs.createError": "No se pudo crear la limpieza.", "jobs.created": "Limpieza creada", "jobs.saved": "Servicio guardado", "jobs.viewJob": "Ver servicio", "jobs.backToProperties": "Volver a propiedades", "jobs.backToJob": "Volver al servicio", "jobs.backToJobs": "Volver a servicios",
+    "offers.title": "Ofertas", "offers.offerToCleaners": "Ofrecer a cleaners", "offers.loadingCleaners": "Cargando cleaners…", "offers.cleanerError": "No se pudieron cargar las cleaners.", "offers.emptyCleaners": "No se encontraron cleaners activas.", "offers.send": "Enviar ofertas", "offers.sending": "Enviando ofertas…", "offers.sendError": "No se pudieron enviar las ofertas.", "offers.sent": "Ofertas enviadas", "offers.receivedOne": "{count} cleaner recibió una oferta.", "offers.receivedMany": "{count} cleaners recibieron ofertas.", "offers.loading": "Cargando ofertas…", "offers.error": "No se pudieron cargar las ofertas.", "offers.empty": "Aún no se enviaron ofertas.", "offers.refresh": "Actualizar ofertas", "offers.responded": "Respondió", "offers.simulateOffer": "Simular oferta", "offers.assign": "Asignar", "offers.assigning": "Asignando…", "offers.assignmentError": "No se pudo asignar la cleaner.", "offers.alreadyAssigned": "Este servicio ya está asignado.", "offers.simulateAssignedCleaner": "Simular cleaner responsable",
+    "issues.title": "Problemas", "issues.loading": "Cargando problemas…", "issues.error": "No se pudieron cargar los problemas.", "issues.empty": "No se reportaron problemas.", "issues.refresh": "Actualizar problemas", "issues.reportedBy": "Reportado por {cleaner}", "issues.reported": "Reportado", "issues.resolved": "Resuelto", "issues.resolution": "Resolución", "issues.resolutionNote": "Nota de resolución (opcional)", "issues.resolve": "Resolver problema", "issues.resolving": "Resolviendo…", "issues.resolveError": "No se pudo resolver el problema.", "issues.alreadyResolved": "Este problema ya está resuelto.",
   },
 };
 
 function getInitialLanguage() {
-  if (typeof window === "undefined") {
-    return "en";
-  }
+  if (typeof window === "undefined") return "en";
 
   const savedLanguage = window.localStorage.getItem(languageStorageKey);
   return messages[savedLanguage] ? savedLanguage : "en";
 }
 
-export function useTranslation() {
+export function TranslationProvider({ children }) {
   const [language, setLanguage] = useState(getInitialLanguage);
 
   useEffect(() => {
     window.localStorage.setItem(languageStorageKey, language);
   }, [language]);
 
-  function translate(key) {
-    return messages[language][key] || messages.en[key] || key;
-  }
+  const value = useMemo(() => {
+    function translate(key, replacements = {}) {
+      const message = messages[language][key] || messages.en[key] || key;
+      return Object.entries(replacements).reduce(
+        (result, [replacementKey, replacementValue]) => result.replaceAll(`{${replacementKey}}`, String(replacementValue)),
+        message,
+      );
+    }
 
-  return { language, setLanguage, translate };
+    return { language, setLanguage, translate };
+  }, [language]);
+
+  return createElement(TranslationContext.Provider, { value }, children);
+}
+
+export function useTranslation() {
+  const translation = useContext(TranslationContext);
+  if (!translation) throw new Error("useTranslation must be used within TranslationProvider");
+  return translation;
 }

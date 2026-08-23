@@ -23,41 +23,8 @@ import { getProperties } from "./features/properties/propertyService.js";
 
 const content = {
   productName: "CleanFlow",
-  productDescription: "Operations platform",
-  buildLabel: "Foundation build",
-  dashboardNavigation: "Dashboard",
-  propertiesNavigation: "Properties",
-  jobsNavigation: "Jobs",
-  loadingProperties: "Loading properties…",
-  loadingJobs: "Loading jobs…",
-  loadingCleaners: "Loading cleaners…",
-  propertyErrorMessage: "Unable to load properties.",
-  jobErrorMessage: "Unable to load jobs.",
-  cleanerErrorMessage: "Unable to load cleaners.",
-  emptyProperties: "No properties found.",
-  emptyJobs: "No jobs found.",
-  emptyCleaners: "No active cleaners found.",
-  propertyLabel: "Property",
   unnamedProperty: "Unnamed property",
   missingValue: "Not provided",
-  propertyDetails: "Property details",
-  jobDetails: "Job details",
-  createCleaning: "Create cleaning",
-  createCleaningError: "Unable to create cleaning.",
-  successTitle: "Cleaning created",
-  offerToCleaners: "Offer to cleaners",
-  sendOffers: "Send offers",
-  sendOffersError: "Unable to send offers.",
-  offersSent: "Offers sent",
-  loadingOffers: "Loading offers…",
-  offersErrorMessage: "Unable to load offers.",
-  emptyOffers: "No offers sent yet.",
-  loadingIssues: "Loading issues…",
-  issuesErrorMessage: "Unable to load issues.",
-  emptyIssues: "No issues reported.",
-  refreshIssues: "Refresh issues",
-  refreshOffers: "Refresh offers",
-  simulateOffer: "Simulate offer",
   cleanerOffer: "Cleaner offer",
   interested: "Interested",
   notAvailable: "Not available",
@@ -86,21 +53,23 @@ function hasValue(value) {
   return value !== undefined && value !== null && value !== "";
 }
 
-function formatPrice(value) {
+const localeByLanguage = { en: "en-US", pt: "pt-BR", es: "es-ES" };
+
+function formatPrice(value, translate = null, language = "en") {
   if (!hasValue(value)) {
-    return content.missingValue;
+    return translate ? translate("common.notProvided") : content.missingValue;
   }
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(localeByLanguage[language] || "en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 2,
   }).format(value);
 }
 
-function formatDate(value) {
+function formatDate(value, translate = null, language = "en") {
   if (!value) {
-    return content.missingValue;
+    return translate ? translate("common.notProvided") : content.missingValue;
   }
 
   const date = new Date(`${value}T00:00:00`);
@@ -109,31 +78,38 @@ function formatDate(value) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(localeByLanguage[language] || "en-US", {
     dateStyle: "medium",
   }).format(date);
 }
 
-function formatCreatedAt(value) {
+function formatCreatedAt(value, language = "en") {
   if (!value || typeof value.toDate !== "function") {
     return null;
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(localeByLanguage[language] || "en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(value.toDate());
 }
 
-function formatOperationalStatus(status) {
-  return {
-    UNASSIGNED: "Unassigned",
-    OFFERED: "Offered",
-    ASSIGNED: "Assigned",
-    IN_PROGRESS: "In progress",
-    COMPLETED: "Completed",
-  }[status] || content.missingValue;
+function formatOperationalStatus(status, translate = null) {
+  const key = {
+    UNASSIGNED: "status.unassigned",
+    OFFERED: "status.offered",
+    ASSIGNED: "status.assigned",
+    IN_PROGRESS: "status.inProgress",
+    COMPLETED: "status.completed",
+  }[status];
+
+  return key && translate ? translate(key) : key ? messagesForCleaner[key] : content.missingValue;
 }
+
+const messagesForCleaner = {
+  "status.unassigned": "Unassigned", "status.offered": "Offered", "status.assigned": "Assigned",
+  "status.inProgress": "In progress", "status.completed": "Completed",
+};
 
 function App() {
   const { language, setLanguage, translate } = useTranslation();
@@ -525,7 +501,7 @@ function App() {
       >
         <header className="foundation__header">
           <div className="brand-block">
-            <p className="eyebrow">{content.productDescription}</p>
+            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
             <h1 id="page-title">{content.productName}</h1>
             <MainNavigation
               activeSection={activeSection}
@@ -537,7 +513,7 @@ function App() {
           </div>
           <div className="header-actions">
             <LanguageSelector language={language} onChange={setLanguage} />
-            <span className="badge">{content.buildLabel}</span>
+            <span className="badge">{translate("brand.foundationBuild")}</span>
           </div>
         </header>
 
@@ -680,11 +656,13 @@ function App() {
 }
 
 function LanguageSelector({ language, onChange }) {
+  const { translate } = useTranslation();
+
   return (
     <select
       className="language-selector"
       value={language}
-      aria-label="Language"
+      aria-label={translate("common.language")}
       onChange={(event) => onChange(event.target.value)}
     >
       {languageOptions.map((option) => (
@@ -704,7 +682,7 @@ function MainNavigation({
   onShowJobs,
 }) {
   return (
-    <nav className="main-navigation" aria-label="Main navigation">
+    <nav className="main-navigation" aria-label={translate("common.mainNavigation")}>
       <button
         className="navigation-button"
         type="button"
@@ -734,16 +712,17 @@ function MainNavigation({
 }
 
 function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, onOpenJob }) {
+  const { language } = useTranslation();
   const [operationFilter, setOperationFilter] = useState("active");
 
   if (isLoading) {
-    return <StateCard message="Loading dashboard…" status="status" />;
+    return <StateCard message={translate("dashboard.loading")} status="status" />;
   }
 
   if (hasError) {
     return (
       <section className="dashboard-state" aria-live="polite">
-        <StateCard message="Unable to load dashboard." status="alert" isError />
+        <StateCard message={translate("dashboard.error")} status="alert" isError />
         <button className="button" type="button" onClick={onRefresh}>
           {translate("dashboard.refresh")}
         </button>
@@ -780,10 +759,10 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
     ...sortIssuesByJobScheduledDate(openIssues).map((issue) => ({
       id: `issue-${issue.id}`,
       job: issue.job,
-      label: "Open issue",
-      detail: `${formatIssueCategory(issue.category)} — ${issue.description}`,
-      status: formatOperationalStatus(issue.job.operationalStatus),
-      action: "Review issue",
+      label: translate("dashboard.openIssue"),
+      detail: `${formatIssueCategory(issue.category, translate)} — ${issue.description}`,
+      status: formatOperationalStatus(issue.job.operationalStatus, translate),
+      action: translate("dashboard.reviewIssue"),
     })),
     ...sortByScheduledDate(offeredJobsWithInterest).map((job) => {
       const interestedNames = (offersByJob[job.id] || [])
@@ -795,10 +774,10 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
       return {
         id: `interest-${job.id}`,
         job,
-        label: "Cleaner interested",
-        detail: interestedNames || "A cleaner is interested",
-        status: formatOperationalStatus(job.operationalStatus),
-        action: "Review & assign",
+        label: translate("dashboard.cleanerInterested"),
+        detail: interestedNames || translate("dashboard.cleanerInterestedDescription"),
+        status: formatOperationalStatus(job.operationalStatus, translate),
+        action: translate("dashboard.reviewAndAssign"),
       };
     }),
     ...sortByScheduledDate(
@@ -814,36 +793,36 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
       job,
       label:
         job.operationalStatus === "UNASSIGNED"
-          ? "Needs assignment"
-          : "Offers awaiting response",
+          ? translate("dashboard.needsAssignment")
+          : translate("dashboard.offersAwaitingResponse"),
       detail:
         job.operationalStatus === "UNASSIGNED"
-          ? "No offers have been sent yet"
-          : "No cleaner has expressed interest yet",
-      status: formatOperationalStatus(job.operationalStatus),
+          ? translate("dashboard.noOffers")
+          : translate("dashboard.noInterestedCleaners"),
+      status: formatOperationalStatus(job.operationalStatus, translate),
       action:
-        job.operationalStatus === "UNASSIGNED" ? "Send offers" : "Review offers",
+        job.operationalStatus === "UNASSIGNED" ? translate("dashboard.sendOffers") : translate("dashboard.reviewOffers"),
     })),
   ];
   const filterOptions = {
     active: {
-      label: "Active operation",
+      label: translate("dashboard.activeOperation"),
       jobs: activeOperationJobs,
     },
     needsAssignment: {
-      label: "Needs assignment",
+      label: translate("dashboard.needsAssignment"),
       jobs: jobsNeedingAssignment,
     },
     inProgress: {
-      label: "In progress",
+      label: translate("dashboard.inProgress"),
       jobs: inProgressJobs,
     },
     completed: {
-      label: "Completed",
+      label: translate("dashboard.completed"),
       jobs: completedJobs,
     },
     openIssues: {
-      label: "Jobs with open issues",
+      label: translate("dashboard.jobsWithOpenIssues"),
       jobs: jobs.filter((job) => openIssueJobIds.has(job.id)),
     },
   };
@@ -855,7 +834,7 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
     <section className="dashboard" aria-labelledby="dashboard-title">
       <div className="dashboard__intro">
         <div>
-          <p className="eyebrow">Manager workspace</p>
+          <p className="eyebrow">{translate("dashboard.managerWorkspace")}</p>
           <h2 id="dashboard-title" className="dashboard__title">
             {translate("dashboard.title")}
           </h2>
@@ -867,31 +846,31 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
       </div>
 
       {jobs.length === 0 ? (
-        <StateCard message="No jobs available for this organization." />
+        <StateCard message={translate("dashboard.noMatchingJobs")} />
       ) : (
         <>
-          <div className="dashboard-summary" aria-label="Operational summary">
-            <SummaryCard label="Total jobs" count={jobs.length} />
+          <div className="dashboard-summary" aria-label={translate("dashboard.operation")}>
+            <SummaryCard label={translate("dashboard.totalJobs")} count={jobs.length} />
             <SummaryCard
-              label="Needs assignment"
+              label={translate("dashboard.needsAssignment")}
               count={jobsNeedingAssignment.length}
               isActive={operationFilter === "needsAssignment"}
               onClick={() => setOperationFilter("needsAssignment")}
             />
             <SummaryCard
-              label="In progress"
+              label={translate("dashboard.inProgress")}
               count={inProgressJobs.length}
               isActive={operationFilter === "inProgress"}
               onClick={() => setOperationFilter("inProgress")}
             />
             <SummaryCard
-              label="Completed"
+              label={translate("dashboard.completed")}
               count={completedJobs.length}
               isActive={operationFilter === "completed"}
               onClick={() => setOperationFilter("completed")}
             />
             <SummaryCard
-              label="Open issues"
+              label={translate("dashboard.openIssues")}
               count={openIssues.length}
               tone="attention"
               isActive={operationFilter === "openIssues"}
@@ -903,13 +882,13 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
             <section className="dashboard-panel" aria-labelledby="attention-title">
               <div className="dashboard-panel__header">
                 <div>
-                  <p className="eyebrow">Priorities</p>
+                  <p className="eyebrow">{translate("dashboard.priorities")}</p>
                   <h3 id="attention-title">{translate("dashboard.needsAttention")}</h3>
                 </div>
               </div>
 
               {attentionItems.length === 0 ? (
-                <p className="dashboard-empty">No current items need attention.</p>
+                <p className="dashboard-empty">{translate("dashboard.noAttention")}</p>
               ) : (
                 <div className="attention-list">
                   {attentionItems.map((item) => (
@@ -920,10 +899,10 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
                       onClick={() => onOpenJob(item.job)}
                     >
                       <span className="attention-item__label">{item.label}</span>
-                      <strong>{item.job.propertyName || content.unnamedProperty}</strong>
+                      <strong>{item.job.propertyName || translate("properties.unnamed")}</strong>
                       <span>{item.detail}</span>
                       <small>
-                        {item.status} · {formatDate(item.job.scheduledDate)}
+                        {item.status} · {formatDate(item.job.scheduledDate, translate, language)}
                       </small>
                       <span className="attention-item__action">
                         {item.action} <span aria-hidden="true">→</span>
@@ -937,13 +916,13 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
             <section className="dashboard-panel" aria-labelledby="completed-title">
               <div className="dashboard-panel__header">
                 <div>
-                  <p className="eyebrow">History</p>
+                  <p className="eyebrow">{translate("dashboard.history")}</p>
                   <h3 id="completed-title">{translate("dashboard.recentlyCompleted")}</h3>
                 </div>
               </div>
 
               {completedJobs.length === 0 ? (
-                <p className="dashboard-empty">No completed cleanings yet.</p>
+                <p className="dashboard-empty">{translate("dashboard.noCompleted")}</p>
               ) : (
                 <div className="recent-list">
                   {sortByCompletedAt(completedJobs).map((job) => (
@@ -953,10 +932,10 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
                       type="button"
                       onClick={() => onOpenJob(job)}
                     >
-                      <strong>{job.propertyName || content.unnamedProperty}</strong>
-                      <span>{formatDate(job.scheduledDate)}</span>
-                      <span>{job.assignedCleanerName || content.missingValue}</span>
-                      <small>{formatCreatedAt(job.completedAt) || "Completion time unavailable"}</small>
+                      <strong>{job.propertyName || translate("properties.unnamed")}</strong>
+                      <span>{formatDate(job.scheduledDate, translate, language)}</span>
+                      <span>{job.assignedCleanerName || translate("common.notProvided")}</span>
+                      <small>{formatCreatedAt(job.completedAt, language) || translate("dashboard.completionUnavailable")}</small>
                     </button>
                   ))}
                 </div>
@@ -967,8 +946,8 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
           <section className="dashboard-panel dashboard-panel--operation" aria-labelledby="operation-title">
             <div className="dashboard-panel__header">
               <div>
-                <p className="eyebrow">Schedule</p>
-                <h3 id="operation-title">Operation</h3>
+                <p className="eyebrow">{translate("dashboard.schedule")}</p>
+                <h3 id="operation-title">{translate("dashboard.operation")}</h3>
                 <p className="dashboard-panel__subtitle">
                   {filterOptions[operationFilter]?.label}
                 </p>
@@ -979,13 +958,13 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
                   type="button"
                   onClick={() => setOperationFilter("active")}
                 >
-                  Show active jobs
+                  {translate("dashboard.showActiveJobs")}
                 </button>
               )}
             </div>
 
             {visibleOperation.length === 0 ? (
-              <p className="dashboard-empty">No jobs match this view.</p>
+              <p className="dashboard-empty">{translate("dashboard.noMatchingJobs")}</p>
             ) : (
               <div className="operation-list">
                 {visibleOperation.map((job) => (
@@ -995,12 +974,12 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
                     type="button"
                     onClick={() => onOpenJob(job)}
                   >
-                    <span>{formatDate(job.scheduledDate)}</span>
-                    <strong>{job.propertyName || content.unnamedProperty}</strong>
+                    <span>{formatDate(job.scheduledDate, translate, language)}</span>
+                    <strong>{job.propertyName || translate("properties.unnamed")}</strong>
                     <span className="operation-item__status">
-                      {formatOperationalStatus(job.operationalStatus)}
+                      {formatOperationalStatus(job.operationalStatus, translate)}
                     </span>
-                    <span>{job.assignedCleanerName || "Not assigned"}</span>
+                    <span>{job.assignedCleanerName || translate("dashboard.notAssigned")}</span>
                   </button>
                 ))}
               </div>
@@ -1066,47 +1045,50 @@ function sortIssuesByJobScheduledDate(issues) {
   );
 }
 
-function formatIssueCategory(category) {
-  return {
-    ACCESS: "Access",
-    SUPPLIES: "Supplies",
-    BROKEN_ITEM: "Broken item",
-    HEAVY_CLEANING: "Heavy cleaning",
-    OTHER: "Other",
-  }[category] || content.missingValue;
+function formatIssueCategory(category, translate = null) {
+  const key = {
+    ACCESS: "issueCategory.access",
+    SUPPLIES: "issueCategory.supplies",
+    BROKEN_ITEM: "issueCategory.brokenItem",
+    HEAVY_CLEANING: "issueCategory.heavyCleaning",
+    OTHER: "issueCategory.other",
+  }[category];
+
+  return key && translate ? translate(key) : category || content.missingValue;
 }
 
 function PropertyList({ properties, isLoading, hasError, onSelect }) {
+  const { translate } = useTranslation();
   if (isLoading) {
-    return <StateCard message={content.loadingProperties} status="status" />;
+    return <StateCard message={translate("properties.loading")} status="status" />;
   }
 
   if (hasError) {
-    return <StateCard message={content.propertyErrorMessage} status="alert" isError />;
+    return <StateCard message={translate("properties.error")} status="alert" isError />;
   }
 
   if (properties.length === 0) {
-    return <StateCard message={content.emptyProperties} />;
+    return <StateCard message={translate("properties.empty")} />;
   }
 
   return (
     <div className="property-list">
       {properties.map((property) => {
-        const propertyName = property.name || content.unnamedProperty;
+        const propertyName = property.name || translate("properties.unnamed");
 
         return (
           <button
             key={property.id}
             className="property-card"
             type="button"
-            aria-label={`View ${propertyName}`}
+            aria-label={translate("properties.view", { property: propertyName })}
             onClick={() => onSelect(property)}
           >
             <span className="property-card__title">{propertyName}</span>
 
             <span className="property-card__label">
               <span className="status-dot" aria-hidden="true" />
-              {content.propertyLabel}
+              {translate("common.property")}
             </span>
           </button>
         );
@@ -1116,42 +1098,43 @@ function PropertyList({ properties, isLoading, hasError, onSelect }) {
 }
 
 function PropertyDetail({ property, onBack, onCreateCleaning }) {
-  const propertyName = property.name || content.unnamedProperty;
-  const clientName = property.clientName || content.missingValue;
-  let activeStatus = content.missingValue;
+  const { language, translate } = useTranslation();
+  const propertyName = property.name || translate("properties.unnamed");
+  const clientName = property.clientName || translate("common.notProvided");
+  let activeStatus = translate("common.notProvided");
 
   if (property.active === true) {
-    activeStatus = "Active";
+    activeStatus = translate("common.active");
   }
 
   if (property.active === false) {
-    activeStatus = "Inactive";
+    activeStatus = translate("common.inactive");
   }
 
   return (
     <section className="panel" aria-labelledby="property-detail-title">
       <BackButton onClick={onBack} />
 
-      <p className="eyebrow">{content.propertyDetails}</p>
+      <p className="eyebrow">{translate("properties.details")}</p>
       <h2 id="property-detail-title" className="panel__title">
         {propertyName}
       </h2>
 
       <dl className="detail-list">
-        <DetailItem label="Client" value={clientName} />
+        <DetailItem label={translate("common.client")} value={clientName} />
         {property.defaultClientPrice !== undefined && (
           <DetailItem
-            label="Default client price"
-            value={formatPrice(property.defaultClientPrice)}
+            label={translate("properties.defaultClientPrice")}
+            value={formatPrice(property.defaultClientPrice, translate, language)}
           />
         )}
         {property.defaultCleanerPrice !== undefined && (
           <DetailItem
-            label="Default cleaner price"
-            value={formatPrice(property.defaultCleanerPrice)}
+            label={translate("properties.defaultCleanerPrice")}
+            value={formatPrice(property.defaultCleanerPrice, translate, language)}
           />
         )}
-        <DetailItem label="Status" value={activeStatus} />
+        <DetailItem label={translate("common.status")} value={activeStatus} />
       </dl>
 
       <div className="button-row">
@@ -1160,7 +1143,7 @@ function PropertyDetail({ property, onBack, onCreateCleaning }) {
           type="button"
           onClick={onCreateCleaning}
         >
-          {content.createCleaning}
+          {translate("properties.createCleaning")}
         </button>
       </div>
     </section>
@@ -1168,10 +1151,11 @@ function PropertyDetail({ property, onBack, onCreateCleaning }) {
 }
 
 function CreateCleaningForm({ property, onBack, onCreated }) {
+  const { translate } = useTranslation();
   const propertyName = property.name ?? "";
   const clientName = property.clientName ?? "";
-  const displayPropertyName = propertyName || content.unnamedProperty;
-  const displayClientName = clientName || content.missingValue;
+  const displayPropertyName = propertyName || translate("properties.unnamed");
+  const displayClientName = clientName || translate("common.notProvided");
   const [formValues, setFormValues] = useState({
     scheduledDate: "",
     clientPrice: property.defaultClientPrice ?? "",
@@ -1235,24 +1219,24 @@ function CreateCleaningForm({ property, onBack, onCreated }) {
     <section className="panel" aria-labelledby="create-cleaning-title">
       <BackButton onClick={onBack} />
 
-      <p className="eyebrow">New job</p>
+      <p className="eyebrow">{translate("jobs.new")}</p>
       <h2 id="create-cleaning-title" className="panel__title">
-        {content.createCleaning}
+        {translate("jobs.create")}
       </h2>
 
       <form className="cleaning-form" onSubmit={handleSubmit}>
         <label>
-          Property name
+          {translate("common.property")}
           <input type="text" value={displayPropertyName} readOnly />
         </label>
 
         <label>
-          Client name
+          {translate("common.client")}
           <input type="text" value={displayClientName} readOnly />
         </label>
 
         <label>
-          Date
+          {translate("common.date")}
           <input
             type="date"
             name="scheduledDate"
@@ -1264,7 +1248,7 @@ function CreateCleaningForm({ property, onBack, onCreated }) {
 
         <div className="form-row">
           <label>
-            Client price
+            {translate("jobs.clientPrice")}
             <input
               type="number"
               name="clientPrice"
@@ -1276,7 +1260,7 @@ function CreateCleaningForm({ property, onBack, onCreated }) {
           </label>
 
           <label>
-            Cleaner payout
+            {translate("jobs.cleanerPayout")}
             <input
               type="number"
               name="cleanerPayout"
@@ -1289,7 +1273,7 @@ function CreateCleaningForm({ property, onBack, onCreated }) {
         </div>
 
         <label>
-          Notes
+          {translate("common.notes")}
           <textarea
             name="notes"
             rows="4"
@@ -1299,13 +1283,13 @@ function CreateCleaningForm({ property, onBack, onCreated }) {
         </label>
 
         <label>
-          Status
-          <input type="text" value="UNASSIGNED" readOnly />
+          {translate("common.status")}
+          <input type="text" value={translate("status.unassigned")} readOnly />
         </label>
 
         {hasSaveError && (
           <p className="form-error" role="alert">
-            {content.createCleaningError}
+            {translate("jobs.createError")}
           </p>
         )}
 
@@ -1315,7 +1299,7 @@ function CreateCleaningForm({ property, onBack, onCreated }) {
             type="submit"
             disabled={isSaving}
           >
-            {isSaving ? "Creating…" : content.createCleaning}
+            {isSaving ? translate("jobs.creating") : translate("jobs.create")}
           </button>
         </div>
       </form>
@@ -1324,26 +1308,27 @@ function CreateCleaningForm({ property, onBack, onCreated }) {
 }
 
 function CleaningSuccess({ job, onBack, onViewJob }) {
+  const { language, translate } = useTranslation();
   return (
     <section className="panel success-panel" aria-labelledby="success-title">
       <span className="success-mark" aria-hidden="true">
         ✓
       </span>
-      <p className="eyebrow">Job saved</p>
+      <p className="eyebrow">{translate("jobs.saved")}</p>
       <h2 id="success-title" className="panel__title">
-        {content.successTitle}
+        {translate("jobs.created")}
       </h2>
       <p className="success-panel__detail">
-        {job.propertyName || content.unnamedProperty}
+        {job.propertyName || translate("properties.unnamed")}
       </p>
-      <p className="success-panel__date">{formatDate(job.scheduledDate)}</p>
+      <p className="success-panel__date">{formatDate(job.scheduledDate, translate, language)}</p>
 
       <div className="button-row">
         <button className="button button--primary" type="button" onClick={onViewJob}>
-          View job
+          {translate("jobs.viewJob")}
         </button>
         <button className="button" type="button" onClick={onBack}>
-          Back to properties
+          {translate("jobs.backToProperties")}
         </button>
       </div>
     </section>
@@ -1351,16 +1336,17 @@ function CleaningSuccess({ job, onBack, onViewJob }) {
 }
 
 function JobList({ jobs, isLoading, hasError, onSelect }) {
+  const { language, translate } = useTranslation();
   if (isLoading) {
-    return <StateCard message={content.loadingJobs} status="status" />;
+    return <StateCard message={translate("jobs.loading")} status="status" />;
   }
 
   if (hasError) {
-    return <StateCard message={content.jobErrorMessage} status="alert" isError />;
+    return <StateCard message={translate("jobs.error")} status="alert" isError />;
   }
 
   if (jobs.length === 0) {
-    return <StateCard message={content.emptyJobs} />;
+    return <StateCard message={translate("jobs.empty")} />;
   }
 
   const sortedJobs = [...jobs].sort((firstJob, secondJob) =>
@@ -1369,9 +1355,9 @@ function JobList({ jobs, isLoading, hasError, onSelect }) {
 
   return (
     <section aria-labelledby="jobs-title">
-      <p className="eyebrow">{content.jobsNavigation}</p>
+      <p className="eyebrow">{translate("navigation.jobs")}</p>
       <h2 id="jobs-title" className="list-title">
-        Cleaning jobs
+        {translate("jobs.title")}
       </h2>
 
       <div className="job-list">
@@ -1380,22 +1366,22 @@ function JobList({ jobs, isLoading, hasError, onSelect }) {
             key={job.id}
             className="job-card"
             type="button"
-            aria-label={`View job for ${job.propertyName || content.unnamedProperty}`}
+            aria-label={translate("properties.view", { property: job.propertyName || translate("properties.unnamed") })}
             onClick={() => onSelect(job)}
           >
-            <span className="job-card__date">{formatDate(job.scheduledDate)}</span>
+            <span className="job-card__date">{formatDate(job.scheduledDate, translate, language)}</span>
             <span className="job-card__summary">
-              <strong>{job.propertyName || content.unnamedProperty}</strong>
-              <span>{job.clientName || content.missingValue}</span>
+              <strong>{job.propertyName || translate("properties.unnamed")}</strong>
+              <span>{job.clientName || translate("common.notProvided")}</span>
             </span>
             <span className="status-badge">
-              {job.operationalStatus || content.missingValue}
+              {formatOperationalStatus(job.operationalStatus, translate)}
             </span>
             {(hasValue(job.clientPrice) || hasValue(job.cleanerPayout)) && (
               <span className="job-card__prices">
-                {hasValue(job.clientPrice) && <span>Client {formatPrice(job.clientPrice)}</span>}
+                {hasValue(job.clientPrice) && <span>{translate("common.client")} {formatPrice(job.clientPrice, translate, language)}</span>}
                 {hasValue(job.cleanerPayout) && (
-                  <span>Cleaner {formatPrice(job.cleanerPayout)}</span>
+                  <span>{translate("common.cleaner")} {formatPrice(job.cleanerPayout, translate, language)}</span>
                 )}
               </span>
             )}
@@ -1423,16 +1409,17 @@ function JobDetail({
   onSimulateAssignedCleaner,
   onResolveIssue,
 }) {
+  const { language, translate } = useTranslation();
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
   const [resolvingIssueId, setResolvingIssueId] = useState(null);
   const [resolutionNote, setResolutionNote] = useState("");
   const [isResolvingIssue, setIsResolvingIssue] = useState(false);
   const [resolutionError, setResolutionError] = useState(null);
-  const createdAt = formatCreatedAt(job.createdAt);
-  const assignedAt = formatCreatedAt(job.assignedAt);
-  const startedAt = formatCreatedAt(job.startedAt);
-  const completedAt = formatCreatedAt(job.completedAt);
+  const createdAt = formatCreatedAt(job.createdAt, language);
+  const assignedAt = formatCreatedAt(job.assignedAt, language);
+  const startedAt = formatCreatedAt(job.startedAt, language);
+  const completedAt = formatCreatedAt(job.completedAt, language);
   const isAssigned = Boolean(
     job.assignedCleanerId ||
       ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus),
@@ -1459,8 +1446,8 @@ function JobDetail({
     } catch (error) {
       setAssignmentError(
         error.code === "job-already-assigned"
-          ? content.alreadyAssignedErrorMessage
-          : content.assignmentErrorMessage,
+          ? translate("offers.alreadyAssigned")
+          : translate("offers.assignmentError"),
       );
     } finally {
       setAssigningCleanerId(null);
@@ -1498,8 +1485,8 @@ function JobDetail({
     } catch (error) {
       setResolutionError(
         error.code === "issue-not-open"
-          ? content.issueAlreadyResolvedError
-          : content.resolveIssueError,
+          ? translate("issues.alreadyResolved")
+          : translate("issues.resolveError"),
       );
     } finally {
       setIsResolvingIssue(false);
@@ -1510,90 +1497,90 @@ function JobDetail({
     <section className="panel" aria-labelledby="job-detail-title">
       <BackButton onClick={onBack} />
 
-      <p className="eyebrow">{content.jobDetails}</p>
+      <p className="eyebrow">{translate("jobs.details")}</p>
       <h2 id="job-detail-title" className="panel__title">
-        {job.propertyName || content.unnamedProperty}
+        {job.propertyName || translate("properties.unnamed")}
       </h2>
 
       <dl className="detail-list">
-        <DetailItem label="Property" value={job.propertyName || content.unnamedProperty} />
-        <DetailItem label="Client" value={job.clientName || content.missingValue} />
-        <DetailItem label="Scheduled date" value={formatDate(job.scheduledDate)} />
+        <DetailItem label={translate("common.property")} value={job.propertyName || translate("properties.unnamed")} />
+        <DetailItem label={translate("common.client")} value={job.clientName || translate("common.notProvided")} />
+        <DetailItem label={translate("jobs.scheduledDate")} value={formatDate(job.scheduledDate, translate, language)} />
         <DetailItem
-          label="Operational status"
-          value={job.operationalStatus || content.missingValue}
+          label={translate("jobs.operationalStatus")}
+          value={formatOperationalStatus(job.operationalStatus, translate)}
         />
-        <DetailItem label="Client price" value={formatPrice(job.clientPrice)} />
-        <DetailItem label="Cleaner payout" value={formatPrice(job.cleanerPayout)} />
+        <DetailItem label={translate("jobs.clientPrice")} value={formatPrice(job.clientPrice, translate, language)} />
+        <DetailItem label={translate("jobs.cleanerPayout")} value={formatPrice(job.cleanerPayout, translate, language)} />
         {isAssigned && (
           <DetailItem
-            label="Assigned cleaner"
-            value={job.assignedCleanerName || content.missingValue}
+            label={translate("jobs.assignedCleaner")}
+            value={job.assignedCleanerName || translate("common.notProvided")}
           />
         )}
         {isAssigned && (
-          <DetailItem label="Assigned time" value={assignedAt || content.missingValue} />
+          <DetailItem label={translate("jobs.assignedTime")} value={assignedAt || translate("common.notProvided")} />
         )}
         {["IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus) && (
-          <DetailItem label="Started time" value={startedAt || content.missingValue} />
+          <DetailItem label={translate("jobs.startedTime")} value={startedAt || translate("common.notProvided")} />
         )}
         {job.operationalStatus === "COMPLETED" && (
-          <DetailItem label="Completed time" value={completedAt || content.missingValue} />
+          <DetailItem label={translate("jobs.completedTime")} value={completedAt || translate("common.notProvided")} />
         )}
-        {createdAt && <DetailItem label="Created" value={createdAt} />}
+        {createdAt && <DetailItem label={translate("jobs.createdTime")} value={createdAt} />}
       </dl>
 
       {job.notes && (
-        <section className="notes-section" aria-label="Notes">
-          <h3>Notes</h3>
+        <section className="notes-section" aria-label={translate("common.notes")}>
+          <h3>{translate("common.notes")}</h3>
           <p>{job.notes}</p>
         </section>
       )}
 
       <section className="issues-section" aria-labelledby="issues-title">
         <div className="issues-section__header">
-          <h3 id="issues-title">Issues</h3>
+          <h3 id="issues-title">{translate("issues.title")}</h3>
           <button
             className="button"
             type="button"
             onClick={onRefreshIssues}
             disabled={isLoadingIssues}
           >
-            {content.refreshIssues}
+            {translate("issues.refresh")}
           </button>
         </div>
 
-        {isLoadingIssues && <StateCard message={content.loadingIssues} status="status" />}
+        {isLoadingIssues && <StateCard message={translate("issues.loading")} status="status" />}
 
         {!isLoadingIssues && hasIssuesError && (
-          <StateCard message={content.issuesErrorMessage} status="alert" isError />
+          <StateCard message={translate("issues.error")} status="alert" isError />
         )}
 
         {!isLoadingIssues && !hasIssuesError && sortedIssues.length === 0 && (
-          <StateCard message={content.emptyIssues} />
+          <StateCard message={translate("issues.empty")} />
         )}
 
         {!isLoadingIssues && !hasIssuesError && sortedIssues.length > 0 && (
           <div className="issue-list">
             {sortedIssues.map((issue) => {
-              const createdAt = formatCreatedAt(issue.createdAt);
-              const resolvedAt = formatCreatedAt(issue.resolvedAt);
+              const createdAt = formatCreatedAt(issue.createdAt, language);
+              const resolvedAt = formatCreatedAt(issue.resolvedAt, language);
               const isOpen = issue.status === "OPEN";
               const isResolutionFormVisible = resolvingIssueId === issue.id;
 
               return (
                 <article key={issue.id} className="issue-card">
                   <div className="issue-card__header">
-                    <strong>{issue.category || content.missingValue}</strong>
-                    <span className="status-badge">{issue.status || "OPEN"}</span>
+                    <strong>{formatIssueCategory(issue.category, translate)}</strong>
+                    <span className="status-badge">{issue.status === "RESOLVED" ? translate("status.resolved") : translate("status.open")}</span>
                   </div>
-                  <p>{issue.description || content.missingValue}</p>
-                  <span>Reported by {issue.cleanerName || content.missingValue}</span>
-                  {createdAt && <span>Reported {createdAt}</span>}
-                  {resolvedAt && <span>Resolved {resolvedAt}</span>}
+                  <p>{issue.description || translate("common.notProvided")}</p>
+                  <span>{translate("issues.reportedBy", { cleaner: issue.cleanerName || translate("common.notProvided") })}</span>
+                  {createdAt && <span>{translate("issues.reported")} {createdAt}</span>}
+                  {resolvedAt && <span>{translate("issues.resolved")} {resolvedAt}</span>}
                   {issue.status === "RESOLVED" && hasValue(issue.resolutionNote) && (
                     <p className="issue-card__resolution-note">
-                      Resolution: {issue.resolutionNote}
+                      {translate("issues.resolution")}: {issue.resolutionNote}
                     </p>
                   )}
 
@@ -1604,7 +1591,7 @@ function JobDetail({
                         type="button"
                         onClick={() => openResolutionForm(issue)}
                       >
-                        {content.resolveIssue}
+                        {translate("issues.resolve")}
                       </button>
                     </div>
                   )}
@@ -1612,11 +1599,11 @@ function JobDetail({
                   {isOpen && isResolutionFormVisible && (
                     <form className="issue-resolution-form" onSubmit={resolveSelectedIssue}>
                       <p className="issue-resolution-form__summary">
-                        <strong>{issue.category || content.missingValue}</strong>
-                        <span>{issue.description || content.missingValue}</span>
+                        <strong>{formatIssueCategory(issue.category, translate)}</strong>
+                        <span>{issue.description || translate("common.notProvided")}</span>
                       </p>
                       <label>
-                        Resolution note (optional)
+                        {translate("issues.resolutionNote")}
                         <textarea
                           name="resolutionNote"
                           value={resolutionNote}
@@ -1636,14 +1623,14 @@ function JobDetail({
                           disabled={isResolvingIssue}
                           onClick={closeResolutionForm}
                         >
-                          Cancel
+                          {translate("common.cancel")}
                         </button>
                         <button
                           className="button button--primary"
                           type="submit"
                           disabled={isResolvingIssue}
                         >
-                          {isResolvingIssue ? "Resolving…" : content.resolveIssue}
+                          {isResolvingIssue ? translate("issues.resolving") : translate("issues.resolve")}
                         </button>
                       </div>
                     </form>
@@ -1657,46 +1644,46 @@ function JobDetail({
 
       <section className="offers-section" aria-labelledby="offers-title">
         <div className="offers-section__header">
-          <h3 id="offers-title">Offers</h3>
+          <h3 id="offers-title">{translate("offers.title")}</h3>
           <button
             className="button"
             type="button"
             onClick={onRefreshOffers}
             disabled={isLoadingOffers}
           >
-            {content.refreshOffers}
+            {translate("offers.refresh")}
           </button>
         </div>
 
-        {isLoadingOffers && <StateCard message={content.loadingOffers} status="status" />}
+        {isLoadingOffers && <StateCard message={translate("offers.loading")} status="status" />}
 
         {!isLoadingOffers && hasOffersError && (
-          <StateCard message={content.offersErrorMessage} status="alert" isError />
+          <StateCard message={translate("offers.error")} status="alert" isError />
         )}
 
         {!isLoadingOffers && !hasOffersError && sortedOffers.length === 0 && (
-          <StateCard message={content.emptyOffers} />
+          <StateCard message={translate("offers.empty")} />
         )}
 
         {!isLoadingOffers && !hasOffersError && sortedOffers.length > 0 && (
           <div className="offer-status-list">
             {sortedOffers.map((offer) => {
-              const respondedAt = formatCreatedAt(offer.respondedAt);
+              const respondedAt = formatCreatedAt(offer.respondedAt, language);
 
               return (
                 <article key={offer.id} className="offer-status-item">
                   <div>
-                    <strong>{offer.cleanerName || content.missingValue}</strong>
-                    {respondedAt && <span>Responded {respondedAt}</span>}
+                    <strong>{offer.cleanerName || translate("common.notProvided")}</strong>
+                    {respondedAt && <span>{translate("offers.responded")} {respondedAt}</span>}
                   </div>
-                  <span className="status-badge">{offer.status || "PENDING"}</span>
+                  <span className="status-badge">{translate({ PENDING: "status.pending", INTERESTED: "status.interested", DECLINED: "status.declined" }[offer.status] || "common.notProvided")}</span>
                   <div className="offer-status-actions">
                     <button
                       className="button"
                       type="button"
                       onClick={() => onSimulateOffer(offer)}
                     >
-                      {content.simulateOffer}
+                      {translate("offers.simulateOffer")}
                     </button>
                     {offer.status === "INTERESTED" && !isAssigned && (
                       <button
@@ -1706,8 +1693,8 @@ function JobDetail({
                         onClick={() => assignCleaner(offer)}
                       >
                         {assigningCleanerId === offer.cleanerId
-                          ? "Assigning…"
-                          : content.assign}
+                          ? translate("offers.assigning")
+                          : translate("offers.assign")}
                       </button>
                     )}
                   </div>
@@ -1727,7 +1714,7 @@ function JobDetail({
       <div className="button-row">
         {canSimulateAssignedCleaner && (
           <button className="button" type="button" onClick={onSimulateAssignedCleaner}>
-            {content.simulateAssignedCleaner}
+            {translate("offers.simulateAssignedCleaner")}
           </button>
         )}
         <button
@@ -1735,7 +1722,7 @@ function JobDetail({
           type="button"
           onClick={onOfferToCleaners}
         >
-          {content.offerToCleaners}
+          {translate("offers.offerToCleaners")}
         </button>
       </div>
     </section>
@@ -1743,6 +1730,7 @@ function JobDetail({
 }
 
 function OfferCleaners({ job, cleaners, isLoading, hasError, onBack, onSent }) {
+  const { translate } = useTranslation();
   const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [hasSendError, setHasSendError] = useState(false);
@@ -1784,22 +1772,22 @@ function OfferCleaners({ job, cleaners, isLoading, hasError, onBack, onSent }) {
     <section className="panel" aria-labelledby="offer-cleaners-title">
       <BackButton onClick={onBack} />
 
-      <p className="eyebrow">Job offers</p>
+      <p className="eyebrow">{translate("offers.title")}</p>
       <h2 id="offer-cleaners-title" className="panel__title">
-        {content.offerToCleaners}
+        {translate("offers.offerToCleaners")}
       </h2>
       <p className="offer-job-name">
-        {job.propertyName || content.unnamedProperty}
+        {job.propertyName || translate("properties.unnamed")}
       </p>
 
-      {isLoading && <StateCard message={content.loadingCleaners} status="status" />}
+      {isLoading && <StateCard message={translate("offers.loadingCleaners")} status="status" />}
 
       {!isLoading && hasError && (
-        <StateCard message={content.cleanerErrorMessage} status="alert" isError />
+        <StateCard message={translate("offers.cleanerError")} status="alert" isError />
       )}
 
       {!isLoading && !hasError && cleaners.length === 0 && (
-        <StateCard message={content.emptyCleaners} />
+        <StateCard message={translate("offers.emptyCleaners")} />
       )}
 
       {!isLoading && !hasError && cleaners.length > 0 && (
@@ -1812,14 +1800,14 @@ function OfferCleaners({ job, cleaners, isLoading, hasError, onBack, onSent }) {
                   checked={selectedCleanerIds.includes(cleaner.id)}
                   onChange={() => toggleCleaner(cleaner.id)}
                 />
-                <span>{cleaner.name || content.missingValue}</span>
+                <span>{cleaner.name || translate("common.notProvided")}</span>
               </label>
             ))}
           </div>
 
           {hasSendError && (
             <p className="form-error" role="alert">
-              {content.sendOffersError}
+              {translate("offers.sendError")}
             </p>
           )}
 
@@ -1829,7 +1817,7 @@ function OfferCleaners({ job, cleaners, isLoading, hasError, onBack, onSent }) {
               type="submit"
               disabled={selectedCleanerIds.length === 0 || isSending}
             >
-              {isSending ? "Sending…" : content.sendOffers}
+              {isSending ? translate("offers.sending") : translate("offers.send")}
             </button>
           </div>
         </form>
@@ -1839,25 +1827,26 @@ function OfferCleaners({ job, cleaners, isLoading, hasError, onBack, onSent }) {
 }
 
 function OffersSuccess({ count, onBackToJob, onBackToJobs }) {
+  const { translate } = useTranslation();
   return (
     <section className="panel success-panel" aria-labelledby="offers-success-title">
       <span className="success-mark" aria-hidden="true">
         ✓
       </span>
-      <p className="eyebrow">Job offers</p>
+      <p className="eyebrow">{translate("offers.title")}</p>
       <h2 id="offers-success-title" className="panel__title">
-        {content.offersSent}
+        {translate("offers.sent")}
       </h2>
       <p className="success-panel__detail">
-        {count} {count === 1 ? "cleaner" : "cleaners"} received an offer.
+        {translate(count === 1 ? "offers.receivedOne" : "offers.receivedMany", { count })}
       </p>
 
       <div className="button-row">
         <button className="button button--primary" type="button" onClick={onBackToJob}>
-          Back to job
+          {translate("jobs.backToJob")}
         </button>
         <button className="button" type="button" onClick={onBackToJobs}>
-          Back to jobs
+          {translate("jobs.backToJobs")}
         </button>
       </div>
     </section>
@@ -2192,9 +2181,11 @@ function StateCard({ message, status, isError = false }) {
 }
 
 function BackButton({ onClick }) {
+  const { translate } = useTranslation();
+
   return (
     <button className="back-button" type="button" onClick={onClick}>
-      ← Back
+      ← {translate("common.back")}
     </button>
   );
 }
