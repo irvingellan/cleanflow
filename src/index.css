@@ -518,10 +518,30 @@ button.summary-card {
   white-space: nowrap;
 }
 
-.cleaner-directory-card__identity span,
-.cleaner-directory-card > span:not(.status-badge) {
+.cleaner-directory-card__details {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cleaner-directory-card__detail {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   color: #6a756f;
   font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.information-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  fill: none;
 }
 
 .cleaner-active-field {
@@ -1017,14 +1037,61 @@ button.summary-card {
 }
 
 @media (max-width: 520px) {
-  .foundation__header,
   .property-card {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .foundation__header {
-    margin-bottom: 28px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    margin-bottom: 20px;
+  }
+
+  .foundation__header .brand-block {
+    display: contents;
+  }
+
+  .foundation__header .brand-block > .eyebrow {
+    grid-column: 1;
+    grid-row: 1;
+    margin-bottom: 2px;
+    font-size: 0.6875rem;
+  }
+
+  .foundation__header .brand-block > h1 {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: clamp(2rem, 11vw, 2.5rem);
+  }
+
+  .foundation__header .header-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    gap: 5px;
+  }
+
+  .foundation__header .badge {
+    padding: 5px 8px;
+    font-size: 0.625rem;
+  }
+
+  .foundation__header .main-navigation {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .foundation__header .navigation-button {
+    min-height: 40px;
+    padding: 6px 4px;
+    font-size: 0.75rem;
+    line-height: 1.15;
+    white-space: normal;
   }
 
   .detail-list,
@@ -1047,11 +1114,36 @@ button.summary-card {
 
   .cleaner-directory-card {
     grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 12px;
+    padding: 16px;
   }
 
-  .cleaner-directory-card > span:not(.status-badge) {
+  .cleaner-directory-card__details {
     grid-column: 1 / -1;
     grid-row: 2;
+    gap: 8px;
+  }
+
+  .cleaner-directory-card__identity {
+    grid-column: 1;
+    grid-row: 1;
+    gap: 8px;
+  }
+
+  .cleaner-directory-card__status-badge {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .cleaner-directory-card__identity strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .cleaner-directory-card__detail {
+    font-size: 0.875rem;
   }
 
   .job-card__summary {
@@ -1094,9 +1186,23 @@ button.summary-card {
     flex-direction: column;
   }
 
-  .dashboard-summary,
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .summary-card {
+    min-height: 92px;
+    padding: 13px;
+    gap: 7px;
+  }
+
+  .summary-card--attention {
+    grid-column: 1 / -1;
   }
 
   .operation-item {
@@ -1121,6 +1227,30 @@ button.summary-card {
   .operation-item > span:last-child {
     grid-column: 1 / -1;
     grid-row: 3;
+  }
+}
+
+@media (max-width: 390px) {
+  .foundation__header .main-navigation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 340px) {
+  .app-shell {
+    padding: 14px;
+  }
+
+  .foundation__header .main-navigation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card--attention {
+    grid-column: auto;
   }
 }
 
