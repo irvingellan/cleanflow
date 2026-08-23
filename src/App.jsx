@@ -25,28 +25,6 @@ const content = {
   productName: "CleanFlow",
   unnamedProperty: "Unnamed property",
   missingValue: "Not provided",
-  cleanerOffer: "Cleaner offer",
-  interested: "Interested",
-  notAvailable: "Not available",
-  responseErrorMessage: "Unable to save your response.",
-  assign: "Assign",
-  assignmentErrorMessage: "Unable to assign cleaner.",
-  alreadyAssignedErrorMessage: "This job is already assigned.",
-  simulateAssignedCleaner: "Simulate assigned cleaner",
-  assignedCleaning: "Assigned cleaning",
-  cleaningInProgress: "Cleaning in progress",
-  startCleaning: "Start cleaning",
-  startCleaningError: "Unable to start cleaning.",
-  completeCleaning: "Complete cleaning",
-  cleaningCompleted: "Cleaning completed",
-  completeCleaningError: "Unable to complete cleaning.",
-  reportIssue: "Report issue",
-  submitIssue: "Submit issue",
-  createIssueError: "Unable to report issue.",
-  issueReported: "Issue reported",
-  resolveIssue: "Resolve issue",
-  resolveIssueError: "Unable to resolve issue.",
-  issueAlreadyResolvedError: "This issue is already resolved.",
 };
 
 function hasValue(value) {
@@ -94,22 +72,35 @@ function formatCreatedAt(value, language = "en") {
   }).format(value.toDate());
 }
 
-function formatOperationalStatus(status, translate = null) {
-  const key = {
+const statusTranslationKeys = {
     UNASSIGNED: "status.unassigned",
     OFFERED: "status.offered",
     ASSIGNED: "status.assigned",
     IN_PROGRESS: "status.inProgress",
     COMPLETED: "status.completed",
-  }[status];
+    PENDING: "status.pending",
+    INTERESTED: "status.interested",
+    DECLINED: "status.declined",
+    OPEN: "status.open",
+    RESOLVED: "status.resolved",
+};
 
-  return key && translate ? translate(key) : key ? messagesForCleaner[key] : content.missingValue;
+const statusFallbackMessages = {
+  "status.unassigned": "Unassigned", "status.offered": "Offered", "status.assigned": "Assigned",
+  "status.inProgress": "In progress", "status.completed": "Completed", "status.pending": "Pending",
+  "status.interested": "Interested", "status.declined": "Not available", "status.open": "Open",
+  "status.resolved": "Resolved",
+};
+
+function formatStatus(status, translate = null) {
+  const key = statusTranslationKeys[status];
+
+  return key && translate ? translate(key) : key ? statusFallbackMessages[key] : content.missingValue;
 }
 
-const messagesForCleaner = {
-  "status.unassigned": "Unassigned", "status.offered": "Offered", "status.assigned": "Assigned",
-  "status.inProgress": "In progress", "status.completed": "Completed",
-};
+function formatOperationalStatus(status, translate = null) {
+  return formatStatus(status, translate);
+}
 
 function App() {
   const { language, setLanguage, translate } = useTranslation();
@@ -1424,7 +1415,7 @@ function JobDetail({
     job.assignedCleanerId ||
       ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus),
   );
-  const canSimulateAssignedCleaner = ["ASSIGNED", "IN_PROGRESS"].includes(
+  const canSimulateAssignedCleaner = ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(
     job.operationalStatus,
   );
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
@@ -1854,6 +1845,7 @@ function OffersSuccess({ count, onBackToJob, onBackToJobs }) {
 }
 
 function CleanerOfferSimulation({ job, offer, onBackToJob }) {
+  const { language, translate } = useTranslation();
   const [offerStatus, setOfferStatus] = useState(offer.status || "PENDING");
   const [isResponding, setIsResponding] = useState(false);
   const [hasResponseError, setHasResponseError] = useState(false);
@@ -1880,32 +1872,32 @@ function CleanerOfferSimulation({ job, offer, onBackToJob }) {
     <section className="panel cleaner-offer-panel" aria-labelledby="cleaner-offer-title">
       <BackButton onClick={onBackToJob} />
 
-      <p className="eyebrow">Development simulation</p>
+      <p className="eyebrow">{translate("cleaner.developmentSimulation")}</p>
       <h2 id="cleaner-offer-title" className="panel__title">
-        {content.cleanerOffer}
+        {translate("cleaner.offerTitle")}
       </h2>
 
       <dl className="detail-list">
-        <DetailItem label="Property" value={job.propertyName || content.unnamedProperty} />
-        <DetailItem label="Scheduled date" value={formatDate(job.scheduledDate)} />
-        <DetailItem label="Offer status" value={offerStatus} />
+        <DetailItem label={translate("common.property")} value={job.propertyName || translate("properties.unnamed")} />
+        <DetailItem label={translate("jobs.scheduledDate")} value={formatDate(job.scheduledDate, translate, language)} />
+        <DetailItem label={translate("cleaner.offerStatus")} value={formatStatus(offerStatus, translate)} />
       </dl>
 
       {hasResponseError && (
         <p className="form-error" role="alert">
-          {content.responseErrorMessage}
+          {translate("cleaner.responseError")}
         </p>
       )}
 
       {offerStatus === "PENDING" && (
-        <div className="button-row" aria-label="Offer response">
+        <div className="button-row" aria-label={translate("cleaner.offerStatus")}>
           <button
             className="button button--primary"
             type="button"
             disabled={isResponding}
             onClick={() => submitResponse("INTERESTED")}
           >
-            {content.interested}
+            {translate("cleaner.interested")}
           </button>
           <button
             className="button"
@@ -1913,7 +1905,7 @@ function CleanerOfferSimulation({ job, offer, onBackToJob }) {
             disabled={isResponding}
             onClick={() => submitResponse("DECLINED")}
           >
-            {content.notAvailable}
+            {translate("cleaner.notAvailable")}
           </button>
         </div>
       )}
@@ -1928,14 +1920,15 @@ function AssignedCleanerJob({
   onCompleteCleaning,
   onReportIssue,
 }) {
+  const { language, translate } = useTranslation();
   const [isStarting, setIsStarting] = useState(false);
   const [hasStartError, setHasStartError] = useState(false);
   const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] =
     useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [hasCompletionError, setHasCompletionError] = useState(false);
-  const startedAt = formatCreatedAt(job.startedAt);
-  const completedAt = formatCreatedAt(job.completedAt);
+  const startedAt = formatCreatedAt(job.startedAt, language);
+  const completedAt = formatCreatedAt(job.completedAt, language);
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
   const isCompleted = job.operationalStatus === "COMPLETED";
 
@@ -1969,50 +1962,50 @@ function AssignedCleanerJob({
     <section className="panel cleaner-job-panel" aria-labelledby="cleaner-job-title">
       <BackButton onClick={onBackToJob} />
 
-      <p className="eyebrow">Development simulation</p>
+      <p className="eyebrow">{translate("cleaner.developmentSimulation")}</p>
       <h2 id="cleaner-job-title" className="panel__title">
         {isCompleted
-          ? content.cleaningCompleted
+          ? translate("cleaner.completedTitle")
           : isInProgress
-            ? content.cleaningInProgress
-            : content.assignedCleaning}
+            ? translate("cleaner.inProgressTitle")
+            : translate("cleaner.assignedTitle")}
       </h2>
 
       <dl className="detail-list">
-        <DetailItem label="Property" value={job.propertyName || content.unnamedProperty} />
-        <DetailItem label="Scheduled date" value={formatDate(job.scheduledDate)} />
+        <DetailItem label={translate("common.property")} value={job.propertyName || translate("properties.unnamed")} />
+        <DetailItem label={translate("jobs.scheduledDate")} value={formatDate(job.scheduledDate, translate, language)} />
         <DetailItem
-          label="Assigned cleaner"
-          value={job.assignedCleanerName || content.missingValue}
+          label={translate("jobs.assignedCleaner")}
+          value={job.assignedCleanerName || translate("common.notProvided")}
         />
         <DetailItem
-          label="Operational status"
-          value={job.operationalStatus || content.missingValue}
+          label={translate("jobs.operationalStatus")}
+          value={formatOperationalStatus(job.operationalStatus, translate)}
         />
         {(isInProgress || isCompleted) && (
-          <DetailItem label="Started time" value={startedAt || content.missingValue} />
+          <DetailItem label={translate("jobs.startedTime")} value={startedAt || translate("common.notProvided")} />
         )}
         {isCompleted && (
-          <DetailItem label="Completed time" value={completedAt || content.missingValue} />
+          <DetailItem label={translate("jobs.completedTime")} value={completedAt || translate("common.notProvided")} />
         )}
       </dl>
 
       {job.notes && (
-        <section className="notes-section" aria-label="Notes">
-          <h3>Notes</h3>
+        <section className="notes-section" aria-label={translate("common.notes")}>
+          <h3>{translate("common.notes")}</h3>
           <p>{job.notes}</p>
         </section>
       )}
 
       {hasStartError && (
         <p className="form-error" role="alert">
-          {content.startCleaningError}
+          {translate("cleaner.startError")}
         </p>
       )}
 
       {hasCompletionError && (
         <p className="form-error" role="alert">
-          {content.completeCleaningError}
+          {translate("cleaner.completeError")}
         </p>
       )}
 
@@ -2024,7 +2017,7 @@ function AssignedCleanerJob({
             disabled={isStarting}
             onClick={startCleaning}
           >
-            {isStarting ? "Starting…" : content.startCleaning}
+            {isStarting ? translate("cleaner.starting") : translate("cleaner.start")}
           </button>
         </div>
       )}
@@ -2032,7 +2025,7 @@ function AssignedCleanerJob({
       {isInProgress && (
         <div className="button-row">
           <button className="button" type="button" onClick={onReportIssue}>
-            {content.reportIssue}
+            {translate("cleaner.reportIssue")}
           </button>
           {!isCompletionConfirmationVisible && (
             <button
@@ -2040,15 +2033,15 @@ function AssignedCleanerJob({
               type="button"
               onClick={() => setIsCompletionConfirmationVisible(true)}
             >
-              {content.completeCleaning}
+              {translate("cleaner.complete")}
             </button>
           )}
         </div>
       )}
 
       {isInProgress && isCompletionConfirmationVisible && (
-        <section className="completion-confirmation" aria-label="Complete cleaning confirmation">
-          <p>Complete this cleaning?</p>
+        <section className="completion-confirmation" aria-label={translate("cleaner.completeConfirmation")}>
+          <p>{translate("cleaner.completeConfirmation")}</p>
           <div className="button-row">
             <button
               className="button"
@@ -2056,7 +2049,7 @@ function AssignedCleanerJob({
               disabled={isCompleting}
               onClick={() => setIsCompletionConfirmationVisible(false)}
             >
-              Cancel
+              {translate("common.cancel")}
             </button>
             <button
               className="button button--primary"
@@ -2064,7 +2057,7 @@ function AssignedCleanerJob({
               disabled={isCompleting}
               onClick={completeCleaning}
             >
-              {isCompleting ? "Completing…" : content.completeCleaning}
+              {isCompleting ? translate("cleaner.completing") : translate("cleaner.complete")}
             </button>
           </div>
         </section>
@@ -2074,6 +2067,7 @@ function AssignedCleanerJob({
 }
 
 function IssueForm({ job, onBack, onSubmitted }) {
+  const { translate } = useTranslation();
   const [category, setCategory] = useState("ACCESS");
   const [description, setDescription] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -2104,25 +2098,25 @@ function IssueForm({ job, onBack, onSubmitted }) {
     <section className="panel cleaner-job-panel" aria-labelledby="issue-form-title">
       <BackButton onClick={onBack} />
 
-      <p className="eyebrow">Cleaning issue</p>
+      <p className="eyebrow">{translate("cleaner.issueTitle")}</p>
       <h2 id="issue-form-title" className="panel__title">
-        {content.reportIssue}
+        {translate("cleaner.reportIssue")}
       </h2>
 
       <form className="cleaning-form" onSubmit={submitIssue}>
         <label>
-          Category
+          {translate("cleaner.issueCategory")}
           <select value={category} onChange={(event) => setCategory(event.target.value)}>
-            <option value="ACCESS">ACCESS</option>
-            <option value="SUPPLIES">SUPPLIES</option>
-            <option value="BROKEN_ITEM">BROKEN_ITEM</option>
-            <option value="HEAVY_CLEANING">HEAVY_CLEANING</option>
-            <option value="OTHER">OTHER</option>
+            <option value="ACCESS">{translate("issueCategory.access")}</option>
+            <option value="SUPPLIES">{translate("issueCategory.supplies")}</option>
+            <option value="BROKEN_ITEM">{translate("issueCategory.brokenItem")}</option>
+            <option value="HEAVY_CLEANING">{translate("issueCategory.heavyCleaning")}</option>
+            <option value="OTHER">{translate("issueCategory.other")}</option>
           </select>
         </label>
 
         <label>
-          Description
+          {translate("cleaner.issueDescription")}
           <textarea
             rows="4"
             value={description}
@@ -2132,19 +2126,19 @@ function IssueForm({ job, onBack, onSubmitted }) {
         </label>
 
         <label>
-          Reported by
-          <input type="text" value={job.assignedCleanerName || content.missingValue} readOnly />
+          {translate("cleaner.reportedBy")}
+          <input type="text" value={job.assignedCleanerName || translate("common.notProvided")} readOnly />
         </label>
 
         {hasSaveError && (
           <p className="form-error" role="alert">
-            {content.createIssueError}
+            {translate("cleaner.issueError")}
           </p>
         )}
 
         <div className="button-row">
           <button className="button button--primary" type="submit" disabled={isSaving}>
-            {isSaving ? "Reporting…" : content.submitIssue}
+            {isSaving ? translate("cleaner.reporting") : translate("cleaner.submitIssue")}
           </button>
         </div>
       </form>
@@ -2153,19 +2147,20 @@ function IssueForm({ job, onBack, onSubmitted }) {
 }
 
 function IssueSuccess({ onBackToCleaning }) {
+  const { translate } = useTranslation();
   return (
     <section className="panel success-panel" aria-labelledby="issue-success-title">
       <span className="success-mark" aria-hidden="true">
         ✓
       </span>
-      <p className="eyebrow">Cleaning issue</p>
+      <p className="eyebrow">{translate("cleaner.issueTitle")}</p>
       <h2 id="issue-success-title" className="panel__title">
-        {content.issueReported}
+        {translate("cleaner.issueReported")}
       </h2>
 
       <div className="button-row">
         <button className="button button--primary" type="button" onClick={onBackToCleaning}>
-          Back to cleaning
+          {translate("cleaner.backToCleaning")}
         </button>
       </div>
     </section>
