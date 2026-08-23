@@ -328,3 +328,13 @@ The system must distinguish at least:
 These dimensions must not be collapsed into one generic financial status. A sent invoice can remain unpaid, and a cleaner can be paid before the corresponding client payment is received.
 
 Financial totals and profit should be derived deterministically from underlying charges, compensation, adjustments and payment records. Automated invoicing and bank-transfer reconciliation remain future capabilities pending further workflow design.
+
+---
+
+## DEC-021 — Development Firestore access requires authentication
+
+Status: Current development foundation
+
+Firestore denies access by default. During development, any authenticated user is temporarily treated as the manager only for `organizations/cleanflow-demo/**`.
+
+This is not production-ready multi-tenant authorization. Before production or multi-user use, rules must authorize organization membership and roles. Cleaner and client/owner access must use narrower, role-appropriate permissions.
