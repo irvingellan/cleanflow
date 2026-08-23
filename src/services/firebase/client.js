@@ -4,7 +4,7 @@ import { createFirebaseConfig } from "./config.js";
 
 const firebaseConfig = createFirebaseConfig(import.meta.env);
 
-const firebaseApp = getApps().length
+export const firebaseApp = getApps().length
   ? getApp()
   : initializeApp(firebaseConfig);
 

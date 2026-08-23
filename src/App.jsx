@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import {
+  signInWithEmail,
+  signOutManager,
+  subscribeToAuthState,
+} from "./features/auth/authService.js";
+import {
   createCleaner,
   getAllCleaners,
   getCleaners,
@@ -145,6 +150,43 @@ function formatOperationalStatus(status, translate = null) {
 }
 
 function App() {
+  const [authUser, setAuthUser] = useState(undefined);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [hasSignOutError, setHasSignOutError] = useState(false);
+
+  useEffect(() => subscribeToAuthState(setAuthUser), []);
+
+  async function handleSignOut() {
+    setIsSigningOut(true);
+    setHasSignOutError(false);
+
+    try {
+      await signOutManager();
+    } catch {
+      setHasSignOutError(true);
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
+
+  if (authUser === undefined) {
+    return <AuthenticationLoading />;
+  }
+
+  if (!authUser) {
+    return <ManagerLogin />;
+  }
+
+  return (
+    <ManagerApplication
+      hasSignOutError={hasSignOutError}
+      isSigningOut={isSigningOut}
+      onSignOut={handleSignOut}
+    />
+  );
+}
+
+function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
   const [properties, setProperties] = useState([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(true);
@@ -610,7 +652,20 @@ function App() {
           </div>
           <div className="header-actions">
             <LanguageSelector language={language} onChange={setLanguage} />
+            <button
+              className="header-sign-out"
+              type="button"
+              disabled={isSigningOut}
+              onClick={onSignOut}
+            >
+              {isSigningOut ? translate("auth.signingOut") : translate("auth.signOut")}
+            </button>
             <span className="badge">{translate("brand.foundationBuild")}</span>
+            {hasSignOutError && (
+              <p className="header-auth-error" role="alert">
+                {translate("auth.signOutError")}
+              </p>
+            )}
           </div>
         </header>
 
@@ -786,6 +841,114 @@ function App() {
         {view === "issue-success" && selectedJob && (
           <IssueSuccess onBackToCleaning={() => setView("cleaner-job")} />
         )}
+      </section>
+    </main>
+  );
+}
+
+function AuthenticationLoading() {
+  const { language, setLanguage, translate } = useTranslation();
+
+  return (
+    <AuthenticationLayout language={language} onLanguageChange={setLanguage}>
+      <StateCard message={translate("auth.loading")} status="status" />
+    </AuthenticationLayout>
+  );
+}
+
+function ManagerLogin() {
+  const { language, setLanguage, translate } = useTranslation();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!email.trim() || !password) {
+      setErrorMessage(translate("auth.credentialsRequired"));
+      return;
+    }
+
+    setIsSigningIn(true);
+    setErrorMessage("");
+
+    try {
+      await signInWithEmail({ email: email.trim(), password });
+    } catch {
+      setErrorMessage(translate("auth.signInError"));
+      setIsSigningIn(false);
+    }
+  }
+
+  return (
+    <AuthenticationLayout language={language} onLanguageChange={setLanguage}>
+      <section className="panel auth-panel" aria-labelledby="login-title">
+        <p className="eyebrow">{translate("auth.managerAccess")}</p>
+        <h2 id="login-title" className="panel__title">
+          {translate("auth.signIn")}
+        </h2>
+
+        <form className="cleaning-form" noValidate onSubmit={handleSubmit}>
+          <label>
+            {translate("auth.email")}
+            <input
+              autoComplete="email"
+              name="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+          </label>
+
+          <label>
+            {translate("auth.password")}
+            <input
+              autoComplete="current-password"
+              name="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+
+          {errorMessage && (
+            <p className="form-error" role="alert">
+              {errorMessage}
+            </p>
+          )}
+
+          <div className="button-row">
+            <button className="button button--primary" type="submit" disabled={isSigningIn}>
+              {isSigningIn ? translate("auth.signingIn") : translate("auth.signIn")}
+            </button>
+          </div>
+        </form>
+      </section>
+    </AuthenticationLayout>
+  );
+}
+
+function AuthenticationLayout({ children, language, onLanguageChange }) {
+  const { translate } = useTranslation();
+
+  return (
+    <main className="app-shell">
+      <section className="foundation auth-foundation" aria-labelledby="page-title">
+        <header className="foundation__header">
+          <div className="brand-block">
+            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
+            <h1 id="page-title">{content.productName}</h1>
+          </div>
+          <div className="header-actions">
+            <LanguageSelector language={language} onChange={onLanguageChange} />
+            <span className="badge">{translate("brand.foundationBuild")}</span>
+          </div>
+        </header>
+        {children}
       </section>
     </main>
   );
