@@ -50,6 +50,15 @@ function localDayStart(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+function addLocalDays(date, days) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function localWeekStart(date) {
+  const mondayOffset = (date.getDay() + 6) % 7;
+  return addLocalDays(date, -mondayOffset);
+}
+
 function isWithinNext48Hours(job, now, windowEnd) {
   if (!job.scheduledDate) {
     return false;
@@ -87,6 +96,13 @@ export async function getOperationalDashboard() {
     todayStart.getMonth(),
     todayStart.getDate() + 1,
   );
+  const weekStart = localWeekStart(now);
+  const nextWeekStart = addLocalDays(weekStart, 7);
+  const weekStartDate = localDateKey(weekStart);
+  const weekEndDate = localDateKey(addLocalDays(weekStart, 6));
+  const weekDays = Array.from({ length: 7 }, (_, index) =>
+    localDateKey(addLocalDays(weekStart, index)),
+  );
   const jobs = jobsCollection();
   const [
     todayJobsCount,
@@ -97,6 +113,11 @@ export async function getOperationalDashboard() {
     inProgressSnapshot,
     next48HoursSnapshot,
     recentlyCompletedSnapshot,
+    weeklyScheduledCount,
+    weeklyAssignedCount,
+    weeklyNeedsAssignmentCount,
+    weeklyCompletedCount,
+    dailyLoadCounts,
   ] = await Promise.all([
     getCountFromServer(query(jobs, where("scheduledDate", "==", today))),
     getCountFromServer(
@@ -144,6 +165,46 @@ export async function getOperationalDashboard() {
         where("operationalStatus", "==", "COMPLETED"),
         orderBy("completedAt", "desc"),
         limit(recentlyCompletedJobLimit),
+      ),
+    ),
+    getCountFromServer(
+      query(
+        jobs,
+        where("scheduledDate", ">=", weekStartDate),
+        where("scheduledDate", "<=", weekEndDate),
+        orderBy("scheduledDate", "asc"),
+      ),
+    ),
+    getCountFromServer(
+      query(
+        jobs,
+        where("operationalStatus", "==", "ASSIGNED"),
+        where("scheduledDate", ">=", weekStartDate),
+        where("scheduledDate", "<=", weekEndDate),
+        orderBy("scheduledDate", "asc"),
+      ),
+    ),
+    getCountFromServer(
+      query(
+        jobs,
+        where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
+        where("scheduledDate", ">=", weekStartDate),
+        where("scheduledDate", "<=", weekEndDate),
+        orderBy("scheduledDate", "asc"),
+      ),
+    ),
+    getCountFromServer(
+      query(
+        jobs,
+        where("operationalStatus", "==", "COMPLETED"),
+        where("completedAt", ">=", Timestamp.fromDate(weekStart)),
+        where("completedAt", "<", Timestamp.fromDate(nextWeekStart)),
+        orderBy("completedAt", "desc"),
+      ),
+    ),
+    Promise.all(
+      weekDays.map((date) =>
+        getCountFromServer(query(jobs, where("scheduledDate", "==", date))),
       ),
     ),
   ]);
@@ -203,5 +264,15 @@ export async function getOperationalDashboard() {
       .filter((job) => isWithinNext48Hours(job, now, windowEnd))
       .sort(sortByScheduledDateTime),
     recentlyCompletedJobs,
+    weeklySummary: {
+      scheduled: weeklyScheduledCount.data().count,
+      assigned: weeklyAssignedCount.data().count,
+      needsAssignment: weeklyNeedsAssignmentCount.data().count,
+      completed: weeklyCompletedCount.data().count,
+      dailyLoad: weekDays.map((date, index) => ({
+        date,
+        count: dailyLoadCounts[index].data().count,
+      })),
+    },
   };
 }

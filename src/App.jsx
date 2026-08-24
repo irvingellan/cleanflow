@@ -144,6 +144,20 @@ function formatDate(value, translate = null, language = "en") {
   }).format(date);
 }
 
+function formatShortWeekday(value, language = "en") {
+  const date = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(localeByLanguage[language] || "en-US", {
+    weekday: "short",
+  })
+    .format(date)
+    .replace(/\.$/, "");
+}
+
 function formatCreatedAt(value, language = "en") {
   if (!value || typeof value.toDate !== "function") {
     return null;
@@ -1532,6 +1546,7 @@ function Dashboard({
   const pendingOffersByJob = dashboardData?.pendingOffersByJob || {};
   const next48HoursJobs = dashboardData?.next48HoursJobs || [];
   const recentlyCompletedJobs = dashboardData?.recentlyCompletedJobs || [];
+  const weeklySummary = dashboardData?.weeklySummary;
   const offeredJobsWithInterest = attentionJobs.filter(
     (job) =>
       job.operationalStatus === "OFFERED" &&
@@ -1781,6 +1796,8 @@ function Dashboard({
           </div>
         )}
       </section>
+
+      <DashboardWeekSummary summary={weeklySummary} />
     </section>
   );
 }
@@ -1803,6 +1820,64 @@ function DashboardNextJob({ job, onOpen }) {
       </span>
       <span>{job.assignedCleanerName || translate("dashboard.needsAssignment")}</span>
     </button>
+  );
+}
+
+function DashboardWeekSummary({ summary }) {
+  const { language, translate } = useTranslation();
+
+  if (!summary) {
+    return null;
+  }
+
+  const metrics = [
+    { key: "scheduled", icon: "calendar", label: translate("dashboard.weeklyScheduled") },
+    { key: "assigned", icon: "user-check", label: translate("dashboard.weeklyAssigned") },
+    {
+      key: "needsAssignment",
+      icon: "assignment",
+      label: translate("dashboard.weeklyNeedsAssignment"),
+    },
+    { key: "completed", icon: "check-circle", label: translate("dashboard.weeklyCompleted") },
+  ];
+  const maxDailyLoad = Math.max(1, ...summary.dailyLoad.map(({ count }) => count));
+
+  return (
+    <section className="dashboard-week" aria-labelledby="this-week-title">
+      <div className="dashboard-week__header">
+        <h3 id="this-week-title">
+          <OperationalIcon name="calendar" />
+          {translate("dashboard.thisWeek")}
+        </h3>
+      </div>
+
+      <div className="dashboard-week__metrics">
+        {metrics.map(({ key, icon, label }) => (
+          <div key={key} className="dashboard-week__metric">
+            <span>
+              <OperationalIcon name={icon} />
+              {label}
+            </span>
+            <strong>{summary[key] || 0}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="dashboard-week__load" aria-label={translate("dashboard.dailyLoad")}>
+        <span className="dashboard-week__load-title">{translate("dashboard.dailyLoad")}</span>
+        <div className="dashboard-week__days">
+          {summary.dailyLoad.map(({ date, count }) => (
+            <div key={date} className="dashboard-week__day">
+              <strong>{count}</strong>
+              <span className="dashboard-week__bar" aria-hidden="true">
+                <span style={{ height: `${(count / maxDailyLoad) * 100}%` }} />
+              </span>
+              <span>{formatShortWeekday(date, language)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 

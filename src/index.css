@@ -571,6 +571,113 @@ button.summary-card {
   letter-spacing: 0.04em;
 }
 
+.dashboard-week {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  border: 1px solid #dce5e0;
+  border-radius: 14px;
+  padding: 18px;
+  background: #f8faf9;
+}
+
+.dashboard-week__header h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #25382e;
+  font-size: 1.0625rem;
+}
+
+.dashboard-week__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboard-week__metric {
+  display: grid;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 11px;
+  background: #ffffff;
+}
+
+.dashboard-week__metric > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #5e7066;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.dashboard-week__metric .operational-icon {
+  font-size: 1rem;
+}
+
+.dashboard-week__metric strong {
+  color: #25382e;
+  font-size: 1.375rem;
+  line-height: 1;
+}
+
+.dashboard-week__load {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-week__load-title {
+  color: #5e7066;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-week__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-week__day {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #5e7066;
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.dashboard-week__day > strong {
+  color: #25382e;
+  font-size: 0.875rem;
+}
+
+.dashboard-week__bar {
+  display: flex;
+  align-items: end;
+  width: 100%;
+  max-width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #e3eae6;
+}
+
+.dashboard-week__bar > span {
+  width: 100%;
+  min-height: 2px;
+  border-radius: inherit;
+  background: #5e9078;
+}
+
 .dashboard-panel--operation {
   padding-bottom: 10px;
 }
@@ -1534,6 +1641,10 @@ button.summary-card {
   .dashboard-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .dashboard-week__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .summary-card {
