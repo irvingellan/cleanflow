@@ -1556,6 +1556,7 @@ function Dashboard({
   const buildAssignmentAttentionItem = (job, isUrgent = false) => ({
     id: `needs-assignment-${job.id}`,
     type: "assignment",
+    icon: "assignment",
     isUrgent,
     job,
     label: translate("dashboard.needsAssignment"),
@@ -1587,6 +1588,7 @@ function Dashboard({
       return {
         id: `interest-${job.id}`,
         type: "interested",
+        icon: "user-check",
         job,
         label: translate("dashboard.cleanerInterested"),
         detail: interestedNames || translate("dashboard.cleanerInterestedDescription"),
@@ -1597,6 +1599,7 @@ function Dashboard({
     sortIssuesByJobScheduledDate(openIssues).map((issue) => ({
       id: `issue-${issue.job.id}-${issue.id}`,
       type: "issue",
+      icon: issueIconName(issue.category),
       job: issue.job,
       label: formatIssueCategory(issue.category, translate),
       detail: `${translate("dashboard.openIssue")} — ${issue.description}`,
@@ -1606,6 +1609,7 @@ function Dashboard({
     sortByScheduledDate(offeredJobsAwaitingResponse).map((job) => ({
       id: `awaiting-response-${job.id}`,
       type: "awaiting",
+      icon: "mail",
       job,
       label: translate("dashboard.offersAwaitingResponse"),
       detail: translate("dashboard.noInterestedCleaners"),
@@ -1641,26 +1645,31 @@ function Dashboard({
         <SummaryCard
           label={translate("dashboard.today")}
           count={counts.today || 0}
+          icon="calendar"
           onClick={() => onShowJobsWithFilter("today")}
         />
         <SummaryCard
           label={translate("dashboard.needsAssignment")}
           count={counts.needsAssignment || 0}
+          icon="assignment"
           onClick={() => onShowJobsWithFilter("needs-assignment")}
         />
         <SummaryCard
           label={translate("dashboard.inProgress")}
           count={counts.inProgress || 0}
+          icon="clock"
           onClick={() => onShowJobsWithFilter("in-progress")}
         />
         <SummaryCard
           label={translate("dashboard.completedToday")}
           count={counts.completedToday || 0}
+          icon="check-circle"
           onClick={() => onShowJobsWithFilter("completed-today")}
         />
         <SummaryCard
           label={translate("dashboard.openIssues")}
           count={counts.openIssues || 0}
+          icon="alert"
           tone="attention"
         />
       </div>
@@ -1692,7 +1701,10 @@ function Dashboard({
                   type="button"
                   onClick={() => onOpenJob(item.job)}
                 >
-                  <span className="attention-item__label">{item.label}</span>
+                  <span className="attention-item__label">
+                    <OperationalIcon name={item.icon || "assignment"} />
+                    {item.label}
+                  </span>
                   <strong>{item.job.propertyName || translate("properties.unnamed")}</strong>
                   <span>{item.detail}</span>
                   <small>
@@ -1836,7 +1848,7 @@ function localDateKeyForDashboard(date) {
   return `${year}-${month}-${day}`;
 }
 
-function SummaryCard({ label, count, tone, isActive, onClick }) {
+function SummaryCard({ label, count, icon, tone, isActive, onClick }) {
   const className = [
     "summary-card",
     tone ? `summary-card--${tone}` : "",
@@ -1848,7 +1860,10 @@ function SummaryCard({ label, count, tone, isActive, onClick }) {
   if (!onClick) {
     return (
       <article className={className}>
-        <span>{label}</span>
+        <span className="summary-card__label">
+          <OperationalIcon name={icon} />
+          {label}
+        </span>
         <strong>{count}</strong>
       </article>
     );
@@ -1861,9 +1876,34 @@ function SummaryCard({ label, count, tone, isActive, onClick }) {
       aria-pressed={isActive}
       onClick={onClick}
     >
-      <span>{label}</span>
+      <span className="summary-card__label">
+        <OperationalIcon name={icon} />
+        {label}
+      </span>
       <strong>{count}</strong>
     </button>
+  );
+}
+
+function OperationalIcon({ name }) {
+  const symbols = {
+    calendar: "📅",
+    assignment: "⏰",
+    clock: "🧹",
+    "check-circle": "✅",
+    alert: "⚠️",
+    "user-check": "👤",
+    mail: "📩",
+    key: "🚪",
+    package: "📦",
+    wrench: "🛠️",
+    sparkle: "🧹",
+  };
+
+  return (
+    <span className="operational-icon" aria-hidden="true">
+      {symbols[name] || symbols.alert}
+    </span>
   );
 }
 
@@ -1941,6 +1981,16 @@ function formatIssueCategory(category, translate = null) {
   }[category];
 
   return key && translate ? translate(key) : category || content.missingValue;
+}
+
+function issueIconName(category) {
+  return {
+    ACCESS: "key",
+    SUPPLIES: "package",
+    BROKEN_ITEM: "wrench",
+    HEAVY_CLEANING: "sparkle",
+    OTHER: "alert",
+  }[category] || "alert";
 }
 
 function PropertyList({ properties, isLoading, hasError, onSelect, onCreate }) {

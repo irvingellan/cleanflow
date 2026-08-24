@@ -362,6 +362,26 @@ button.summary-card {
   text-transform: uppercase;
 }
 
+.summary-card__label,
+.attention-item__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.operational-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.summary-card__label .operational-icon {
+  font-size: 1.35rem;
+}
+
 .summary-card strong {
   color: #17251f;
   font-size: 2rem;
