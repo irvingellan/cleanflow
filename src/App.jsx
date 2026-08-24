@@ -26,6 +26,7 @@ import {
   assignCleanerToJob,
   completeInProgressJob,
   createJob,
+  getPropertyJobHistory,
   getJobs,
   startAssignedJob,
 } from "./features/jobs/jobService.js";
@@ -34,7 +35,10 @@ import {
   respondToPublicOffer,
 } from "./features/public-offers/publicOfferService.js";
 import { languageOptions, useTranslation } from "./i18n/translations.js";
-import { getProperties } from "./features/properties/propertyService.js";
+import {
+  createProperty,
+  getProperties,
+} from "./features/properties/propertyService.js";
 
 const content = {
   productName: "CleanFlow",
@@ -83,6 +87,25 @@ function cleanerToForm(cleaner, defaultPreferredLanguage) {
     ),
     active: typeof cleaner.active === "boolean" ? cleaner.active : true,
   };
+}
+
+function createEmptyPropertyForm() {
+  return {
+    name: "",
+    clientName: "",
+    defaultClientPrice: "",
+    defaultCleanerPrice: "",
+    active: true,
+  };
+}
+
+function optionalPrice(value) {
+  if (value.trim() === "") {
+    return undefined;
+  }
+
+  const price = Number(value);
+  return Number.isFinite(price) && price >= 0 ? price : null;
 }
 
 function formatPrice(value, translate = null, language = "en") {
@@ -733,6 +756,11 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     setView("property-list");
   }
 
+  function showNewProperty() {
+    setSelectedProperty(null);
+    setView("property-create");
+  }
+
   function showDashboard() {
     setActiveSection("dashboard");
     setSelectedProperty(null);
@@ -794,6 +822,30 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     setIsLoadingIssues(true);
     setSelectedOffer(null);
     setView("job-detail");
+  }
+
+  function openPropertyJob(job) {
+    setActiveSection("properties");
+    setJobDetailOrigin("property");
+    setSelectedJob(job);
+    setJobOffers([]);
+    setHasOffersError(false);
+    setIsLoadingOffers(true);
+    setJobIssues([]);
+    setHasIssuesError(false);
+    setIsLoadingIssues(true);
+    setSelectedOffer(null);
+    setView("job-detail");
+  }
+
+  function returnToPropertyDetail() {
+    setSelectedJob(null);
+    setJobOffers([]);
+    setHasOffersError(false);
+    setJobIssues([]);
+    setHasIssuesError(false);
+    setSelectedOffer(null);
+    setView("property-detail");
   }
 
   function openDashboardJob(job) {
@@ -891,6 +943,19 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             isLoading={isLoadingProperties}
             hasError={hasPropertyError}
             onSelect={openProperty}
+            onCreate={showNewProperty}
+          />
+        )}
+
+        {view === "property-create" && (
+          <PropertyCreateForm
+            properties={properties}
+            onBack={showProperties}
+            onSaved={(property) => {
+              setProperties((currentProperties) => [...currentProperties, property]);
+              setSelectedProperty(property);
+              setView("property-detail");
+            }}
           />
         )}
 
@@ -899,6 +964,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             property={selectedProperty}
             onBack={showProperties}
             onCreateCleaning={() => setView("create-cleaning")}
+            onOpenJob={openPropertyJob}
           />
         )}
 
@@ -978,7 +1044,13 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             issues={jobIssues}
             isLoadingIssues={isLoadingIssues}
             hasIssuesError={hasIssuesError}
-            onBack={jobDetailOrigin === "dashboard" ? showDashboard : showJobs}
+            onBack={
+              jobDetailOrigin === "dashboard"
+                ? showDashboard
+                : jobDetailOrigin === "property"
+                  ? returnToPropertyDetail
+                  : showJobs
+            }
             onOfferToCleaners={showOfferCleaners}
             onRefreshOffers={refreshJobOffers}
             onRefreshIssues={refreshJobIssues}
@@ -1571,7 +1643,7 @@ function formatIssueCategory(category, translate = null) {
   return key && translate ? translate(key) : category || content.missingValue;
 }
 
-function PropertyList({ properties, isLoading, hasError, onSelect }) {
+function PropertyList({ properties, isLoading, hasError, onSelect, onCreate }) {
   const { translate } = useTranslation();
   if (isLoading) {
     return <StateCard message={translate("properties.loading")} status="status" />;
@@ -1581,37 +1653,191 @@ function PropertyList({ properties, isLoading, hasError, onSelect }) {
     return <StateCard message={translate("properties.error")} status="alert" isError />;
   }
 
-  if (properties.length === 0) {
-    return <StateCard message={translate("properties.empty")} />;
-  }
-
   return (
-    <div className="property-list">
-      {properties.map((property) => {
-        const propertyName = property.name || translate("properties.unnamed");
+    <section aria-labelledby="properties-title">
+      <div className="directory-heading">
+        <div>
+          <p className="eyebrow">{translate("navigation.properties")}</p>
+          <h2 id="properties-title" className="list-title">
+            {translate("properties.title")}
+          </h2>
+        </div>
+        <button className="button button--primary" type="button" onClick={onCreate}>
+          {translate("properties.new")}
+        </button>
+      </div>
 
-        return (
-          <button
-            key={property.id}
-            className="property-card"
-            type="button"
-            aria-label={translate("properties.view", { property: propertyName })}
-            onClick={() => onSelect(property)}
-          >
-            <span className="property-card__title">{propertyName}</span>
+      {properties.length === 0 ? (
+        <StateCard message={translate("properties.empty")} />
+      ) : (
+        <div className="property-list">
+          {properties.map((property) => {
+            const propertyName = property.name || translate("properties.unnamed");
 
-            <span className="property-card__label">
-              <span className="status-dot" aria-hidden="true" />
-              {translate("common.property")}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+            return (
+              <button
+                key={property.id}
+                className="property-card"
+                type="button"
+                aria-label={translate("properties.view", { property: propertyName })}
+                onClick={() => onSelect(property)}
+              >
+                <span className="property-card__title">{propertyName}</span>
+
+                <span className="property-card__label">
+                  <span className="status-dot" aria-hidden="true" />
+                  {translate("common.property")}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
-function PropertyDetail({ property, onBack, onCreateCleaning }) {
+function PropertyCreateForm({ properties, onBack, onSaved }) {
+  const { translate } = useTranslation();
+  const [formValues, setFormValues] = useState(createEmptyPropertyForm);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const clientNames = [...new Set(
+    properties.map((property) => property.clientName).filter(Boolean),
+  )].sort((firstClient, secondClient) => firstClient.localeCompare(secondClient));
+
+  function updateField(event) {
+    const { name, value, checked, type } = event.target;
+
+    setFormValues((currentValues) => ({
+      ...currentValues,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  }
+
+  async function saveProperty(event) {
+    event.preventDefault();
+    const name = formValues.name.trim();
+    const clientName = formValues.clientName.trim();
+    const defaultClientPrice = optionalPrice(formValues.defaultClientPrice);
+    const defaultCleanerPrice = optionalPrice(formValues.defaultCleanerPrice);
+
+    if (!name) {
+      setFormError(translate("properties.nameRequired"));
+      return;
+    }
+
+    if (!clientName) {
+      setFormError(translate("properties.clientRequired"));
+      return;
+    }
+
+    if (defaultClientPrice === null || defaultCleanerPrice === null) {
+      setFormError(translate("properties.priceInvalid"));
+      return;
+    }
+
+    setIsSaving(true);
+    setFormError("");
+
+    try {
+      const property = await createProperty({
+        name,
+        clientName,
+        defaultClientPrice,
+        defaultCleanerPrice,
+        active: formValues.active,
+      });
+
+      onSaved(property);
+    } catch {
+      setFormError(translate("properties.createError"));
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-labelledby="property-create-title">
+      <BackButton onClick={onBack} />
+      <p className="eyebrow">{translate("navigation.properties")}</p>
+      <h2 id="property-create-title" className="panel__title">
+        {translate("properties.createTitle")}
+      </h2>
+
+      <form className="cleaning-form" noValidate onSubmit={saveProperty}>
+        <label>
+          {translate("properties.name")}
+          <input name="name" value={formValues.name} onChange={updateField} required />
+        </label>
+
+        <label>
+          {translate("common.client")}
+          <select
+            name="clientName"
+            value={formValues.clientName}
+            onChange={updateField}
+            required
+          >
+            <option value="">{translate("properties.selectClient")}</option>
+            {clientNames.map((clientName) => (
+              <option key={clientName} value={clientName}>{clientName}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          {translate("properties.defaultClientPrice")}
+          <input
+            type="number"
+            name="defaultClientPrice"
+            value={formValues.defaultClientPrice}
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            onChange={updateField}
+          />
+        </label>
+
+        <label>
+          {translate("properties.defaultCleanerPrice")}
+          <input
+            type="number"
+            name="defaultCleanerPrice"
+            value={formValues.defaultCleanerPrice}
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            onChange={updateField}
+          />
+        </label>
+
+        <label className="cleaner-active-field">
+          <input
+            type="checkbox"
+            name="active"
+            checked={formValues.active}
+            onChange={updateField}
+          />
+          {translate("common.active")}
+        </label>
+
+        {formError && (
+          <p className="form-error" role="alert">
+            {formError}
+          </p>
+        )}
+
+        <div className="button-row">
+          <button className="button button--primary" type="submit" disabled={isSaving}>
+            {isSaving ? translate("properties.creating") : translate("properties.save")}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function PropertyDetail({ property, onBack, onCreateCleaning, onOpenJob }) {
   const { language, translate } = useTranslation();
   const propertyName = property.name || translate("properties.unnamed");
   const clientName = property.clientName || translate("common.notProvided");
@@ -1660,7 +1886,114 @@ function PropertyDetail({ property, onBack, onCreateCleaning }) {
           {translate("properties.createCleaning")}
         </button>
       </div>
+
+      <PropertyOperationalHistory propertyId={property.id} onOpenJob={onOpenJob} />
     </section>
+  );
+}
+
+function PropertyOperationalHistory({ propertyId, onOpenJob }) {
+  const { language, translate } = useTranslation();
+  const [history, setHistory] = useState(null);
+  const [hasHistoryError, setHasHistoryError] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadHistory() {
+      setHistory(null);
+      setHasHistoryError(false);
+
+      try {
+        const loadedHistory = await getPropertyJobHistory(propertyId);
+
+        if (isCurrent) {
+          setHistory(loadedHistory);
+        }
+      } catch {
+        if (isCurrent) {
+          setHasHistoryError(true);
+        }
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [propertyId]);
+
+  return (
+    <div className="property-history">
+      <section className="property-history-section" aria-labelledby="property-upcoming-job-title">
+        <h3 id="property-upcoming-job-title">{translate("properties.upcomingService")}</h3>
+
+        {!history && !hasHistoryError && (
+          <p className="property-history-state">{translate("properties.historyLoading")}</p>
+        )}
+
+        {hasHistoryError && (
+          <p className="property-history-state property-history-state--error" role="alert">
+            {translate("properties.historyError")}
+          </p>
+        )}
+
+        {history && !history.upcomingJob && (
+          <p className="property-history-state">{translate("properties.noUpcomingService")}</p>
+        )}
+
+        {history?.upcomingJob && (
+          <PropertyHistoryJob job={history.upcomingJob} onOpen={onOpenJob} />
+        )}
+      </section>
+
+      <section className="property-history-section" aria-labelledby="property-cleaning-history-title">
+        <h3 id="property-cleaning-history-title">{translate("properties.cleaningHistory")}</h3>
+
+        {history && history.recentJobs.length === 0 && (
+          <p className="property-history-state">{translate("properties.noCleaningHistory")}</p>
+        )}
+
+        {history && history.recentJobs.length > 0 && (
+          <div className="property-history-list">
+            {history.recentJobs.map((job) => (
+              <PropertyHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PropertyHistoryJob({ job, onOpen }) {
+  const { language, translate } = useTranslation();
+  const scheduledService = [
+    formatDate(job.scheduledDate, translate, language),
+    job.scheduledStart,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <article className="property-history-job">
+      <div className="property-history-job__summary">
+        <strong>{scheduledService}</strong>
+        <span>{job.assignedCleanerName || translate("dashboard.notAssigned")}</span>
+      </div>
+      <span className="status-badge">
+        {formatOperationalStatus(job.operationalStatus, translate)}
+      </span>
+      {hasValue(job.cleanerPayout) && (
+        <span className="property-history-job__payout">
+          {translate("jobs.cleanerPayout")}: {formatPrice(job.cleanerPayout, translate, language)}
+        </span>
+      )}
+      <button className="button" type="button" onClick={() => onOpen(job)}>
+        {translate("jobs.viewJob")}
+      </button>
+    </article>
   );
 }
 

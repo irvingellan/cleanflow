@@ -715,6 +715,58 @@ button.summary-card {
   margin-top: 32px;
 }
 
+.property-history {
+  display: grid;
+  gap: 28px;
+  margin-top: 40px;
+}
+
+.property-history-section {
+  display: grid;
+  gap: 12px;
+}
+
+.property-history-section h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  letter-spacing: -0.015em;
+}
+
+.property-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.property-history-job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e3eae6;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.property-history-job__summary {
+  display: grid;
+  gap: 4px;
+}
+
+.property-history-job__summary span,
+.property-history-job__payout,
+.property-history-state {
+  color: #6a756f;
+  font-size: 0.875rem;
+}
+
+.property-history-state {
+  margin: 0;
+}
+
+.property-history-state--error {
+  color: #8a463a;
+}
+
 .button {
   border: 1px solid #b8c9c1;
   border-radius: 10px;
@@ -1221,6 +1273,33 @@ button.summary-card {
     grid-column: 1 / -1;
     grid-row: 3;
     justify-items: start;
+  }
+
+  .property-history-job {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .property-history-job__summary {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .property-history-job .status-badge {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .property-history-job__payout {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+  }
+
+  .property-history-job .button {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
   }
 
   .panel {

@@ -4,8 +4,12 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
+  query,
   runTransaction,
   serverTimestamp,
+  where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 
@@ -26,10 +30,55 @@ function jobFromSnapshot(snapshot) {
   };
 }
 
+function currentLocalDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 export async function getJobs() {
   const snapshot = await getDocs(jobsCollection());
 
   return snapshot.docs.map(jobFromSnapshot);
+}
+
+export async function getPropertyJobHistory(propertyId) {
+  const today = currentLocalDate();
+  const jobs = jobsCollection();
+  const [upcomingSnapshot, historySnapshot] = await Promise.all([
+    getDocs(
+      query(
+        jobs,
+        where("propertyId", "==", propertyId),
+        where("operationalStatus", "in", [
+          "UNASSIGNED",
+          "OFFERED",
+          "ASSIGNED",
+          "IN_PROGRESS",
+        ]),
+        where("scheduledDate", ">=", today),
+        orderBy("scheduledDate", "asc"),
+        limit(1),
+      ),
+    ),
+    getDocs(
+      query(
+        jobs,
+        where("propertyId", "==", propertyId),
+        where("scheduledDate", "<", today),
+        orderBy("scheduledDate", "desc"),
+        limit(10),
+      ),
+    ),
+  ]);
+
+  return {
+    upcomingJob: upcomingSnapshot.empty ? null : jobFromSnapshot(upcomingSnapshot.docs[0]),
+    recentJobs: historySnapshot.docs.map(jobFromSnapshot),
+  };
 }
 
 export async function assignCleanerToJob(jobId, cleaner) {
