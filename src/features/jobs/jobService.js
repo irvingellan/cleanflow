@@ -39,6 +39,20 @@ function currentLocalDate() {
   return `${year}-${month}-${day}`;
 }
 
+function propertyIdsInGroups(propertyIds) {
+  const groups = [];
+
+  for (let index = 0; index < propertyIds.length; index += 30) {
+    groups.push(propertyIds.slice(index, index + 30));
+  }
+
+  return groups;
+}
+
+function uniqueJobs(jobs) {
+  return [...new Map(jobs.map((job) => [job.id, job])).values()];
+}
+
 export async function getJobs() {
   const snapshot = await getDocs(jobsCollection());
 
@@ -78,6 +92,74 @@ export async function getPropertyJobHistory(propertyId) {
   return {
     upcomingJob: upcomingSnapshot.empty ? null : jobFromSnapshot(upcomingSnapshot.docs[0]),
     recentJobs: historySnapshot.docs.map(jobFromSnapshot),
+  };
+}
+
+export async function getClientJobHistory(clientId, propertyIds) {
+  const today = currentLocalDate();
+  const jobs = jobsCollection();
+  const activeStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
+  const propertyIdGroups = propertyIdsInGroups(propertyIds);
+  const upcomingQueries = [
+    query(
+      jobs,
+      where("clientId", "==", clientId),
+      where("operationalStatus", "in", activeStatuses),
+      where("scheduledDate", ">=", today),
+      orderBy("scheduledDate", "asc"),
+      limit(1),
+    ),
+    ...propertyIdGroups.flatMap((propertyIdGroup) =>
+      activeStatuses.map((operationalStatus) =>
+        query(
+          jobs,
+          where("propertyId", "in", propertyIdGroup),
+          where("operationalStatus", "==", operationalStatus),
+          where("scheduledDate", ">=", today),
+          orderBy("scheduledDate", "asc"),
+          limit(1),
+        ),
+      ),
+    ),
+  ];
+  const historyQueries = [
+    query(
+      jobs,
+      where("clientId", "==", clientId),
+      where("scheduledDate", "<", today),
+      orderBy("scheduledDate", "desc"),
+      limit(10),
+    ),
+    ...propertyIdGroups.map((propertyIdGroup) =>
+      query(
+        jobs,
+        where("propertyId", "in", propertyIdGroup),
+        where("scheduledDate", "<", today),
+        orderBy("scheduledDate", "desc"),
+        limit(10),
+      ),
+    ),
+  ];
+  const [upcomingSnapshots, historySnapshots] = await Promise.all([
+    Promise.all(upcomingQueries.map((jobQuery) => getDocs(jobQuery))),
+    Promise.all(historyQueries.map((jobQuery) => getDocs(jobQuery))),
+  ]);
+  const byScheduledDateAscending = (firstJob, secondJob) =>
+    (firstJob.scheduledDate || "").localeCompare(secondJob.scheduledDate || "");
+  const byScheduledDateDescending = (firstJob, secondJob) =>
+    byScheduledDateAscending(secondJob, firstJob);
+  const upcomingJobs = uniqueJobs(
+    upcomingSnapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
+  ).sort(byScheduledDateAscending);
+  const recentJobs = uniqueJobs(
+    historySnapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
+  )
+    .sort(byScheduledDateDescending)
+    .slice(0, 10);
+
+  return {
+    upcomingJob: upcomingJobs[0] || null,
+    recentJobs,
   };
 }
 

@@ -31,6 +31,7 @@ import {
   assignCleanerToJob,
   completeInProgressJob,
   createJob,
+  getClientJobHistory,
   getPropertyJobHistory,
   getJobs,
   startAssignedJob,
@@ -897,6 +898,20 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     setView("property-detail");
   }
 
+  function openClientJob(job) {
+    setActiveSection("clients");
+    setJobDetailOrigin("client");
+    setSelectedJob(job);
+    setJobOffers([]);
+    setHasOffersError(false);
+    setIsLoadingOffers(true);
+    setJobIssues([]);
+    setHasIssuesError(false);
+    setIsLoadingIssues(true);
+    setSelectedOffer(null);
+    setView("job-detail");
+  }
+
   function returnToClientDetail() {
     setSelectedProperty(null);
     setView("client-detail");
@@ -1180,6 +1195,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             onBack={showClients}
             onOpenProperty={openClientProperty}
             onCreateProperty={showNewPropertyForClient}
+            onOpenJob={openClientJob}
           />
         )}
 
@@ -1207,6 +1223,8 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
                 ? showDashboard
                 : jobDetailOrigin === "property"
                   ? returnToPropertyDetail
+                  : jobDetailOrigin === "client"
+                    ? returnToClientDetail
                   : showJobs
             }
             onOfferToCleaners={showOfferCleaners}
@@ -1923,11 +1941,19 @@ function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect }) {
   );
 }
 
-function ClientDetail({ client, onBack, onOpenProperty, onCreateProperty }) {
+function ClientDetail({
+  client,
+  onBack,
+  onOpenProperty,
+  onCreateProperty,
+  onOpenJob,
+}) {
   const { language, translate } = useTranslation();
   const [properties, setProperties] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [jobHistory, setJobHistory] = useState(null);
+  const [hasJobHistoryError, setHasJobHistoryError] = useState(false);
   const clientName = client.name || translate("common.notProvided");
   const clientStatus = client.active === false
     ? translate("common.inactive")
@@ -1966,6 +1992,39 @@ function ClientDetail({ client, onBack, onOpenProperty, onCreateProperty }) {
   const sortedProperties = [...properties].sort((firstProperty, secondProperty) =>
     (firstProperty.name || "").localeCompare(secondProperty.name || ""),
   );
+
+  useEffect(() => {
+    if (isLoading) {
+      return undefined;
+    }
+
+    let isCurrent = true;
+    setJobHistory(null);
+    setHasJobHistoryError(false);
+
+    async function loadJobHistory() {
+      try {
+        const loadedHistory = await getClientJobHistory(
+          client.id,
+          hasError ? [] : properties.map((property) => property.id),
+        );
+
+        if (isCurrent) {
+          setJobHistory(loadedHistory);
+        }
+      } catch {
+        if (isCurrent) {
+          setHasJobHistoryError(true);
+        }
+      }
+    }
+
+    loadJobHistory();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [client.id, hasError, isLoading, properties]);
 
   return (
     <section className="panel" aria-labelledby="client-detail-title">
@@ -2046,7 +2105,90 @@ function ClientDetail({ client, onBack, onOpenProperty, onCreateProperty }) {
           </div>
         )}
       </section>
+
+      <ClientOperationalHistory
+        history={jobHistory}
+        hasError={hasJobHistoryError}
+        onOpenJob={onOpenJob}
+      />
     </section>
+  );
+}
+
+function ClientOperationalHistory({ history, hasError, onOpenJob }) {
+  const { language, translate } = useTranslation();
+
+  return (
+    <div className="property-history client-history">
+      <section className="property-history-section" aria-labelledby="client-upcoming-job-title">
+        <h3 id="client-upcoming-job-title">{translate("clients.upcomingService")}</h3>
+
+        {!history && !hasError && (
+          <p className="property-history-state">{translate("clients.historyLoading")}</p>
+        )}
+
+        {hasError && (
+          <p className="property-history-state property-history-state--error" role="alert">
+            {translate("clients.historyError")}
+          </p>
+        )}
+
+        {history && !history.upcomingJob && (
+          <p className="property-history-state">{translate("clients.noUpcomingService")}</p>
+        )}
+
+        {history?.upcomingJob && (
+          <ClientHistoryJob job={history.upcomingJob} onOpen={onOpenJob} />
+        )}
+      </section>
+
+      <section className="property-history-section" aria-labelledby="client-recent-history-title">
+        <h3 id="client-recent-history-title">{translate("clients.recentHistory")}</h3>
+
+        {history && history.recentJobs.length === 0 && (
+          <p className="property-history-state">{translate("clients.noRecentHistory")}</p>
+        )}
+
+        {history && history.recentJobs.length > 0 && (
+          <div className="property-history-list">
+            {history.recentJobs.map((job) => (
+              <ClientHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ClientHistoryJob({ job, onOpen }) {
+  const { language, translate } = useTranslation();
+  const scheduledService = [
+    formatDate(job.scheduledDate, translate, language),
+    job.scheduledStart,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <article className="property-history-job">
+      <div className="property-history-job__summary">
+        <strong>{scheduledService}</strong>
+        <span>{job.propertyName || translate("properties.unnamed")}</span>
+        <span>{job.assignedCleanerName || translate("dashboard.notAssigned")}</span>
+      </div>
+      <span className="status-badge">
+        {formatOperationalStatus(job.operationalStatus, translate)}
+      </span>
+      {hasValue(job.clientPrice) && (
+        <span className="property-history-job__payout">
+          {translate("jobs.clientPrice")}: {formatPrice(job.clientPrice, translate, language)}
+        </span>
+      )}
+      <button className="button" type="button" onClick={() => onOpen(job)}>
+        {translate("jobs.viewJob")}
+      </button>
+    </article>
   );
 }
 
