@@ -449,6 +449,22 @@ button.summary-card {
   text-transform: uppercase;
 }
 
+.attention-item--urgent {
+  border-left: 3px solid #a85a25;
+}
+
+.attention-item--interested .attention-item__label {
+  color: #315c49;
+}
+
+.attention-item--issue .attention-item__label {
+  color: #a84935;
+}
+
+.attention-item--awaiting .attention-item__label {
+  color: #7c5620;
+}
+
 .attention-item strong,
 .recent-item strong {
   font-size: 0.9375rem;

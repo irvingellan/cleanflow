@@ -10,7 +10,10 @@ import {
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 import { getOpenJobIssues } from "../issues/issueService.js";
-import { getInterestedJobOffers } from "../jobs/jobOfferService.js";
+import {
+  getInterestedJobOffers,
+  getPendingJobOffers,
+} from "../jobs/jobOfferService.js";
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = [
@@ -156,10 +159,18 @@ export async function getOperationalDashboard() {
   ]);
   const [offeredJobOffers, issueGroups] = await Promise.all([
     Promise.all(
-      offeredAttentionJobs.map(async (job) => ({
-        jobId: job.id,
-        offers: await getInterestedJobOffers(job.id),
-      })),
+      offeredAttentionJobs.map(async (job) => {
+        const [interestedOffers, pendingOffers] = await Promise.all([
+          getInterestedJobOffers(job.id),
+          getPendingJobOffers(job.id),
+        ]);
+
+        return {
+          jobId: job.id,
+          interestedOffers,
+          hasPendingOffer: pendingOffers.length > 0,
+        };
+      }),
     ),
     Promise.all(
       issueCandidateJobs.map(async (job) => ({
@@ -179,7 +190,10 @@ export async function getOperationalDashboard() {
     },
     attentionJobs,
     offersByJob: Object.fromEntries(
-      offeredJobOffers.map(({ jobId, offers }) => [jobId, offers]),
+      offeredJobOffers.map(({ jobId, interestedOffers }) => [jobId, interestedOffers]),
+    ),
+    pendingOffersByJob: Object.fromEntries(
+      offeredJobOffers.map(({ jobId, hasPendingOffer }) => [jobId, hasPendingOffer]),
     ),
     openIssues: issueGroups.flatMap(({ job, issues }) =>
       issues.map((issue) => ({ ...issue, job })),

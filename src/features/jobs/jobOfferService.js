@@ -87,6 +87,17 @@ export async function getInterestedJobOffers(jobId) {
   }));
 }
 
+export async function getPendingJobOffers(jobId) {
+  const snapshot = await getDocs(
+    query(offersCollection(jobId), where("status", "==", "PENDING"), limit(1)),
+  );
+
+  return snapshot.docs.map((offerDocumentSnapshot) => ({
+    ...offerDocumentSnapshot.data(),
+    id: offerDocumentSnapshot.id,
+  }));
+}
+
 export async function respondToJobOffer({ jobId, cleanerId, status }) {
   if (status !== "INTERESTED" && status !== "DECLINED") {
     throw new Error("Invalid job offer response status.");

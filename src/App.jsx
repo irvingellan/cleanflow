@@ -1529,6 +1529,7 @@ function Dashboard({
   const attentionJobs = dashboardData?.attentionJobs || [];
   const openIssues = dashboardData?.openIssues || [];
   const offersByJob = dashboardData?.offersByJob || {};
+  const pendingOffersByJob = dashboardData?.pendingOffersByJob || {};
   const next48HoursJobs = dashboardData?.next48HoursJobs || [];
   const recentlyCompletedJobs = dashboardData?.recentlyCompletedJobs || [];
   const offeredJobsWithInterest = attentionJobs.filter(
@@ -1537,16 +1538,46 @@ function Dashboard({
       !job.assignedCleanerId &&
       (offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED"),
   );
-  const attentionItems = [
-    ...sortIssuesByJobScheduledDate(openIssues).map((issue) => ({
-      id: `issue-${issue.job.id}-${issue.id}`,
-      job: issue.job,
-      label: translate("dashboard.openIssue"),
-      detail: `${formatIssueCategory(issue.category, translate)} — ${issue.description}`,
-      status: formatOperationalStatus(issue.job.operationalStatus, translate),
-      action: translate("dashboard.reviewIssue"),
-    })),
-    ...sortByScheduledDate(offeredJobsWithInterest).map((job) => {
+  const offeredJobsAwaitingResponse = attentionJobs.filter(
+    (job) =>
+      job.operationalStatus === "OFFERED" &&
+      !job.assignedCleanerId &&
+      !(offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED") &&
+      pendingOffersByJob[job.id],
+  );
+  const jobsNeedingAssignment = attentionJobs.filter(
+    (job) =>
+      job.operationalStatus === "UNASSIGNED" ||
+      (job.operationalStatus === "OFFERED" &&
+        !job.assignedCleanerId &&
+        !(offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED") &&
+        !pendingOffersByJob[job.id]),
+  );
+  const buildAssignmentAttentionItem = (job, isUrgent = false) => ({
+    id: `needs-assignment-${job.id}`,
+    type: "assignment",
+    isUrgent,
+    job,
+    label: translate("dashboard.needsAssignment"),
+    detail:
+      job.operationalStatus === "UNASSIGNED"
+        ? translate("dashboard.noOffers")
+        : translate("dashboard.noInterestedCleaners"),
+    status: formatOperationalStatus(job.operationalStatus, translate),
+    action:
+      job.operationalStatus === "UNASSIGNED"
+        ? translate("dashboard.sendOffers")
+        : translate("dashboard.reviewOffers"),
+  });
+  const urgentAssignmentItems = sortByScheduledDate(
+    jobsNeedingAssignment.filter(isNearTermJob),
+  ).map((job) => buildAssignmentAttentionItem(job, true));
+  const otherAssignmentItems = sortByScheduledDate(
+    jobsNeedingAssignment.filter((job) => !isNearTermJob(job)),
+  ).map((job) => buildAssignmentAttentionItem(job));
+  const priorityGroups = [
+    urgentAssignmentItems,
+    sortByScheduledDate(offeredJobsWithInterest).map((job) => {
       const interestedNames = (offersByJob[job.id] || [])
         .filter((offer) => offer.status === "INTERESTED")
         .map((offer) => offer.cleanerName)
@@ -1555,6 +1586,7 @@ function Dashboard({
 
       return {
         id: `interest-${job.id}`,
+        type: "interested",
         job,
         label: translate("dashboard.cleanerInterested"),
         detail: interestedNames || translate("dashboard.cleanerInterestedDescription"),
@@ -1562,33 +1594,28 @@ function Dashboard({
         action: translate("dashboard.reviewAndAssign"),
       };
     }),
-    ...sortByScheduledDate(
-      attentionJobs.filter(
-        (job) =>
-          job.operationalStatus === "UNASSIGNED" ||
-          !(offersByJob[job.id] || []).some(
-            (offer) => offer.status === "INTERESTED",
-          ),
-      ),
-    ).map((job) => ({
-      id: `needs-assignment-${job.id}`,
-      job,
-      label:
-        job.operationalStatus === "UNASSIGNED"
-          ? translate("dashboard.needsAssignment")
-          : translate("dashboard.offersAwaitingResponse"),
-      detail:
-        job.operationalStatus === "UNASSIGNED"
-          ? translate("dashboard.noOffers")
-          : translate("dashboard.noInterestedCleaners"),
-      status: formatOperationalStatus(job.operationalStatus, translate),
-      action:
-        job.operationalStatus === "UNASSIGNED"
-          ? translate("dashboard.sendOffers")
-          : translate("dashboard.reviewOffers"),
+    sortIssuesByJobScheduledDate(openIssues).map((issue) => ({
+      id: `issue-${issue.job.id}-${issue.id}`,
+      type: "issue",
+      job: issue.job,
+      label: formatIssueCategory(issue.category, translate),
+      detail: `${translate("dashboard.openIssue")} — ${issue.description}`,
+      status: formatOperationalStatus(issue.job.operationalStatus, translate),
+      action: translate("dashboard.reviewIssue"),
     })),
+    sortByScheduledDate(offeredJobsAwaitingResponse).map((job) => ({
+      id: `awaiting-response-${job.id}`,
+      type: "awaiting",
+      job,
+      label: translate("dashboard.offersAwaitingResponse"),
+      detail: translate("dashboard.noInterestedCleaners"),
+      status: formatOperationalStatus(job.operationalStatus, translate),
+      action: translate("dashboard.reviewOffers"),
+    })),
+    otherAssignmentItems,
   ];
-  const visibleAttentionItems = attentionItems.slice(0, 5);
+  const attentionItems = priorityGroups.flat();
+  const visibleAttentionItems = selectPriorityAttentionItems(priorityGroups, 5);
   const hasMoreAttention =
     attentionItems.length > visibleAttentionItems.length ||
     counts.needsAssignment > attentionJobs.length ||
@@ -1659,7 +1686,9 @@ function Dashboard({
               {visibleAttentionItems.map((item) => (
                 <button
                   key={item.id}
-                  className="attention-item"
+                  className={`attention-item attention-item--${item.type}${
+                    item.isUrgent ? " attention-item--urgent" : ""
+                  }`}
                   type="button"
                   onClick={() => onOpenJob(item.job)}
                 >
@@ -1859,6 +1888,47 @@ function sortIssuesByJobScheduledDate(issues) {
       secondIssue.job.scheduledDate || "",
     ),
   );
+}
+
+function isNearTermJob(job) {
+  if (!job.scheduledDate) {
+    return false;
+  }
+
+  const scheduledAt = new Date(
+    `${job.scheduledDate}T${job.scheduledStart || "00:00:00"}`,
+  );
+
+  if (Number.isNaN(scheduledAt.getTime())) {
+    return false;
+  }
+
+  return scheduledAt.getTime() <= Date.now() + 48 * 60 * 60 * 1000;
+}
+
+function selectPriorityAttentionItems(priorityGroups, maximumItems) {
+  const visibleItems = [];
+  const selectedIds = new Set();
+  const addItem = (item) => {
+    if (!item || selectedIds.has(item.id) || visibleItems.length >= maximumItems) {
+      return;
+    }
+
+    selectedIds.add(item.id);
+    visibleItems.push(item);
+  };
+
+  for (const group of priorityGroups) {
+    addItem(group[0]);
+  }
+
+  for (const group of priorityGroups) {
+    for (const item of group) {
+      addItem(item);
+    }
+  }
+
+  return visibleItems;
 }
 
 function formatIssueCategory(category, translate = null) {
