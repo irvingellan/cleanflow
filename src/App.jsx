@@ -419,6 +419,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
   const [jobs, setJobs] = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [hasJobError, setHasJobError] = useState(false);
+  const [jobListFilter, setJobListFilter] = useState("all");
   const [cleaners, setCleaners] = useState([]);
   const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
   const [hasCleanerError, setHasCleanerError] = useState(false);
@@ -485,7 +486,6 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     try {
       const loadedDashboard = await getOperationalDashboard();
       setDashboardData(loadedDashboard);
-      setJobs(loadedDashboard.jobs);
     } catch {
       setHasDashboardError(true);
     } finally {
@@ -544,7 +544,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
 
     async function loadJobs() {
       try {
-        const loadedJobs = await getJobs();
+        const loadedJobs = await getJobs(jobListFilter);
 
         if (isCurrent) {
           setJobs(loadedJobs);
@@ -565,7 +565,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     return () => {
       isCurrent = false;
     };
-  }, [view]);
+  }, [view, jobListFilter]);
 
   useEffect(() => {
     if (view !== "client-list") {
@@ -825,14 +825,27 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     setView("dashboard");
   }
 
-  function showJobs() {
+  function showJobList(filter) {
     setActiveSection("jobs");
     setSelectedProperty(null);
     setSelectedJob(null);
     setOffersSentCount(null);
     setSelectedOffer(null);
     setJobIssues([]);
+    setJobListFilter(filter);
     setView("job-list");
+  }
+
+  function showJobs() {
+    showJobList("all");
+  }
+
+  function showJobsWithFilter(filter) {
+    showJobList(filter);
+  }
+
+  function returnToJobs() {
+    showJobList(jobListFilter);
   }
 
   function showCleaners() {
@@ -1048,6 +1061,8 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             translate={translate}
             onRefresh={refreshDashboard}
             onOpenJob={openDashboardJob}
+            onShowJobs={showJobs}
+            onShowJobsWithFilter={showJobsWithFilter}
           />
         )}
 
@@ -1137,6 +1152,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             isLoading={isLoadingJobs}
             hasError={hasJobError}
             onSelect={openJob}
+            filter={jobListFilter}
           />
         )}
 
@@ -1225,7 +1241,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
                   ? returnToPropertyDetail
                   : jobDetailOrigin === "client"
                     ? returnToClientDetail
-                  : showJobs
+                  : returnToJobs
             }
             onOfferToCleaners={showOfferCleaners}
             onRefreshOffers={refreshJobOffers}
@@ -1482,9 +1498,17 @@ function MainNavigation({
   );
 }
 
-function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, onOpenJob }) {
+function Dashboard({
+  dashboardData,
+  isLoading,
+  hasError,
+  translate,
+  onRefresh,
+  onOpenJob,
+  onShowJobs,
+  onShowJobsWithFilter,
+}) {
   const { language } = useTranslation();
-  const [operationFilter, setOperationFilter] = useState("active");
 
   if (isLoading) {
     return <StateCard message={translate("dashboard.loading")} status="status" />;
@@ -1501,34 +1525,21 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
     );
   }
 
-  const jobs = dashboardData?.jobs || [];
-  const issues = dashboardData?.issues || [];
+  const counts = dashboardData?.counts || {};
+  const attentionJobs = dashboardData?.attentionJobs || [];
+  const openIssues = dashboardData?.openIssues || [];
   const offersByJob = dashboardData?.offersByJob || {};
-  const openIssues = issues.filter((issue) => issue.status === "OPEN");
-  const jobsNeedingAssignment = jobs.filter((job) =>
-    ["UNASSIGNED", "OFFERED"].includes(job.operationalStatus),
-  );
-  const inProgressJobs = jobs.filter(
-    (job) => job.operationalStatus === "IN_PROGRESS",
-  );
-  const completedJobs = jobs.filter(
-    (job) => job.operationalStatus === "COMPLETED",
-  );
-  const activeOperationJobs = jobs.filter((job) =>
-    ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"].includes(
-      job.operationalStatus,
-    ),
-  );
-  const offeredJobsWithInterest = jobs.filter(
+  const next48HoursJobs = dashboardData?.next48HoursJobs || [];
+  const recentlyCompletedJobs = dashboardData?.recentlyCompletedJobs || [];
+  const offeredJobsWithInterest = attentionJobs.filter(
     (job) =>
       job.operationalStatus === "OFFERED" &&
       !job.assignedCleanerId &&
       (offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED"),
   );
-  const openIssueJobIds = new Set(openIssues.map((issue) => issue.job.id));
   const attentionItems = [
     ...sortIssuesByJobScheduledDate(openIssues).map((issue) => ({
-      id: `issue-${issue.id}`,
+      id: `issue-${issue.job.id}-${issue.id}`,
       job: issue.job,
       label: translate("dashboard.openIssue"),
       detail: `${formatIssueCategory(issue.category, translate)} — ${issue.description}`,
@@ -1552,7 +1563,7 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
       };
     }),
     ...sortByScheduledDate(
-      jobsNeedingAssignment.filter(
+      attentionJobs.filter(
         (job) =>
           job.operationalStatus === "UNASSIGNED" ||
           !(offersByJob[job.id] || []).some(
@@ -1572,34 +1583,17 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
           : translate("dashboard.noInterestedCleaners"),
       status: formatOperationalStatus(job.operationalStatus, translate),
       action:
-        job.operationalStatus === "UNASSIGNED" ? translate("dashboard.sendOffers") : translate("dashboard.reviewOffers"),
+        job.operationalStatus === "UNASSIGNED"
+          ? translate("dashboard.sendOffers")
+          : translate("dashboard.reviewOffers"),
     })),
   ];
-  const filterOptions = {
-    active: {
-      label: translate("dashboard.activeOperation"),
-      jobs: activeOperationJobs,
-    },
-    needsAssignment: {
-      label: translate("dashboard.needsAssignment"),
-      jobs: jobsNeedingAssignment,
-    },
-    inProgress: {
-      label: translate("dashboard.inProgress"),
-      jobs: inProgressJobs,
-    },
-    completed: {
-      label: translate("dashboard.completed"),
-      jobs: completedJobs,
-    },
-    openIssues: {
-      label: translate("dashboard.jobsWithOpenIssues"),
-      jobs: jobs.filter((job) => openIssueJobIds.has(job.id)),
-    },
-  };
-  const visibleOperation = sortByScheduledDate(
-    filterOptions[operationFilter]?.jobs || [],
-  );
+  const visibleAttentionItems = attentionItems.slice(0, 5);
+  const hasMoreAttention =
+    attentionItems.length > visibleAttentionItems.length ||
+    counts.needsAssignment > attentionJobs.length ||
+    visibleAttentionItems.length === 5;
+  const next48HourGroups = groupNext48HourJobs(next48HoursJobs, translate);
 
   return (
     <section className="dashboard" aria-labelledby="dashboard-title">
@@ -1616,150 +1610,201 @@ function Dashboard({ dashboardData, isLoading, hasError, translate, onRefresh, o
         </button>
       </div>
 
-      {jobs.length === 0 ? (
-        <StateCard message={translate("dashboard.noMatchingJobs")} />
-      ) : (
-        <>
-          <div className="dashboard-summary" aria-label={translate("dashboard.operation")}>
-            <SummaryCard label={translate("dashboard.totalJobs")} count={jobs.length} />
-            <SummaryCard
-              label={translate("dashboard.needsAssignment")}
-              count={jobsNeedingAssignment.length}
-              isActive={operationFilter === "needsAssignment"}
-              onClick={() => setOperationFilter("needsAssignment")}
-            />
-            <SummaryCard
-              label={translate("dashboard.inProgress")}
-              count={inProgressJobs.length}
-              isActive={operationFilter === "inProgress"}
-              onClick={() => setOperationFilter("inProgress")}
-            />
-            <SummaryCard
-              label={translate("dashboard.completed")}
-              count={completedJobs.length}
-              isActive={operationFilter === "completed"}
-              onClick={() => setOperationFilter("completed")}
-            />
-            <SummaryCard
-              label={translate("dashboard.openIssues")}
-              count={openIssues.length}
-              tone="attention"
-              isActive={operationFilter === "openIssues"}
-              onClick={() => setOperationFilter("openIssues")}
-            />
-          </div>
+      <div className="dashboard-summary" aria-label={translate("dashboard.operation")}>
+        <SummaryCard
+          label={translate("dashboard.today")}
+          count={counts.today || 0}
+          onClick={() => onShowJobsWithFilter("today")}
+        />
+        <SummaryCard
+          label={translate("dashboard.needsAssignment")}
+          count={counts.needsAssignment || 0}
+          onClick={() => onShowJobsWithFilter("needs-assignment")}
+        />
+        <SummaryCard
+          label={translate("dashboard.inProgress")}
+          count={counts.inProgress || 0}
+          onClick={() => onShowJobsWithFilter("in-progress")}
+        />
+        <SummaryCard
+          label={translate("dashboard.completedToday")}
+          count={counts.completedToday || 0}
+          onClick={() => onShowJobsWithFilter("completed-today")}
+        />
+        <SummaryCard
+          label={translate("dashboard.openIssues")}
+          count={counts.openIssues || 0}
+          tone="attention"
+        />
+      </div>
 
-          <div className="dashboard-grid">
-            <section className="dashboard-panel" aria-labelledby="attention-title">
-              <div className="dashboard-panel__header">
-                <div>
-                  <p className="eyebrow">{translate("dashboard.priorities")}</p>
-                  <h3 id="attention-title">{translate("dashboard.needsAttention")}</h3>
-                </div>
-              </div>
-
-              {attentionItems.length === 0 ? (
-                <p className="dashboard-empty">{translate("dashboard.noAttention")}</p>
-              ) : (
-                <div className="attention-list">
-                  {attentionItems.map((item) => (
-                    <button
-                      key={item.id}
-                      className="attention-item"
-                      type="button"
-                      onClick={() => onOpenJob(item.job)}
-                    >
-                      <span className="attention-item__label">{item.label}</span>
-                      <strong>{item.job.propertyName || translate("properties.unnamed")}</strong>
-                      <span>{item.detail}</span>
-                      <small>
-                        {item.status} · {formatDate(item.job.scheduledDate, translate, language)}
-                      </small>
-                      <span className="attention-item__action">
-                        {item.action} <span aria-hidden="true">→</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="dashboard-panel" aria-labelledby="completed-title">
-              <div className="dashboard-panel__header">
-                <div>
-                  <p className="eyebrow">{translate("dashboard.history")}</p>
-                  <h3 id="completed-title">{translate("dashboard.recentlyCompleted")}</h3>
-                </div>
-              </div>
-
-              {completedJobs.length === 0 ? (
-                <p className="dashboard-empty">{translate("dashboard.noCompleted")}</p>
-              ) : (
-                <div className="recent-list">
-                  {sortByCompletedAt(completedJobs).map((job) => (
-                    <button
-                      key={job.id}
-                      className="recent-item"
-                      type="button"
-                      onClick={() => onOpenJob(job)}
-                    >
-                      <strong>{job.propertyName || translate("properties.unnamed")}</strong>
-                      <span>{formatDate(job.scheduledDate, translate, language)}</span>
-                      <span>{job.assignedCleanerName || translate("common.notProvided")}</span>
-                      <small>{formatCreatedAt(job.completedAt, language) || translate("dashboard.completionUnavailable")}</small>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          <section className="dashboard-panel dashboard-panel--operation" aria-labelledby="operation-title">
-            <div className="dashboard-panel__header">
-              <div>
-                <p className="eyebrow">{translate("dashboard.schedule")}</p>
-                <h3 id="operation-title">{translate("dashboard.operation")}</h3>
-                <p className="dashboard-panel__subtitle">
-                  {filterOptions[operationFilter]?.label}
-                </p>
-              </div>
-              {operationFilter !== "active" && (
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => setOperationFilter("active")}
-                >
-                  {translate("dashboard.showActiveJobs")}
-                </button>
-              )}
+      <div className="dashboard-grid">
+        <section className="dashboard-panel" aria-labelledby="attention-title">
+          <div className="dashboard-panel__header dashboard-panel__header--action">
+            <div>
+              <p className="eyebrow">{translate("dashboard.priorities")}</p>
+              <h3 id="attention-title">{translate("dashboard.needsAttention")}</h3>
             </div>
-
-            {visibleOperation.length === 0 ? (
-              <p className="dashboard-empty">{translate("dashboard.noMatchingJobs")}</p>
-            ) : (
-              <div className="operation-list">
-                {visibleOperation.map((job) => (
-                  <button
-                    key={job.id}
-                    className="operation-item"
-                    type="button"
-                    onClick={() => onOpenJob(job)}
-                  >
-                    <span>{formatDate(job.scheduledDate, translate, language)}</span>
-                    <strong>{job.propertyName || translate("properties.unnamed")}</strong>
-                    <span className="operation-item__status">
-                      {formatOperationalStatus(job.operationalStatus, translate)}
-                    </span>
-                    <span>{job.assignedCleanerName || translate("dashboard.notAssigned")}</span>
-                  </button>
-                ))}
-              </div>
+            {hasMoreAttention && (
+              <button className="button button--small" type="button" onClick={onShowJobs}>
+                {translate("dashboard.viewAll")}
+              </button>
             )}
-          </section>
-        </>
-      )}
+          </div>
+
+          {visibleAttentionItems.length === 0 ? (
+            <p className="dashboard-empty">{translate("dashboard.noAttention")}</p>
+          ) : (
+            <div className="attention-list">
+              {visibleAttentionItems.map((item) => (
+                <button
+                  key={item.id}
+                  className="attention-item"
+                  type="button"
+                  onClick={() => onOpenJob(item.job)}
+                >
+                  <span className="attention-item__label">{item.label}</span>
+                  <strong>{item.job.propertyName || translate("properties.unnamed")}</strong>
+                  <span>{item.detail}</span>
+                  <small>
+                    {item.status} · {formatDate(item.job.scheduledDate, translate, language)}
+                  </small>
+                  <span className="attention-item__action">
+                    {item.action} <span aria-hidden="true">→</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="dashboard-panel" aria-labelledby="completed-title">
+          <div className="dashboard-panel__header dashboard-panel__header--action">
+            <div>
+              <p className="eyebrow">{translate("dashboard.history")}</p>
+              <h3 id="completed-title">{translate("dashboard.recentlyCompleted")}</h3>
+            </div>
+            <button className="button button--small" type="button" onClick={onShowJobs}>
+              {translate("dashboard.viewAll")}
+            </button>
+          </div>
+
+          {recentlyCompletedJobs.length === 0 ? (
+            <p className="dashboard-empty">{translate("dashboard.noCompleted")}</p>
+          ) : (
+            <div className="recent-list">
+              {recentlyCompletedJobs.map((job) => (
+                <button
+                  key={job.id}
+                  className="recent-item"
+                  type="button"
+                  onClick={() => onOpenJob(job)}
+                >
+                  <strong>{job.propertyName || translate("properties.unnamed")}</strong>
+                  <span>{formatDate(job.scheduledDate, translate, language)}</span>
+                  <span>{job.assignedCleanerName || translate("common.notProvided")}</span>
+                  <small>
+                    {formatCreatedAt(job.completedAt, language) ||
+                      translate("dashboard.completionUnavailable")}
+                  </small>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <section className="dashboard-panel" aria-labelledby="next-48-hours-title">
+        <div className="dashboard-panel__header dashboard-panel__header--action">
+          <div>
+            <p className="eyebrow">{translate("dashboard.schedule")}</p>
+            <h3 id="next-48-hours-title">{translate("dashboard.next48Hours")}</h3>
+          </div>
+          <button className="button button--small" type="button" onClick={onShowJobs}>
+            {translate("dashboard.viewAll")}
+          </button>
+        </div>
+
+        {next48HourGroups.length === 0 ? (
+          <p className="dashboard-empty">{translate("dashboard.noNext48Hours")}</p>
+        ) : (
+          <div className="dashboard-next-list">
+            {next48HourGroups.map(({ day, jobs }) => (
+              <section key={day} className="dashboard-next-group" aria-label={day}>
+                <h4>{day}</h4>
+                {jobs.map((job) => (
+                  <DashboardNextJob key={job.id} job={job} onOpen={onOpenJob} />
+                ))}
+              </section>
+            ))}
+          </div>
+        )}
+      </section>
     </section>
   );
+}
+
+function DashboardNextJob({ job, onOpen }) {
+  const { language, translate } = useTranslation();
+  const schedule = [
+    formatDate(job.scheduledDate, translate, language),
+    job.scheduledStart,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <button className="dashboard-next-item" type="button" onClick={() => onOpen(job)}>
+      <span>{schedule}</span>
+      <strong>{job.propertyName || translate("properties.unnamed")}</strong>
+      <span className="dashboard-next-item__status">
+        {formatOperationalStatus(job.operationalStatus, translate)}
+      </span>
+      <span>{job.assignedCleanerName || translate("dashboard.needsAssignment")}</span>
+    </button>
+  );
+}
+
+function groupNext48HourJobs(jobs, translate) {
+  const today = localDateKeyForDashboard(new Date());
+  const tomorrow = localDateKeyForDashboard(
+    new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1),
+  );
+  const followingDay = localDateKeyForDashboard(
+    new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 2),
+  );
+  const groups = new Map();
+
+  for (const job of jobs) {
+    const groupKey = job.scheduledDate === today
+      ? "dashboard.today"
+      : job.scheduledDate === tomorrow
+        ? "dashboard.tomorrow"
+        : job.scheduledDate === followingDay
+          ? "dashboard.followingDay"
+          : null;
+
+    if (groupKey) {
+      const currentJobs = groups.get(groupKey) || [];
+      currentJobs.push(job);
+      groups.set(groupKey, currentJobs);
+    }
+  }
+
+  return ["dashboard.today", "dashboard.tomorrow", "dashboard.followingDay"]
+    .filter((groupKey) => groups.has(groupKey))
+    .map((groupKey) => ({
+      day: translate(groupKey),
+      jobs: groups.get(groupKey),
+    }));
+}
+
+function localDateKeyForDashboard(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function SummaryCard({ label, count, tone, isActive, onClick }) {
@@ -2883,7 +2928,7 @@ function CleaningSuccess({ job, onBack, onViewJob }) {
   );
 }
 
-function JobList({ jobs, isLoading, hasError, onSelect }) {
+function JobList({ jobs, isLoading, hasError, onSelect, filter }) {
   const { language, translate } = useTranslation();
   if (isLoading) {
     return <StateCard message={translate("jobs.loading")} status="status" />;
@@ -2900,6 +2945,12 @@ function JobList({ jobs, isLoading, hasError, onSelect }) {
   const sortedJobs = [...jobs].sort((firstJob, secondJob) =>
     (firstJob.scheduledDate || "").localeCompare(secondJob.scheduledDate || ""),
   );
+  const filterLabel = {
+    today: translate("jobs.filterToday"),
+    "needs-assignment": translate("jobs.filterNeedsAssignment"),
+    "in-progress": translate("jobs.filterInProgress"),
+    "completed-today": translate("jobs.filterCompletedToday"),
+  }[filter];
 
   return (
     <section aria-labelledby="jobs-title">
@@ -2907,6 +2958,7 @@ function JobList({ jobs, isLoading, hasError, onSelect }) {
       <h2 id="jobs-title" className="list-title">
         {translate("jobs.title")}
       </h2>
+      {filterLabel && <p className="job-list__context">{filterLabel}</p>}
 
       <div className="job-list">
         {sortedJobs.map((job) => (

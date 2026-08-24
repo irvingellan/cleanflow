@@ -3,10 +3,13 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  query,
   runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
@@ -66,6 +69,17 @@ function jobFromSnapshot(snapshot) {
 
 export async function getJobOffers(jobId) {
   const snapshot = await getDocs(offersCollection(jobId));
+
+  return snapshot.docs.map((offerDocumentSnapshot) => ({
+    ...offerDocumentSnapshot.data(),
+    id: offerDocumentSnapshot.id,
+  }));
+}
+
+export async function getInterestedJobOffers(jobId) {
+  const snapshot = await getDocs(
+    query(offersCollection(jobId), where("status", "==", "INTERESTED"), limit(5)),
+  );
 
   return snapshot.docs.map((offerDocumentSnapshot) => ({
     ...offerDocumentSnapshot.data(),

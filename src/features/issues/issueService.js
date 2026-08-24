@@ -4,8 +4,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  query,
   runTransaction,
   serverTimestamp,
+  where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 
@@ -50,6 +53,14 @@ function mapIssue(issueSnapshot) {
 
 export async function getJobIssues(jobId) {
   const snapshot = await getDocs(issuesCollection(jobId));
+
+  return snapshot.docs.map(mapIssue);
+}
+
+export async function getOpenJobIssues(jobId) {
+  const snapshot = await getDocs(
+    query(issuesCollection(jobId), where("status", "==", "OPEN"), limit(3)),
+  );
 
   return snapshot.docs.map(mapIssue);
 }

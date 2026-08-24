@@ -9,6 +9,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
@@ -39,6 +40,11 @@ function currentLocalDate() {
   return `${year}-${month}-${day}`;
 }
 
+function currentLocalDayStart() {
+  const date = new Date();
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 function propertyIdsInGroups(propertyIds) {
   const groups = [];
 
@@ -53,8 +59,40 @@ function uniqueJobs(jobs) {
   return [...new Map(jobs.map((job) => [job.id, job])).values()];
 }
 
-export async function getJobs() {
-  const snapshot = await getDocs(jobsCollection());
+export async function getJobs(filter = "all") {
+  const constraints = [];
+
+  if (filter === "today") {
+    constraints.push(where("scheduledDate", "==", currentLocalDate()));
+  }
+
+  if (filter === "needs-assignment") {
+    constraints.push(where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]));
+  }
+
+  if (filter === "in-progress") {
+    constraints.push(where("operationalStatus", "==", "IN_PROGRESS"));
+  }
+
+  if (filter === "completed-today") {
+    const dayStart = currentLocalDayStart();
+    const nextDayStart = new Date(
+      dayStart.getFullYear(),
+      dayStart.getMonth(),
+      dayStart.getDate() + 1,
+    );
+
+    constraints.push(
+      where("operationalStatus", "==", "COMPLETED"),
+      where("completedAt", ">=", Timestamp.fromDate(dayStart)),
+      where("completedAt", "<", Timestamp.fromDate(nextDayStart)),
+      orderBy("completedAt", "desc"),
+    );
+  }
+
+  const snapshot = await getDocs(
+    constraints.length > 0 ? query(jobsCollection(), ...constraints) : jobsCollection(),
+  );
 
   return snapshot.docs.map(jobFromSnapshot);
 }
