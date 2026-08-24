@@ -130,6 +130,46 @@ h1 {
   width: min(100%, 480px);
 }
 
+.public-offer-shell {
+  place-items: start center;
+}
+
+.public-offer-foundation {
+  width: min(100%, 480px);
+}
+
+.public-offer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.public-offer-header h1 {
+  font-size: clamp(2.5rem, 12vw, 3.5rem);
+}
+
+.public-offer-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.public-offer-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.public-offer-actions .button {
+  width: 100%;
+}
+
+.public-offer-confirmation {
+  margin-bottom: 0;
+  color: #315c49;
+  font-weight: 700;
+}
+
 .auth-panel {
   max-width: 440px;
 }
@@ -969,6 +1009,22 @@ button.summary-card {
 .offer-status-item > .offer-status-actions {
   display: flex;
   gap: 8px;
+}
+
+.offer-status-item > .public-offer-link,
+.offer-status-item > .form-error {
+  grid-column: 1 / -1;
+}
+
+.public-offer-link {
+  color: #315c49;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.public-offer-link:focus-visible {
+  outline: 3px solid rgb(63 112 91 / 24%);
+  outline-offset: 3px;
 }
 
 .assignment-error {

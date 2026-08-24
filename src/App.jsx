@@ -12,6 +12,7 @@ import {
 } from "./features/cleaners/cleanerService.js";
 import { getOperationalDashboard } from "./features/dashboard/dashboardService.js";
 import {
+  createPublicOfferLink,
   createJobOffers,
   getJobOffers,
   respondToJobOffer,
@@ -28,6 +29,10 @@ import {
   getJobs,
   startAssignedJob,
 } from "./features/jobs/jobService.js";
+import {
+  getPublicOffer,
+  respondToPublicOffer,
+} from "./features/public-offers/publicOfferService.js";
 import { languageOptions, useTranslation } from "./i18n/translations.js";
 import { getProperties } from "./features/properties/propertyService.js";
 
@@ -149,12 +154,42 @@ function formatOperationalStatus(status, translate = null) {
   return formatStatus(status, translate);
 }
 
+function publicOfferTokenFromPathname(pathname = window.location.pathname) {
+  const pathSegments = pathname.split("/").filter(Boolean);
+
+  if (pathSegments[0] !== "offer") {
+    return null;
+  }
+
+  if (pathSegments.length !== 2) {
+    return "";
+  }
+
+  try {
+    return decodeURIComponent(pathSegments[1]);
+  } catch {
+    return "";
+  }
+}
+
 function App() {
+  const publicOfferToken = publicOfferTokenFromPathname();
+  const isPublicOfferRoute = publicOfferToken !== null;
   const [authUser, setAuthUser] = useState(undefined);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
-  useEffect(() => subscribeToAuthState(setAuthUser), []);
+  useEffect(() => {
+    if (isPublicOfferRoute) {
+      return undefined;
+    }
+
+    return subscribeToAuthState(setAuthUser);
+  }, [isPublicOfferRoute]);
+
+  if (isPublicOfferRoute) {
+    return <PublicOfferPage token={publicOfferToken} />;
+  }
 
   async function handleSignOut() {
     setIsSigningOut(true);
@@ -183,6 +218,165 @@ function App() {
       isSigningOut={isSigningOut}
       onSignOut={handleSignOut}
     />
+  );
+}
+
+function PublicOfferPage({ token }) {
+  const { language, setLanguage, translate } = useTranslation();
+  const [offer, setOffer] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isResponding, setIsResponding] = useState(false);
+  const [responseError, setResponseError] = useState(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadOffer() {
+      if (!token) {
+        if (isCurrent) {
+          setLoadError("offer_not_found");
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+      setLoadError(null);
+
+      try {
+        const loadedOffer = await getPublicOffer(token);
+
+        if (isCurrent) {
+          setOffer(loadedOffer);
+        }
+      } catch (error) {
+        if (isCurrent) {
+          setLoadError(error.code || "request_failed");
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadOffer();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [token]);
+
+  async function submitResponse(status) {
+    setIsResponding(true);
+    setResponseError(null);
+
+    try {
+      const result = await respondToPublicOffer({ token, status });
+      setOffer((currentOffer) => ({ ...currentOffer, status: result.status }));
+    } catch (error) {
+      if (["offer_not_found", "offer_expired", "offer_unavailable"].includes(error.code)) {
+        setLoadError(error.code);
+      } else {
+        setResponseError(error.code || "request_failed");
+      }
+    } finally {
+      setIsResponding(false);
+    }
+  }
+
+  const errorMessage = {
+    offer_not_found: "publicOffer.notFound",
+    offer_expired: "publicOffer.expired",
+    offer_unavailable: "publicOffer.unavailable",
+  }[loadError] || "publicOffer.loadError";
+  const hasAnswered = offer && offer.status !== "PENDING";
+
+  return (
+    <main className="app-shell public-offer-shell">
+      <section className="foundation public-offer-foundation" aria-labelledby="public-offer-page-title">
+        <header className="public-offer-header">
+          <div>
+            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
+            <h1 id="public-offer-page-title">{content.productName}</h1>
+          </div>
+          <LanguageSelector language={language} onChange={setLanguage} />
+        </header>
+
+        {isLoading && <StateCard message={translate("publicOffer.loading")} status="status" />}
+
+        {!isLoading && loadError && (
+          <StateCard message={translate(errorMessage)} status="alert" isError />
+        )}
+
+        {!isLoading && !loadError && offer && (
+          <section className="panel public-offer-panel" aria-labelledby="public-offer-title">
+            <p className="eyebrow">{translate("publicOffer.eyebrow")}</p>
+            <h2 id="public-offer-title" className="panel__title">
+              {translate("publicOffer.title")}
+            </h2>
+
+            <dl className="detail-list">
+              <DetailItem
+                label={translate("common.property")}
+                value={offer.propertyName || translate("properties.unnamed")}
+              />
+              <DetailItem
+                label={translate("publicOffer.serviceDate")}
+                value={formatDate(offer.scheduledDate, translate, language)}
+              />
+              {offer.scheduledStart && (
+                <DetailItem label={translate("publicOffer.startTime")} value={offer.scheduledStart} />
+              )}
+              <DetailItem
+                label={translate("publicOffer.yourPayment")}
+                value={formatPrice(offer.cleanerPayout, translate, language)}
+              />
+              <DetailItem
+                label={translate("publicOffer.status")}
+                value={formatStatus(offer.status, translate)}
+              />
+            </dl>
+
+            {responseError && (
+              <p className="form-error" role="alert">
+                {translate("publicOffer.responseError")}
+              </p>
+            )}
+
+            {offer.status === "PENDING" && (
+              <div className="public-offer-actions" aria-label={translate("publicOffer.status")}>
+                <button
+                  className="button button--primary"
+                  type="button"
+                  disabled={isResponding}
+                  onClick={() => submitResponse("INTERESTED")}
+                >
+                  {isResponding ? translate("publicOffer.responding") : translate("cleaner.interested")}
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={isResponding}
+                  onClick={() => submitResponse("DECLINED")}
+                >
+                  {translate("cleaner.notAvailable")}
+                </button>
+              </div>
+            )}
+
+            {hasAnswered && (
+              <p className="public-offer-confirmation" role="status">
+                {offer.status === "INTERESTED"
+                  ? translate("publicOffer.interestedConfirmation")
+                  : translate("publicOffer.declinedConfirmation")}
+              </p>
+            )}
+          </section>
+        )}
+      </section>
+    </main>
   );
 }
 
@@ -474,6 +668,17 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
 
       throw error;
     }
+  }
+
+  async function createCleanerOfferLink(offer) {
+    if (!selectedJob) {
+      throw new Error("No job selected.");
+    }
+
+    return createPublicOfferLink({
+      jobId: selectedJob.id,
+      cleanerId: offer.cleanerId,
+    });
   }
 
   useEffect(() => {
@@ -778,6 +983,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             onRefreshOffers={refreshJobOffers}
             onRefreshIssues={refreshJobIssues}
             onSimulateOffer={openCleanerOffer}
+            onCreatePublicOfferLink={createCleanerOfferLink}
             onAssignCleaner={assignCleaner}
             onSimulateAssignedCleaner={openAssignedCleanerJob}
             onResolveIssue={resolveJobIssue}
@@ -1969,6 +2175,7 @@ function JobDetail({
   onRefreshOffers,
   onRefreshIssues,
   onSimulateOffer,
+  onCreatePublicOfferLink,
   onAssignCleaner,
   onSimulateAssignedCleaner,
   onResolveIssue,
@@ -1980,6 +2187,9 @@ function JobDetail({
   const [resolutionNote, setResolutionNote] = useState("");
   const [isResolvingIssue, setIsResolvingIssue] = useState(false);
   const [resolutionError, setResolutionError] = useState(null);
+  const [publicOfferLink, setPublicOfferLink] = useState(null);
+  const [isCreatingPublicOfferLinkFor, setIsCreatingPublicOfferLinkFor] = useState(null);
+  const [publicOfferLinkError, setPublicOfferLinkError] = useState(null);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
   const startedAt = formatCreatedAt(job.startedAt, language);
@@ -2015,6 +2225,20 @@ function JobDetail({
       );
     } finally {
       setAssigningCleanerId(null);
+    }
+  }
+
+  async function createOfferLink(offer) {
+    setIsCreatingPublicOfferLinkFor(offer.id);
+    setPublicOfferLinkError(null);
+
+    try {
+      const link = await onCreatePublicOfferLink(offer);
+      setPublicOfferLink({ offerId: offer.id, ...link });
+    } catch {
+      setPublicOfferLinkError(offer.id);
+    } finally {
+      setIsCreatingPublicOfferLinkFor(null);
     }
   }
 
@@ -2249,6 +2473,18 @@ function JobDetail({
                     >
                       {translate("offers.simulateOffer")}
                     </button>
+                    {offer.status === "PENDING" && (
+                      <button
+                        className="button"
+                        type="button"
+                        disabled={isCreatingPublicOfferLinkFor !== null}
+                        onClick={() => createOfferLink(offer)}
+                      >
+                        {isCreatingPublicOfferLinkFor === offer.id
+                          ? translate("offers.creatingPublicLink")
+                          : translate("offers.createPublicLink")}
+                      </button>
+                    )}
                     {offer.status === "INTERESTED" && !isAssigned && (
                       <button
                         className="button button--primary"
@@ -2262,6 +2498,21 @@ function JobDetail({
                       </button>
                     )}
                   </div>
+                  {publicOfferLink?.offerId === offer.id && (
+                    <a
+                      className="public-offer-link"
+                      href={publicOfferLink.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {translate("offers.openPublicLink")}
+                    </a>
+                  )}
+                  {publicOfferLinkError === offer.id && (
+                    <p className="form-error" role="alert">
+                      {translate("offers.publicLinkError")}
+                    </p>
+                  )}
                 </article>
               );
             })}

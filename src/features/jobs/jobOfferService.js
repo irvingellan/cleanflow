@@ -5,12 +5,30 @@ import {
   getDocs,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
+const publicOfferTokenLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
+
+function createPublicOfferToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+async function hashPublicOfferToken(token) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 function offersCollection(jobId) {
   return collection(
@@ -105,4 +123,43 @@ export async function createJobOffers({ jobId, cleaners }) {
 
   const snapshot = await getDoc(reference);
   return jobFromSnapshot(snapshot);
+}
+
+export async function createPublicOfferLink({ jobId, cleanerId }) {
+  const token = createPublicOfferToken();
+  const tokenHash = await hashPublicOfferToken(token);
+  const expiresAt = Timestamp.fromMillis(Date.now() + publicOfferTokenLifetimeMilliseconds);
+  const jobReference = jobDocument(jobId);
+  const offerReference = offerDocument(jobId, cleanerId);
+
+  await runTransaction(db, async (transaction) => {
+    const [jobSnapshot, offerSnapshot] = await Promise.all([
+      transaction.get(jobReference),
+      transaction.get(offerReference),
+    ]);
+
+    if (!jobSnapshot.exists() || !offerSnapshot.exists()) {
+      const error = new Error("Offer not found.");
+      error.code = "offer-not-found";
+      throw error;
+    }
+
+    if (
+      jobSnapshot.data().operationalStatus !== "OFFERED" ||
+      offerSnapshot.data().status !== "PENDING"
+    ) {
+      const error = new Error("Offer is not available for a public link.");
+      error.code = "offer-unavailable";
+      throw error;
+    }
+
+    transaction.update(offerReference, {
+      publicOfferTokenHash: tokenHash,
+      publicOfferExpiresAt: expiresAt,
+    });
+  });
+
+  return {
+    url: new URL(`/offer/${token}`, window.location.origin).toString(),
+  };
 }

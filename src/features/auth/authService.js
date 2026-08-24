@@ -1,12 +1,17 @@
 import {
+  connectAuthEmulator,
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { firebaseApp } from "../../services/firebase/client.js";
+import { firebaseApp, useFirebaseEmulators } from "../../services/firebase/client.js";
 
 const auth = getAuth(firebaseApp);
+
+if (useFirebaseEmulators) {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+}
 
 export function subscribeToAuthState(onChange) {
   return onAuthStateChanged(auth, onChange);
