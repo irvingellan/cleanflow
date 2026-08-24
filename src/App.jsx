@@ -10,6 +10,11 @@ import {
   getCleaners,
   updateCleaner,
 } from "./features/cleaners/cleanerService.js";
+import {
+  createClient,
+  getActiveClients,
+  getClients,
+} from "./features/clients/clientService.js";
 import { getOperationalDashboard } from "./features/dashboard/dashboardService.js";
 import {
   createPublicOfferLink,
@@ -38,6 +43,7 @@ import { languageOptions, useTranslation } from "./i18n/translations.js";
 import {
   createProperty,
   getProperties,
+  linkPropertyToClient,
 } from "./features/properties/propertyService.js";
 
 const content = {
@@ -417,6 +423,9 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
   const [directoryCleaners, setDirectoryCleaners] = useState([]);
   const [isLoadingDirectoryCleaners, setIsLoadingDirectoryCleaners] = useState(false);
   const [hasDirectoryCleanersError, setHasDirectoryCleanersError] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(false);
+  const [hasClientsError, setHasClientsError] = useState(false);
   const [jobOffers, setJobOffers] = useState([]);
   const [isLoadingOffers, setIsLoadingOffers] = useState(false);
   const [hasOffersError, setHasOffersError] = useState(false);
@@ -548,6 +557,40 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     }
 
     loadJobs();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== "client-list") {
+      return undefined;
+    }
+
+    let isCurrent = true;
+    setIsLoadingClients(true);
+    setHasClientsError(false);
+
+    async function loadClients() {
+      try {
+        const loadedClients = await getClients();
+
+        if (isCurrent) {
+          setClients(loadedClients);
+        }
+      } catch {
+        if (isCurrent) {
+          setHasClientsError(true);
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoadingClients(false);
+        }
+      }
+    }
+
+    loadClients();
 
     return () => {
       isCurrent = false;
@@ -761,6 +804,10 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     setView("property-create");
   }
 
+  function showPropertyClientLink() {
+    setView("property-link-client");
+  }
+
   function showDashboard() {
     setActiveSection("dashboard");
     setSelectedProperty(null);
@@ -791,6 +838,17 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     setView("cleaner-list");
   }
 
+  function showClients() {
+    setActiveSection("clients");
+    setSelectedProperty(null);
+    setSelectedJob(null);
+    setSelectedCleaner(null);
+    setSavedCleaner(null);
+    setSelectedOffer(null);
+    setJobIssues([]);
+    setView("client-list");
+  }
+
   function openCleaner(cleaner) {
     setActiveSection("cleaners");
     setSelectedCleaner(cleaner);
@@ -802,6 +860,10 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
     setSelectedCleaner(null);
     setSavedCleaner(null);
     setView("cleaner-create");
+  }
+
+  function showNewClient() {
+    setView("client-create");
   }
 
   function openProperty(property) {
@@ -905,6 +967,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
               onShowProperties={showProperties}
               onShowJobs={showJobs}
               onShowCleaners={showCleaners}
+              onShowClients={showClients}
             />
           </div>
           <div className="header-actions">
@@ -965,6 +1028,24 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             onBack={showProperties}
             onCreateCleaning={() => setView("create-cleaning")}
             onOpenJob={openPropertyJob}
+            onLinkClient={showPropertyClientLink}
+          />
+        )}
+
+        {view === "property-link-client" && selectedProperty && (
+          <PropertyClientLinkForm
+            property={selectedProperty}
+            onBack={() => setView("property-detail")}
+            onLinked={(propertyUpdate) => {
+              const linkedProperty = { ...selectedProperty, ...propertyUpdate };
+              setSelectedProperty(linkedProperty);
+              setProperties((currentProperties) =>
+                currentProperties.map((property) =>
+                  property.id === linkedProperty.id ? linkedProperty : property,
+                ),
+              );
+              setView("property-detail");
+            }}
           />
         )}
 
@@ -1033,6 +1114,25 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
 
         {view === "cleaner-success" && savedCleaner && (
           <CleanerProfileSuccess cleaner={savedCleaner} onBack={showCleaners} />
+        )}
+
+        {view === "client-list" && (
+          <ClientDirectory
+            clients={clients}
+            isLoading={isLoadingClients}
+            hasError={hasClientsError}
+            onCreate={showNewClient}
+          />
+        )}
+
+        {view === "client-create" && (
+          <ClientCreateForm
+            onBack={showClients}
+            onSaved={(client) => {
+              setClients((currentClients) => [...currentClients, client]);
+              setView("client-list");
+            }}
+          />
         )}
 
         {view === "job-detail" && selectedJob && (
@@ -1258,6 +1358,7 @@ function MainNavigation({
   onShowProperties,
   onShowJobs,
   onShowCleaners,
+  onShowClients,
 }) {
   return (
     <nav className="main-navigation" aria-label={translate("common.mainNavigation")}>
@@ -1292,6 +1393,14 @@ function MainNavigation({
         onClick={onShowCleaners}
       >
         {translate("navigation.cleaners")}
+      </button>
+      <button
+        className="navigation-button"
+        type="button"
+        aria-current={activeSection === "clients" ? "page" : undefined}
+        onClick={onShowClients}
+      >
+        {translate("navigation.clients")}
       </button>
     </nav>
   );
@@ -1697,6 +1806,122 @@ function PropertyList({ properties, isLoading, hasError, onSelect, onCreate }) {
   );
 }
 
+function ClientDirectory({ clients, isLoading, hasError, onCreate }) {
+  const { translate } = useTranslation();
+
+  if (isLoading) {
+    return <StateCard message={translate("clients.loading")} status="status" />;
+  }
+
+  if (hasError) {
+    return <StateCard message={translate("clients.error")} status="alert" isError />;
+  }
+
+  const sortedClients = [...clients].sort((firstClient, secondClient) =>
+    (firstClient.name || "").localeCompare(secondClient.name || ""),
+  );
+
+  return (
+    <section aria-labelledby="clients-title">
+      <div className="directory-heading">
+        <div>
+          <p className="eyebrow">{translate("navigation.clients")}</p>
+          <h2 id="clients-title" className="list-title">
+            {translate("clients.title")}
+          </h2>
+        </div>
+        <button className="button button--primary" type="button" onClick={onCreate}>
+          {translate("clients.new")}
+        </button>
+      </div>
+
+      {sortedClients.length === 0 ? (
+        <StateCard message={translate("clients.empty")} />
+      ) : (
+        <div className="client-directory">
+          {sortedClients.map((client) => (
+            <article key={client.id} className="client-card">
+              <strong>{client.name || translate("common.notProvided")}</strong>
+              <span className="status-badge">
+                {client.active === false
+                  ? translate("common.inactive")
+                  : translate("common.active")}
+              </span>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ClientCreateForm({ onBack, onSaved }) {
+  const { translate } = useTranslation();
+  const [name, setName] = useState("");
+  const [active, setActive] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  async function saveClient(event) {
+    event.preventDefault();
+    const clientName = name.trim();
+
+    if (!clientName) {
+      setFormError(translate("clients.nameRequired"));
+      return;
+    }
+
+    setIsSaving(true);
+    setFormError("");
+
+    try {
+      const client = await createClient({ name: clientName, active });
+      onSaved(client);
+    } catch {
+      setFormError(translate("clients.createError"));
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-labelledby="client-create-title">
+      <BackButton onClick={onBack} />
+      <p className="eyebrow">{translate("navigation.clients")}</p>
+      <h2 id="client-create-title" className="panel__title">
+        {translate("clients.createTitle")}
+      </h2>
+
+      <form className="cleaning-form" noValidate onSubmit={saveClient}>
+        <label>
+          {translate("clients.name")}
+          <input value={name} onChange={(event) => setName(event.target.value)} required />
+        </label>
+
+        <label className="cleaner-active-field">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(event) => setActive(event.target.checked)}
+          />
+          {translate("common.active")}
+        </label>
+
+        {formError && (
+          <p className="form-error" role="alert">
+            {formError}
+          </p>
+        )}
+
+        <div className="button-row">
+          <button className="button button--primary" type="submit" disabled={isSaving}>
+            {isSaving ? translate("clients.creating") : translate("clients.save")}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function PropertyCreateForm({ properties, onBack, onSaved }) {
   const { translate } = useTranslation();
   const [formValues, setFormValues] = useState(createEmptyPropertyForm);
@@ -1837,7 +2062,131 @@ function PropertyCreateForm({ properties, onBack, onSaved }) {
   );
 }
 
-function PropertyDetail({ property, onBack, onCreateCleaning, onOpenJob }) {
+function PropertyClientLinkForm({ property, onBack, onLinked }) {
+  const { translate } = useTranslation();
+  const [clients, setClients] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadError, setHasLoadError] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const currentClientName = property.clientName || translate("common.notProvided");
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadActiveClients() {
+      setIsLoading(true);
+      setHasLoadError(false);
+
+      try {
+        const loadedClients = await getActiveClients();
+
+        if (isCurrent) {
+          setClients(loadedClients);
+        }
+      } catch {
+        if (isCurrent) {
+          setHasLoadError(true);
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadActiveClients();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [property.id]);
+
+  const sortedClients = [...clients].sort((firstClient, secondClient) =>
+    (firstClient.name || "").localeCompare(secondClient.name || ""),
+  );
+
+  async function saveLink(event) {
+    event.preventDefault();
+    const selectedClient = clients.find((client) => client.id === selectedClientId);
+
+    if (!selectedClient) {
+      setFormError(translate("properties.clientRequired"));
+      return;
+    }
+
+    setIsSaving(true);
+    setFormError("");
+
+    try {
+      const propertyUpdate = await linkPropertyToClient(property.id, selectedClient);
+      onLinked(propertyUpdate);
+    } catch {
+      setFormError(translate("properties.linkClientError"));
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-labelledby="property-link-client-title">
+      <BackButton onClick={onBack} />
+      <p className="eyebrow">{translate("properties.details")}</p>
+      <h2 id="property-link-client-title" className="panel__title">
+        {translate("properties.linkClient")}
+      </h2>
+
+      <dl className="detail-list">
+        <DetailItem label={translate("common.property")} value={property.name || translate("properties.unnamed")} />
+        <DetailItem label={translate("properties.currentClient")} value={currentClientName} />
+      </dl>
+
+      {isLoading && <StateCard message={translate("properties.loadingClients")} status="status" />}
+
+      {hasLoadError && (
+        <StateCard message={translate("properties.clientsError")} status="alert" isError />
+      )}
+
+      {!isLoading && !hasLoadError && (
+        <form className="cleaning-form" noValidate onSubmit={saveLink}>
+          {sortedClients.length === 0 ? (
+            <StateCard message={translate("properties.noActiveClients")} />
+          ) : (
+            <label>
+              {translate("properties.selectClient")}
+              <select
+                value={selectedClientId}
+                onChange={(event) => setSelectedClientId(event.target.value)}
+                required
+              >
+                <option value="">{translate("properties.selectClient")}</option>
+                {sortedClients.map((client) => (
+                  <option key={client.id} value={client.id}>{client.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {formError && (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          )}
+
+          {sortedClients.length > 0 && (
+            <div className="button-row">
+              <button className="button button--primary" type="submit" disabled={isSaving}>
+                {isSaving ? translate("properties.linkingClient") : translate("properties.confirmClientLink")}
+              </button>
+            </div>
+          )}
+        </form>
+      )}
+    </section>
+  );
+}
+
+function PropertyDetail({ property, onBack, onCreateCleaning, onOpenJob, onLinkClient }) {
   const { language, translate } = useTranslation();
   const propertyName = property.name || translate("properties.unnamed");
   const clientName = property.clientName || translate("common.notProvided");
@@ -1878,6 +2227,11 @@ function PropertyDetail({ property, onBack, onCreateCleaning, onOpenJob }) {
       </dl>
 
       <div className="button-row">
+        {!property.clientId && (
+          <button className="button" type="button" onClick={onLinkClient}>
+            {translate("properties.linkClient")}
+          </button>
+        )}
         <button
           className="button button--primary"
           type="button"

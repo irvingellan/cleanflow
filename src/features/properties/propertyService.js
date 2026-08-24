@@ -1,10 +1,14 @@
-import { addDoc, collection, getDocs } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
 
 function propertiesCollection() {
   return collection(db, "organizations", organizationId, "properties");
+}
+
+function propertyDocument(propertyId) {
+  return doc(db, "organizations", organizationId, "properties", propertyId);
 }
 
 export async function getProperties() {
@@ -41,4 +45,17 @@ export async function createProperty({
   const reference = await addDoc(propertiesCollection(), property);
 
   return { id: reference.id, ...property };
+}
+
+export async function linkPropertyToClient(propertyId, client) {
+  await updateDoc(propertyDocument(propertyId), {
+    clientId: client.id,
+    clientName: client.name,
+  });
+
+  return {
+    id: propertyId,
+    clientId: client.id,
+    clientName: client.name,
+  };
 }
