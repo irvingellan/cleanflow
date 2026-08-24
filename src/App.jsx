@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { appVersion } from "./appVersion.js";
 import {
   signInWithEmail,
   signOutManager,
@@ -1058,7 +1059,7 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             >
               {isSigningOut ? translate("auth.signingOut") : translate("auth.signOut")}
             </button>
-            <span className="badge">{translate("brand.foundationBuild")}</span>
+            <span className="badge">{appVersion}</span>
             {hasSignOutError && (
               <p className="header-auth-error" role="alert">
                 {translate("auth.signOutError")}
@@ -1429,7 +1430,7 @@ function AuthenticationLayout({ children, language, onLanguageChange }) {
           </div>
           <div className="header-actions">
             <LanguageSelector language={language} onChange={onLanguageChange} />
-            <span className="badge">{translate("brand.foundationBuild")}</span>
+            <span className="badge">{appVersion}</span>
           </div>
         </header>
         {children}
