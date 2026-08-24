@@ -133,6 +133,37 @@ export async function getPropertyJobHistory(propertyId) {
   };
 }
 
+export async function getCleanerJobHistory(cleanerId) {
+  const today = currentLocalDate();
+  const jobs = jobsCollection();
+  const [upcomingSnapshot, historySnapshot] = await Promise.all([
+    getDocs(
+      query(
+        jobs,
+        where("assignedCleanerId", "==", cleanerId),
+        where("operationalStatus", "in", ["ASSIGNED", "IN_PROGRESS"]),
+        where("scheduledDate", ">=", today),
+        orderBy("scheduledDate", "asc"),
+        limit(5),
+      ),
+    ),
+    getDocs(
+      query(
+        jobs,
+        where("assignedCleanerId", "==", cleanerId),
+        where("scheduledDate", "<", today),
+        orderBy("scheduledDate", "desc"),
+        limit(10),
+      ),
+    ),
+  ]);
+
+  return {
+    upcomingJobs: upcomingSnapshot.docs.map(jobFromSnapshot),
+    recentJobs: historySnapshot.docs.map(jobFromSnapshot),
+  };
+}
+
 export async function getClientJobHistory(clientId, propertyIds) {
   const today = currentLocalDate();
   const jobs = jobsCollection();
