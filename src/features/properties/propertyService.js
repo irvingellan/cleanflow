@@ -1,4 +1,12 @@
-import { addDoc, collection, doc, getDocs, updateDoc } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
@@ -20,8 +28,20 @@ export async function getProperties() {
   }));
 }
 
+export async function getPropertiesForClient(clientId) {
+  const snapshot = await getDocs(
+    query(propertiesCollection(), where("clientId", "==", clientId)),
+  );
+
+  return snapshot.docs.map((propertyDocument) => ({
+    ...propertyDocument.data(),
+    id: propertyDocument.id,
+  }));
+}
+
 export async function createProperty({
   name,
+  clientId,
   clientName,
   defaultClientPrice,
   defaultCleanerPrice,
@@ -33,6 +53,10 @@ export async function createProperty({
     active,
     organizationId,
   };
+
+  if (clientId) {
+    property.clientId = clientId;
+  }
 
   if (defaultClientPrice !== undefined) {
     property.defaultClientPrice = defaultClientPrice;

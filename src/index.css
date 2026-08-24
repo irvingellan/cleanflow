@@ -225,14 +225,22 @@ h1 {
 
 .client-card {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   border: 1px solid #dce5e0;
   border-radius: 16px;
   padding: 24px;
+  color: inherit;
+  text-align: left;
   background: #ffffff;
   box-shadow: 0 16px 40px rgb(28 54 42 / 8%);
+  cursor: pointer;
+}
+
+.client-card:hover {
+  border-color: #b8c9c1;
 }
 
 .property-card,
@@ -265,6 +273,7 @@ h1 {
 }
 
 .property-card:focus-visible,
+.client-card:focus-visible,
 .job-card:focus-visible,
 .navigation-button:focus-visible,
 .back-button:focus-visible,
@@ -785,6 +794,48 @@ button.summary-card {
   color: #8a463a;
 }
 
+.client-properties {
+  display: grid;
+  gap: 12px;
+  margin-top: 40px;
+}
+
+.client-properties h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  letter-spacing: -0.015em;
+}
+
+.client-properties__list {
+  display: grid;
+  gap: 10px;
+}
+
+.client-property-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e3eae6;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.client-property-card__summary {
+  display: grid;
+  gap: 4px;
+}
+
+.client-property-card__prices {
+  color: #6a756f;
+  font-size: 0.875rem;
+}
+
+.client-property-card__prices {
+  display: grid;
+  gap: 4px;
+}
+
 .button {
   border: 1px solid #b8c9c1;
   border-radius: 10px;
@@ -1295,6 +1346,32 @@ button.summary-card {
 
   .property-history-job {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .client-property-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .client-property-card__summary {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .client-property-card .status-badge {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .client-property-card__prices {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .client-property-card .button {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    justify-self: start;
   }
 
   .property-history-job__summary {
