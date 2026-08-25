@@ -43,6 +43,7 @@ import {
   respondToPublicOffer,
 } from "./features/public-offers/publicOfferService.js";
 import { languageOptions, useTranslation } from "./i18n/translations.js";
+import { ThemeProvider, useTheme } from "./theme/theme.js";
 import {
   createProperty,
   getProperties,
@@ -260,11 +261,14 @@ function App() {
   }
 
   return (
-    <ManagerApplication
-      hasSignOutError={hasSignOutError}
-      isSigningOut={isSigningOut}
-      onSignOut={handleSignOut}
-    />
+    <ThemeProvider>
+      <ManagerApplication
+        authUser={authUser}
+        hasSignOutError={hasSignOutError}
+        isSigningOut={isSigningOut}
+        onSignOut={handleSignOut}
+      />
+    </ThemeProvider>
   );
 }
 
@@ -427,7 +431,7 @@ function PublicOfferPage({ token }) {
   );
 }
 
-function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
+function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
   const [properties, setProperties] = useState([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(true);
@@ -1075,16 +1079,22 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             />
           </div>
           <div className="header-actions">
-            <LanguageSelector language={language} onChange={setLanguage} />
-            <button
-              className="header-sign-out"
-              type="button"
-              disabled={isSigningOut}
-              onClick={onSignOut}
-            >
-              {isSigningOut ? translate("auth.signingOut") : translate("auth.signOut")}
-            </button>
-            <span className="badge">{appVersion}</span>
+            <div className="manager-account">
+              <ManagerIdentity user={authUser} />
+              <div className="manager-account__controls">
+                <LanguageSelector language={language} onChange={setLanguage} />
+                <ThemeToggle />
+                <button
+                  className="header-sign-out"
+                  type="button"
+                  disabled={isSigningOut}
+                  onClick={onSignOut}
+                >
+                  {isSigningOut ? translate("auth.signingOut") : translate("auth.signOut")}
+                </button>
+                <span className="badge">{appVersion}</span>
+              </div>
+            </div>
             {hasSignOutError && (
               <p className="header-auth-error" role="alert">
                 {translate("auth.signOutError")}
@@ -1492,6 +1502,39 @@ function LanguageSelector({ language, onChange }) {
         </option>
       ))}
     </select>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const { translate } = useTranslation();
+  const isDark = theme === "dark";
+  const label = isDark ? translate("theme.switchToLight") : translate("theme.switchToDark");
+
+  return (
+    <button
+      className="theme-toggle"
+      type="button"
+      aria-label={label}
+      aria-pressed={isDark}
+      title={label}
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+    >
+      <span aria-hidden="true">{isDark ? "☀" : "☾"}</span>
+    </button>
+  );
+}
+
+function ManagerIdentity({ user }) {
+  const { translate } = useTranslation();
+  const displayName = user.displayName?.trim();
+  const email = user.email || "";
+
+  return (
+    <div className="manager-identity">
+      <strong>{displayName || email || translate("auth.managerAccess")}</strong>
+      {displayName && email && <span>{email}</span>}
+    </div>
   );
 }
 
