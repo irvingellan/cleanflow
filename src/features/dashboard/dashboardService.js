@@ -1,5 +1,6 @@
 import {
   collection,
+  documentId,
   getCountFromServer,
   getDocs,
   limit,
@@ -26,9 +27,14 @@ const attentionJobLimit = 10;
 const issueCandidateJobLimit = 10;
 const next48HoursJobLimit = 20;
 const recentlyCompletedJobLimit = 5;
+const cleanerLookupBatchSize = 30;
 
 function jobsCollection() {
   return collection(db, "organizations", organizationId, "jobs");
+}
+
+function cleanersCollection() {
+  return collection(db, "organizations", organizationId, "cleaners");
 }
 
 function jobFromSnapshot(snapshot) {
@@ -83,6 +89,37 @@ function sortByScheduledDateTime(firstJob, secondJob) {
 
 function uniqueJobs(jobs) {
   return [...new Map(jobs.map((job) => [job.id, job])).values()];
+}
+
+async function getCleanerNamesById(cleanerIds) {
+  const uniqueCleanerIds = [...new Set(cleanerIds.filter(Boolean))];
+  const cleanerIdBatches = Array.from(
+    { length: Math.ceil(uniqueCleanerIds.length / cleanerLookupBatchSize) },
+    (_, index) =>
+      uniqueCleanerIds.slice(
+        index * cleanerLookupBatchSize,
+        (index + 1) * cleanerLookupBatchSize,
+      ),
+  );
+  const snapshots = await Promise.all(
+    cleanerIdBatches.map((cleanerIdsBatch) =>
+      getDocs(
+        query(
+          cleanersCollection(),
+          where(documentId(), "in", cleanerIdsBatch),
+        ),
+      ),
+    ),
+  );
+
+  return Object.fromEntries(
+    snapshots.flatMap((snapshot) =>
+      snapshot.docs.map((cleanerSnapshot) => [
+        cleanerSnapshot.id,
+        cleanerSnapshot.data().name,
+      ]),
+    ),
+  );
 }
 
 export async function getOperationalDashboard() {
@@ -211,6 +248,10 @@ export async function getOperationalDashboard() {
   const attentionJobs = attentionSnapshot.docs.map(jobFromSnapshot);
   const inProgressJobs = inProgressSnapshot.docs.map(jobFromSnapshot);
   const recentlyCompletedJobs = recentlyCompletedSnapshot.docs.map(jobFromSnapshot);
+  const next48HoursJobs = next48HoursSnapshot.docs
+    .map(jobFromSnapshot)
+    .filter((job) => isWithinNext48Hours(job, now, windowEnd))
+    .sort(sortByScheduledDateTime);
   const offeredAttentionJobs = attentionJobs.filter(
     (job) => job.operationalStatus === "OFFERED",
   );
@@ -240,6 +281,13 @@ export async function getOperationalDashboard() {
       })),
     ),
   ]);
+  const cleanerNamesById = await getCleanerNamesById([
+    ...recentlyCompletedJobs.map((job) => job.assignedCleanerId),
+    ...next48HoursJobs.map((job) => job.assignedCleanerId),
+    ...offeredJobOffers.flatMap(({ interestedOffers }) =>
+      interestedOffers.map((offer) => offer.cleanerId),
+    ),
+  ]);
 
   return {
     counts: {
@@ -256,13 +304,11 @@ export async function getOperationalDashboard() {
     pendingOffersByJob: Object.fromEntries(
       offeredJobOffers.map(({ jobId, hasPendingOffer }) => [jobId, hasPendingOffer]),
     ),
+    cleanerNamesById,
     openIssues: issueGroups.flatMap(({ job, issues }) =>
       issues.map((issue) => ({ ...issue, job })),
     ),
-    next48HoursJobs: next48HoursSnapshot.docs
-      .map(jobFromSnapshot)
-      .filter((job) => isWithinNext48Hours(job, now, windowEnd))
-      .sort(sortByScheduledDateTime),
+    next48HoursJobs,
     recentlyCompletedJobs,
     weeklySummary: {
       scheduled: weeklyScheduledCount.data().count,

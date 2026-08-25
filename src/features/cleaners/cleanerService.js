@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -18,6 +19,14 @@ function cleanersCollection() {
 
 function cleanerDocument(cleanerId) {
   return doc(db, "organizations", organizationId, "cleaners", cleanerId);
+}
+
+export async function getCleanerById(cleanerId) {
+  const snapshot = await getDoc(cleanerDocument(cleanerId));
+
+  return snapshot.exists()
+    ? { ...snapshot.data(), id: snapshot.id }
+    : null;
 }
 
 export async function getCleaners() {

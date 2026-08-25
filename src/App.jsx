@@ -8,6 +8,7 @@ import {
 import {
   createCleaner,
   getAllCleaners,
+  getCleanerById,
   getCleaners,
   updateCleaner,
 } from "./features/cleaners/cleanerService.js";
@@ -898,6 +899,31 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("cleaner-detail");
   }
 
+  function showCleanerDetail() {
+    setSavedCleaner(null);
+    setView("cleaner-detail");
+  }
+
+  function showEditCleaner() {
+    setSavedCleaner(null);
+    setView("cleaner-edit");
+  }
+
+  function handleCleanerUpdated(cleaner) {
+    const updatedCleaner = { ...selectedCleaner, ...cleaner };
+
+    setSelectedCleaner(updatedCleaner);
+    setDirectoryCleaners((currentCleaners) =>
+      currentCleaners.map((currentCleaner) =>
+        currentCleaner.id === updatedCleaner.id
+          ? { ...currentCleaner, ...updatedCleaner }
+          : currentCleaner,
+      ),
+    );
+    setSavedCleaner({ ...updatedCleaner, wasCreated: false });
+    setView("cleaner-success");
+  }
+
   function showNewCleaner() {
     setSelectedCleaner(null);
     setSavedCleaner(null);
@@ -1220,6 +1246,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
           <CleanerDetail
             cleaner={selectedCleaner}
             onBack={showCleaners}
+            onEdit={showEditCleaner}
             onOpenJob={openCleanerJob}
           />
         )}
@@ -1241,16 +1268,21 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             key={selectedCleaner.id}
             cleaner={selectedCleaner}
             defaultPreferredLanguage={language}
-            onBack={showCleaners}
-            onSaved={(cleaner) => {
-              setSavedCleaner(cleaner);
-              setView("cleaner-success");
-            }}
+            onBack={showCleanerDetail}
+            onSaved={handleCleanerUpdated}
           />
         )}
 
         {view === "cleaner-success" && savedCleaner && (
-          <CleanerProfileSuccess cleaner={savedCleaner} onBack={showCleaners} />
+          <CleanerProfileSuccess
+            cleaner={savedCleaner}
+            onBack={savedCleaner.wasCreated ? showCleaners : showCleanerDetail}
+            backLabel={
+              savedCleaner.wasCreated
+                ? "cleaners.backToDirectory"
+                : "cleaners.backToDetail"
+            }
+          />
         )}
 
         {view === "client-list" && (
@@ -1286,6 +1318,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "job-detail" && selectedJob && (
           <JobDetail
             job={selectedJob}
+            knownCleaners={directoryCleaners}
             offers={jobOffers}
             isLoadingOffers={isLoadingOffers}
             hasOffersError={hasOffersError}
@@ -1593,6 +1626,10 @@ function MainNavigation({
   );
 }
 
+function currentCleanerName(cleanerId, snapshotName, cleanerNamesById, fallback) {
+  return (cleanerId && cleanerNamesById[cleanerId]) || snapshotName || fallback;
+}
+
 function Dashboard({
   dashboardData,
   isLoading,
@@ -1625,6 +1662,7 @@ function Dashboard({
   const openIssues = dashboardData?.openIssues || [];
   const offersByJob = dashboardData?.offersByJob || {};
   const pendingOffersByJob = dashboardData?.pendingOffersByJob || {};
+  const cleanerNamesById = dashboardData?.cleanerNamesById || {};
   const next48HoursJobs = dashboardData?.next48HoursJobs || [];
   const recentlyCompletedJobs = dashboardData?.recentlyCompletedJobs || [];
   const weeklySummary = dashboardData?.weeklySummary;
@@ -1677,7 +1715,14 @@ function Dashboard({
     sortByScheduledDate(offeredJobsWithInterest).map((job) => {
       const interestedNames = (offersByJob[job.id] || [])
         .filter((offer) => offer.status === "INTERESTED")
-        .map((offer) => offer.cleanerName)
+        .map((offer) =>
+          currentCleanerName(
+            offer.cleanerId,
+            offer.cleanerName,
+            cleanerNamesById,
+            "",
+          ),
+        )
         .filter(Boolean)
         .join(", ");
 
@@ -1839,7 +1884,14 @@ function Dashboard({
                 >
                   <strong>{job.propertyName || translate("properties.unnamed")}</strong>
                   <span>{formatDate(job.scheduledDate, translate, language)}</span>
-                  <span>{job.assignedCleanerName || translate("common.notProvided")}</span>
+                  <span>
+                    {currentCleanerName(
+                      job.assignedCleanerId,
+                      job.assignedCleanerName,
+                      cleanerNamesById,
+                      translate("common.notProvided"),
+                    )}
+                  </span>
                   <small>
                     {formatCreatedAt(job.completedAt, language) ||
                       translate("dashboard.completionUnavailable")}
@@ -1870,7 +1922,12 @@ function Dashboard({
               <section key={day} className="dashboard-next-group" aria-label={day}>
                 <h4>{day}</h4>
                 {jobs.map((job) => (
-                  <DashboardNextJob key={job.id} job={job} onOpen={onOpenJob} />
+                  <DashboardNextJob
+                    key={job.id}
+                    job={job}
+                    cleanerNamesById={cleanerNamesById}
+                    onOpen={onOpenJob}
+                  />
                 ))}
               </section>
             ))}
@@ -1883,7 +1940,7 @@ function Dashboard({
   );
 }
 
-function DashboardNextJob({ job, onOpen }) {
+function DashboardNextJob({ job, cleanerNamesById, onOpen }) {
   const { language, translate } = useTranslation();
   const schedule = [
     formatDate(job.scheduledDate, translate, language),
@@ -1899,7 +1956,14 @@ function DashboardNextJob({ job, onOpen }) {
       <span className="dashboard-next-item__status">
         {formatOperationalStatus(job.operationalStatus, translate)}
       </span>
-      <span>{job.assignedCleanerName || translate("dashboard.needsAssignment")}</span>
+      <span>
+        {currentCleanerName(
+          job.assignedCleanerId,
+          job.assignedCleanerName,
+          cleanerNamesById,
+          translate("dashboard.needsAssignment"),
+        )}
+      </span>
     </button>
   );
 }
@@ -3362,7 +3426,7 @@ function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate })
   );
 }
 
-function CleanerDetail({ cleaner, onBack, onOpenJob }) {
+function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob }) {
   const { translate } = useTranslation();
   const [history, setHistory] = useState(null);
   const [hasHistoryError, setHasHistoryError] = useState(false);
@@ -3414,6 +3478,12 @@ function CleanerDetail({ cleaner, onBack, onOpenJob }) {
           value={preferredLanguageLabel(cleaner.preferredLanguage, translate)}
         />
       </dl>
+
+      <div className="button-row">
+        <button className="button button--primary" type="button" onClick={onEdit}>
+          {translate("cleaners.edit", { cleaner: cleanerName })}
+        </button>
+      </div>
 
       <CleanerOperationalHistory
         history={history}
@@ -3644,7 +3714,7 @@ function CleanerProfileForm({ cleaner, defaultPreferredLanguage, onBack, onSaved
   );
 }
 
-function CleanerProfileSuccess({ cleaner, onBack }) {
+function CleanerProfileSuccess({ cleaner, onBack, backLabel }) {
   const { translate } = useTranslation();
 
   return (
@@ -3659,7 +3729,7 @@ function CleanerProfileSuccess({ cleaner, onBack }) {
       <p className="success-panel__detail">{cleaner.name}</p>
       <div className="button-row">
         <button className="button button--primary" type="button" onClick={onBack}>
-          {translate("cleaners.backToDirectory")}
+          {translate(backLabel)}
         </button>
       </div>
     </section>
@@ -3668,6 +3738,7 @@ function CleanerProfileSuccess({ cleaner, onBack }) {
 
 function JobDetail({
   job,
+  knownCleaners,
   offers,
   isLoadingOffers,
   hasOffersError,
@@ -3687,6 +3758,7 @@ function JobDetail({
   onResolveIssue,
 }) {
   const { language, translate } = useTranslation();
+  const [resolvedAssignedCleaner, setResolvedAssignedCleaner] = useState(null);
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
   const [resolvingIssueId, setResolvingIssueId] = useState(null);
@@ -3714,6 +3786,16 @@ function JobDetail({
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
   const isCompleted = job.operationalStatus === "COMPLETED";
   const canManageOffers = !isCompleted;
+  const knownAssignedCleaner = knownCleaners.find(
+    (cleaner) => cleaner.id === job.assignedCleanerId,
+  );
+  const assignedCleanerName =
+    knownAssignedCleaner?.name ||
+    (resolvedAssignedCleaner?.id === job.assignedCleanerId
+      ? resolvedAssignedCleaner?.name
+      : null) ||
+    job.assignedCleanerName ||
+    translate("common.notProvided");
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
@@ -3723,6 +3805,37 @@ function JobDetail({
 
     return secondCreatedAt - firstCreatedAt;
   });
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (!job.assignedCleanerId || knownAssignedCleaner) {
+      setResolvedAssignedCleaner(null);
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    async function loadAssignedCleaner() {
+      try {
+        const cleaner = await getCleanerById(job.assignedCleanerId);
+
+        if (isCurrent) {
+          setResolvedAssignedCleaner(cleaner);
+        }
+      } catch {
+        if (isCurrent) {
+          setResolvedAssignedCleaner(null);
+        }
+      }
+    }
+
+    loadAssignedCleaner();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [job.assignedCleanerId, knownAssignedCleaner]);
 
   async function assignCleaner(offer) {
     setAssigningCleanerId(offer.cleanerId);
@@ -3842,7 +3955,7 @@ function JobDetail({
         {isAssigned && (
           <DetailItem
             label={translate("jobs.assignedCleaner")}
-            value={job.assignedCleanerName || translate("common.notProvided")}
+            value={assignedCleanerName}
           />
         )}
         {isAssigned && (
