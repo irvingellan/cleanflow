@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { appVersion } from "./appVersion.js";
+import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
 import {
   signInWithEmail,
   signOutManager,
@@ -10,6 +11,8 @@ import {
   getAllCleaners,
   getCleanerNamesById,
   getCleaners,
+  supportedCleanerTeamTypes,
+  supportedPaymentMethods,
   updateCleaner,
 } from "./features/cleaners/cleanerService.js";
 import {
@@ -64,6 +67,11 @@ function hasValue(value) {
 
 const localeByLanguage = { en: "en-US", pt: "pt-BR", es: "es-ES" };
 const supportedCleanerLanguages = ["en", "pt", "es"];
+const cleanerProfileLimits = {
+  cityOrRegion: 120,
+  internalNotes: 1000,
+  paymentContact: 160,
+};
 
 function normalizedCleanerLanguage(language) {
   return supportedCleanerLanguages.includes(language) ? language : "en";
@@ -71,6 +79,10 @@ function normalizedCleanerLanguage(language) {
 
 function normalizedCleanerText(value) {
   return value === undefined || value === null ? "" : String(value);
+}
+
+function normalizedCleanerProfileOption(value, supportedValues) {
+  return supportedValues.includes(value) ? value : "";
 }
 
 function normalizeCleanerPhone(phone) {
@@ -83,6 +95,11 @@ function createEmptyCleanerForm(defaultPreferredLanguage) {
     phone: "",
     preferredLanguage: normalizedCleanerLanguage(defaultPreferredLanguage),
     active: true,
+    cityOrRegion: "",
+    teamType: "",
+    internalNotes: "",
+    preferredPaymentMethod: "",
+    paymentContact: "",
   };
 }
 
@@ -98,6 +115,18 @@ function cleanerToForm(cleaner, defaultPreferredLanguage) {
       cleaner.preferredLanguage || defaultPreferredLanguage,
     ),
     active: typeof cleaner.active === "boolean" ? cleaner.active : true,
+    // Legacy profiles do not have these optional operational fields.
+    cityOrRegion: normalizedCleanerText(cleaner.cityOrRegion),
+    teamType: normalizedCleanerProfileOption(
+      cleaner.teamType,
+      supportedCleanerTeamTypes,
+    ),
+    internalNotes: normalizedCleanerText(cleaner.internalNotes),
+    preferredPaymentMethod: normalizedCleanerProfileOption(
+      cleaner.preferredPaymentMethod,
+      supportedPaymentMethods,
+    ),
+    paymentContact: normalizedCleanerText(cleaner.paymentContact),
   };
 }
 
@@ -1110,6 +1139,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
               <div className="manager-account__controls">
                 <LanguageSelector language={language} onChange={setLanguage} />
                 <ThemeToggle />
+                <FeedbackPanel screen={view} />
                 <button
                   className="header-sign-out"
                   type="button"
@@ -3340,6 +3370,24 @@ function preferredLanguageLabel(preferredLanguage, translate) {
   }[preferredLanguage] || translate("common.notProvided");
 }
 
+function cleanerTeamTypeLabel(teamType, translate) {
+  return {
+    SOLO: translate("cleaners.teamTypeSolo"),
+    COUPLE: translate("cleaners.teamTypeCouple"),
+    TEAM: translate("cleaners.teamTypeTeam"),
+  }[teamType] || translate("common.notProvided");
+}
+
+function paymentMethodLabel(paymentMethod, translate) {
+  return {
+    ZELLE: "Zelle",
+    VENMO: "Venmo",
+    CASH: translate("cleaners.paymentMethodCash"),
+    CHECK: translate("cleaners.paymentMethodCheck"),
+    OTHER: translate("cleaners.paymentMethodOther"),
+  }[paymentMethod] || translate("common.notProvided");
+}
+
 function InformationIcon({ name }) {
   if (name === "phone") {
     return (
@@ -3479,6 +3527,41 @@ function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob }) {
         />
       </dl>
 
+      <section className="cleaner-profile-section" aria-labelledby="cleaner-operations-title">
+        <h3 id="cleaner-operations-title">{translate("cleaners.operations")}</h3>
+        <dl className="detail-list">
+          <DetailItem
+            label={translate("cleaners.cityOrRegion")}
+            value={cleaner.cityOrRegion || translate("common.notProvided")}
+          />
+          <DetailItem
+            label={translate("cleaners.teamType")}
+            value={cleanerTeamTypeLabel(cleaner.teamType, translate)}
+          />
+        </dl>
+      </section>
+
+      <section className="cleaner-profile-section" aria-labelledby="cleaner-payment-title">
+        <h3 id="cleaner-payment-title">{translate("cleaners.payment")}</h3>
+        <dl className="detail-list">
+          <DetailItem
+            label={translate("cleaners.preferredPaymentMethod")}
+            value={paymentMethodLabel(cleaner.preferredPaymentMethod, translate)}
+          />
+          <DetailItem
+            label={translate("cleaners.paymentContact")}
+            value={cleaner.paymentContact || translate("common.notProvided")}
+          />
+        </dl>
+      </section>
+
+      {cleaner.internalNotes && (
+        <section className="cleaner-profile-section" aria-labelledby="cleaner-notes-title">
+          <h3 id="cleaner-notes-title">{translate("cleaners.internalNotes")}</h3>
+          <p className="cleaner-internal-notes">{cleaner.internalNotes}</p>
+        </section>
+      )}
+
       <div className="button-row">
         <button className="button button--primary" type="button" onClick={onEdit}>
           {translate("cleaners.edit", { cleaner: cleanerName })}
@@ -3602,6 +3685,9 @@ function CleanerProfileForm({ cleaner, defaultPreferredLanguage, onBack, onSaved
     event.preventDefault();
     const name = formValues.name.trim();
     const phone = normalizeCleanerPhone(formValues.phone);
+    const cityOrRegion = formValues.cityOrRegion.trim();
+    const internalNotes = formValues.internalNotes.trim();
+    const paymentContact = formValues.paymentContact.trim();
 
     if (!name) {
       setFormError(translate("cleaners.nameRequired"));
@@ -3623,6 +3709,43 @@ function CleanerProfileForm({ cleaner, defaultPreferredLanguage, onBack, onSaved
       return;
     }
 
+    if (!supportedCleanerTeamTypes.includes(formValues.teamType)) {
+      setFormError(translate("cleaners.teamTypeInvalid"));
+      return;
+    }
+
+    if (!supportedPaymentMethods.includes(formValues.preferredPaymentMethod)) {
+      setFormError(translate("cleaners.preferredPaymentMethodInvalid"));
+      return;
+    }
+
+    if (cityOrRegion.length > cleanerProfileLimits.cityOrRegion) {
+      setFormError(
+        translate("cleaners.cityOrRegionTooLong", {
+          count: cleanerProfileLimits.cityOrRegion,
+        }),
+      );
+      return;
+    }
+
+    if (internalNotes.length > cleanerProfileLimits.internalNotes) {
+      setFormError(
+        translate("cleaners.internalNotesTooLong", {
+          count: cleanerProfileLimits.internalNotes,
+        }),
+      );
+      return;
+    }
+
+    if (paymentContact.length > cleanerProfileLimits.paymentContact) {
+      setFormError(
+        translate("cleaners.paymentContactTooLong", {
+          count: cleanerProfileLimits.paymentContact,
+        }),
+      );
+      return;
+    }
+
     setIsSaving(true);
     setFormError("");
 
@@ -3632,6 +3755,11 @@ function CleanerProfileForm({ cleaner, defaultPreferredLanguage, onBack, onSaved
         phone,
         preferredLanguage: formValues.preferredLanguage,
         active: formValues.active,
+        cityOrRegion,
+        teamType: formValues.teamType,
+        internalNotes,
+        preferredPaymentMethod: formValues.preferredPaymentMethod,
+        paymentContact,
       };
       const savedProfile = isEditing
         ? await updateCleaner(cleaner.id, cleanerValues)
@@ -3686,6 +3814,69 @@ function CleanerProfileForm({ cleaner, defaultPreferredLanguage, onBack, onSaved
             <option value="pt">{translate("language.portuguese")}</option>
             <option value="es">{translate("language.spanish")}</option>
           </select>
+        </label>
+
+        <div className="cleaner-profile-form-section">
+          <h3>{translate("cleaners.operations")}</h3>
+          <label>
+            {translate("cleaners.cityOrRegion")}
+            <input
+              name="cityOrRegion"
+              value={formValues.cityOrRegion}
+              maxLength={cleanerProfileLimits.cityOrRegion}
+              onChange={updateField}
+            />
+          </label>
+
+          <label>
+            {translate("cleaners.teamType")}
+            <select name="teamType" value={formValues.teamType} onChange={updateField}>
+              <option value="">{translate("common.notProvided")}</option>
+              <option value="SOLO">{translate("cleaners.teamTypeSolo")}</option>
+              <option value="COUPLE">{translate("cleaners.teamTypeCouple")}</option>
+              <option value="TEAM">{translate("cleaners.teamTypeTeam")}</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="cleaner-profile-form-section">
+          <h3>{translate("cleaners.payment")}</h3>
+          <label>
+            {translate("cleaners.preferredPaymentMethod")}
+            <select
+              name="preferredPaymentMethod"
+              value={formValues.preferredPaymentMethod}
+              onChange={updateField}
+            >
+              <option value="">{translate("common.notProvided")}</option>
+              <option value="ZELLE">Zelle</option>
+              <option value="VENMO">Venmo</option>
+              <option value="CASH">{translate("cleaners.paymentMethodCash")}</option>
+              <option value="CHECK">{translate("cleaners.paymentMethodCheck")}</option>
+              <option value="OTHER">{translate("cleaners.paymentMethodOther")}</option>
+            </select>
+          </label>
+
+          <label>
+            {translate("cleaners.paymentContact")}
+            <input
+              name="paymentContact"
+              value={formValues.paymentContact}
+              maxLength={cleanerProfileLimits.paymentContact}
+              onChange={updateField}
+            />
+          </label>
+        </div>
+
+        <label>
+          {translate("cleaners.internalNotes")}
+          <textarea
+            name="internalNotes"
+            rows="4"
+            value={formValues.internalNotes}
+            maxLength={cleanerProfileLimits.internalNotes}
+            onChange={updateField}
+          />
         </label>
 
         <label className="cleaner-active-field">

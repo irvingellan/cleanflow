@@ -13,6 +13,8 @@ import { db } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
 const cleanerLookupBatchSize = 30;
+export const supportedCleanerTeamTypes = ["", "SOLO", "COUPLE", "TEAM"];
+export const supportedPaymentMethods = ["", "ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 
 function cleanersCollection() {
   return collection(db, "organizations", organizationId, "cleaners");
@@ -20,6 +22,16 @@ function cleanersCollection() {
 
 function cleanerDocument(cleanerId) {
   return doc(db, "organizations", organizationId, "cleaners", cleanerId);
+}
+
+function assertValidProfileEnums({ teamType, preferredPaymentMethod }) {
+  if (!supportedCleanerTeamTypes.includes(teamType)) {
+    throw new Error("Invalid cleaner team type.");
+  }
+
+  if (!supportedPaymentMethods.includes(preferredPaymentMethod)) {
+    throw new Error("Invalid cleaner payment method.");
+  }
 }
 
 export async function getCleanerNamesById(cleanerIds) {
@@ -75,28 +87,84 @@ export async function getAllCleaners() {
   }));
 }
 
-export async function createCleaner({ name, phone, preferredLanguage, active }) {
+export async function createCleaner({
+  name,
+  phone,
+  preferredLanguage,
+  active,
+  cityOrRegion,
+  teamType,
+  internalNotes,
+  preferredPaymentMethod,
+  paymentContact,
+}) {
+  assertValidProfileEnums({ teamType, preferredPaymentMethod });
+
   const reference = await addDoc(cleanersCollection(), {
     name,
     phone,
     preferredLanguage,
     active,
+    cityOrRegion,
+    teamType,
+    internalNotes,
+    preferredPaymentMethod,
+    paymentContact,
     organizationId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 
-  return { id: reference.id, name, phone, preferredLanguage, active };
+  return {
+    id: reference.id,
+    name,
+    phone,
+    preferredLanguage,
+    active,
+    cityOrRegion,
+    teamType,
+    internalNotes,
+    preferredPaymentMethod,
+    paymentContact,
+  };
 }
 
-export async function updateCleaner(cleanerId, { name, phone, preferredLanguage, active }) {
+export async function updateCleaner(cleanerId, {
+  name,
+  phone,
+  preferredLanguage,
+  active,
+  cityOrRegion,
+  teamType,
+  internalNotes,
+  preferredPaymentMethod,
+  paymentContact,
+}) {
+  assertValidProfileEnums({ teamType, preferredPaymentMethod });
+
   await updateDoc(cleanerDocument(cleanerId), {
     name,
     phone,
     preferredLanguage,
     active,
+    cityOrRegion,
+    teamType,
+    internalNotes,
+    preferredPaymentMethod,
+    paymentContact,
     updatedAt: serverTimestamp(),
   });
 
-  return { id: cleanerId, name, phone, preferredLanguage, active };
+  return {
+    id: cleanerId,
+    name,
+    phone,
+    preferredLanguage,
+    active,
+    cityOrRegion,
+    teamType,
+    internalNotes,
+    preferredPaymentMethod,
+    paymentContact,
+  };
 }
