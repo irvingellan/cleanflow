@@ -3,6 +3,11 @@ import { appVersion } from "./appVersion.js";
 import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
 import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
 import { PwaUpdatePrompt } from "./features/pwa/PwaUpdatePrompt.jsx";
+import { PayoutDirectory, PayoutReview } from "./features/payouts/PayoutViews.jsx";
+import {
+  getUnpaidCompletedJobs,
+  recordPayout,
+} from "./features/payouts/payoutService.js";
 import {
   signInWithEmail,
   signOutManager,
@@ -130,6 +135,32 @@ function cleanerToForm(cleaner, defaultPreferredLanguage) {
     ),
     paymentContact: normalizedCleanerText(cleaner.paymentContact),
   };
+}
+
+function groupUnpaidJobsByCleaner(jobs, cleaners) {
+  const cleanersById = Object.fromEntries(cleaners.map((cleaner) => [cleaner.id, cleaner]));
+  const groupsByCleanerId = new Map();
+
+  jobs.forEach((job) => {
+    const cleaner = cleanersById[job.assignedCleanerId] || {
+      id: job.assignedCleanerId,
+      name: job.assignedCleanerName || "",
+      preferredPaymentMethod: "",
+    };
+    const currentGroup = groupsByCleanerId.get(cleaner.id) || {
+      cleaner,
+      jobs: [],
+      total: 0,
+    };
+
+    currentGroup.jobs.push(job);
+    currentGroup.total += job.cleanerPayout;
+    groupsByCleanerId.set(cleaner.id, currentGroup);
+  });
+
+  return [...groupsByCleanerId.values()].sort((firstGroup, secondGroup) =>
+    (firstGroup.cleaner.name || "").localeCompare(secondGroup.cleaner.name || ""),
+  );
 }
 
 function createEmptyPropertyForm(preselectedClient = null) {
@@ -481,6 +512,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [clients, setClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [hasClientsError, setHasClientsError] = useState(false);
+  const [payoutGroups, setPayoutGroups] = useState([]);
+  const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
+  const [hasPayoutsError, setHasPayoutsError] = useState(false);
   const [jobOffers, setJobOffers] = useState([]);
   const [isLoadingOffers, setIsLoadingOffers] = useState(false);
   const [hasOffersError, setHasOffersError] = useState(false);
@@ -502,6 +536,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [selectedOffer, setSelectedOffer] = useState(null);
   const [selectedCleaner, setSelectedCleaner] = useState(null);
   const [savedCleaner, setSavedCleaner] = useState(null);
+  const [selectedPayoutGroup, setSelectedPayoutGroup] = useState(null);
+  const [paidPayoutSummary, setPaidPayoutSummary] = useState(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -548,6 +584,29 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   useEffect(() => {
     if (view === "dashboard") {
       refreshDashboard();
+    }
+  }, [view]);
+
+  async function refreshPayouts() {
+    setIsLoadingPayouts(true);
+    setHasPayoutsError(false);
+
+    try {
+      const [unpaidJobs, loadedCleaners] = await Promise.all([
+        getUnpaidCompletedJobs(),
+        getAllCleaners(),
+      ]);
+      setPayoutGroups(groupUnpaidJobsByCleaner(unpaidJobs, loadedCleaners));
+    } catch {
+      setHasPayoutsError(true);
+    } finally {
+      setIsLoadingPayouts(false);
+    }
+  }
+
+  useEffect(() => {
+    if (view === "payout-list") {
+      refreshPayouts();
     }
   }, [view]);
 
@@ -911,6 +970,36 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("cleaner-list");
   }
 
+  function showPayouts() {
+    setActiveSection("payouts");
+    setSelectedProperty(null);
+    setSelectedJob(null);
+    setSelectedCleaner(null);
+    setSelectedPayoutGroup(null);
+    setPaidPayoutSummary(null);
+    setSelectedOffer(null);
+    setJobIssues([]);
+    setView("payout-list");
+  }
+
+  function openPayoutReview(group) {
+    setActiveSection("payouts");
+    setSelectedPayoutGroup(group);
+    setPaidPayoutSummary(null);
+    setView("payout-review");
+  }
+
+  async function recordCleanerPayout(values) {
+    const payout = await recordPayout(values);
+
+    setSelectedPayoutGroup(null);
+    setPaidPayoutSummary({
+      amount: payout.amount,
+      jobCount: payout.jobIds.length,
+    });
+    setView("payout-list");
+  }
+
   function showClients() {
     setActiveSection("clients");
     setSelectedProperty(null);
@@ -1132,6 +1221,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
               onShowProperties={showProperties}
               onShowJobs={showJobs}
               onShowCleaners={showCleaners}
+              onShowPayouts={showPayouts}
               onShowClients={showClients}
             />
           </div>
@@ -1274,6 +1364,30 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasError={hasDirectoryCleanersError}
             onSelect={openCleaner}
             onCreate={showNewCleaner}
+          />
+        )}
+
+        {view === "payout-list" && (
+          <PayoutDirectory
+            payoutGroups={payoutGroups}
+            isLoading={isLoadingPayouts}
+            hasError={hasPayoutsError}
+            paidSummary={paidPayoutSummary}
+            onRefresh={refreshPayouts}
+            onReview={openPayoutReview}
+            formatPrice={(amount) => formatPrice(amount, translate, language)}
+          />
+        )}
+
+        {view === "payout-review" && selectedPayoutGroup && (
+          <PayoutReview
+            cleaner={selectedPayoutGroup.cleaner}
+            jobs={selectedPayoutGroup.jobs}
+            onBack={showPayouts}
+            onRecord={recordCleanerPayout}
+            formatDate={(date) => formatDate(date, translate, language)}
+            formatCreatedAt={(date) => formatCreatedAt(date, language)}
+            formatPrice={(amount) => formatPrice(amount, translate, language)}
           />
         )}
 
@@ -1613,6 +1727,7 @@ function MainNavigation({
   onShowProperties,
   onShowJobs,
   onShowCleaners,
+  onShowPayouts,
   onShowClients,
 }) {
   return (
@@ -1648,6 +1763,14 @@ function MainNavigation({
         onClick={onShowCleaners}
       >
         {translate("navigation.cleaners")}
+      </button>
+      <button
+        className="navigation-button"
+        type="button"
+        aria-current={activeSection === "payouts" ? "page" : undefined}
+        onClick={onShowPayouts}
+      >
+        {translate("navigation.payouts")}
       </button>
       <button
         className="navigation-button"

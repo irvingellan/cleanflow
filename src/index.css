@@ -1411,6 +1411,87 @@ button.summary-card {
   gap: 4px;
 }
 
+.payout-success {
+  margin: 0 0 16px;
+  color: var(--color-success);
+  font-weight: 750;
+}
+
+.payout-directory,
+.payout-job-list {
+  display: grid;
+  gap: 10px;
+}
+
+.payout-directory-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--color-surface);
+  box-shadow: 0 12px 30px var(--shadow-card-subtle);
+}
+
+.payout-directory-card > div,
+.payout-job__summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.payout-directory-card > div > span,
+.payout-job__summary > span {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.payout-directory-card__amount {
+  color: var(--color-heading);
+  white-space: nowrap;
+}
+
+.payout-job {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--color-divider);
+  border-radius: 12px;
+  padding: 13px;
+  color: var(--color-text) !important;
+  background: var(--color-surface-subtle);
+}
+
+.payout-job input {
+  width: 18px !important;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-brand);
+}
+
+.payout-job > strong {
+  white-space: nowrap;
+}
+
+.payout-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 16px;
+  color: var(--color-brand-text);
+  font-weight: 750;
+}
+
+.payout-total strong {
+  color: var(--color-heading);
+  font-size: 1.125rem;
+}
+
 .button {
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
@@ -2045,6 +2126,20 @@ button.summary-card {
   .client-property-card .button {
     grid-column: 1 / -1;
     grid-row: 4;
+    justify-self: start;
+  }
+
+  .payout-directory-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .payout-directory-card__amount {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .payout-directory-card .button {
+    grid-column: 1 / -1;
     justify-self: start;
   }
 

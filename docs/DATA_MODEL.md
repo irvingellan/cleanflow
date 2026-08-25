@@ -447,6 +447,21 @@ Conceptual payout states:
 - pending
 - paid
 
+### Phase 1 implementation
+
+The first payout slice records only completed payments at:
+
+`organizations/{organizationId}/payouts/{payoutId}`
+
+Each `PAID` record includes the Cleaner ID and name snapshot, the included Job IDs,
+amount, payment method, optional payment-contact snapshot and note, plus `createdAt`
+and `paidAt`. The same transaction writes `payoutId` and `payoutPaidAt` to every
+included Job. This keeps the payout record as the payment history while preventing a
+Job from being included in a second payout.
+
+Payment proof, client invoicing and bank-transfer reconciliation remain separate future
+capabilities.
+
 Client invoice payment and cleaner payout must remain separate concepts.
 
 ## Financial totals and profit
