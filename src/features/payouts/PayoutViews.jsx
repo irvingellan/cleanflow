@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "../../i18n/translations.js";
+import { validatePayoutProofFile } from "./payoutProofService.js";
 
 const paymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 
@@ -15,12 +16,16 @@ function paymentMethodLabel(paymentMethod, translate) {
 
 export function PayoutDirectory({
   payoutGroups,
+  recentPayouts,
   isLoading,
   hasError,
   paidSummary,
   onRefresh,
   onReview,
+  onUploadProof,
+  onOpenProof,
   formatPrice,
+  formatCreatedAt,
 }) {
   const { translate } = useTranslation();
 
@@ -79,11 +84,127 @@ export function PayoutDirectory({
           ))}
         </div>
       )}
+
+      {!isLoading && !hasError && recentPayouts.length > 0 && (
+        <section className="payout-history" aria-labelledby="payout-history-title">
+          <h3 id="payout-history-title">{translate("payouts.recentHistory")}</h3>
+          <div className="payout-history__list">
+            {recentPayouts.map((payout) => (
+              <PayoutHistoryItem
+                key={payout.id}
+                payout={payout}
+                onUploadProof={onUploadProof}
+                onOpenProof={onOpenProof}
+                onRefresh={onRefresh}
+                formatPrice={formatPrice}
+                formatCreatedAt={formatCreatedAt}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   );
 }
 
-export function PayoutReview({ cleaner, jobs, onBack, onRecord, formatDate, formatCreatedAt, formatPrice }) {
+function PayoutHistoryItem({ payout, onUploadProof, onOpenProof, onRefresh, formatPrice, formatCreatedAt }) {
+  const { translate } = useTranslation();
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState("");
+  const hasProof = Boolean(payout.proofStoragePath);
+
+  function fileErrorMessage(errorCode) {
+    if (errorCode === "invalid-proof-type") return translate("payouts.proofInvalidType");
+    if (errorCode === "proof-too-large") return translate("payouts.proofTooLarge");
+    return translate("payouts.proofUploadError");
+  }
+
+  async function selectProof(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    const validationError = validatePayoutProofFile(file);
+
+    if (validationError) {
+      setError(fileErrorMessage(validationError.code));
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setError("");
+
+    try {
+      await onUploadProof(payout.id, file, setUploadProgress);
+      await onRefresh();
+    } catch (uploadError) {
+      setError(fileErrorMessage(uploadError.code));
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function viewProof() {
+    setError("");
+
+    try {
+      const proofUrl = await onOpenProof(payout.proofStoragePath);
+      window.open(proofUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      setError(translate("payouts.proofViewError"));
+    }
+  }
+
+  return (
+    <article className="payout-history-item">
+      <div>
+        <strong>{payout.cleanerNameSnapshot || translate("common.notProvided")}</strong>
+        <span>
+          {formatCreatedAt(payout.paidAt)} · {translate("payouts.historyJobs", { count: payout.jobIds?.length || 0 })}
+        </span>
+        <span>{paymentMethodLabel(payout.paymentMethod, translate)}</span>
+      </div>
+      <strong className="payout-history-item__amount">{formatPrice(payout.amount)}</strong>
+      <div className="payout-history-item__proof">
+        {hasProof ? (
+          <>
+            <span className="status-badge">{translate("payouts.proofAttached")}</span>
+            <button className="button" type="button" onClick={viewProof}>
+              {translate("payouts.viewProof")}
+            </button>
+          </>
+        ) : (
+          <label className="button">
+            <input
+              className="visually-hidden"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+              capture="environment"
+              disabled={isUploading}
+              onChange={selectProof}
+            />
+            {isUploading
+              ? translate("payouts.uploadingProof", { percent: uploadProgress })
+              : translate("payouts.attachProof")}
+          </label>
+        )}
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </div>
+    </article>
+  );
+}
+
+export function PayoutReview({
+  cleaner,
+  jobs,
+  onBack,
+  onRecord,
+  onUploadProof,
+  onRecorded,
+  formatDate,
+  formatCreatedAt,
+  formatPrice,
+}) {
   const { translate } = useTranslation();
   const [selectedJobIds, setSelectedJobIds] = useState(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState(
@@ -94,6 +215,11 @@ export function PayoutReview({ cleaner, jobs, onBack, onRecord, formatDate, form
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [proofFile, setProofFile] = useState(null);
+  const [proofError, setProofError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [recordedPayout, setRecordedPayout] = useState(null);
 
   const selectedJobs = useMemo(
     () => jobs.filter((job) => selectedJobIds.has(job.id)),
@@ -115,6 +241,20 @@ export function PayoutReview({ cleaner, jobs, onBack, onRecord, formatDate, form
     });
   }
 
+  function proofErrorMessage(errorCode) {
+    if (errorCode === "invalid-proof-type") return translate("payouts.proofInvalidType");
+    if (errorCode === "proof-too-large") return translate("payouts.proofTooLarge");
+    return translate("payouts.proofUploadError");
+  }
+
+  function selectProof(event) {
+    const file = event.target.files?.[0] || null;
+    const validationError = file ? validatePayoutProofFile(file) : null;
+
+    setProofFile(validationError ? null : file);
+    setProofError(validationError ? proofErrorMessage(validationError.code) : "");
+  }
+
   async function submit(event) {
     event.preventDefault();
 
@@ -132,18 +272,57 @@ export function PayoutReview({ cleaner, jobs, onBack, onRecord, formatDate, form
     setError("");
 
     try {
-      await onRecord({
+      const payout = await onRecord({
         cleaner,
         jobIds: [...selectedJobIds],
         paymentMethod,
         note,
       });
+
+      if (proofFile) {
+        try {
+          setUploadProgress(0);
+          setIsUploadingProof(true);
+          await onUploadProof(payout.id, proofFile, setUploadProgress);
+        } catch (uploadError) {
+          setRecordedPayout(payout);
+          setProofError(proofErrorMessage(uploadError.code));
+          setIsUploadingProof(false);
+          setIsSubmitting(false);
+          return;
+        }
+        setIsUploadingProof(false);
+      }
+
+      onRecorded(payout);
     } catch (recordError) {
       setError(
         recordError.code === "job-not-payable"
           ? translate("payouts.jobNoLongerPayable")
           : translate("payouts.recordError"),
       );
+      setIsSubmitting(false);
+    }
+  }
+
+  async function retryProof() {
+    if (!proofFile || !recordedPayout) {
+      setProofError(translate("payouts.proofRequired"));
+      return;
+    }
+
+    setIsSubmitting(true);
+    setProofError("");
+    setUploadProgress(0);
+    setIsUploadingProof(true);
+
+    try {
+      await onUploadProof(recordedPayout.id, proofFile, setUploadProgress);
+      onRecorded(recordedPayout);
+    } catch (uploadError) {
+      setProofError(proofErrorMessage(uploadError.code));
+    } finally {
+      setIsUploadingProof(false);
       setIsSubmitting(false);
     }
   }
@@ -211,14 +390,45 @@ export function PayoutReview({ cleaner, jobs, onBack, onRecord, formatDate, form
           />
         </label>
 
+        <label>
+          {translate("payouts.proof")}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            capture="environment"
+            disabled={isSubmitting || Boolean(recordedPayout)}
+            onChange={selectProof}
+          />
+          <span className="form-helper">{translate("payouts.proofHelper")}</span>
+          {proofFile && <span className="form-helper">{translate("payouts.proofSelected", { fileName: proofFile.name })}</span>}
+        </label>
+
         {error && <p className="form-error" role="alert">{error}</p>}
+        {proofError && <p className="form-error" role="alert">{proofError}</p>}
+
+        {recordedPayout && (
+          <p className="payout-proof-recovery" role="status">
+            {translate("payouts.proofRetryMessage")}
+          </p>
+        )}
 
         <div className="button-row">
           <button className="button" type="button" disabled={isSubmitting} onClick={onBack}>
             {translate("common.cancel")}
           </button>
-          <button className="button button--primary" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? translate("payouts.recording") : translate("payouts.markPaid")}
+          <button
+            className="button button--primary"
+            type={recordedPayout ? "button" : "submit"}
+            disabled={isSubmitting}
+            onClick={recordedPayout ? retryProof : undefined}
+          >
+            {isSubmitting
+              ? isUploadingProof
+                ? translate("payouts.uploadingProof", { percent: uploadProgress })
+                : translate("payouts.recording")
+              : recordedPayout
+                ? translate("payouts.retryProof")
+                : translate("payouts.markPaid")}
           </button>
         </div>
       </form>

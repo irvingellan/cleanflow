@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 import { createFirebaseConfig } from "./config.js";
 
 export const useFirebaseEmulators =
@@ -18,6 +19,7 @@ export const firebaseApp = getApps().length
 
 export const db = getFirestore(firebaseApp);
 export const functions = getFunctions(firebaseApp, "us-central1");
+export const storage = getStorage(firebaseApp);
 
 if (useFirebaseEmulators) {
   connectFirestoreEmulator(db, "127.0.0.1", 8080);

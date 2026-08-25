@@ -2,6 +2,8 @@ import {
   collection,
   doc,
   getDocs,
+  limit,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -65,6 +67,14 @@ export async function getUnpaidCompletedJobs() {
     .map(jobFromSnapshot)
     .filter(isEligibleForPayout)
     .sort((firstJob, secondJob) => completionSortValue(secondJob) - completionSortValue(firstJob));
+}
+
+export async function getRecentPayouts() {
+  const snapshot = await getDocs(
+    query(payoutsCollection(), orderBy("paidAt", "desc"), limit(20)),
+  );
+
+  return snapshot.docs.map(jobFromSnapshot);
 }
 
 export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {

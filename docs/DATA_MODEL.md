@@ -459,8 +459,18 @@ and `paidAt`. The same transaction writes `payoutId` and `payoutPaidAt` to every
 included Job. This keeps the payout record as the payment history while preventing a
 Job from being included in a second payout.
 
-Payment proof, client invoicing and bank-transfer reconciliation remain separate future
-capabilities.
+### Phase 2 payment proof
+
+One optional payment-proof image can be attached after a `PAID` payout exists. The payout
+document stores only `proofStoragePath`, `proofFileName`, `proofContentType`,
+`proofSizeBytes` and `proofUploadedAt`; the image binary lives at
+`organizations/{organizationId}/payouts/{payoutId}/proof/payment-proof` in Firebase Storage.
+
+The payout transaction remains the financial source of truth. A proof upload failure does not
+undo or duplicate a payout, and a manager can retry attaching the proof to the existing record.
+Proof is optional; legacy payouts without it remain valid.
+
+Client invoicing and bank-transfer reconciliation remain separate future capabilities.
 
 Client invoice payment and cleaner payout must remain separate concepts.
 

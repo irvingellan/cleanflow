@@ -5,9 +5,14 @@ import { NotificationControl } from "./features/notifications/NotificationContro
 import { PwaUpdatePrompt } from "./features/pwa/PwaUpdatePrompt.jsx";
 import { PayoutDirectory, PayoutReview } from "./features/payouts/PayoutViews.jsx";
 import {
+  getRecentPayouts,
   getUnpaidCompletedJobs,
   recordPayout,
 } from "./features/payouts/payoutService.js";
+import {
+  getPayoutProofUrl,
+  uploadPayoutProof,
+} from "./features/payouts/payoutProofService.js";
 import {
   signInWithEmail,
   signOutManager,
@@ -513,6 +518,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [hasClientsError, setHasClientsError] = useState(false);
   const [payoutGroups, setPayoutGroups] = useState([]);
+  const [recentPayouts, setRecentPayouts] = useState([]);
   const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
   const [hasPayoutsError, setHasPayoutsError] = useState(false);
   const [jobOffers, setJobOffers] = useState([]);
@@ -592,11 +598,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setHasPayoutsError(false);
 
     try {
-      const [unpaidJobs, loadedCleaners] = await Promise.all([
+      const [unpaidJobs, loadedCleaners, loadedRecentPayouts] = await Promise.all([
         getUnpaidCompletedJobs(),
         getAllCleaners(),
+        getRecentPayouts(),
       ]);
       setPayoutGroups(groupUnpaidJobsByCleaner(unpaidJobs, loadedCleaners));
+      setRecentPayouts(loadedRecentPayouts);
     } catch {
       setHasPayoutsError(true);
     } finally {
@@ -990,8 +998,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   async function recordCleanerPayout(values) {
-    const payout = await recordPayout(values);
+    return recordPayout(values);
+  }
 
+  function showRecordedPayout(payout) {
     setSelectedPayoutGroup(null);
     setPaidPayoutSummary({
       amount: payout.amount,
@@ -1370,12 +1380,18 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "payout-list" && (
           <PayoutDirectory
             payoutGroups={payoutGroups}
+            recentPayouts={recentPayouts}
             isLoading={isLoadingPayouts}
             hasError={hasPayoutsError}
             paidSummary={paidPayoutSummary}
             onRefresh={refreshPayouts}
             onReview={openPayoutReview}
+            onUploadProof={(payoutId, file, onProgress) =>
+              uploadPayoutProof({ payoutId, file, onProgress })
+            }
+            onOpenProof={getPayoutProofUrl}
             formatPrice={(amount) => formatPrice(amount, translate, language)}
+            formatCreatedAt={(date) => formatCreatedAt(date, language)}
           />
         )}
 
@@ -1385,6 +1401,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             jobs={selectedPayoutGroup.jobs}
             onBack={showPayouts}
             onRecord={recordCleanerPayout}
+            onUploadProof={(payoutId, file, onProgress) =>
+              uploadPayoutProof({ payoutId, file, onProgress })
+            }
+            onRecorded={showRecordedPayout}
             formatDate={(date) => formatDate(date, translate, language)}
             formatCreatedAt={(date) => formatCreatedAt(date, language)}
             formatPrice={(amount) => formatPrice(amount, translate, language)}
