@@ -1299,6 +1299,8 @@ function ManagerApplication({ hasSignOutError, isSigningOut, onSignOut }) {
             onSimulateOffer={openCleanerOffer}
             onCreatePublicOfferLink={createCleanerOfferLink}
             onAssignCleaner={assignCleaner}
+            onStartCleaning={startCleaning}
+            onCompleteCleaning={completeCleaning}
             onSimulateAssignedCleaner={openAssignedCleanerJob}
             onResolveIssue={resolveJobIssue}
           />
@@ -3636,6 +3638,8 @@ function JobDetail({
   onSimulateOffer,
   onCreatePublicOfferLink,
   onAssignCleaner,
+  onStartCleaning,
+  onCompleteCleaning,
   onSimulateAssignedCleaner,
   onResolveIssue,
 }) {
@@ -3649,6 +3653,10 @@ function JobDetail({
   const [publicOfferLink, setPublicOfferLink] = useState(null);
   const [isCreatingPublicOfferLinkFor, setIsCreatingPublicOfferLinkFor] = useState(null);
   const [publicOfferLinkError, setPublicOfferLinkError] = useState(null);
+  const [isStartingCleaning, setIsStartingCleaning] = useState(false);
+  const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
+  const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
+  const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
   const startedAt = formatCreatedAt(job.startedAt, language);
@@ -3660,6 +3668,8 @@ function JobDetail({
   const canSimulateAssignedCleaner = ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(
     job.operationalStatus,
   );
+  const isInProgress = job.operationalStatus === "IN_PROGRESS";
+  const isCompleted = job.operationalStatus === "COMPLETED";
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
@@ -3698,6 +3708,32 @@ function JobDetail({
       setPublicOfferLinkError(offer.id);
     } finally {
       setIsCreatingPublicOfferLinkFor(null);
+    }
+  }
+
+  async function startCleaning() {
+    setIsStartingCleaning(true);
+    setHasStartCleaningError(false);
+
+    try {
+      await onStartCleaning();
+    } catch {
+      setHasStartCleaningError(true);
+    } finally {
+      setIsStartingCleaning(false);
+    }
+  }
+
+  async function completeCleaning() {
+    setIsCompletingCleaning(true);
+    setHasCompleteCleaningError(false);
+
+    try {
+      await onCompleteCleaning();
+    } catch {
+      setHasCompleteCleaningError(true);
+    } finally {
+      setIsCompletingCleaning(false);
     }
   }
 
@@ -3776,6 +3812,61 @@ function JobDetail({
         )}
         {createdAt && <DetailItem label={translate("jobs.createdTime")} value={createdAt} />}
       </dl>
+
+      {(job.operationalStatus === "ASSIGNED" || isInProgress || isCompleted) && (
+        <section className="job-execution" aria-label={translate("jobs.operationalStatus")}>
+          {isInProgress && (
+            <p className="job-execution__state job-execution__state--in-progress">
+              <OperationalIcon name="clock" />
+              {translate("jobs.executionInProgress")}
+            </p>
+          )}
+          {isCompleted && (
+            <p className="job-execution__state job-execution__state--completed">
+              <OperationalIcon name="check-circle" />
+              {translate("jobs.executionCompleted")}
+            </p>
+          )}
+          {job.operationalStatus === "ASSIGNED" && (
+            <div className="button-row job-execution__actions">
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={isStartingCleaning}
+                onClick={startCleaning}
+              >
+                {isStartingCleaning
+                  ? translate("jobs.startingCleaning")
+                  : translate("jobs.startCleaning")}
+              </button>
+            </div>
+          )}
+          {isInProgress && (
+            <div className="button-row job-execution__actions">
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={isCompletingCleaning}
+                onClick={completeCleaning}
+              >
+                {isCompletingCleaning
+                  ? translate("jobs.completingCleaning")
+                  : translate("jobs.completeCleaning")}
+              </button>
+            </div>
+          )}
+          {hasStartCleaningError && (
+            <p className="form-error" role="alert">
+              {translate("jobs.startCleaningError")}
+            </p>
+          )}
+          {hasCompleteCleaningError && (
+            <p className="form-error" role="alert">
+              {translate("jobs.completeCleaningError")}
+            </p>
+          )}
+        </section>
+      )}
 
       {job.notes && (
         <section className="notes-section" aria-label={translate("common.notes")}>

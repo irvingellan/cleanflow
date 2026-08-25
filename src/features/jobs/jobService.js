@@ -59,6 +59,25 @@ function uniqueJobs(jobs) {
   return [...new Map(jobs.map((job) => [job.id, job])).values()];
 }
 
+function historySortValue(job) {
+  const completedAt = job.completedAt?.toMillis?.();
+
+  if (completedAt) {
+    return completedAt;
+  }
+
+  const scheduledAt = new Date(`${job.scheduledDate || ""}T00:00:00`).getTime();
+  return Number.isNaN(scheduledAt) ? 0 : scheduledAt;
+}
+
+function recentJobsFromSnapshots(snapshots) {
+  return uniqueJobs(
+    snapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
+  )
+    .sort((firstJob, secondJob) => historySortValue(secondJob) - historySortValue(firstJob))
+    .slice(0, 10);
+}
+
 export async function getJobs(filter = "all") {
   const constraints = [];
 
@@ -100,7 +119,7 @@ export async function getJobs(filter = "all") {
 export async function getPropertyJobHistory(propertyId) {
   const today = currentLocalDate();
   const jobs = jobsCollection();
-  const [upcomingSnapshot, historySnapshot] = await Promise.all([
+  const [upcomingSnapshot, scheduledHistorySnapshot, completedHistorySnapshot] = await Promise.all([
     getDocs(
       query(
         jobs,
@@ -125,18 +144,30 @@ export async function getPropertyJobHistory(propertyId) {
         limit(10),
       ),
     ),
+    getDocs(
+      query(
+        jobs,
+        where("propertyId", "==", propertyId),
+        where("operationalStatus", "==", "COMPLETED"),
+        orderBy("completedAt", "desc"),
+        limit(10),
+      ),
+    ),
   ]);
 
   return {
     upcomingJob: upcomingSnapshot.empty ? null : jobFromSnapshot(upcomingSnapshot.docs[0]),
-    recentJobs: historySnapshot.docs.map(jobFromSnapshot),
+    recentJobs: recentJobsFromSnapshots([
+      scheduledHistorySnapshot,
+      completedHistorySnapshot,
+    ]),
   };
 }
 
 export async function getCleanerJobHistory(cleanerId) {
   const today = currentLocalDate();
   const jobs = jobsCollection();
-  const [upcomingSnapshot, historySnapshot] = await Promise.all([
+  const [upcomingSnapshot, scheduledHistorySnapshot, completedHistorySnapshot] = await Promise.all([
     getDocs(
       query(
         jobs,
@@ -156,11 +187,23 @@ export async function getCleanerJobHistory(cleanerId) {
         limit(10),
       ),
     ),
+    getDocs(
+      query(
+        jobs,
+        where("assignedCleanerId", "==", cleanerId),
+        where("operationalStatus", "==", "COMPLETED"),
+        orderBy("completedAt", "desc"),
+        limit(10),
+      ),
+    ),
   ]);
 
   return {
     upcomingJobs: upcomingSnapshot.docs.map(jobFromSnapshot),
-    recentJobs: historySnapshot.docs.map(jobFromSnapshot),
+    recentJobs: recentJobsFromSnapshots([
+      scheduledHistorySnapshot,
+      completedHistorySnapshot,
+    ]),
   };
 }
 
@@ -209,22 +252,38 @@ export async function getClientJobHistory(clientId, propertyIds) {
       ),
     ),
   ];
-  const [upcomingSnapshots, historySnapshots] = await Promise.all([
+  const completedHistoryQueries = [
+    query(
+      jobs,
+      where("clientId", "==", clientId),
+      where("operationalStatus", "==", "COMPLETED"),
+      orderBy("completedAt", "desc"),
+      limit(10),
+    ),
+    ...propertyIdGroups.map((propertyIdGroup) =>
+      query(
+        jobs,
+        where("propertyId", "in", propertyIdGroup),
+        where("operationalStatus", "==", "COMPLETED"),
+        orderBy("completedAt", "desc"),
+        limit(10),
+      ),
+    ),
+  ];
+  const [upcomingSnapshots, historySnapshots, completedHistorySnapshots] = await Promise.all([
     Promise.all(upcomingQueries.map((jobQuery) => getDocs(jobQuery))),
     Promise.all(historyQueries.map((jobQuery) => getDocs(jobQuery))),
+    Promise.all(completedHistoryQueries.map((jobQuery) => getDocs(jobQuery))),
   ]);
   const byScheduledDateAscending = (firstJob, secondJob) =>
     (firstJob.scheduledDate || "").localeCompare(secondJob.scheduledDate || "");
-  const byScheduledDateDescending = (firstJob, secondJob) =>
-    byScheduledDateAscending(secondJob, firstJob);
   const upcomingJobs = uniqueJobs(
     upcomingSnapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
   ).sort(byScheduledDateAscending);
-  const recentJobs = uniqueJobs(
-    historySnapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
-  )
-    .sort(byScheduledDateDescending)
-    .slice(0, 10);
+  const recentJobs = recentJobsFromSnapshots([
+    ...historySnapshots,
+    ...completedHistorySnapshots,
+  ]);
 
   return {
     upcomingJob: upcomingJobs[0] || null,
@@ -286,10 +345,15 @@ export async function startAssignedJob(jobId) {
       throw error;
     }
 
-    transaction.update(reference, {
+    const updates = {
       operationalStatus: "IN_PROGRESS",
-      startedAt: serverTimestamp(),
-    });
+    };
+
+    if (!job.startedAt) {
+      updates.startedAt = serverTimestamp();
+    }
+
+    transaction.update(reference, updates);
   });
 
   const snapshot = await getDoc(reference);
@@ -317,10 +381,15 @@ export async function completeInProgressJob(jobId) {
       throw error;
     }
 
-    transaction.update(reference, {
+    const updates = {
       operationalStatus: "COMPLETED",
-      completedAt: serverTimestamp(),
-    });
+    };
+
+    if (!job.completedAt) {
+      updates.completedAt = serverTimestamp();
+    }
+
+    transaction.update(reference, updates);
   });
 
   const snapshot = await getDoc(reference);

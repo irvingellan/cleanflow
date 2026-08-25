@@ -1189,6 +1189,34 @@ button.summary-card {
   white-space: pre-wrap;
 }
 
+.job-execution {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+  border-top: 1px solid #e3eae6;
+  padding-top: 20px;
+}
+
+.job-execution__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-weight: 800;
+}
+
+.job-execution__state--in-progress {
+  color: #315c49;
+}
+
+.job-execution__state--completed {
+  color: #3f705b;
+}
+
+.job-execution__actions {
+  margin-top: 0;
+}
+
 .issues-section {
   margin-top: 28px;
   border-top: 1px solid #e3eae6;

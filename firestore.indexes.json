@@ -21,6 +21,15 @@
       "collectionGroup": "jobs",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "propertyId", "order": "ASCENDING" },
+        { "fieldPath": "operationalStatus", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "clientId", "order": "ASCENDING" },
         { "fieldPath": "operationalStatus", "order": "ASCENDING" },
         { "fieldPath": "scheduledDate", "order": "ASCENDING" }
@@ -32,6 +41,15 @@
       "fields": [
         { "fieldPath": "clientId", "order": "ASCENDING" },
         { "fieldPath": "scheduledDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "operationalStatus", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
       ]
     },
     {
@@ -65,6 +83,15 @@
       "fields": [
         { "fieldPath": "assignedCleanerId", "order": "ASCENDING" },
         { "fieldPath": "scheduledDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "assignedCleanerId", "order": "ASCENDING" },
+        { "fieldPath": "operationalStatus", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
       ]
     }
   ],
