@@ -1,7 +1,7 @@
 import {
   addDoc,
   collection,
-  getDoc,
+  documentId,
   getDocs,
   query,
   serverTimestamp,
@@ -12,6 +12,7 @@ import {
 import { db } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
+const cleanerLookupBatchSize = 30;
 
 function cleanersCollection() {
   return collection(db, "organizations", organizationId, "cleaners");
@@ -21,12 +22,35 @@ function cleanerDocument(cleanerId) {
   return doc(db, "organizations", organizationId, "cleaners", cleanerId);
 }
 
-export async function getCleanerById(cleanerId) {
-  const snapshot = await getDoc(cleanerDocument(cleanerId));
+export async function getCleanerNamesById(cleanerIds) {
+  const uniqueCleanerIds = [...new Set(cleanerIds.filter(Boolean))];
+  const cleanerIdBatches = Array.from(
+    { length: Math.ceil(uniqueCleanerIds.length / cleanerLookupBatchSize) },
+    (_, index) =>
+      uniqueCleanerIds.slice(
+        index * cleanerLookupBatchSize,
+        (index + 1) * cleanerLookupBatchSize,
+      ),
+  );
+  const snapshots = await Promise.all(
+    cleanerIdBatches.map((cleanerIdsBatch) =>
+      getDocs(
+        query(
+          cleanersCollection(),
+          where(documentId(), "in", cleanerIdsBatch),
+        ),
+      ),
+    ),
+  );
 
-  return snapshot.exists()
-    ? { ...snapshot.data(), id: snapshot.id }
-    : null;
+  return Object.fromEntries(
+    snapshots.flatMap((snapshot) =>
+      snapshot.docs.map((cleanerSnapshot) => [
+        cleanerSnapshot.id,
+        cleanerSnapshot.data().name,
+      ]),
+    ),
+  );
 }
 
 export async function getCleaners() {

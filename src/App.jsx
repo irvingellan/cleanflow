@@ -8,7 +8,7 @@ import {
 import {
   createCleaner,
   getAllCleaners,
-  getCleanerById,
+  getCleanerNamesById,
   getCleaners,
   updateCleaner,
 } from "./features/cleaners/cleanerService.js";
@@ -3758,7 +3758,7 @@ function JobDetail({
   onResolveIssue,
 }) {
   const { language, translate } = useTranslation();
-  const [resolvedAssignedCleaner, setResolvedAssignedCleaner] = useState(null);
+  const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
   const [resolvingIssueId, setResolvingIssueId] = useState(null);
@@ -3786,16 +3786,26 @@ function JobDetail({
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
   const isCompleted = job.operationalStatus === "COMPLETED";
   const canManageOffers = !isCompleted;
-  const knownAssignedCleaner = knownCleaners.find(
-    (cleaner) => cleaner.id === job.assignedCleanerId,
+  const knownCleanerNames = Object.fromEntries(
+    knownCleaners.map((cleaner) => [cleaner.id, cleaner.name]),
   );
-  const assignedCleanerName =
-    knownAssignedCleaner?.name ||
-    (resolvedAssignedCleaner?.id === job.assignedCleanerId
-      ? resolvedAssignedCleaner?.name
-      : null) ||
-    job.assignedCleanerName ||
-    translate("common.notProvided");
+  const cleanerNamesById = { ...resolvedCleanerNames, ...knownCleanerNames };
+  const unresolvedCleanerIds = [
+    job.assignedCleanerId,
+    ...offers.map((offer) => offer.cleanerId),
+  ]
+    .filter(Boolean)
+    .filter((cleanerId, index, cleanerIds) =>
+      cleanerIds.indexOf(cleanerId) === index && !knownCleanerNames[cleanerId],
+    )
+    .sort();
+  const cleanerLookupKey = unresolvedCleanerIds.join(",");
+  const assignedCleanerName = currentCleanerName(
+    job.assignedCleanerId,
+    job.assignedCleanerName,
+    cleanerNamesById,
+    translate("common.notProvided"),
+  );
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
@@ -3809,33 +3819,34 @@ function JobDetail({
   useEffect(() => {
     let isCurrent = true;
 
-    if (!job.assignedCleanerId || knownAssignedCleaner) {
-      setResolvedAssignedCleaner(null);
+    if (!cleanerLookupKey) {
+      setResolvedCleanerNames({});
       return () => {
         isCurrent = false;
       };
     }
 
-    async function loadAssignedCleaner() {
+    async function loadCleanerNames() {
       try {
-        const cleaner = await getCleanerById(job.assignedCleanerId);
+        // Keep immutable job/offer snapshots as fallbacks while showing current Cleaner names.
+        const cleanerNames = await getCleanerNamesById(unresolvedCleanerIds);
 
         if (isCurrent) {
-          setResolvedAssignedCleaner(cleaner);
+          setResolvedCleanerNames(cleanerNames);
         }
       } catch {
         if (isCurrent) {
-          setResolvedAssignedCleaner(null);
+          setResolvedCleanerNames({});
         }
       }
     }
 
-    loadAssignedCleaner();
+    loadCleanerNames();
 
     return () => {
       isCurrent = false;
     };
-  }, [job.assignedCleanerId, knownAssignedCleaner]);
+  }, [cleanerLookupKey]);
 
   async function assignCleaner(offer) {
     setAssigningCleanerId(offer.cleanerId);
@@ -4164,11 +4175,17 @@ function JobDetail({
           <div className="offer-status-list">
             {sortedOffers.map((offer) => {
               const respondedAt = formatCreatedAt(offer.respondedAt, language);
+              const offerCleanerName = currentCleanerName(
+                offer.cleanerId,
+                offer.cleanerName,
+                cleanerNamesById,
+                translate("common.notProvided"),
+              );
 
               return (
                 <article key={offer.id} className="offer-status-item">
                   <div>
-                    <strong>{offer.cleanerName || translate("common.notProvided")}</strong>
+                    <strong>{offerCleanerName}</strong>
                     {respondedAt && <span>{translate("offers.responded")} {respondedAt}</span>}
                   </div>
                   <span className="status-badge">{translate({ PENDING: "status.pending", INTERESTED: "status.interested", DECLINED: "status.declined" }[offer.status] || "common.notProvided")}</span>

@@ -1,6 +1,5 @@
 import {
   collection,
-  documentId,
   getCountFromServer,
   getDocs,
   limit,
@@ -10,6 +9,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { getCleanerNamesById } from "../cleaners/cleanerService.js";
 import { getOpenJobIssues } from "../issues/issueService.js";
 import {
   getInterestedJobOffers,
@@ -27,14 +27,9 @@ const attentionJobLimit = 10;
 const issueCandidateJobLimit = 10;
 const next48HoursJobLimit = 20;
 const recentlyCompletedJobLimit = 5;
-const cleanerLookupBatchSize = 30;
 
 function jobsCollection() {
   return collection(db, "organizations", organizationId, "jobs");
-}
-
-function cleanersCollection() {
-  return collection(db, "organizations", organizationId, "cleaners");
 }
 
 function jobFromSnapshot(snapshot) {
@@ -89,37 +84,6 @@ function sortByScheduledDateTime(firstJob, secondJob) {
 
 function uniqueJobs(jobs) {
   return [...new Map(jobs.map((job) => [job.id, job])).values()];
-}
-
-async function getCleanerNamesById(cleanerIds) {
-  const uniqueCleanerIds = [...new Set(cleanerIds.filter(Boolean))];
-  const cleanerIdBatches = Array.from(
-    { length: Math.ceil(uniqueCleanerIds.length / cleanerLookupBatchSize) },
-    (_, index) =>
-      uniqueCleanerIds.slice(
-        index * cleanerLookupBatchSize,
-        (index + 1) * cleanerLookupBatchSize,
-      ),
-  );
-  const snapshots = await Promise.all(
-    cleanerIdBatches.map((cleanerIdsBatch) =>
-      getDocs(
-        query(
-          cleanersCollection(),
-          where(documentId(), "in", cleanerIdsBatch),
-        ),
-      ),
-    ),
-  );
-
-  return Object.fromEntries(
-    snapshots.flatMap((snapshot) =>
-      snapshot.docs.map((cleanerSnapshot) => [
-        cleanerSnapshot.id,
-        cleanerSnapshot.data().name,
-      ]),
-    ),
-  );
 }
 
 export async function getOperationalDashboard() {
