@@ -3670,6 +3670,7 @@ function JobDetail({
   );
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
   const isCompleted = job.operationalStatus === "COMPLETED";
+  const canManageOffers = !isCompleted;
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
@@ -4015,39 +4016,41 @@ function JobDetail({
                     {respondedAt && <span>{translate("offers.responded")} {respondedAt}</span>}
                   </div>
                   <span className="status-badge">{translate({ PENDING: "status.pending", INTERESTED: "status.interested", DECLINED: "status.declined" }[offer.status] || "common.notProvided")}</span>
-                  <div className="offer-status-actions">
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => onSimulateOffer(offer)}
-                    >
-                      {translate("offers.simulateOffer")}
-                    </button>
-                    {offer.status === "PENDING" && (
+                  {canManageOffers && (
+                    <div className="offer-status-actions">
                       <button
                         className="button"
                         type="button"
-                        disabled={isCreatingPublicOfferLinkFor !== null}
-                        onClick={() => createOfferLink(offer)}
+                        onClick={() => onSimulateOffer(offer)}
                       >
-                        {isCreatingPublicOfferLinkFor === offer.id
-                          ? translate("offers.creatingPublicLink")
-                          : translate("offers.createPublicLink")}
+                        {translate("offers.simulateOffer")}
                       </button>
-                    )}
-                    {offer.status === "INTERESTED" && !isAssigned && (
-                      <button
-                        className="button button--primary"
-                        type="button"
-                        disabled={assigningCleanerId !== null}
-                        onClick={() => assignCleaner(offer)}
-                      >
-                        {assigningCleanerId === offer.cleanerId
-                          ? translate("offers.assigning")
-                          : translate("offers.assign")}
-                      </button>
-                    )}
-                  </div>
+                      {offer.status === "PENDING" && (
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={isCreatingPublicOfferLinkFor !== null}
+                          onClick={() => createOfferLink(offer)}
+                        >
+                          {isCreatingPublicOfferLinkFor === offer.id
+                            ? translate("offers.creatingPublicLink")
+                            : translate("offers.createPublicLink")}
+                        </button>
+                      )}
+                      {offer.status === "INTERESTED" && !isAssigned && (
+                        <button
+                          className="button button--primary"
+                          type="button"
+                          disabled={assigningCleanerId !== null}
+                          onClick={() => assignCleaner(offer)}
+                        >
+                          {assigningCleanerId === offer.cleanerId
+                            ? translate("offers.assigning")
+                            : translate("offers.assign")}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {publicOfferLink?.offerId === offer.id && (
                     <a
                       className="public-offer-link"
@@ -4082,13 +4085,15 @@ function JobDetail({
             {translate("offers.simulateAssignedCleaner")}
           </button>
         )}
-        <button
-          className="button button--primary"
-          type="button"
-          onClick={onOfferToCleaners}
-        >
-          {translate("offers.offerToCleaners")}
-        </button>
+        {canManageOffers && (
+          <button
+            className="button button--primary"
+            type="button"
+            onClick={onOfferToCleaners}
+          >
+            {translate("offers.offerToCleaners")}
+          </button>
+        )}
       </div>
     </section>
   );
