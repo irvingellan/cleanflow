@@ -263,9 +263,38 @@ h1 {
 }
 
 .feedback-trigger:focus-visible,
-.feedback-close:focus-visible {
+.feedback-close:focus-visible,
+.notification-control:focus-visible {
   outline: 3px solid var(--focus-ring-strong);
   outline-offset: 2px;
+}
+
+.notification-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--color-brand-text);
+  background: var(--color-surface);
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.notification-control:hover:not(:disabled) {
+  border-color: var(--color-brand);
+  background: var(--color-surface-subtle);
+}
+
+.notification-control--enabled {
+  color: var(--color-success);
+}
+
+.notification-control:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .feedback-backdrop {
@@ -1825,8 +1854,19 @@ button.summary-card {
     grid-row: 1;
   }
 
+  .foundation__header .notification-control {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+    padding: 5px 7px;
+  }
+
+  .foundation__header .notification-control__label {
+    display: none;
+  }
+
   .foundation__header .feedback-trigger {
-    grid-column: 1 / -1;
+    grid-column: 2;
     grid-row: 2;
     justify-self: end;
   }

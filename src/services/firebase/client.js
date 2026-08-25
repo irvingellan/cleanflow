@@ -1,4 +1,5 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { createFirebaseConfig } from "./config.js";
 
@@ -16,7 +17,9 @@ export const firebaseApp = getApps().length
   : initializeApp(firebaseConfig);
 
 export const db = getFirestore(firebaseApp);
+export const functions = getFunctions(firebaseApp, "us-central1");
 
 if (useFirebaseEmulators) {
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
 }

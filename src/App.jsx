@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
+import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
 import {
   signInWithEmail,
   signOutManager,
@@ -1139,6 +1140,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
               <div className="manager-account__controls">
                 <LanguageSelector language={language} onChange={setLanguage} />
                 <ThemeToggle />
+                <NotificationControl />
                 <FeedbackPanel screen={view} />
                 <button
                   className="header-sign-out"

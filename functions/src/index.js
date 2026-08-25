@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
@@ -20,9 +21,23 @@ const feedbackTypes = {
   bug: "Problem / Bug",
   other: "Other",
 };
+const pushDeviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
+const pushTokenMaximumLength = 4096;
 
 function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function managerPushDeviceDocumentId(uid, deviceId) {
+  return createHash("sha256").update(`${uid}:${deviceId}`).digest("hex");
+}
+
+function validPushDeviceId(deviceId) {
+  return typeof deviceId === "string" && pushDeviceIdPattern.test(deviceId);
+}
+
+function validPushToken(token) {
+  return typeof token === "string" && token.length >= 32 && token.length <= pushTokenMaximumLength;
 }
 
 function validToken(token) {
@@ -247,6 +262,129 @@ export const submitFeedback = onCall(
   },
 );
 
+export const registerManagerPushDevice = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const { deviceId, token } = request.data || {};
+
+    if (!validPushDeviceId(deviceId) || !validPushToken(token)) {
+      throw new HttpsError("invalid-argument", "Push device registration is invalid.");
+    }
+
+    const deviceReference = db
+      .collection("managerPushDevices")
+      .doc(managerPushDeviceDocumentId(request.auth.uid, deviceId));
+
+    // The device identifier is random and local to this browser. Re-registering updates a refreshed FCM token.
+    await db.runTransaction(async (transaction) => {
+      const deviceSnapshot = await transaction.get(deviceReference);
+      const deviceData = {
+        organizationId,
+        userId: request.auth.uid,
+        token,
+        platform: "web",
+        active: true,
+        updatedAt: FieldValue.serverTimestamp(),
+        lastSeenAt: FieldValue.serverTimestamp(),
+      };
+
+      if (!deviceSnapshot.exists) {
+        deviceData.createdAt = FieldValue.serverTimestamp();
+      }
+
+      transaction.set(deviceReference, deviceData, { merge: true });
+    });
+
+    return { registered: true };
+  },
+);
+
+async function activeManagerPushDevices() {
+  const deviceSnapshots = await db
+    .collection("managerPushDevices")
+    .where("organizationId", "==", organizationId)
+    .get();
+
+  return deviceSnapshots.docs.filter((snapshot) => {
+    const device = snapshot.data();
+    return device.active === true && validPushToken(device.token);
+  });
+}
+
+function invalidPushTokenError(error) {
+  return [
+    "messaging/invalid-registration-token",
+    "messaging/registration-token-not-registered",
+  ].includes(error?.code);
+}
+
+async function sendCleanerInterestNotification({ jobId, propertyName, cleanerId, cleanerName, offerId }) {
+  const deviceSnapshots = await activeManagerPushDevices();
+
+  if (deviceSnapshots.length === 0) {
+    return;
+  }
+
+  let currentCleanerName = cleanerName || "A cleaner";
+
+  if (cleanerId) {
+    const cleanerSnapshot = await db
+      .collection("organizations")
+      .doc(organizationId)
+      .collection("cleaners")
+      .doc(cleanerId)
+      .get();
+
+    if (cleanerSnapshot.exists && cleanerSnapshot.data().name) {
+      currentCleanerName = cleanerSnapshot.data().name;
+    }
+  }
+
+  const safePropertyName = propertyName || "a property";
+  const responses = await getMessaging().sendEach(
+    deviceSnapshots.map((snapshot) => ({
+      token: snapshot.data().token,
+      data: {
+        title: "👤 Cleaner interested",
+        body: `${currentCleanerName} is interested in ${safePropertyName}.`,
+        eventId: `cleaner-interest-${offerId}`,
+        eventType: "CLEANER_INTERESTED",
+        jobId,
+        link: "/",
+      },
+      webpush: {
+        headers: { Urgency: "high" },
+      },
+    })),
+  );
+
+  const invalidDeviceUpdates = responses.responses.flatMap((response, index) => {
+    if (response.success || !invalidPushTokenError(response.error)) {
+      return [];
+    }
+
+    return [
+      deviceSnapshots[index].ref.update({
+        active: false,
+        invalidatedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }),
+    ];
+  });
+
+  await Promise.all(invalidDeviceUpdates);
+
+  logger.info("Cleaner-interest notifications processed.", {
+    attempted: deviceSnapshots.length,
+    delivered: responses.successCount,
+    invalidated: invalidDeviceUpdates.length,
+  });
+}
+
 export const publicOffer = onRequest(
   { region: "us-central1", invoker: "public" },
   async (request, response) => {
@@ -319,7 +457,7 @@ export const publicOffer = onRequest(
         }
 
         if (offerData.status !== "PENDING") {
-          return { state: "answered", status: offerData.status };
+          return { state: "answered", status: offerData.status, shouldNotifyManagers: false };
         }
 
         transaction.update(offerDocument, {
@@ -327,7 +465,16 @@ export const publicOffer = onRequest(
           respondedAt: FieldValue.serverTimestamp(),
         });
 
-        return { state: "answered", status };
+        return {
+          state: "answered",
+          status,
+          shouldNotifyManagers: status === "INTERESTED",
+          jobId: jobDocument.id,
+          propertyName: jobData.propertyName || null,
+          cleanerId: offerData.cleanerId || null,
+          cleanerName: offerData.cleanerName || null,
+          offerId: offerDocument.id,
+        };
       });
 
       if (result.state === "not-found") {
@@ -343,6 +490,17 @@ export const publicOffer = onRequest(
       if (result.state === "unavailable") {
         sendPublicError(response, 410, "offer_unavailable");
         return;
+      }
+
+      if (result.shouldNotifyManagers) {
+        try {
+          await sendCleanerInterestNotification(result);
+        } catch (error) {
+          // The offer response is already committed; a delivery failure must not invite a duplicate response.
+          logger.error("Unable to send cleaner-interest notifications.", {
+            code: error.code || "unknown",
+          });
+        }
       }
 
       configureResponse(response);
