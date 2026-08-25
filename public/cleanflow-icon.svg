@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>CleanFlow</title>
+  <rect width="512" height="512" rx="112" fill="#315c49" />
+  <path
+    d="M355 162a136 136 0 1 0 0 188"
+    fill="none"
+    stroke="#ffffff"
+    stroke-linecap="round"
+    stroke-width="56"
+  />
+  <circle cx="366" cy="350" r="27" fill="#9dc9ad" />
+</svg>
