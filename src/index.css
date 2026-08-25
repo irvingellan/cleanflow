@@ -403,6 +403,33 @@ h1 {
   text-align: right;
 }
 
+.pwa-update-prompt {
+  position: fixed;
+  z-index: 90;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  max-width: min(calc(100vw - 48px), 390px);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: var(--color-heading);
+  background: var(--color-surface);
+  box-shadow: 0 18px 48px var(--shadow-card);
+  font-size: 0.8125rem;
+  font-weight: 750;
+}
+
+.pwa-update-prompt .button {
+  flex: none;
+  padding: 8px 10px;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+
 .auth-foundation {
   width: min(100%, 480px);
 }
@@ -1790,6 +1817,19 @@ button.summary-card {
 }
 
 @media (max-width: 520px) {
+  .pwa-update-prompt {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    justify-content: space-between;
+    gap: 10px;
+    max-width: none;
+  }
+
+  .pwa-update-prompt span {
+    min-width: 0;
+  }
+
   .property-card {
     align-items: flex-start;
     flex-direction: column;

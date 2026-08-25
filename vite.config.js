@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -50,7 +52,54 @@ firebase.messaging().onBackgroundMessage((payload) => {
 `
 }
 
-function firebaseMessagingWorker() {
+function rootWorkerSource(buildId) {
+  return `const buildId = ${JSON.stringify(buildId)};
+const acknowledgedClients = new Set();
+
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEANFLOW_UPDATE_CLIENT_READY" && event.source?.id) {
+    acknowledgedClients.add(event.source.id);
+  }
+
+  if (event.data?.type === "CLEANFLOW_SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    await self.clients.claim();
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+
+    windows.forEach((client) => {
+      client.postMessage({ type: "CLEANFLOW_UPDATE_AVAILABLE", buildId });
+    });
+
+    // Older installed builds cannot acknowledge the update message. Reload them once so this
+    // update protocol can take over; current builds acknowledge and show their own prompt.
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const currentWindows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+
+    await Promise.all(
+      currentWindows
+        .filter((client) => !acknowledgedClients.has(client.id))
+        .map((client) => client.navigate(client.url).catch(() => undefined)),
+    );
+  })());
+});
+
+// Keep authenticated operational data network-only; this worker intentionally does not cache it.
+self.addEventListener("fetch", (event) => {
+  event.respondWith(fetch(event.request));
+});
+`
+}
+
+function cleanflowServiceWorkers(buildInfo) {
   let source = ''
 
   return {
@@ -75,22 +124,56 @@ function firebaseMessagingWorker() {
       source = messagingWorkerSource(firebaseConfig)
     },
     configureServer(server) {
+      server.middlewares.use('/sw.js', (_request, response) => {
+        response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+        response.setHeader('Cache-Control', 'no-cache')
+        response.end(rootWorkerSource(buildInfo.buildId))
+      })
       server.middlewares.use('/firebase-messaging-sw.js', (_request, response) => {
         response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
         response.setHeader('Cache-Control', 'no-cache')
         response.end(source)
       })
+      server.middlewares.use('/version.json', (_request, response) => {
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.setHeader('Cache-Control', 'no-cache')
+        response.end(JSON.stringify(buildInfo))
+      })
     },
     generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sw.js',
+        source: rootWorkerSource(buildInfo.buildId),
+      })
       this.emitFile({
         type: 'asset',
         fileName: 'firebase-messaging-sw.js',
         source,
       })
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify(buildInfo),
+      })
     },
   }
 }
 
-export default defineConfig({
-  plugins: [react(), firebaseMessagingWorker()],
+const packageMetadata = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
+)
+
+export default defineConfig(() => {
+  const buildInfo = {
+    version: `v${packageMetadata.version}`,
+    buildId: process.env.GITHUB_SHA || `${packageMetadata.version}-${new Date().toISOString()}`,
+  }
+
+  return {
+    define: {
+      __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.buildId),
+    },
+    plugins: [react(), cleanflowServiceWorkers(buildInfo)],
+  }
 })
