@@ -7,32 +7,9 @@ import {
   hasValue,
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
+import { createJobListFilters } from "./jobListFilters.js";
 
-export function createJobListFilters(overrides = {}) {
-  return {
-    status: "all",
-    datePreset: "any",
-    cleanerId: "",
-    propertyId: "",
-    search: "",
-    ...overrides,
-  };
-}
-
-export function dashboardJobListFilters(filter) {
-  if (filter === "today") return createJobListFilters({ datePreset: "today" });
-  if (filter === "needs-assignment") {
-    return createJobListFilters({ status: "needs-assignment" });
-  }
-  if (filter === "in-progress") {
-    return createJobListFilters({ status: "in-progress" });
-  }
-  if (filter === "completed-today") {
-    return createJobListFilters({ status: "completed", datePreset: "today" });
-  }
-
-  return createJobListFilters();
-}
+export { createJobListFilters, dashboardJobListFilters } from "./jobListFilters.js";
 
 function jobCompletedAtSortValue(job) {
   if (job.completedAt?.toMillis) return job.completedAt.toMillis();

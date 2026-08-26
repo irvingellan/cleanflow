@@ -28,7 +28,6 @@ import {
 import {
   createCleaner,
   getAllCleaners,
-  getCleaners,
   supportedCleanerTeamTypes,
   supportedPaymentMethods,
   updateCleaner,
@@ -41,30 +40,23 @@ import {
 } from "./features/clients/clientService.js";
 import { getOperationalDashboard } from "./features/dashboard/dashboardService.js";
 import {
-  createPublicOfferLink,
-  getJobOffers,
-} from "./features/jobs/jobOfferService.js";
-import { getJobIssues, resolveIssue } from "./features/issues/issueService.js";
-import {
   formatIssueCategory,
   issueIconName,
 } from "./features/issues/issuePresentation.js";
 import {
-  assignCleanerToJob,
-  completeInProgressJob,
   getCleanerJobHistory,
   getClientJobHistory,
   getPropertyJobHistory,
-  getJobs,
-  startAssignedJob,
 } from "./features/jobs/jobService.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
 import { CleaningSuccess, CreateCleaningForm } from "./features/jobs/JobForm.jsx";
+import { JobsPage } from "./features/jobs/JobsPage.jsx";
 import {
   createJobListFilters,
   dashboardJobListFilters,
-  JobsPage,
-} from "./features/jobs/JobsPage.jsx";
+} from "./features/jobs/jobListFilters.js";
+import { useJobDetailController } from "./features/jobs/useJobDetailController.js";
+import { useJobsWorklist } from "./features/jobs/useJobsWorklist.js";
 import {
   AssignedCleanerJob,
   CleanerOfferSimulation,
@@ -443,22 +435,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [properties, setProperties] = useState([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(true);
   const [hasPropertyError, setHasPropertyError] = useState(false);
-  const [jobs, setJobs] = useState([]);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
-  const [hasJobError, setHasJobError] = useState(false);
-  const [jobListFilters, setJobListFilters] = useState(createJobListFilters);
-  const [jobFilterCleaners, setJobFilterCleaners] = useState([]);
-  const [jobPageCursors, setJobPageCursors] = useState({
-    activeCursor: null,
-    completedCursor: null,
-    activeExhausted: false,
-    completedExhausted: false,
-  });
-  const [hasMoreJobs, setHasMoreJobs] = useState(false);
-  const [isLoadingMoreJobs, setIsLoadingMoreJobs] = useState(false);
-  const [cleaners, setCleaners] = useState([]);
-  const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
-  const [hasCleanerError, setHasCleanerError] = useState(false);
   const [directoryCleaners, setDirectoryCleaners] = useState([]);
   const [isLoadingDirectoryCleaners, setIsLoadingDirectoryCleaners] = useState(false);
   const [hasDirectoryCleanersError, setHasDirectoryCleanersError] = useState(false);
@@ -469,12 +445,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [recentPayouts, setRecentPayouts] = useState([]);
   const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
   const [hasPayoutsError, setHasPayoutsError] = useState(false);
-  const [jobOffers, setJobOffers] = useState([]);
-  const [isLoadingOffers, setIsLoadingOffers] = useState(false);
-  const [hasOffersError, setHasOffersError] = useState(false);
-  const [jobIssues, setJobIssues] = useState([]);
-  const [isLoadingIssues, setIsLoadingIssues] = useState(false);
-  const [hasIssuesError, setHasIssuesError] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [hasDashboardError, setHasDashboardError] = useState(false);
@@ -484,14 +454,61 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
-  const [selectedJob, setSelectedJob] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
-  const [offersSentCount, setOffersSentCount] = useState(null);
-  const [selectedOffer, setSelectedOffer] = useState(null);
   const [selectedCleaner, setSelectedCleaner] = useState(null);
   const [savedCleaner, setSavedCleaner] = useState(null);
   const [selectedPayoutGroup, setSelectedPayoutGroup] = useState(null);
   const [paidPayoutSummary, setPaidPayoutSummary] = useState(null);
+  const jobWorklist = useJobsWorklist({ view });
+  const jobDetail = useJobDetailController({
+    view,
+    onJobUpdated: jobWorklist.replaceJob,
+  });
+  const {
+    jobs,
+    isLoading: isLoadingJobs,
+    hasError: hasJobError,
+    filters: jobListFilters,
+    cleaners: jobFilterCleaners,
+    hasMore: hasMoreJobs,
+    isLoadingMore: isLoadingMoreJobs,
+    setFilters: setJobListFilters,
+    resetPagination: resetJobPagination,
+    loadMore: loadMoreJobs,
+  } = jobWorklist;
+  const {
+    job: selectedJob,
+    detail: {
+      offers: jobOffers,
+      isLoadingOffers,
+      hasOffersError,
+      issues: jobIssues,
+      isLoadingIssues,
+      hasIssuesError,
+      refreshOffers: refreshJobOffers,
+      refreshIssues: refreshJobIssues,
+    },
+    offerFlow: {
+      offersSentCount,
+      selectedOffer,
+      availableCleaners: cleaners,
+      isLoadingCleaners,
+      hasCleanerError,
+      clearOffersSentCount,
+      setSelectedOffer,
+      recordOffersSent,
+      createCleanerOfferLink,
+    },
+    actions: {
+      assignCleaner,
+      startCleaning,
+      completeCleaning,
+      resolveJobIssue,
+    },
+    openJob: openJobDetail,
+    closeJob: closeJobDetail,
+    prepareJobDetailRefresh,
+  } = jobDetail;
 
   useEffect(() => {
     let isCurrent = true;
@@ -601,63 +618,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }, [view]);
 
   useEffect(() => {
-    if (view !== "job-list") {
-      return undefined;
-    }
-
-    let isCurrent = true;
-    setIsLoadingJobs(true);
-    setHasJobError(false);
-
-    async function loadJobs() {
-      try {
-        const [loadedJobPage, loadedCleaners] = await Promise.all([
-          getJobs(jobListFilters),
-          getAllCleaners(),
-        ]);
-
-        if (isCurrent) {
-          setJobs(loadedJobPage.jobs);
-          setJobFilterCleaners(loadedCleaners);
-          setJobPageCursors(loadedJobPage.nextPageCursors);
-          setHasMoreJobs(loadedJobPage.hasMore);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasJobError(true);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoadingJobs(false);
-        }
-      }
-    }
-
-    loadJobs();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [view, jobListFilters.status, jobListFilters.datePreset]);
-
-  async function loadMoreJobs() {
-    setIsLoadingMoreJobs(true);
-
-    try {
-      const loadedJobPage = await getJobs(jobListFilters, jobPageCursors);
-      setJobs((currentJobs) => [
-        ...new Map([...currentJobs, ...loadedJobPage.jobs].map((job) => [job.id, job])).values(),
-      ]);
-      setJobPageCursors(loadedJobPage.nextPageCursors);
-      setHasMoreJobs(loadedJobPage.hasMore);
-    } catch {
-      setHasJobError(true);
-    } finally {
-      setIsLoadingMoreJobs(false);
-    }
-  }
-
-  useEffect(() => {
     if (view !== "client-list") {
       return undefined;
     }
@@ -691,207 +651,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     };
   }, [view]);
 
-  async function refreshJobOffers() {
-    if (!selectedJob) {
-      return;
-    }
-
-    setIsLoadingOffers(true);
-    setHasOffersError(false);
-
-    try {
-      const loadedOffers = await getJobOffers(selectedJob.id);
-      setJobOffers(loadedOffers);
-    } catch {
-      setHasOffersError(true);
-    } finally {
-      setIsLoadingOffers(false);
-    }
-  }
-
-  async function refreshJobIssues() {
-    if (!selectedJob) {
-      return;
-    }
-
-    setIsLoadingIssues(true);
-    setHasIssuesError(false);
-
-    try {
-      const loadedIssues = await getJobIssues(selectedJob.id);
-      setJobIssues(loadedIssues);
-    } catch {
-      setHasIssuesError(true);
-    } finally {
-      setIsLoadingIssues(false);
-    }
-  }
-
-  async function assignCleaner(offer) {
-    if (!selectedJob) {
-      return;
-    }
-
-    try {
-      const assignedJob = await assignCleanerToJob(selectedJob.id, {
-        id: offer.cleanerId,
-        name: offer.cleanerName,
-      });
-
-      setSelectedJob(assignedJob);
-      setJobs((currentJobs) =>
-        currentJobs.map((job) => (job.id === assignedJob.id ? assignedJob : job)),
-      );
-    } catch (error) {
-      if (error.job) {
-        setSelectedJob(error.job);
-        setJobs((currentJobs) =>
-          currentJobs.map((job) => (job.id === error.job.id ? error.job : job)),
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  async function startCleaning() {
-    if (!selectedJob) {
-      return;
-    }
-
-    try {
-      const startedJob = await startAssignedJob(selectedJob.id);
-      setSelectedJob(startedJob);
-      setJobs((currentJobs) =>
-        currentJobs.map((job) => (job.id === startedJob.id ? startedJob : job)),
-      );
-    } catch (error) {
-      if (error.job) {
-        setSelectedJob(error.job);
-        setJobs((currentJobs) =>
-          currentJobs.map((job) => (job.id === error.job.id ? error.job : job)),
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  async function completeCleaning() {
-    if (!selectedJob) {
-      return;
-    }
-
-    try {
-      const completedJob = await completeInProgressJob(selectedJob.id);
-      setSelectedJob(completedJob);
-      setJobs((currentJobs) =>
-        currentJobs.map((job) => (job.id === completedJob.id ? completedJob : job)),
-      );
-    } catch (error) {
-      if (error.job) {
-        setSelectedJob(error.job);
-        setJobs((currentJobs) =>
-          currentJobs.map((job) => (job.id === error.job.id ? error.job : job)),
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  async function resolveJobIssue({ issueId, resolutionNote }) {
-    if (!selectedJob) {
-      return;
-    }
-
-    try {
-      const resolvedIssue = await resolveIssue({
-        jobId: selectedJob.id,
-        issueId,
-        resolutionNote,
-      });
-
-      setJobIssues((currentIssues) =>
-        currentIssues.map((issue) =>
-          issue.id === resolvedIssue.id ? resolvedIssue : issue,
-        ),
-      );
-    } catch (error) {
-      if (error.issue) {
-        setJobIssues((currentIssues) =>
-          currentIssues.map((issue) =>
-            issue.id === error.issue.id ? error.issue : issue,
-          ),
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  async function createCleanerOfferLink(offer) {
-    if (!selectedJob) {
-      throw new Error("No job selected.");
-    }
-
-    return createPublicOfferLink({
-      jobId: selectedJob.id,
-      cleanerId: offer.cleanerId,
-    });
-  }
-
-  useEffect(() => {
-    if (view === "job-detail" && selectedJob) {
-      refreshJobOffers();
-      refreshJobIssues();
-    }
-  }, [view, selectedJob]);
-
-  useEffect(() => {
-    if (view !== "offer-cleaners") {
-      return undefined;
-    }
-
-    let isCurrent = true;
-    setIsLoadingCleaners(true);
-    setHasCleanerError(false);
-
-    async function loadCleaners() {
-      try {
-        const loadedCleaners = await getCleaners();
-
-        if (isCurrent) {
-          setCleaners(loadedCleaners);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasCleanerError(true);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoadingCleaners(false);
-        }
-      }
-    }
-
-    loadCleaners();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [view]);
-
   function showProperties() {
     setActiveSection("properties");
     setPropertyDetailOrigin("properties");
     setSelectedProperty(null);
     setSelectedClient(null);
-    setSelectedJob(null);
+    closeJobDetail();
     setCreatedJob(null);
-    setOffersSentCount(null);
-    setSelectedOffer(null);
-    setJobIssues([]);
+    clearOffersSentCount();
     setView("property-list");
   }
 
@@ -909,26 +676,16 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function showDashboard() {
     setActiveSection("dashboard");
     setSelectedProperty(null);
-    setSelectedJob(null);
-    setSelectedOffer(null);
-    setJobIssues([]);
+    closeJobDetail();
     setView("dashboard");
   }
 
   function showJobList(filters = createJobListFilters()) {
     setActiveSection("jobs");
     setSelectedProperty(null);
-    setSelectedJob(null);
-    setOffersSentCount(null);
-    setSelectedOffer(null);
-    setJobIssues([]);
-    setJobPageCursors({
-      activeCursor: null,
-      completedCursor: null,
-      activeExhausted: false,
-      completedExhausted: false,
-    });
-    setHasMoreJobs(false);
+    closeJobDetail();
+    clearOffersSentCount();
+    resetJobPagination();
     setJobListFilters(createJobListFilters(filters));
     setView("job-list");
   }
@@ -948,23 +705,19 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function showCleaners() {
     setActiveSection("cleaners");
     setSelectedProperty(null);
-    setSelectedJob(null);
+    closeJobDetail();
     setSelectedCleaner(null);
     setSavedCleaner(null);
-    setSelectedOffer(null);
-    setJobIssues([]);
     setView("cleaner-list");
   }
 
   function showPayouts() {
     setActiveSection("payouts");
     setSelectedProperty(null);
-    setSelectedJob(null);
+    closeJobDetail();
     setSelectedCleaner(null);
     setSelectedPayoutGroup(null);
     setPaidPayoutSummary(null);
-    setSelectedOffer(null);
-    setJobIssues([]);
     setView("payout-list");
   }
 
@@ -992,11 +745,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setActiveSection("clients");
     setSelectedProperty(null);
     setSelectedClient(null);
-    setSelectedJob(null);
+    closeJobDetail();
     setSelectedCleaner(null);
     setSavedCleaner(null);
-    setSelectedOffer(null);
-    setJobIssues([]);
     setView("client-list");
   }
 
@@ -1068,38 +819,19 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function openClientJob(job) {
     setActiveSection("clients");
     setJobDetailOrigin("client");
-    setSelectedJob(job);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setIsLoadingOffers(true);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setIsLoadingIssues(true);
-    setSelectedOffer(null);
+    openJobDetail(job);
     setView("job-detail");
   }
 
   function openCleanerJob(job) {
     setActiveSection("cleaners");
     setJobDetailOrigin("cleaner");
-    setSelectedJob(job);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setIsLoadingOffers(true);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setIsLoadingIssues(true);
-    setSelectedOffer(null);
+    openJobDetail(job);
     setView("job-detail");
   }
 
   function returnToCleanerDetail() {
-    setSelectedJob(null);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setSelectedOffer(null);
+    closeJobDetail();
     setView("cleaner-detail");
   }
 
@@ -1117,57 +849,31 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function openJob(job) {
     setActiveSection("jobs");
     setJobDetailOrigin("jobs");
-    setSelectedJob(job);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setIsLoadingOffers(true);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setIsLoadingIssues(true);
-    setSelectedOffer(null);
+    openJobDetail(job);
     setView("job-detail");
   }
 
   function openPropertyJob(job) {
     setActiveSection("properties");
     setJobDetailOrigin("property");
-    setSelectedJob(job);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setIsLoadingOffers(true);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setIsLoadingIssues(true);
-    setSelectedOffer(null);
+    openJobDetail(job);
     setView("job-detail");
   }
 
   function returnToPropertyDetail() {
-    setSelectedJob(null);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setSelectedOffer(null);
+    closeJobDetail();
     setView("property-detail");
   }
 
   function openDashboardJob(job) {
     setActiveSection("dashboard");
     setJobDetailOrigin("dashboard");
-    setSelectedJob(job);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setIsLoadingOffers(true);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setIsLoadingIssues(true);
-    setSelectedOffer(null);
+    openJobDetail(job);
     setView("job-detail");
   }
 
   function showOfferCleaners() {
-    setOffersSentCount(null);
+    clearOffersSentCount();
     setView("offer-cleaners");
   }
 
@@ -1182,13 +888,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function returnToJobDetail() {
-    setSelectedOffer(null);
-    setJobOffers([]);
-    setHasOffersError(false);
-    setIsLoadingOffers(true);
-    setJobIssues([]);
-    setHasIssuesError(false);
-    setIsLoadingIssues(true);
+    prepareJobDetailRefresh();
     setView("job-detail");
   }
 
@@ -1514,13 +1214,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasError={hasCleanerError}
             onBack={returnToJobDetail}
             onSent={(count, updatedJob) => {
-              setSelectedJob(updatedJob);
-              setJobs((currentJobs) =>
-                currentJobs.map((job) =>
-                  job.id === updatedJob.id ? updatedJob : job,
-                ),
-              );
-              setOffersSentCount(count);
+              recordOffersSent(count, updatedJob);
               setView("offers-success");
             }}
           />
