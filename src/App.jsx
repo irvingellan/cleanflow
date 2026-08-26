@@ -10,22 +10,13 @@ import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
 import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
 import { PwaUpdatePrompt } from "./features/pwa/PwaUpdatePrompt.jsx";
 import { PayoutDirectory, PayoutReview } from "./features/payouts/PayoutViews.jsx";
+import { usePayoutsController } from "./features/payouts/usePayoutsController.js";
 import { WhatsNewPanel } from "./features/releases/WhatsNewPanel.jsx";
-import {
-  getRecentPayouts,
-  getUnpaidCompletedJobs,
-  recordPayout,
-} from "./features/payouts/payoutService.js";
-import {
-  getPayoutProofUrl,
-  uploadPayoutProof,
-} from "./features/payouts/payoutProofService.js";
 import {
   signInWithEmail,
   signOutManager,
   subscribeToAuthState,
 } from "./features/auth/authService.js";
-import { getAllCleaners } from "./features/cleaners/cleanerService.js";
 import { currentCleanerName } from "./features/cleaners/cleanerIdentity.js";
 import { CleanerDetail } from "./features/cleaners/CleanerDetail.jsx";
 import { CleanerDirectory } from "./features/cleaners/CleanerDirectory.jsx";
@@ -91,32 +82,6 @@ const content = {
   productName: "CleanFlow",
   unnamedProperty: "Unnamed property",
 };
-
-function groupUnpaidJobsByCleaner(jobs, cleaners) {
-  const cleanersById = Object.fromEntries(cleaners.map((cleaner) => [cleaner.id, cleaner]));
-  const groupsByCleanerId = new Map();
-
-  jobs.forEach((job) => {
-    const cleaner = cleanersById[job.assignedCleanerId] || {
-      id: job.assignedCleanerId,
-      name: job.assignedCleanerName || "",
-      preferredPaymentMethod: "",
-    };
-    const currentGroup = groupsByCleanerId.get(cleaner.id) || {
-      cleaner,
-      jobs: [],
-      total: 0,
-    };
-
-    currentGroup.jobs.push(job);
-    currentGroup.total += job.cleanerPayout;
-    groupsByCleanerId.set(cleaner.id, currentGroup);
-  });
-
-  return [...groupsByCleanerId.values()].sort((firstGroup, secondGroup) =>
-    (firstGroup.cleaner.name || "").localeCompare(secondGroup.cleaner.name || ""),
-  );
-}
 
 function createEmptyPropertyForm(preselectedClient = null) {
   return {
@@ -374,10 +339,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [clients, setClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [hasClientsError, setHasClientsError] = useState(false);
-  const [payoutGroups, setPayoutGroups] = useState([]);
-  const [recentPayouts, setRecentPayouts] = useState([]);
-  const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
-  const [hasPayoutsError, setHasPayoutsError] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [hasDashboardError, setHasDashboardError] = useState(false);
@@ -388,14 +349,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
-  const [selectedPayoutGroup, setSelectedPayoutGroup] = useState(null);
-  const [paidPayoutSummary, setPaidPayoutSummary] = useState(null);
   const jobWorklist = useJobsWorklist({ view });
   const jobDetail = useJobDetailController({
     view,
     onJobUpdated: jobWorklist.replaceJob,
   });
   const cleanersController = useCleanersController({ view });
+  const payoutsController = usePayoutsController({ view });
   const {
     jobs,
     isLoading: isLoadingJobs,
@@ -456,6 +416,27 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       saveCleaner,
     },
   } = cleanersController;
+  const {
+    directory: {
+      payoutGroups,
+      recentPayouts,
+      isLoading: isLoadingPayouts,
+      hasError: hasPayoutsError,
+      refresh: refreshPayouts,
+    },
+    review: {
+      selectedGroup: selectedPayoutGroup,
+      paidSummary: paidPayoutSummary,
+      resetPayoutView,
+      openReview,
+      recordPayout,
+      recordPayoutComplete,
+    },
+    proof: {
+      attachProof,
+      getProofUrl,
+    },
+  } = payoutsController;
 
   useEffect(() => {
     let isCurrent = true;
@@ -502,31 +483,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   useEffect(() => {
     if (view === "dashboard") {
       refreshDashboard();
-    }
-  }, [view]);
-
-  async function refreshPayouts() {
-    setIsLoadingPayouts(true);
-    setHasPayoutsError(false);
-
-    try {
-      const [unpaidJobs, loadedCleaners, loadedRecentPayouts] = await Promise.all([
-        getUnpaidCompletedJobs(),
-        getAllCleaners(),
-        getRecentPayouts(),
-      ]);
-      setPayoutGroups(groupUnpaidJobsByCleaner(unpaidJobs, loadedCleaners));
-      setRecentPayouts(loadedRecentPayouts);
-    } catch {
-      setHasPayoutsError(true);
-    } finally {
-      setIsLoadingPayouts(false);
-    }
-  }
-
-  useEffect(() => {
-    if (view === "payout-list") {
-      refreshPayouts();
     }
   }, [view]);
 
@@ -628,28 +584,18 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setSelectedProperty(null);
     closeJobDetail();
     clearCleaner();
-    setSelectedPayoutGroup(null);
-    setPaidPayoutSummary(null);
+    resetPayoutView();
     setView("payout-list");
   }
 
   function openPayoutReview(group) {
     setActiveSection("payouts");
-    setSelectedPayoutGroup(group);
-    setPaidPayoutSummary(null);
+    openReview(group);
     setView("payout-review");
   }
 
-  async function recordCleanerPayout(values) {
-    return recordPayout(values);
-  }
-
   function showRecordedPayout(payout) {
-    setSelectedPayoutGroup(null);
-    setPaidPayoutSummary({
-      amount: payout.amount,
-      jobCount: payout.jobIds.length,
-    });
+    recordPayoutComplete(payout);
     setView("payout-list");
   }
 
@@ -968,10 +914,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             paidSummary={paidPayoutSummary}
             onRefresh={refreshPayouts}
             onReview={openPayoutReview}
-            onUploadProof={(payoutId, file, onProgress) =>
-              uploadPayoutProof({ payoutId, file, onProgress })
-            }
-            onOpenProof={getPayoutProofUrl}
+            onUploadProof={attachProof}
+            onOpenProof={getProofUrl}
             formatPrice={(amount) => formatPrice(amount, translate, language)}
             formatCreatedAt={(date) => formatCreatedAt(date, language)}
           />
@@ -982,10 +926,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             cleaner={selectedPayoutGroup.cleaner}
             jobs={selectedPayoutGroup.jobs}
             onBack={showPayouts}
-            onRecord={recordCleanerPayout}
-            onUploadProof={(payoutId, file, onProgress) =>
-              uploadPayoutProof({ payoutId, file, onProgress })
-            }
+            onRecord={recordPayout}
+            onUploadProof={attachProof}
             onRecorded={showRecordedPayout}
             formatDate={(date) => formatDate(date, translate, language)}
             formatCreatedAt={(date) => formatCreatedAt(date, language)}
