@@ -1631,6 +1631,29 @@ button.summary-card {
   justify-self: end;
 }
 
+.proof-field {
+  display: grid;
+  gap: 8px;
+}
+
+.proof-field__label {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.proof-source-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .proof-source-picker__camera {
+    display: none;
+  }
+}
+
 .payout-proof-recovery {
   margin: 0;
   color: var(--color-warning-text);
@@ -1656,6 +1679,14 @@ button.summary-card {
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
+  border: 0;
+}
+
+/* Keep hidden file controls hidden when a form's general input styles apply. */
+.cleaning-form input.visually-hidden {
+  width: 1px;
+  height: 1px;
+  padding: 0;
   border: 0;
 }
 

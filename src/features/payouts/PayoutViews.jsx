@@ -14,6 +14,42 @@ function paymentMethodLabel(paymentMethod, translate) {
   }[paymentMethod] || translate("common.notProvided");
 }
 
+function PayoutProofSourcePicker({ disabled, onSelect }) {
+  const { translate } = useTranslation();
+
+  function handleSelection(event) {
+    onSelect(event);
+    // Allow choosing the same image again after a validation or upload retry.
+    event.target.value = "";
+  }
+
+  return (
+    <div className="proof-source-picker">
+      <label className="button proof-source-picker__camera">
+        <input
+          className="visually-hidden"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          disabled={disabled}
+          onChange={handleSelection}
+        />
+        📷 {translate("payouts.takePhoto")}
+      </label>
+      <label className="button">
+        <input
+          className="visually-hidden"
+          type="file"
+          accept="image/*"
+          disabled={disabled}
+          onChange={handleSelection}
+        />
+        🖼️ {translate("payouts.chooseImage")}
+      </label>
+    </div>
+  );
+}
+
 export function PayoutDirectory({
   payoutGroups,
   recentPayouts,
@@ -112,6 +148,7 @@ function PayoutHistoryItem({ payout, onUploadProof, onOpenProof, onRefresh, form
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
+  const [selectedFileName, setSelectedFileName] = useState("");
   const hasProof = Boolean(payout.proofStoragePath);
 
   function fileErrorMessage(errorCode) {
@@ -126,10 +163,12 @@ function PayoutHistoryItem({ payout, onUploadProof, onOpenProof, onRefresh, form
     const validationError = validatePayoutProofFile(file);
 
     if (validationError) {
+      setSelectedFileName("");
       setError(fileErrorMessage(validationError.code));
       return;
     }
 
+    setSelectedFileName(file.name || "");
     setIsUploading(true);
     setUploadProgress(0);
     setError("");
@@ -174,19 +213,11 @@ function PayoutHistoryItem({ payout, onUploadProof, onOpenProof, onRefresh, form
             </button>
           </>
         ) : (
-          <label className="button">
-            <input
-              className="visually-hidden"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              capture="environment"
-              disabled={isUploading}
-              onChange={selectProof}
-            />
-            {isUploading
-              ? translate("payouts.uploadingProof", { percent: uploadProgress })
-              : translate("payouts.attachProof")}
-          </label>
+          <PayoutProofSourcePicker disabled={isUploading} onSelect={selectProof} />
+        )}
+        {isUploading && <span>{translate("payouts.uploadingProof", { percent: uploadProgress })}</span>}
+        {!hasProof && selectedFileName && (
+          <span>{translate("payouts.proofSelected", { fileName: selectedFileName })}</span>
         )}
         {error && <p className="form-error" role="alert">{error}</p>}
       </div>
@@ -390,18 +421,15 @@ export function PayoutReview({
           />
         </label>
 
-        <label>
-          {translate("payouts.proof")}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-            capture="environment"
+        <div className="proof-field">
+          <span className="proof-field__label">{translate("payouts.proof")}</span>
+          <PayoutProofSourcePicker
             disabled={isSubmitting || Boolean(recordedPayout)}
-            onChange={selectProof}
+            onSelect={selectProof}
           />
           <span className="form-helper">{translate("payouts.proofHelper")}</span>
           {proofFile && <span className="form-helper">{translate("payouts.proofSelected", { fileName: proofFile.name })}</span>}
-        </label>
+        </div>
 
         {error && <p className="form-error" role="alert">{error}</p>}
         {proofError && <p className="form-error" role="alert">{proofError}</p>}
