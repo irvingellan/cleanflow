@@ -9,12 +9,20 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  startAfter,
   Timestamp,
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
+const jobWorklistLimit = 100;
+const activeOperationalStatuses = [
+  "UNASSIGNED",
+  "OFFERED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+];
 
 function jobsCollection() {
   return collection(db, "organizations", organizationId, "jobs");
@@ -31,8 +39,7 @@ function jobFromSnapshot(snapshot) {
   };
 }
 
-function currentLocalDate() {
-  const date = new Date();
+function currentLocalDate(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -43,6 +50,10 @@ function currentLocalDate() {
 function currentLocalDayStart() {
   const date = new Date();
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addLocalDays(date, days) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 function propertyIdsInGroups(propertyIds) {
@@ -78,42 +89,133 @@ function recentJobsFromSnapshots(snapshots) {
     .slice(0, 10);
 }
 
-export async function getJobs(filter = "all") {
-  const constraints = [];
+function activeStatusesForFilter(status) {
+  if (status === "needs-assignment") return ["UNASSIGNED", "OFFERED"];
+  if (status === "offered") return ["OFFERED"];
+  if (status === "assigned") return ["ASSIGNED"];
+  if (status === "in-progress") return ["IN_PROGRESS"];
+  return activeOperationalStatuses;
+}
 
-  if (filter === "today") {
-    constraints.push(where("scheduledDate", "==", currentLocalDate()));
+function scheduledDateConstraints(datePreset) {
+  const today = currentLocalDate();
+
+  if (datePreset === "today") {
+    return [where("scheduledDate", "==", today)];
   }
 
-  if (filter === "needs-assignment") {
-    constraints.push(where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]));
+  if (datePreset === "next-7-days") {
+    return [
+      where("scheduledDate", ">=", today),
+      where("scheduledDate", "<=", currentLocalDate(addLocalDays(new Date(), 7))),
+    ];
   }
 
-  if (filter === "in-progress") {
-    constraints.push(where("operationalStatus", "==", "IN_PROGRESS"));
+  if (datePreset === "past-7-days" || datePreset === "past-30-days") {
+    const days = datePreset === "past-7-days" ? 7 : 30;
+    return [
+      where("scheduledDate", ">=", currentLocalDate(addLocalDays(new Date(), -days))),
+      where("scheduledDate", "<", today),
+    ];
   }
 
-  if (filter === "completed-today") {
-    const dayStart = currentLocalDayStart();
-    const nextDayStart = new Date(
-      dayStart.getFullYear(),
-      dayStart.getMonth(),
-      dayStart.getDate() + 1,
-    );
+  return [];
+}
 
-    constraints.push(
-      where("operationalStatus", "==", "COMPLETED"),
+function completedAtConstraints(datePreset) {
+  const dayStart = currentLocalDayStart();
+
+  if (datePreset === "today") {
+    return [
       where("completedAt", ">=", Timestamp.fromDate(dayStart)),
-      where("completedAt", "<", Timestamp.fromDate(nextDayStart)),
-      orderBy("completedAt", "desc"),
-    );
+      where("completedAt", "<", Timestamp.fromDate(addLocalDays(dayStart, 1))),
+    ];
   }
 
-  const snapshot = await getDocs(
-    constraints.length > 0 ? query(jobsCollection(), ...constraints) : jobsCollection(),
-  );
+  if (datePreset === "next-7-days") {
+    return [
+      where("completedAt", ">=", Timestamp.fromDate(addLocalDays(dayStart, 1))),
+      where("completedAt", "<", Timestamp.fromDate(addLocalDays(dayStart, 8))),
+    ];
+  }
 
-  return snapshot.docs.map(jobFromSnapshot);
+  if (datePreset === "past-7-days" || datePreset === "past-30-days") {
+    const days = datePreset === "past-7-days" ? 7 : 30;
+    return [
+      where("completedAt", ">=", Timestamp.fromDate(addLocalDays(dayStart, -days))),
+      where("completedAt", "<", Timestamp.fromDate(dayStart)),
+    ];
+  }
+
+  return [];
+}
+
+function pagedJobQuery(constraints, cursor) {
+  return query(
+    jobsCollection(),
+    ...constraints,
+    ...(cursor ? [startAfter(cursor)] : []),
+    limit(jobWorklistLimit + 1),
+  );
+}
+
+function pageFromSnapshot(snapshot) {
+  const documents = snapshot.docs.slice(0, jobWorklistLimit);
+
+  return {
+    jobs: documents.map(jobFromSnapshot),
+    cursor: documents.at(-1) || null,
+    hasMore: snapshot.docs.length > jobWorklistLimit,
+  };
+}
+
+export async function getJobs(
+  { status = "all", datePreset = "any" } = {},
+  {
+    activeCursor = null,
+    completedCursor = null,
+    activeExhausted = false,
+    completedExhausted = false,
+  } = {},
+) {
+  const shouldLoadCompleted = status === "all" || status === "completed";
+  const shouldLoadActive = status !== "completed";
+  const activeStatuses = activeStatusesForFilter(status);
+  const activeQuery = shouldLoadActive && !activeExhausted
+    ? getDocs(pagedJobQuery([
+        where("operationalStatus", "in", activeStatuses),
+        ...scheduledDateConstraints(datePreset),
+        orderBy("scheduledDate", "asc"),
+      ], activeCursor))
+    : Promise.resolve(null);
+  // Completed work is filtered and ordered by when it actually completed; active work uses
+  // its scheduled date so upcoming and overdue operations remain visible in schedule order.
+  const completedQuery = shouldLoadCompleted && !completedExhausted
+    ? getDocs(pagedJobQuery([
+        where("operationalStatus", "==", "COMPLETED"),
+        ...completedAtConstraints(datePreset),
+        orderBy("completedAt", "desc"),
+      ], completedCursor))
+    : Promise.resolve(null);
+  const [activeSnapshot, completedSnapshot] = await Promise.all([activeQuery, completedQuery]);
+  const activePage = activeSnapshot ? pageFromSnapshot(activeSnapshot) : null;
+  const completedPage = completedSnapshot ? pageFromSnapshot(completedSnapshot) : null;
+
+  // Cleaner/property/search controls refine these bounded, status/date-indexed candidates.
+  // Combining every optional filter in Firestore would require an unsustainable index matrix.
+  return {
+    jobs: uniqueJobs([
+      ...(activePage?.jobs || []),
+      ...(completedPage?.jobs || []),
+    ]),
+    nextPageCursors: {
+      activeCursor: activePage?.hasMore ? activePage.cursor : null,
+      completedCursor: completedPage?.hasMore ? completedPage.cursor : null,
+      activeExhausted: !shouldLoadActive || !activePage?.hasMore,
+      completedExhausted: !shouldLoadCompleted || !completedPage?.hasMore,
+    },
+    hasMore: Boolean(activePage?.hasMore || completedPage?.hasMore),
+  };
 }
 
 export async function getPropertyJobHistory(propertyId) {

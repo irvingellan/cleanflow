@@ -1077,6 +1077,94 @@ button.summary-card {
   font-weight: 700;
 }
 
+.job-filters {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.job-filters__advanced label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.job-filters__search input {
+  width: min(100%, 480px);
+}
+
+.job-filters__quick-actions,
+.job-filters__utility-actions,
+.job-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-filters__quick-actions {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-filter-chip,
+.job-filters__advanced-toggle,
+.job-filters__clear {
+  min-height: 38px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 8px 11px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.job-filter-chip:hover,
+.job-filters__advanced-toggle:hover {
+  border-color: var(--color-brand);
+}
+
+.job-filter-chip--active,
+.job-filters__advanced-toggle--active {
+  border-color: var(--color-brand);
+  color: var(--color-on-brand);
+  background: var(--color-brand);
+}
+
+.job-filters__clear {
+  border-color: transparent;
+  padding-inline: 4px;
+  color: var(--color-brand-text);
+  background: transparent;
+}
+
+.job-filter-chip:focus-visible,
+.job-filters__advanced-toggle:focus-visible,
+.job-filters__clear:focus-visible {
+  outline: 3px solid var(--focus-ring-strong);
+  outline-offset: 2px;
+}
+
+.job-filters__advanced {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface-subtle);
+}
+
+.job-list__load-more {
+  display: block;
+  margin: 16px auto 0;
+}
+
 .directory-heading {
   display: flex;
   align-items: flex-start;
@@ -1988,6 +2076,24 @@ button.summary-card {
 
   .pwa-update-prompt span {
     min-width: 0;
+  }
+
+  .job-filters__search input {
+    width: 100%;
+  }
+
+  .job-filters__quick-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .job-filters__utility-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .job-filters__advanced {
+    grid-template-columns: 1fr;
   }
 
   .property-card {
