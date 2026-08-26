@@ -1983,6 +1983,9 @@ function Dashboard({
             <div>
               <p className="eyebrow">{translate("dashboard.priorities")}</p>
               <h3 id="attention-title">{translate("dashboard.needsAttention")}</h3>
+              <p className="dashboard-panel__subtitle">
+                {translate("dashboard.needsAttentionDescription")}
+              </p>
             </div>
             {hasMoreAttention && (
               <button className="button button--small" type="button" onClick={onShowJobs}>

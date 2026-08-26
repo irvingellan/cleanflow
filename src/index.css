@@ -883,6 +883,7 @@ button.summary-card {
 .dashboard-panel__subtitle {
   margin-top: 6px;
   font-size: 0.875rem;
+  line-height: 1.4;
 }
 
 .attention-list,
