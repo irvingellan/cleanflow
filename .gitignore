@@ -8,6 +8,7 @@ dist/
 .env
 .env.*
 *.local
+!.env.e2e
 
 # Package manager logs
 npm-debug.log*
@@ -24,6 +25,9 @@ ui-debug.log*
 
 # Test output and tool caches
 coverage/
+playwright-report/
+test-results/
+blob-report/
 .vite/
 .cache/
 .eslintcache

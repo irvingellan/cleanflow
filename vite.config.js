@@ -174,10 +174,13 @@ export default defineConfig(({ mode }) => {
     define: {
       __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.buildId),
     },
-    plugins: mode === "test" ? [react()] : [react(), cleanflowServiceWorkers(buildInfo)],
+    plugins: ["test", "e2e"].includes(mode)
+      ? [react()]
+      : [react(), cleanflowServiceWorkers(buildInfo)],
     test: {
       environment: "jsdom",
       setupFiles: "./src/test/setup.js",
+      include: ["src/**/*.test.{js,jsx}"],
     },
   }
 })

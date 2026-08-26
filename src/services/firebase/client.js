@@ -5,7 +5,7 @@ import { getStorage } from "firebase/storage";
 import { createFirebaseConfig } from "./config.js";
 
 export const useFirebaseEmulators =
-  import.meta.env.MODE === "emulator" &&
+  ["emulator", "e2e"].includes(import.meta.env.MODE) &&
   import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true";
 
 const firebaseConfig = createFirebaseConfig({
