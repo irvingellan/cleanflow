@@ -27,7 +27,6 @@ import {
 import { useCleanersController } from "./features/cleaners/useCleanersController.js";
 import {
   createClient,
-  getActiveClients,
   getClients,
 } from "./features/clients/clientService.js";
 import { getOperationalDashboard } from "./features/dashboard/dashboardService.js";
@@ -37,7 +36,6 @@ import {
 } from "./features/issues/issuePresentation.js";
 import {
   getClientJobHistory,
-  getPropertyJobHistory,
 } from "./features/jobs/jobService.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
 import { CleaningSuccess, CreateCleaningForm } from "./features/jobs/JobForm.jsx";
@@ -71,36 +69,19 @@ import {
   formatStatus,
   hasValue,
 } from "./lib/presentation.js";
+import { PropertyDetail } from "./features/properties/PropertyDetail.jsx";
+import { PropertyDirectory } from "./features/properties/PropertyDirectory.jsx";
 import {
-  createProperty,
-  getProperties,
-  getPropertiesForClient,
-  linkPropertyToClient,
-} from "./features/properties/propertyService.js";
+  PropertyClientLinkForm,
+  PropertyForm,
+} from "./features/properties/PropertyForm.jsx";
+import { getPropertiesForClient } from "./features/properties/propertyService.js";
+import { usePropertiesController } from "./features/properties/usePropertiesController.js";
 
 const content = {
   productName: "CleanFlow",
   unnamedProperty: "Unnamed property",
 };
-
-function createEmptyPropertyForm(preselectedClient = null) {
-  return {
-    name: "",
-    clientName: preselectedClient?.name || "",
-    defaultClientPrice: "",
-    defaultCleanerPrice: "",
-    active: true,
-  };
-}
-
-function optionalPrice(value) {
-  if (value.trim() === "") {
-    return undefined;
-  }
-
-  const price = Number(value);
-  return Number.isFinite(price) && price >= 0 ? price : null;
-}
 
 function publicOfferTokenFromPathname(pathname = window.location.pathname) {
   const pathSegments = pathname.split("/").filter(Boolean);
@@ -333,9 +314,6 @@ function PublicOfferPage({ token }) {
 
 function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
-  const [properties, setProperties] = useState([]);
-  const [isLoadingProperties, setIsLoadingProperties] = useState(true);
-  const [hasPropertyError, setHasPropertyError] = useState(false);
   const [clients, setClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [hasClientsError, setHasClientsError] = useState(false);
@@ -346,7 +324,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [view, setView] = useState("dashboard");
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
-  const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
   const jobWorklist = useJobsWorklist({ view });
@@ -356,6 +333,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   });
   const cleanersController = useCleanersController({ view });
   const payoutsController = usePayoutsController({ view });
+  const propertiesController = usePropertiesController();
   const {
     jobs,
     isLoading: isLoadingJobs,
@@ -437,34 +415,20 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       getProofUrl,
     },
   } = payoutsController;
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    async function loadProperties() {
-      try {
-        const loadedProperties = await getProperties();
-
-        if (isCurrent) {
-          setProperties(loadedProperties);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasPropertyError(true);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoadingProperties(false);
-        }
-      }
-    }
-
-    loadProperties();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, []);
+  const {
+    directory: {
+      properties,
+      isLoading: isLoadingProperties,
+      hasError: hasPropertyError,
+    },
+    selection: {
+      selectedProperty,
+      clearProperty,
+      openProperty: selectProperty,
+    },
+    saveProperty,
+    linkClient,
+  } = propertiesController;
 
   async function refreshDashboard() {
     setIsLoadingDashboard(true);
@@ -523,7 +487,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function showProperties() {
     setActiveSection("properties");
     setPropertyDetailOrigin("properties");
-    setSelectedProperty(null);
+    clearProperty();
     setSelectedClient(null);
     closeJobDetail();
     setCreatedJob(null);
@@ -533,7 +497,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   function showNewProperty() {
     setPropertyDetailOrigin("properties");
-    setSelectedProperty(null);
+    clearProperty();
     setSelectedClient(null);
     setView("property-create");
   }
@@ -544,14 +508,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   function showDashboard() {
     setActiveSection("dashboard");
-    setSelectedProperty(null);
+    clearProperty();
     closeJobDetail();
     setView("dashboard");
   }
 
   function showJobList(filters = createJobListFilters()) {
     setActiveSection("jobs");
-    setSelectedProperty(null);
+    clearProperty();
     closeJobDetail();
     clearOffersSentCount();
     resetJobPagination();
@@ -573,7 +537,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   function showCleaners() {
     setActiveSection("cleaners");
-    setSelectedProperty(null);
+    clearProperty();
     closeJobDetail();
     clearCleaner();
     setView("cleaner-list");
@@ -581,7 +545,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   function showPayouts() {
     setActiveSection("payouts");
-    setSelectedProperty(null);
+    clearProperty();
     closeJobDetail();
     clearCleaner();
     resetPayoutView();
@@ -601,7 +565,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   function showClients() {
     setActiveSection("clients");
-    setSelectedProperty(null);
+    clearProperty();
     setSelectedClient(null);
     closeJobDetail();
     clearCleaner();
@@ -636,7 +600,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   function openClient(client) {
     setActiveSection("clients");
-    setSelectedProperty(null);
+    clearProperty();
     setSelectedClient(client);
     setView("client-detail");
   }
@@ -645,14 +609,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setActiveSection("properties");
     setPropertyDetailOrigin("properties");
     setSelectedClient(null);
-    setSelectedProperty(property);
+    selectProperty(property);
     setView("property-detail");
   }
 
   function openClientProperty(property) {
     setActiveSection("clients");
     setPropertyDetailOrigin("client");
-    setSelectedProperty(property);
+    selectProperty(property);
     setView("property-detail");
   }
 
@@ -676,13 +640,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function returnToClientDetail() {
-    setSelectedProperty(null);
+    clearProperty();
     setView("client-detail");
   }
 
   function showNewPropertyForClient() {
     setPropertyDetailOrigin("client");
-    setSelectedProperty(null);
+    clearProperty();
     setView("property-create");
   }
 
@@ -797,7 +761,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "property-list" && (
-          <PropertyList
+          <PropertyDirectory
             properties={properties}
             isLoading={isLoadingProperties}
             hasError={hasPropertyError}
@@ -807,7 +771,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "property-create" && (
-          <PropertyCreateForm
+          <PropertyForm
             properties={properties}
             preselectedClient={
               propertyDetailOrigin === "client" ? selectedClient : null
@@ -815,13 +779,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onBack={
               propertyDetailOrigin === "client" ? returnToClientDetail : showProperties
             }
-            onSaved={(property) => {
-              setProperties((currentProperties) => [...currentProperties, property]);
+            onSaved={async (values) => {
+              const property = await saveProperty(values);
               if (propertyDetailOrigin === "client") {
-                setSelectedProperty(null);
+                clearProperty();
                 setView("client-detail");
               } else {
-                setSelectedProperty(property);
+                selectProperty(property);
                 setView("property-detail");
               }
             }}
@@ -844,14 +808,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
           <PropertyClientLinkForm
             property={selectedProperty}
             onBack={() => setView("property-detail")}
-            onLinked={(propertyUpdate) => {
-              const linkedProperty = { ...selectedProperty, ...propertyUpdate };
-              setSelectedProperty(linkedProperty);
-              setProperties((currentProperties) =>
-                currentProperties.map((property) =>
-                  property.id === linkedProperty.id ? linkedProperty : property,
-                ),
-              );
+            onLinked={async (client) => {
+              await linkClient(selectedProperty, client);
               setView("property-detail");
             }}
           />
@@ -1863,60 +1821,6 @@ function selectPriorityAttentionItems(priorityGroups, maximumItems) {
   return visibleItems;
 }
 
-function PropertyList({ properties, isLoading, hasError, onSelect, onCreate }) {
-  const { translate } = useTranslation();
-  if (isLoading) {
-    return <StateCard message={translate("properties.loading")} status="status" />;
-  }
-
-  if (hasError) {
-    return <StateCard message={translate("properties.error")} status="alert" isError />;
-  }
-
-  return (
-    <section aria-labelledby="properties-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.properties")}</p>
-          <h2 id="properties-title" className="list-title">
-            {translate("properties.title")}
-          </h2>
-        </div>
-        <button className="button button--primary" type="button" onClick={onCreate}>
-          {translate("properties.new")}
-        </button>
-      </div>
-
-      {properties.length === 0 ? (
-        <StateCard message={translate("properties.empty")} />
-      ) : (
-        <div className="property-list">
-          {properties.map((property) => {
-            const propertyName = property.name || translate("properties.unnamed");
-
-            return (
-              <button
-                key={property.id}
-                className="property-card"
-                type="button"
-                aria-label={translate("properties.view", { property: propertyName })}
-                onClick={() => onSelect(property)}
-              >
-                <span className="property-card__title">{propertyName}</span>
-
-                <span className="property-card__label">
-                  <span className="status-dot" aria-hidden="true" />
-                  {translate("common.property")}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect }) {
   const { translate } = useTranslation();
 
@@ -2291,445 +2195,6 @@ function ClientCreateForm({ onBack, onSaved }) {
         </div>
       </form>
     </section>
-  );
-}
-
-function PropertyCreateForm({ properties, preselectedClient, onBack, onSaved }) {
-  const { translate } = useTranslation();
-  const [formValues, setFormValues] = useState(() =>
-    createEmptyPropertyForm(preselectedClient),
-  );
-  const [isSaving, setIsSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-  const clientNames = [...new Set(
-    properties.map((property) => property.clientName).filter(Boolean),
-  )].sort((firstClient, secondClient) => firstClient.localeCompare(secondClient));
-
-  function updateField(event) {
-    const { name, value, checked, type } = event.target;
-
-    setFormValues((currentValues) => ({
-      ...currentValues,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  }
-
-  async function saveProperty(event) {
-    event.preventDefault();
-    const name = formValues.name.trim();
-    const clientName = formValues.clientName.trim();
-    const defaultClientPrice = optionalPrice(formValues.defaultClientPrice);
-    const defaultCleanerPrice = optionalPrice(formValues.defaultCleanerPrice);
-
-    if (!name) {
-      setFormError(translate("properties.nameRequired"));
-      return;
-    }
-
-    if (!clientName) {
-      setFormError(translate("properties.clientRequired"));
-      return;
-    }
-
-    if (defaultClientPrice === null || defaultCleanerPrice === null) {
-      setFormError(translate("properties.priceInvalid"));
-      return;
-    }
-
-    setIsSaving(true);
-    setFormError("");
-
-    try {
-      const property = await createProperty({
-        name,
-        clientId: preselectedClient?.id,
-        clientName,
-        defaultClientPrice,
-        defaultCleanerPrice,
-        active: formValues.active,
-      });
-
-      onSaved(property);
-    } catch {
-      setFormError(translate("properties.createError"));
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <section className="panel" aria-labelledby="property-create-title">
-      <BackButton onClick={onBack} />
-      <p className="eyebrow">{translate("navigation.properties")}</p>
-      <h2 id="property-create-title" className="panel__title">
-        {translate("properties.createTitle")}
-      </h2>
-
-      <form className="cleaning-form" noValidate onSubmit={saveProperty}>
-        <label>
-          {translate("properties.name")}
-          <input name="name" value={formValues.name} onChange={updateField} required />
-        </label>
-
-        {preselectedClient ? (
-          <label>
-            {translate("properties.currentClient")}
-            <input value={preselectedClient.name || ""} readOnly />
-          </label>
-        ) : (
-          <label>
-            {translate("common.client")}
-            <select
-              name="clientName"
-              value={formValues.clientName}
-              onChange={updateField}
-              required
-            >
-              <option value="">{translate("properties.selectClient")}</option>
-              {clientNames.map((clientName) => (
-                <option key={clientName} value={clientName}>{clientName}</option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <label>
-          {translate("properties.defaultClientPrice")}
-          <input
-            type="number"
-            name="defaultClientPrice"
-            value={formValues.defaultClientPrice}
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            onChange={updateField}
-          />
-        </label>
-
-        <label>
-          {translate("properties.defaultCleanerPrice")}
-          <input
-            type="number"
-            name="defaultCleanerPrice"
-            value={formValues.defaultCleanerPrice}
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            onChange={updateField}
-          />
-        </label>
-
-        <label className="cleaner-active-field">
-          <input
-            type="checkbox"
-            name="active"
-            checked={formValues.active}
-            onChange={updateField}
-          />
-          {translate("common.active")}
-        </label>
-
-        {formError && (
-          <p className="form-error" role="alert">
-            {formError}
-          </p>
-        )}
-
-        <div className="button-row">
-          <button className="button button--primary" type="submit" disabled={isSaving}>
-            {isSaving ? translate("properties.creating") : translate("properties.save")}
-          </button>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-function PropertyClientLinkForm({ property, onBack, onLinked }) {
-  const { translate } = useTranslation();
-  const [clients, setClients] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasLoadError, setHasLoadError] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-  const currentClientName = property.clientName || translate("common.notProvided");
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    async function loadActiveClients() {
-      setIsLoading(true);
-      setHasLoadError(false);
-
-      try {
-        const loadedClients = await getActiveClients();
-
-        if (isCurrent) {
-          setClients(loadedClients);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasLoadError(true);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadActiveClients();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [property.id]);
-
-  const sortedClients = [...clients].sort((firstClient, secondClient) =>
-    (firstClient.name || "").localeCompare(secondClient.name || ""),
-  );
-
-  async function saveLink(event) {
-    event.preventDefault();
-    const selectedClient = clients.find((client) => client.id === selectedClientId);
-
-    if (!selectedClient) {
-      setFormError(translate("properties.clientRequired"));
-      return;
-    }
-
-    setIsSaving(true);
-    setFormError("");
-
-    try {
-      const propertyUpdate = await linkPropertyToClient(property.id, selectedClient);
-      onLinked(propertyUpdate);
-    } catch {
-      setFormError(translate("properties.linkClientError"));
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <section className="panel" aria-labelledby="property-link-client-title">
-      <BackButton onClick={onBack} />
-      <p className="eyebrow">{translate("properties.details")}</p>
-      <h2 id="property-link-client-title" className="panel__title">
-        {translate("properties.linkClient")}
-      </h2>
-
-      <dl className="detail-list">
-        <DetailItem label={translate("common.property")} value={property.name || translate("properties.unnamed")} />
-        <DetailItem label={translate("properties.currentClient")} value={currentClientName} />
-      </dl>
-
-      {isLoading && <StateCard message={translate("properties.loadingClients")} status="status" />}
-
-      {hasLoadError && (
-        <StateCard message={translate("properties.clientsError")} status="alert" isError />
-      )}
-
-      {!isLoading && !hasLoadError && (
-        <form className="cleaning-form" noValidate onSubmit={saveLink}>
-          {sortedClients.length === 0 ? (
-            <StateCard message={translate("properties.noActiveClients")} />
-          ) : (
-            <label>
-              {translate("properties.selectClient")}
-              <select
-                value={selectedClientId}
-                onChange={(event) => setSelectedClientId(event.target.value)}
-                required
-              >
-                <option value="">{translate("properties.selectClient")}</option>
-                {sortedClients.map((client) => (
-                  <option key={client.id} value={client.id}>{client.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {formError && (
-            <p className="form-error" role="alert">
-              {formError}
-            </p>
-          )}
-
-          {sortedClients.length > 0 && (
-            <div className="button-row">
-              <button className="button button--primary" type="submit" disabled={isSaving}>
-                {isSaving ? translate("properties.linkingClient") : translate("properties.confirmClientLink")}
-              </button>
-            </div>
-          )}
-        </form>
-      )}
-    </section>
-  );
-}
-
-function PropertyDetail({ property, onBack, onCreateCleaning, onOpenJob, onLinkClient }) {
-  const { language, translate } = useTranslation();
-  const propertyName = property.name || translate("properties.unnamed");
-  const clientName = property.clientName || translate("common.notProvided");
-  let activeStatus = translate("common.notProvided");
-
-  if (property.active === true) {
-    activeStatus = translate("common.active");
-  }
-
-  if (property.active === false) {
-    activeStatus = translate("common.inactive");
-  }
-
-  return (
-    <section className="panel" aria-labelledby="property-detail-title">
-      <BackButton onClick={onBack} />
-
-      <p className="eyebrow">{translate("properties.details")}</p>
-      <h2 id="property-detail-title" className="panel__title">
-        {propertyName}
-      </h2>
-
-      <dl className="detail-list">
-        <DetailItem label={translate("common.client")} value={clientName} />
-        {property.defaultClientPrice !== undefined && (
-          <DetailItem
-            label={translate("properties.defaultClientPrice")}
-            value={formatPrice(property.defaultClientPrice, translate, language)}
-          />
-        )}
-        {property.defaultCleanerPrice !== undefined && (
-          <DetailItem
-            label={translate("properties.defaultCleanerPrice")}
-            value={formatPrice(property.defaultCleanerPrice, translate, language)}
-          />
-        )}
-        <DetailItem label={translate("common.status")} value={activeStatus} />
-      </dl>
-
-      <div className="button-row">
-        {!property.clientId && (
-          <button className="button" type="button" onClick={onLinkClient}>
-            {translate("properties.linkClient")}
-          </button>
-        )}
-        <button
-          className="button button--primary"
-          type="button"
-          onClick={onCreateCleaning}
-        >
-          {translate("properties.createCleaning")}
-        </button>
-      </div>
-
-      <PropertyOperationalHistory propertyId={property.id} onOpenJob={onOpenJob} />
-    </section>
-  );
-}
-
-function PropertyOperationalHistory({ propertyId, onOpenJob }) {
-  const { language, translate } = useTranslation();
-  const [history, setHistory] = useState(null);
-  const [hasHistoryError, setHasHistoryError] = useState(false);
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    async function loadHistory() {
-      setHistory(null);
-      setHasHistoryError(false);
-
-      try {
-        const loadedHistory = await getPropertyJobHistory(propertyId);
-
-        if (isCurrent) {
-          setHistory(loadedHistory);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasHistoryError(true);
-        }
-      }
-    }
-
-    loadHistory();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [propertyId]);
-
-  return (
-    <div className="property-history">
-      <section className="property-history-section" aria-labelledby="property-upcoming-job-title">
-        <h3 id="property-upcoming-job-title">{translate("properties.upcomingService")}</h3>
-
-        {!history && !hasHistoryError && (
-          <p className="property-history-state">{translate("properties.historyLoading")}</p>
-        )}
-
-        {hasHistoryError && (
-          <p className="property-history-state property-history-state--error" role="alert">
-            {translate("properties.historyError")}
-          </p>
-        )}
-
-        {history && !history.upcomingJob && (
-          <p className="property-history-state">{translate("properties.noUpcomingService")}</p>
-        )}
-
-        {history?.upcomingJob && (
-          <PropertyHistoryJob job={history.upcomingJob} onOpen={onOpenJob} />
-        )}
-      </section>
-
-      <section className="property-history-section" aria-labelledby="property-cleaning-history-title">
-        <h3 id="property-cleaning-history-title">{translate("properties.cleaningHistory")}</h3>
-
-        {history && history.recentJobs.length === 0 && (
-          <p className="property-history-state">{translate("properties.noCleaningHistory")}</p>
-        )}
-
-        {history && history.recentJobs.length > 0 && (
-          <div className="property-history-list">
-            {history.recentJobs.map((job) => (
-              <PropertyHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function PropertyHistoryJob({ job, onOpen }) {
-  const { language, translate } = useTranslation();
-  const scheduledService = [
-    formatDate(job.scheduledDate, translate, language),
-    job.scheduledStart,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <article className="property-history-job">
-      <div className="property-history-job__summary">
-        <strong>{scheduledService}</strong>
-        <span>{job.assignedCleanerName || translate("dashboard.notAssigned")}</span>
-      </div>
-      <span className="status-badge">
-        {formatOperationalStatus(job.operationalStatus, translate)}
-      </span>
-      {hasValue(job.cleanerPayout) && (
-        <span className="property-history-job__payout">
-          {translate("jobs.cleanerPayout")}: {formatPrice(job.cleanerPayout, translate, language)}
-        </span>
-      )}
-      <button className="button" type="button" onClick={() => onOpen(job)}>
-        {translate("jobs.viewJob")}
-      </button>
-    </article>
   );
 }
 
