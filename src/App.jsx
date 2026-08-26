@@ -4,6 +4,7 @@ import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
 import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
 import { PwaUpdatePrompt } from "./features/pwa/PwaUpdatePrompt.jsx";
 import { PayoutDirectory, PayoutReview } from "./features/payouts/PayoutViews.jsx";
+import { WhatsNewPanel } from "./features/releases/WhatsNewPanel.jsx";
 import {
   getRecentPayouts,
   getUnpaidCompletedJobs,
@@ -1304,6 +1305,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <ThemeToggle />
                 <NotificationControl />
                 <FeedbackPanel screen={view} />
+                <WhatsNewPanel />
                 <button
                   className="header-sign-out"
                   type="button"
