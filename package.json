@@ -8,6 +8,8 @@
     "build": "vite build",
     "build:emulators": "VITE_USE_FIREBASE_EMULATORS=true vite build --mode emulator",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "seed:properties": "node scripts/seedProperties.js",
     "seed:cleaners": "node scripts/seedCleaners.js",
     "seed:dashboard": "node scripts/seedDashboard.js",
@@ -19,7 +21,12 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.6",
     "@vitejs/plugin-react": "^6.1.0",
-    "vite": "^8.2.2"
+    "jsdom": "^28.1.0",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   }
 }

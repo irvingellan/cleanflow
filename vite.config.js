@@ -164,7 +164,7 @@ const packageMetadata = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
 )
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
   const buildInfo = {
     version: `v${packageMetadata.version}`,
     buildId: process.env.GITHUB_SHA || `${packageMetadata.version}-${new Date().toISOString()}`,
@@ -174,6 +174,10 @@ export default defineConfig(() => {
     define: {
       __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.buildId),
     },
-    plugins: [react(), cleanflowServiceWorkers(buildInfo)],
+    plugins: mode === "test" ? [react()] : [react(), cleanflowServiceWorkers(buildInfo)],
+    test: {
+      environment: "jsdom",
+      setupFiles: "./src/test/setup.js",
+    },
   }
 })

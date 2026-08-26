@@ -41,7 +41,7 @@ function jobCompletedAtSortValue(job) {
   return Number.isNaN(scheduledAt) ? 0 : scheduledAt;
 }
 
-function sortJobWorklist(firstJob, secondJob) {
+export function sortJobWorklist(firstJob, secondJob) {
   const firstIsCompleted = firstJob.operationalStatus === "COMPLETED";
   const secondIsCompleted = secondJob.operationalStatus === "COMPLETED";
 
