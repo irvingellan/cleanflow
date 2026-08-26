@@ -25,14 +25,15 @@ import {
   signOutManager,
   subscribeToAuthState,
 } from "./features/auth/authService.js";
-import {
-  createCleaner,
-  getAllCleaners,
-  supportedCleanerTeamTypes,
-  supportedPaymentMethods,
-  updateCleaner,
-} from "./features/cleaners/cleanerService.js";
+import { getAllCleaners } from "./features/cleaners/cleanerService.js";
 import { currentCleanerName } from "./features/cleaners/cleanerIdentity.js";
+import { CleanerDetail } from "./features/cleaners/CleanerDetail.jsx";
+import { CleanerDirectory } from "./features/cleaners/CleanerDirectory.jsx";
+import {
+  CleanerProfileForm,
+  CleanerProfileSuccess,
+} from "./features/cleaners/CleanerProfileForm.jsx";
+import { useCleanersController } from "./features/cleaners/useCleanersController.js";
 import {
   createClient,
   getActiveClients,
@@ -44,7 +45,6 @@ import {
   issueIconName,
 } from "./features/issues/issuePresentation.js";
 import {
-  getCleanerJobHistory,
   getClientJobHistory,
   getPropertyJobHistory,
 } from "./features/jobs/jobService.js";
@@ -91,70 +91,6 @@ const content = {
   productName: "CleanFlow",
   unnamedProperty: "Unnamed property",
 };
-
-const supportedCleanerLanguages = ["en", "pt", "es"];
-const cleanerProfileLimits = {
-  cityOrRegion: 120,
-  internalNotes: 1000,
-  paymentContact: 160,
-};
-
-function normalizedCleanerLanguage(language) {
-  return supportedCleanerLanguages.includes(language) ? language : "en";
-}
-
-function normalizedCleanerText(value) {
-  return value === undefined || value === null ? "" : String(value);
-}
-
-function normalizedCleanerProfileOption(value, supportedValues) {
-  return supportedValues.includes(value) ? value : "";
-}
-
-function normalizeCleanerPhone(phone) {
-  return phone.trim().replace(/[\s()-]/g, "");
-}
-
-function createEmptyCleanerForm(defaultPreferredLanguage) {
-  return {
-    name: "",
-    phone: "",
-    preferredLanguage: normalizedCleanerLanguage(defaultPreferredLanguage),
-    active: true,
-    cityOrRegion: "",
-    teamType: "",
-    internalNotes: "",
-    preferredPaymentMethod: "",
-    paymentContact: "",
-  };
-}
-
-function cleanerToForm(cleaner, defaultPreferredLanguage) {
-  if (!cleaner) {
-    return createEmptyCleanerForm(defaultPreferredLanguage);
-  }
-
-  return {
-    name: normalizedCleanerText(cleaner.name),
-    phone: normalizedCleanerText(cleaner.phone),
-    preferredLanguage: normalizedCleanerLanguage(
-      cleaner.preferredLanguage || defaultPreferredLanguage,
-    ),
-    active: typeof cleaner.active === "boolean" ? cleaner.active : true,
-    // Legacy profiles do not have these optional operational fields.
-    cityOrRegion: normalizedCleanerText(cleaner.cityOrRegion),
-    teamType: normalizedCleanerProfileOption(
-      cleaner.teamType,
-      supportedCleanerTeamTypes,
-    ),
-    internalNotes: normalizedCleanerText(cleaner.internalNotes),
-    preferredPaymentMethod: normalizedCleanerProfileOption(
-      cleaner.preferredPaymentMethod,
-      supportedPaymentMethods,
-    ),
-    paymentContact: normalizedCleanerText(cleaner.paymentContact),
-  };
-}
 
 function groupUnpaidJobsByCleaner(jobs, cleaners) {
   const cleanersById = Object.fromEntries(cleaners.map((cleaner) => [cleaner.id, cleaner]));
@@ -435,9 +371,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [properties, setProperties] = useState([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(true);
   const [hasPropertyError, setHasPropertyError] = useState(false);
-  const [directoryCleaners, setDirectoryCleaners] = useState([]);
-  const [isLoadingDirectoryCleaners, setIsLoadingDirectoryCleaners] = useState(false);
-  const [hasDirectoryCleanersError, setHasDirectoryCleanersError] = useState(false);
   const [clients, setClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [hasClientsError, setHasClientsError] = useState(false);
@@ -455,8 +388,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
-  const [selectedCleaner, setSelectedCleaner] = useState(null);
-  const [savedCleaner, setSavedCleaner] = useState(null);
   const [selectedPayoutGroup, setSelectedPayoutGroup] = useState(null);
   const [paidPayoutSummary, setPaidPayoutSummary] = useState(null);
   const jobWorklist = useJobsWorklist({ view });
@@ -464,6 +395,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     view,
     onJobUpdated: jobWorklist.replaceJob,
   });
+  const cleanersController = useCleanersController({ view });
   const {
     jobs,
     isLoading: isLoadingJobs,
@@ -509,6 +441,21 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     closeJob: closeJobDetail,
     prepareJobDetailRefresh,
   } = jobDetail;
+  const {
+    directory: {
+      cleaners: directoryCleaners,
+      isLoading: isLoadingDirectoryCleaners,
+      hasError: hasDirectoryCleanersError,
+    },
+    profile: {
+      selectedCleaner,
+      savedCleaner,
+      clearCleaner,
+      openCleaner: selectCleaner,
+      clearSavedCleaner,
+      saveCleaner,
+    },
+  } = cleanersController;
 
   useEffect(() => {
     let isCurrent = true;
@@ -581,40 +528,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     if (view === "payout-list") {
       refreshPayouts();
     }
-  }, [view]);
-
-  useEffect(() => {
-    if (view !== "cleaner-list") {
-      return undefined;
-    }
-
-    let isCurrent = true;
-    setIsLoadingDirectoryCleaners(true);
-    setHasDirectoryCleanersError(false);
-
-    async function loadDirectoryCleaners() {
-      try {
-        const loadedCleaners = await getAllCleaners();
-
-        if (isCurrent) {
-          setDirectoryCleaners(loadedCleaners);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasDirectoryCleanersError(true);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoadingDirectoryCleaners(false);
-        }
-      }
-    }
-
-    loadDirectoryCleaners();
-
-    return () => {
-      isCurrent = false;
-    };
   }, [view]);
 
   useEffect(() => {
@@ -706,8 +619,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setActiveSection("cleaners");
     setSelectedProperty(null);
     closeJobDetail();
-    setSelectedCleaner(null);
-    setSavedCleaner(null);
+    clearCleaner();
     setView("cleaner-list");
   }
 
@@ -715,7 +627,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setActiveSection("payouts");
     setSelectedProperty(null);
     closeJobDetail();
-    setSelectedCleaner(null);
+    clearCleaner();
     setSelectedPayoutGroup(null);
     setPaidPayoutSummary(null);
     setView("payout-list");
@@ -746,46 +658,28 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setSelectedProperty(null);
     setSelectedClient(null);
     closeJobDetail();
-    setSelectedCleaner(null);
-    setSavedCleaner(null);
+    clearCleaner();
     setView("client-list");
   }
 
   function openCleaner(cleaner) {
     setActiveSection("cleaners");
-    setSelectedCleaner(cleaner);
-    setSavedCleaner(null);
+    selectCleaner(cleaner);
     setView("cleaner-detail");
   }
 
   function showCleanerDetail() {
-    setSavedCleaner(null);
+    clearSavedCleaner();
     setView("cleaner-detail");
   }
 
   function showEditCleaner() {
-    setSavedCleaner(null);
+    clearSavedCleaner();
     setView("cleaner-edit");
   }
 
-  function handleCleanerUpdated(cleaner) {
-    const updatedCleaner = { ...selectedCleaner, ...cleaner };
-
-    setSelectedCleaner(updatedCleaner);
-    setDirectoryCleaners((currentCleaners) =>
-      currentCleaners.map((currentCleaner) =>
-        currentCleaner.id === updatedCleaner.id
-          ? { ...currentCleaner, ...updatedCleaner }
-          : currentCleaner,
-      ),
-    );
-    setSavedCleaner({ ...updatedCleaner, wasCreated: false });
-    setView("cleaner-success");
-  }
-
   function showNewCleaner() {
-    setSelectedCleaner(null);
-    setSavedCleaner(null);
+    clearCleaner();
     setView("cleaner-create");
   }
 
@@ -1113,10 +1007,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             key="new-cleaner"
             defaultPreferredLanguage={language}
             onBack={showCleaners}
-            onSaved={(cleaner) => {
-              setSavedCleaner(cleaner);
-              setView("cleaner-success");
-            }}
+            onSave={saveCleaner}
+            onSaved={() => setView("cleaner-success")}
           />
         )}
 
@@ -1126,7 +1018,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             cleaner={selectedCleaner}
             defaultPreferredLanguage={language}
             onBack={showCleanerDetail}
-            onSaved={handleCleanerUpdated}
+            onSave={saveCleaner}
+            onSaved={() => setView("cleaner-success")}
           />
         )}
 
@@ -2895,571 +2788,6 @@ function PropertyHistoryJob({ job, onOpen }) {
         {translate("jobs.viewJob")}
       </button>
     </article>
-  );
-}
-
-function preferredLanguageLabel(preferredLanguage, translate) {
-  return {
-    en: translate("language.english"),
-    pt: translate("language.portuguese"),
-    es: translate("language.spanish"),
-  }[preferredLanguage] || translate("common.notProvided");
-}
-
-function cleanerTeamTypeLabel(teamType, translate) {
-  return {
-    SOLO: translate("cleaners.teamTypeSolo"),
-    COUPLE: translate("cleaners.teamTypeCouple"),
-    TEAM: translate("cleaners.teamTypeTeam"),
-  }[teamType] || translate("common.notProvided");
-}
-
-function paymentMethodLabel(paymentMethod, translate) {
-  return {
-    ZELLE: "Zelle",
-    VENMO: "Venmo",
-    CASH: translate("cleaners.paymentMethodCash"),
-    CHECK: translate("cleaners.paymentMethodCheck"),
-    OTHER: translate("cleaners.paymentMethodOther"),
-  }[paymentMethod] || translate("common.notProvided");
-}
-
-function InformationIcon({ name }) {
-  if (name === "phone") {
-    return (
-      <svg className="information-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5.5 3.5h3l1.5 4-2 1.75a16.5 16.5 0 0 0 6.75 6.75l1.75-2 4 1.5v3a2 2 0 0 1-2.1 2A16.9 16.9 0 0 1 3.5 5.6a2 2 0 0 1 2-2.1Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg className="information-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M3.5 12h17M12 3.5c2.1 2.3 3.2 5.1 3.2 8.5S14.1 18.2 12 20.5C9.9 18.2 8.8 15.4 8.8 12S9.9 5.8 12 3.5Z" />
-    </svg>
-  );
-}
-
-function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate }) {
-  const { translate } = useTranslation();
-
-  if (isLoading) {
-    return <StateCard message={translate("cleaners.loading")} status="status" />;
-  }
-
-  if (hasError) {
-    return <StateCard message={translate("cleaners.error")} status="alert" isError />;
-  }
-
-  const sortedCleaners = [...cleaners].sort((firstCleaner, secondCleaner) =>
-    (firstCleaner.name || "").localeCompare(secondCleaner.name || ""),
-  );
-
-  return (
-    <section aria-labelledby="cleaners-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.cleaners")}</p>
-          <h2 id="cleaners-title" className="list-title">
-            {translate("cleaners.title")}
-          </h2>
-        </div>
-        <button className="button button--primary" type="button" onClick={onCreate}>
-          {translate("cleaners.new")}
-        </button>
-      </div>
-
-      {sortedCleaners.length === 0 ? (
-        <StateCard message={translate("cleaners.empty")} />
-      ) : (
-        <div className="cleaner-directory">
-          {sortedCleaners.map((cleaner) => (
-            <button
-              key={cleaner.id}
-              className="cleaner-directory-card"
-              type="button"
-              aria-label={translate("cleaners.view", {
-                cleaner: cleaner.name || translate("common.notProvided"),
-              })}
-              onClick={() => onSelect(cleaner)}
-            >
-              <span className="cleaner-directory-card__identity">
-                <strong>{cleaner.name || translate("common.notProvided")}</strong>
-                <span className="cleaner-directory-card__detail">
-                  <InformationIcon name="phone" />
-                  {cleaner.phone || translate("cleaners.noPhone")}
-                </span>
-              </span>
-              <span className="cleaner-directory-card__details">
-                <span className="cleaner-directory-card__detail">
-                  <InformationIcon name="language" />
-                  {preferredLanguageLabel(cleaner.preferredLanguage, translate)}
-                </span>
-              </span>
-              <span className="status-badge cleaner-directory-card__status-badge">
-                {cleaner.active === false
-                  ? translate("common.inactive")
-                  : translate("common.active")}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob }) {
-  const { translate } = useTranslation();
-  const [history, setHistory] = useState(null);
-  const [hasHistoryError, setHasHistoryError] = useState(false);
-  const cleanerName = cleaner.name || translate("common.notProvided");
-  const cleanerStatus = cleaner.active === false
-    ? translate("common.inactive")
-    : translate("common.active");
-
-  useEffect(() => {
-    let isCurrent = true;
-    setHistory(null);
-    setHasHistoryError(false);
-
-    async function loadJobHistory() {
-      try {
-        const loadedHistory = await getCleanerJobHistory(cleaner.id);
-
-        if (isCurrent) {
-          setHistory(loadedHistory);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasHistoryError(true);
-        }
-      }
-    }
-
-    loadJobHistory();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [cleaner.id]);
-
-  return (
-    <section className="panel" aria-labelledby="cleaner-detail-title">
-      <BackButton onClick={onBack} />
-
-      <p className="eyebrow">{translate("cleaners.details")}</p>
-      <h2 id="cleaner-detail-title" className="panel__title">
-        {cleanerName}
-      </h2>
-
-      <dl className="detail-list">
-        <DetailItem label={translate("common.status")} value={cleanerStatus} />
-        <DetailItem label={translate("cleaners.phone")} value={cleaner.phone || translate("cleaners.noPhone")} />
-        <DetailItem
-          label={translate("cleaners.preferredLanguage")}
-          value={preferredLanguageLabel(cleaner.preferredLanguage, translate)}
-        />
-      </dl>
-
-      <section className="cleaner-profile-section" aria-labelledby="cleaner-operations-title">
-        <h3 id="cleaner-operations-title">{translate("cleaners.operations")}</h3>
-        <dl className="detail-list">
-          <DetailItem
-            label={translate("cleaners.cityOrRegion")}
-            value={cleaner.cityOrRegion || translate("common.notProvided")}
-          />
-          <DetailItem
-            label={translate("cleaners.teamType")}
-            value={cleanerTeamTypeLabel(cleaner.teamType, translate)}
-          />
-        </dl>
-      </section>
-
-      <section className="cleaner-profile-section" aria-labelledby="cleaner-payment-title">
-        <h3 id="cleaner-payment-title">{translate("cleaners.payment")}</h3>
-        <dl className="detail-list">
-          <DetailItem
-            label={translate("cleaners.preferredPaymentMethod")}
-            value={paymentMethodLabel(cleaner.preferredPaymentMethod, translate)}
-          />
-          <DetailItem
-            label={translate("cleaners.paymentContact")}
-            value={cleaner.paymentContact || translate("common.notProvided")}
-          />
-        </dl>
-      </section>
-
-      {cleaner.internalNotes && (
-        <section className="cleaner-profile-section" aria-labelledby="cleaner-notes-title">
-          <h3 id="cleaner-notes-title">{translate("cleaners.internalNotes")}</h3>
-          <p className="cleaner-internal-notes">{cleaner.internalNotes}</p>
-        </section>
-      )}
-
-      <div className="button-row">
-        <button className="button button--primary" type="button" onClick={onEdit}>
-          {translate("cleaners.edit", { cleaner: cleanerName })}
-        </button>
-      </div>
-
-      <CleanerOperationalHistory
-        history={history}
-        hasError={hasHistoryError}
-        onOpenJob={onOpenJob}
-      />
-    </section>
-  );
-}
-
-function CleanerOperationalHistory({ history, hasError, onOpenJob }) {
-  const { translate } = useTranslation();
-
-  return (
-    <div className="property-history">
-      <section className="property-history-section" aria-labelledby="cleaner-upcoming-services-title">
-        <h3 id="cleaner-upcoming-services-title">{translate("cleaners.upcomingServices")}</h3>
-
-        {!history && !hasError && (
-          <p className="property-history-state">{translate("cleaners.historyLoading")}</p>
-        )}
-
-        {hasError && (
-          <p className="property-history-state property-history-state--error" role="alert">
-            {translate("cleaners.historyError")}
-          </p>
-        )}
-
-        {history && history.upcomingJobs.length === 0 && (
-          <p className="property-history-state">{translate("cleaners.noUpcomingServices")}</p>
-        )}
-
-        {history && history.upcomingJobs.length > 0 && (
-          <div className="property-history-list">
-            {history.upcomingJobs.map((job) => (
-              <CleanerHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="property-history-section" aria-labelledby="cleaner-recent-history-title">
-        <h3 id="cleaner-recent-history-title">{translate("cleaners.recentHistory")}</h3>
-
-        {history && history.recentJobs.length === 0 && (
-          <p className="property-history-state">{translate("cleaners.noRecentHistory")}</p>
-        )}
-
-        {history && history.recentJobs.length > 0 && (
-          <div className="property-history-list">
-            {history.recentJobs.map((job) => (
-              <CleanerHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function CleanerHistoryJob({ job, onOpen }) {
-  const { language, translate } = useTranslation();
-  const scheduledService = [
-    formatDate(job.scheduledDate, translate, language),
-    job.scheduledStart,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <article className="property-history-job">
-      <div className="property-history-job__summary">
-        <strong>{scheduledService}</strong>
-        <span>{job.propertyName || translate("properties.unnamed")}</span>
-      </div>
-      <span className="status-badge">
-        {formatOperationalStatus(job.operationalStatus, translate)}
-      </span>
-      {hasValue(job.cleanerPayout) && (
-        <span className="property-history-job__payout">
-          {translate("jobs.cleanerPayout")}: {formatPrice(job.cleanerPayout, translate, language)}
-        </span>
-      )}
-      <button className="button" type="button" onClick={() => onOpen(job)}>
-        {translate("jobs.viewJob")}
-      </button>
-    </article>
-  );
-}
-
-function CleanerProfileForm({ cleaner, defaultPreferredLanguage, onBack, onSaved }) {
-  const { translate } = useTranslation();
-  const isEditing = Boolean(cleaner);
-  const [formValues, setFormValues] = useState(() =>
-    cleanerToForm(cleaner, defaultPreferredLanguage),
-  );
-  const [isSaving, setIsSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-
-  useEffect(() => {
-    setFormValues(cleanerToForm(cleaner, defaultPreferredLanguage));
-    setFormError("");
-    setIsSaving(false);
-  }, [cleaner, defaultPreferredLanguage]);
-
-  function updateField(event) {
-    const { name, value, checked, type } = event.target;
-
-    setFormValues((currentValues) => ({
-      ...currentValues,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  }
-
-  async function saveCleaner(event) {
-    event.preventDefault();
-    const name = formValues.name.trim();
-    const phone = normalizeCleanerPhone(formValues.phone);
-    const cityOrRegion = formValues.cityOrRegion.trim();
-    const internalNotes = formValues.internalNotes.trim();
-    const paymentContact = formValues.paymentContact.trim();
-
-    if (!name) {
-      setFormError(translate("cleaners.nameRequired"));
-      return;
-    }
-
-    if (!phone) {
-      setFormError(translate("cleaners.phoneRequired"));
-      return;
-    }
-
-    if (phone && !/^\+\d{7,15}$/.test(phone)) {
-      setFormError(translate("cleaners.phoneInvalid"));
-      return;
-    }
-
-    if (!supportedCleanerLanguages.includes(formValues.preferredLanguage)) {
-      setFormError(translate("cleaners.preferredLanguageRequired"));
-      return;
-    }
-
-    if (!supportedCleanerTeamTypes.includes(formValues.teamType)) {
-      setFormError(translate("cleaners.teamTypeInvalid"));
-      return;
-    }
-
-    if (!supportedPaymentMethods.includes(formValues.preferredPaymentMethod)) {
-      setFormError(translate("cleaners.preferredPaymentMethodInvalid"));
-      return;
-    }
-
-    if (cityOrRegion.length > cleanerProfileLimits.cityOrRegion) {
-      setFormError(
-        translate("cleaners.cityOrRegionTooLong", {
-          count: cleanerProfileLimits.cityOrRegion,
-        }),
-      );
-      return;
-    }
-
-    if (internalNotes.length > cleanerProfileLimits.internalNotes) {
-      setFormError(
-        translate("cleaners.internalNotesTooLong", {
-          count: cleanerProfileLimits.internalNotes,
-        }),
-      );
-      return;
-    }
-
-    if (paymentContact.length > cleanerProfileLimits.paymentContact) {
-      setFormError(
-        translate("cleaners.paymentContactTooLong", {
-          count: cleanerProfileLimits.paymentContact,
-        }),
-      );
-      return;
-    }
-
-    setIsSaving(true);
-    setFormError("");
-
-    try {
-      const cleanerValues = {
-        name,
-        phone,
-        preferredLanguage: formValues.preferredLanguage,
-        active: formValues.active,
-        cityOrRegion,
-        teamType: formValues.teamType,
-        internalNotes,
-        preferredPaymentMethod: formValues.preferredPaymentMethod,
-        paymentContact,
-      };
-      const savedProfile = isEditing
-        ? await updateCleaner(cleaner.id, cleanerValues)
-        : await createCleaner(cleanerValues);
-
-      onSaved({ ...savedProfile, wasCreated: !isEditing });
-    } catch {
-      setFormError(
-        translate(isEditing ? "cleaners.updateError" : "cleaners.createError"),
-      );
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <section className="panel" aria-labelledby="cleaner-profile-title">
-      <BackButton onClick={onBack} />
-      <p className="eyebrow">{translate("navigation.cleaners")}</p>
-      <h2 id="cleaner-profile-title" className="panel__title">
-        {translate(isEditing ? "cleaners.editTitle" : "cleaners.createTitle")}
-      </h2>
-
-      <form className="cleaning-form" noValidate onSubmit={saveCleaner}>
-        <label>
-          {translate("cleaners.name")}
-          <input name="name" value={formValues.name} onChange={updateField} required />
-        </label>
-
-        <label>
-          {translate("cleaners.phone")}
-          <input
-            type="tel"
-            name="phone"
-            value={formValues.phone}
-            placeholder={translate("cleaners.phoneExample")}
-            autoComplete="off"
-            inputMode="tel"
-            onChange={updateField}
-            required
-          />
-        </label>
-
-        <label>
-          {translate("cleaners.preferredLanguage")}
-          <select
-            name="preferredLanguage"
-            value={formValues.preferredLanguage}
-            onChange={updateField}
-            required
-          >
-            <option value="en">{translate("language.english")}</option>
-            <option value="pt">{translate("language.portuguese")}</option>
-            <option value="es">{translate("language.spanish")}</option>
-          </select>
-        </label>
-
-        <div className="cleaner-profile-form-section">
-          <h3>{translate("cleaners.operations")}</h3>
-          <label>
-            {translate("cleaners.cityOrRegion")}
-            <input
-              name="cityOrRegion"
-              value={formValues.cityOrRegion}
-              maxLength={cleanerProfileLimits.cityOrRegion}
-              onChange={updateField}
-            />
-          </label>
-
-          <label>
-            {translate("cleaners.teamType")}
-            <select name="teamType" value={formValues.teamType} onChange={updateField}>
-              <option value="">{translate("common.notProvided")}</option>
-              <option value="SOLO">{translate("cleaners.teamTypeSolo")}</option>
-              <option value="COUPLE">{translate("cleaners.teamTypeCouple")}</option>
-              <option value="TEAM">{translate("cleaners.teamTypeTeam")}</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="cleaner-profile-form-section">
-          <h3>{translate("cleaners.payment")}</h3>
-          <label>
-            {translate("cleaners.preferredPaymentMethod")}
-            <select
-              name="preferredPaymentMethod"
-              value={formValues.preferredPaymentMethod}
-              onChange={updateField}
-            >
-              <option value="">{translate("common.notProvided")}</option>
-              <option value="ZELLE">Zelle</option>
-              <option value="VENMO">Venmo</option>
-              <option value="CASH">{translate("cleaners.paymentMethodCash")}</option>
-              <option value="CHECK">{translate("cleaners.paymentMethodCheck")}</option>
-              <option value="OTHER">{translate("cleaners.paymentMethodOther")}</option>
-            </select>
-          </label>
-
-          <label>
-            {translate("cleaners.paymentContact")}
-            <input
-              name="paymentContact"
-              value={formValues.paymentContact}
-              maxLength={cleanerProfileLimits.paymentContact}
-              onChange={updateField}
-            />
-          </label>
-        </div>
-
-        <label>
-          {translate("cleaners.internalNotes")}
-          <textarea
-            name="internalNotes"
-            rows="4"
-            value={formValues.internalNotes}
-            maxLength={cleanerProfileLimits.internalNotes}
-            onChange={updateField}
-          />
-        </label>
-
-        <label className="cleaner-active-field">
-          <input
-            type="checkbox"
-            name="active"
-            checked={formValues.active}
-            onChange={updateField}
-          />
-          {translate("common.active")}
-        </label>
-
-        {formError && (
-          <p className="form-error" role="alert">
-            {formError}
-          </p>
-        )}
-
-        <div className="button-row">
-          <button className="button button--primary" type="submit" disabled={isSaving}>
-            {isSaving ? translate("cleaners.saving") : translate("cleaners.save")}
-          </button>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-function CleanerProfileSuccess({ cleaner, onBack, backLabel }) {
-  const { translate } = useTranslation();
-
-  return (
-    <section className="panel success-panel" aria-labelledby="cleaner-success-title">
-      <span className="success-mark" aria-hidden="true">
-        ✓
-      </span>
-      <p className="eyebrow">{translate("navigation.cleaners")}</p>
-      <h2 id="cleaner-success-title" className="panel__title">
-        {translate(cleaner.wasCreated ? "cleaners.created" : "cleaners.updated")}
-      </h2>
-      <p className="success-panel__detail">{cleaner.name}</p>
-      <div className="button-row">
-        <button className="button button--primary" type="button" onClick={onBack}>
-          {translate(backLabel)}
-        </button>
-      </div>
-    </section>
   );
 }
 
