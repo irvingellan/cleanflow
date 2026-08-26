@@ -47,6 +47,8 @@
   background: var(--color-page-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 :root[data-theme="dark"] {
@@ -99,8 +101,8 @@
 
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--color-page-bg);
 }
 
@@ -114,6 +116,7 @@ select {
 .app-shell {
   display: grid;
   min-height: 100vh;
+  min-height: 100dvh;
   place-items: center;
   padding: 24px;
 }
@@ -2220,6 +2223,14 @@ button.summary-card {
 }
 
 @media (max-width: 520px) {
+  .app-shell {
+    padding:
+      max(16px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+
   .whats-new-backdrop {
     padding: 14px;
   }
@@ -2271,8 +2282,8 @@ button.summary-card {
 
   .foundation__header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
     margin-bottom: 20px;
   }
 
@@ -2290,71 +2301,44 @@ button.summary-card {
   .foundation__header .brand-block > h1 {
     grid-column: 1;
     grid-row: 2;
-    font-size: clamp(2rem, 11vw, 2.5rem);
+    font-size: clamp(1.875rem, 9vw, 2.25rem);
   }
 
   .foundation__header .header-actions {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    gap: 5px;
-    width: 132px;
-    min-width: 0;
+    grid-column: 1;
+    grid-row: 3;
+    width: 100%;
+    gap: 7px;
+    justify-items: stretch;
   }
 
   .foundation__header .manager-account {
     width: 100%;
+    justify-items: stretch;
   }
 
   .foundation__header .manager-identity {
     max-width: 100%;
+    text-align: left;
   }
 
   .foundation__header .manager-account__controls {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
     width: 100%;
-    gap: 5px 7px;
+    gap: 7px;
   }
 
   .foundation__header .language-selector {
-    grid-column: 1;
-    grid-row: 1;
-    width: 100%;
+    width: auto;
     min-width: 0;
-  }
-
-  .foundation__header .theme-toggle {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .foundation__header .notification-control {
-    grid-column: 1;
-    grid-row: 2;
-    justify-self: start;
-    padding: 5px 7px;
+    font-size: 16px;
   }
 
   .foundation__header .notification-control__label {
     display: none;
-  }
-
-  .foundation__header .feedback-trigger {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: end;
-  }
-
-  .foundation__header .header-sign-out {
-    grid-column: 1;
-    grid-row: 3;
-    justify-self: end;
-  }
-
-  .foundation__header .manager-account__controls .badge {
-    grid-column: 2;
-    grid-row: 3;
-    justify-self: end;
   }
 
   .foundation__header .badge {
@@ -2363,20 +2347,33 @@ button.summary-card {
   }
 
   .foundation__header .main-navigation {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-row: 3;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-    margin-top: 4px;
+    display: flex;
+    grid-column: 1;
+    grid-row: 4;
+    flex-wrap: nowrap;
+    gap: 6px;
+    width: 100%;
+    margin-top: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
   .foundation__header .navigation-button {
-    min-height: 40px;
-    padding: 6px 4px;
+    min-height: 38px;
+    flex: 0 0 auto;
+    padding: 7px 10px;
     font-size: 0.75rem;
     line-height: 1.15;
-    white-space: normal;
+    white-space: nowrap;
+  }
+
+  .cleaning-form input:not([type="checkbox"]):not([type="radio"]):not(.visually-hidden),
+  .cleaning-form textarea,
+  .cleaning-form select,
+  .feedback-form textarea,
+  .feedback-form select,
+  .issue-resolution-form textarea {
+    font-size: 16px;
   }
 
   .detail-list,
@@ -2623,19 +2620,13 @@ button.summary-card {
   }
 }
 
-@media (max-width: 390px) {
-  .foundation__header .main-navigation {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 340px) {
   .app-shell {
-    padding: 14px;
-  }
-
-  .foundation__header .main-navigation {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding:
+      max(14px, env(safe-area-inset-top))
+      max(14px, env(safe-area-inset-right))
+      max(14px, env(safe-area-inset-bottom))
+      max(14px, env(safe-area-inset-left));
   }
 
   .dashboard-summary {
