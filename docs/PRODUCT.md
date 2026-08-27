@@ -1,386 +1,219 @@
-# CleanFlow Product Context
+# CleanFlow — Product Context
 
-## Origin
+## Product thesis
 
-CleanFlow began from a real operational problem.
+CleanFlow is a realtime operations platform for cleaning teams and short-term-rental turnover workflows.
 
-Gabriela manages cleaning services for multiple short-term-rental clients and properties.
+The project is informed by an **anonymized design partner**: a small, growing cleaning operation coordinating multiple clients, properties and field workers across a fragmented toolchain. The repository intentionally describes workflow patterns rather than personally identifying the people or businesses involved.
 
-As the operation grew, administrative work became increasingly manual and began limiting her willingness to accept more business.
+The core product hypothesis is that operational coordination should move from scattered messages and manual records into one structured system while preserving low-friction mobile access for field workers.
 
-She currently performs several roles herself, including:
+## Problem space
 
-- cleaner recruiting / coordination
-- scheduling
-- operational communication
-- property instruction management
-- supply reporting
-- financial tracking
-- client billing follow-up
-- cleaner payouts
-- administrative record keeping
+As service operations grow, managers commonly accumulate responsibilities across:
 
-A significant portion of the work currently happens through WhatsApp and a large Notion database.
+- scheduling and job intake;
+- worker availability and assignment;
+- property instructions and access information;
+- checklists and completion evidence;
+- operational issue handling;
+- reservation reconciliation;
+- client billing status;
+- worker payout tracking;
+- historical reporting and auditability.
 
-Notion is currently the only place where Gabriela can see cleaning jobs from all clients together. Individual clients and reservation platforms expose only parts of the operation, so maintaining this combined view requires manual administrative work.
+When these workflows live across messaging apps, reservation platforms and flexible databases, the manager becomes the integration layer. CleanFlow aims to make the software the integration layer instead.
 
-## Current clients and job intake
+## Current operating environment
 
-Different clients use different systems.
+Observed workflows may involve combinations of:
 
-Current examples include:
+- WhatsApp or similar messaging;
+- Notion-style operational databases;
+- Hospitable;
+- Guesty;
+- Airbnb-connected reservation flows;
+- external payment channels.
 
-1. A client who sends cleaning needs manually through WhatsApp.
-2. A client using Hospitable connected to Airbnb. Gabriela has calendar access and manually identifies upcoming cleanings.
-3. A client using Guesty connected to Airbnb. This is newer in her workflow.
+These systems expose different slices of the operation. CleanFlow should provide a unified operational model without copying provider-specific state blindly into the core domain.
 
-Gabriela currently has to reconcile reservation activity across these sources manually. A future CleanFlow capability should synchronize reservations from Guesty and Hospitable, including:
+## Primary operational flow
 
-- new reservations
-- date changes
-- cancellations
+```text
+Reservation / manual intake
+        ↓
+Cleaning Job
+        ↓
+Manager selects workers to invite
+        ↓
+Workers express interest / decline
+        ↓
+Manager assigns one worker
+        ↓
+Instructions and execution
+        ↓
+Checklist / photos / issues
+        ↓
+Completion
+        ↓
+Financial follow-up
+```
 
-This synchronization is important future work, not part of the first vertical slice.
+The manager retains assignment control. Worker interest is a response to an offer, not an automatic assignment.
 
-## Confirmed limitations of prior tools
+## Reservation versus Cleaning Job
 
-Turno previously provided property instructions and owner-defined checklists. However, cleaners could not reliably access the workflow. Gabriela often received cleaner photos and information outside Turno, then uploaded 30 or more photos and completed the checklist herself. The tool therefore shifted substantial execution work back to the manager instead of removing it.
+A **Reservation** represents a guest stay or external booking fact.
 
-Taskbird team invitations were also unreliable. Invitation failures and access friction made it harder to onboard cleaners into the operational workflow.
+A **Cleaning Job** represents the operational work that must be scheduled, offered, assigned, executed and completed.
 
-These findings reinforce that a cleaner-facing workflow must be low-friction, reliable on mobile web and validated with the people who will actually use it. Authentication and authorization for cleaner links remain open architecture decisions for the real flow.
+These concepts must remain separate. Reservation changes may affect a Job, but reservation-provider state should not become the Job lifecycle automatically.
 
-## Cleaner coordination
+## Worker coordination
 
-Gabriela currently works with approximately ten cleaners she knows.
+A recurring operational problem is contacting workers individually until availability is found.
 
-There is no consistent reserved weekly schedule with them.
+The first CleanFlow workflow allows a manager to:
 
-For a new cleaning, Gabriela often contacts cleaners individually through WhatsApp until she finds someone available.
+1. create or receive a Cleaning Job;
+2. select multiple workers to receive an offer;
+3. see `interested` / `declined` responses in realtime;
+4. choose the assigned worker explicitly;
+5. withdraw or close remaining open offers as appropriate.
 
-Selection is not based only on availability.
+Workers must not see competing workers, competing responses or the number of other interested workers.
 
-Factors may include:
+Automatic recommendations may eventually assist the manager, but they must not silently remove manager control.
 
-- experience
-- quality
-- speed
-- job difficulty
-- whether the cleaner works with a partner/spouse
-- cost
-- suitability for heavier jobs
-- availability
+## Property information versus Job information
 
-The current product hypothesis is:
+Reusable property data may include:
 
-A job can be offered to multiple cleaners simultaneously.
+- address;
+- parking instructions;
+- access instructions;
+- supply location;
+- default checklist;
+- standard photo requirements;
+- pricing defaults;
+- operational notes.
 
-For the first vertical slice, the manager manually selects which cleaners receive the offer.
-
-Cleaners can respond as interested or declined. In the interface, these responses may appear as “Tenho interesse” and “Não posso”.
-
-Gabriela can then manually choose who receives the job.
-
-Cleaner assignment must remain manager-controlled. Expressing interest never assigns the job.
-
-Cleaners may express interest without seeing which other cleaners were invited, which cleaners responded or how many other cleaners expressed interest. The manager can see the responses needed to make the assignment.
-
-The system may eventually recommend cleaners, but recommendations must not silently take assignment control away from the manager.
-
-## Instructions
-
-Property/job instructions can be extensive.
-
-Examples include:
-
-- address
-- parking
-- key / lockbox information
-- access code
-- supply location
-- cleaning instructions
-- special requests
-- checklists
-- required photos
-- guest information
-- property-specific details
-
-Instructions sent through WhatsApp become long and can become buried in conversation history.
-
-A key distinction is:
-
-### Property information
-
-Information that generally belongs permanently to a property, such as:
-
-- address
-- owner/client
-- default price
-- parking
-- access instructions
-- lockbox
-- supply location
-- default checklist
-- standard photo requirements
-
-Selecting a known property for a cleaning should populate its reusable information, including persistent instructions, access information, checklist, supply requirements and pricing defaults. Job-specific changes must remain possible without silently rewriting the property's defaults or historical operations.
-
-### Job information
-
-Information specific to one cleaning, such as:
-
-- date
-- scheduled time
-- assigned cleaner
-- guest count
-- special request
-- temporary access change
-- actual start time
-- completion time
-- one-time notes
-- issue reports
-
-## Cleaner completion workflow
-
-After / during cleaning, Gabriela may need:
-
-- checklist completion
-- supply levels
-- final photos
-- damage reports
-- issues
-- start/end times for hourly work
-- completion confirmation
-
-A cleaning commonly produces 30 or more photos. Those photos are operational deliverables: they ultimately need to be organized and delivered to the relevant property owner/client, not merely stored for internal viewing.
-
-Some cleaning jobs are fixed-price.
-
-Some are hourly.
-
-The system therefore must eventually support at least:
-
-- fixed compensation
-- hourly compensation
-
-## Finance
-
-Financial workflows currently differ by client.
-
-Examples:
-
-### Client flow A
-
-Gabriela sends the week's total, then receives payment through Zelle.
-
-### Client flow B
-
-The client closes payments weekly and sends money through Relay.
-
-### Client flow C
-
-Payments arrive through an Airbnb-related automatic payment flow.
-
-These payments can be harder to reconcile because multiple amounts may arrive together.
-
-Gabriela currently marks payment status manually in Notion.
-
-Cleaner payouts are currently performed every Tuesday, often through Zelle, regardless of whether Gabriela has already received client payment.
-
-This creates two conceptually separate concerns:
-
-- Accounts Receivable: money clients owe the business
-- Accounts Payable / Cleaner Payouts: money the business owes cleaners
-
-They should not be modeled as the same state.
-
-The financial workflow needs to show these dimensions explicitly rather than hiding them behind one generic financial status:
-
-- invoice pending or sent
-- client payment pending or received
-- cleaner payout pending or paid
-- relevant totals
-- profit
-
-Bank-transfer payment reconciliation is a major administrative pain point, particularly when one transfer covers multiple amounts. Automated reconciliation remains a future capability and requires more workflow discovery before implementation.
-
-## Top pain points identified by Gabriela
-
-When asked what three tasks she would eliminate immediately, she chose:
-
-1. Generate invoices automatically and send them to clients.
-2. Stop contacting cleaners one-by-one to find availability.
-3. Automatically send job instructions and reminders after assignment.
-
-These are important priorities, but they do not automatically define implementation order.
-
-Additional discovery confirmed three major administrative pain points:
-
-1. Reconciling new reservations, date changes and cancellations across reservation platforms.
-2. Reconciling bank-transfer payments with the work or invoices they cover.
-3. Generating invoices manually.
-
-Reservation synchronization, automated invoice generation and payment reconciliation are important future capabilities. They do not replace the first operational vertical slice in the current roadmap.
-
-## Manager experience
-
-Gabriela often works from a MacBook.
-
-The manager experience should eventually take advantage of a larger screen.
-
-Potential desktop concepts include:
-
-- today's operation
-- jobs needing attention
-- upcoming calendar
-- cleaner availability
-- properties
-- finance
-- invoices
-- cleaner payouts
-- realtime activity
-- issues/exceptions
-
-Gabriela currently changes/reorders Notion columns depending on the task she is doing.
-
-Examples:
-
-- paying cleaners
-- collecting client payments
-
-This suggests CleanFlow should provide task-specific views instead of forcing one giant table to represent every workflow.
-
-The manager also needs a unified historical operations view with filters for:
-
-- date range
-- client
-- cleaner
-- property
-
-This should preserve the cross-client visibility that only Notion currently provides.
-
-## Worker / cleaner experience
-
-Cleaner experience should be:
-
-- mobile-first
-- simple
-- low-friction
-- usable through the browser
-- accessible from a WhatsApp link
-
-A native app is not required for initial development.
-
-WhatsApp can be the notification/entry channel.
-
-Structured work should happen inside CleanFlow.
-
-Potential cleaner actions:
-
-- express interest in / decline opportunity
-- view assigned jobs
-- view instructions
-- start cleaning
-- complete checklist
-- report issue
-- upload photos
-- report supplies
-- finish cleaning
-
-Cleaner-facing job pages should expose the relevant property instructions, access information and checklist for the assigned cleaning. Sensitive access details must be protected by the eventual cleaner-link authentication and authorization design.
+Job-specific information may include:
+
+- date and scheduled time;
+- assigned worker;
+- guest count;
+- temporary instructions;
+- one-time access changes;
+- issue reports;
+- actual start/completion times.
+
+Selecting a Property should populate appropriate defaults while preserving historical Job values. Editing the Property later must not rewrite what applied to previously completed work.
+
+## Field-worker experience
+
+The worker experience should remain:
+
+- mobile-first;
+- browser-first;
+- simple;
+- low-friction;
+- task-focused;
+- accessible from a secure link when appropriate.
+
+Potential worker actions include:
+
+- respond to an opportunity;
+- view assigned work;
+- view instructions;
+- start work;
+- complete checklist items;
+- report issues;
+- upload photos;
+- report supplies;
+- complete work.
+
+A native mobile app is not required unless future requirements justify it.
 
 ## Realtime operations
 
-One major product concept is a realtime operations center.
-
-Examples of realtime events:
-
-- cleaner became interested in job
-- job assigned
-- cleaner started
-- cleaner uploaded photos
-- cleaner reported issue
-- supply shortage reported
-- job completed
-- admin resolved issue
-- payment state changed
-
-Not every event should interrupt the manager.
-
-The interface should distinguish:
-
-- informational activity
-- important events
-- events requiring action
-- urgent issues
-
-## Issues and exceptions
-
-Real operations do not always follow the happy path.
-
-The manager must be able to intervene.
+Realtime updates are valuable when they reduce operational uncertainty.
 
 Examples:
 
-- cleaner cannot access property
-- guest is still inside
-- cleaner is late
-- unusual cleaning conditions
-- property damage
-- missing supplies
-- cleaner forgot to use the system
-- cleaner assignment changes
-- job must be reopened
-- job completed manually
+- worker expressed interest;
+- Job assigned;
+- Job started;
+- issue reported;
+- photo uploaded;
+- Job completed;
+- administrative override performed;
+- payment state changed.
 
-Common issue categories confirmed through discovery include:
+Not every event should become an interruptive notification. The product should distinguish informational activity from action-required events.
 
-- access, key or code problems
-- missing supplies
-- broken or non-working items
-- unusually heavy cleaning
-- miscellaneous unexpected situations
+## Issues and exceptions
 
-Admin overrides should be explicit and auditable.
+Real-world service operations routinely deviate from the happy path. Examples include:
 
-## Multilingual product
+- access problems;
+- missing supplies;
+- unusual cleaning conditions;
+- damaged or non-working items;
+- schedule changes;
+- worker delays;
+- manual manager intervention.
 
-CleanFlow should be multilingual by design.
+Issue state is intentionally separate from Job lifecycle state. A Job may remain `IN_PROGRESS` while an Issue is `OPEN`.
 
-Likely early interface languages:
+Administrative overrides should be explicit and auditable.
 
-- English
-- Portuguese
-- Spanish
+## Financial domain
 
-Other languages may be added later without reworking application architecture.
+Financial workflows should keep separate concepts separate:
 
-There are two translation concerns:
+- invoice delivery state;
+- client payment state;
+- worker payout state;
+- payment reconciliation;
+- operational profitability.
 
-1. Static UI translation through i18n.
-2. User-generated content translation, potentially using AI later.
+A sent invoice can remain unpaid. A worker payout can occur independently of whether a client receivable has cleared. These should never be collapsed into one generic status.
 
-Example future scenario:
+Real payment processing is outside the current prototype scope.
 
-Manager writes in Portuguese.
+## Internationalization
 
-Cleaner reads Spanish.
+CleanFlow is designed for multilingual operation.
 
-Cleaner reports issue in Spanish.
+Static interface translation and translation of user-generated content are different concerns. UI strings should live behind an i18n layer; future AI-assisted translation may handle unstructured content when appropriate.
 
-Manager reads translated Portuguese.
+## AI philosophy
 
-This is a future capability, not an MVP requirement.
+AI is not the default solution for deterministic workflow rules.
+
+Potential future AI uses include:
+
+- interpreting unstructured job intake;
+- translating user-generated content;
+- summarizing operational activity;
+- classifying ambiguous reports;
+- assisting managers with natural-language queries.
+
+Known state transitions, permissions and financial calculations should remain normal deterministic application logic.
 
 ## Product expansion hypothesis
 
-CleanFlow may eventually be useful beyond the initial design partner.
+Potential future users include:
 
-Potential users include:
+- small cleaning operators;
+- larger cleaning teams;
+- short-term-rental operators;
+- property managers;
+- related field-service operations.
 
-- small cleaning operators
-- larger cleaning teams
-- short-term-rental operators
-- property managers
+The immediate priority remains proving reliable operational workflows rather than prematurely generalizing the system into a broad SaaS platform.
 
-However, the current priority is to solve and understand the first real operation rather than prematurely building a generic SaaS platform.
+## Public-repository privacy rule
+
+This repository documents product patterns and engineering decisions, not private design-partner details. All committed fixtures must be fictitious, and public documentation should use generic roles such as **design partner**, **operations manager**, **client**, **worker/cleaner** and **property**.
