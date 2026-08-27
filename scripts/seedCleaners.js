@@ -3,15 +3,16 @@ import { doc, getFirestore, writeBatch } from "firebase/firestore";
 import { loadEnv } from "vite";
 import { createFirebaseConfig } from "../src/services/firebase/config.js";
 
+// Public-repository fixtures are intentionally fictional.
 const cleaners = [
-  { id: "agnes", name: "Agnes" },
-  { id: "eloisa", name: "Eloisa" },
-  { id: "carla", name: "Carla" },
-  { id: "erika", name: "Erika" },
-  { id: "mary", name: "Mary" },
-  { id: "mayara", name: "Mayara" },
-  { id: "douglas", name: "Douglas" },
-  { id: "ingrid", name: "Ingrid" },
+  { id: "demo-alex", name: "Alex Rivera" },
+  { id: "demo-jordan", name: "Jordan Lee" },
+  { id: "demo-sam", name: "Sam Morgan" },
+  { id: "demo-taylor", name: "Taylor Kim" },
+  { id: "demo-casey", name: "Casey Patel" },
+  { id: "demo-riley", name: "Riley Chen" },
+  { id: "demo-morgan", name: "Morgan Brooks" },
+  { id: "demo-jamie", name: "Jamie Santos" },
 ];
 
 async function seedCleaners() {
@@ -35,23 +36,18 @@ async function seedCleaners() {
 
     for (const cleaner of cleaners) {
       batch.set(
-        doc(
-          db,
-          "organizations",
-          "cleanflow-demo",
-          "cleaners",
-          cleaner.id,
-        ),
+        doc(db, "organizations", "cleanflow-demo", "cleaners", cleaner.id),
         {
           name: cleaner.name,
           active: true,
           organizationId: "cleanflow-demo",
+          fixture: true,
         },
       );
     }
 
     await batch.commit();
-    console.log(`Seeded ${cleaners.length} cleaners.`);
+    console.log(`Seeded ${cleaners.length} fictional demo cleaners.`);
   } finally {
     await deleteApp(firebaseApp);
   }
