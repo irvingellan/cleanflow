@@ -3,54 +3,66 @@ import { doc, getFirestore, writeBatch } from "firebase/firestore";
 import { loadEnv } from "vite";
 import { createFirebaseConfig } from "../src/services/firebase/config.js";
 
+// Fictional portfolio/demo data only. These names are not real customer properties.
 const properties = [
   {
-    id: "2031-second-ave",
+    id: "harbor-loft",
     data: {
-      name: "2031 Second Ave",
-      clientName: "Carl",
+      name: "Harbor Loft",
+      clientName: "Northstar Stays",
       defaultClientPrice: 350,
       defaultCleanerPrice: 200,
       active: true,
       organizationId: "cleanflow-demo",
+      fixture: true,
     },
   },
   {
-    id: "1964-oliver-ave",
+    id: "cedar-house",
     data: {
-      name: "1964 Oliver Ave",
-      clientName: "Carl",
+      name: "Cedar House",
+      clientName: "Northstar Stays",
       defaultClientPrice: 200,
       defaultCleanerPrice: 100,
       active: true,
       organizationId: "cleanflow-demo",
+      fixture: true,
     },
   },
   {
-    id: "6816-newbold-ct",
+    id: "sunset-bungalow",
     data: {
-      name: "6816 Newbold Ct",
-      clientName: "Carl",
+      name: "Sunset Bungalow",
+      clientName: "Northstar Stays",
+      defaultClientPrice: 275,
+      defaultCleanerPrice: 150,
       active: true,
       organizationId: "cleanflow-demo",
+      fixture: true,
     },
   },
   {
-    id: "8845-echo-drive",
+    id: "canyon-retreat",
     data: {
-      name: "8845 Echo Drive",
-      clientName: "Sara",
+      name: "Canyon Retreat",
+      clientName: "Bluebird Rentals",
+      defaultClientPrice: 400,
+      defaultCleanerPrice: 220,
       active: true,
       organizationId: "cleanflow-demo",
+      fixture: true,
     },
   },
   {
-    id: "5548-rylei-st",
+    id: "palm-cottage",
     data: {
-      name: "5548 Rylei St",
-      clientName: "Rafael",
+      name: "Palm Cottage",
+      clientName: "Coastal Key Management",
+      defaultClientPrice: 325,
+      defaultCleanerPrice: 180,
       active: true,
       organizationId: "cleanflow-demo",
+      fixture: true,
     },
   },
 ];
@@ -76,19 +88,13 @@ async function seedProperties() {
 
     for (const property of properties) {
       batch.set(
-        doc(
-          db,
-          "organizations",
-          "cleanflow-demo",
-          "properties",
-          property.id,
-        ),
+        doc(db, "organizations", "cleanflow-demo", "properties", property.id),
         property.data,
       );
     }
 
     await batch.commit();
-    console.log(`Seeded ${properties.length} properties.`);
+    console.log(`Seeded ${properties.length} fictional demo properties.`);
   } finally {
     await deleteApp(firebaseApp);
   }
