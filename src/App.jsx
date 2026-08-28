@@ -28,6 +28,8 @@ import { ClientForm } from "./features/clients/ClientForm.jsx";
 import { useClientsController } from "./features/clients/useClientsController.js";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
+import { DevCenter } from "./features/dev-center/DevCenter.jsx";
+import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
 import { CleaningSuccess, CreateCleaningForm } from "./features/jobs/JobForm.jsx";
 import { JobsPage } from "./features/jobs/JobsPage.jsx";
@@ -317,6 +319,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const payoutsController = usePayoutsController({ view });
   const propertiesController = usePropertiesController();
   const dashboardController = useDashboardController({ view });
+  const devCenterController = useDevCenterController({ view });
   const {
     dashboardData,
     isLoading: isLoadingDashboard,
@@ -464,6 +467,17 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     clearProperty();
     closeJobDetail();
     setView("dashboard");
+  }
+
+  function showDevCenter() {
+    if (!devCenterController.access.authorized) {
+      return;
+    }
+
+    setActiveSection("dev-center");
+    clearProperty();
+    closeJobDetail();
+    setView("dev-center");
   }
 
   function showJobList(filters = createJobListFilters()) {
@@ -668,6 +682,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
               onShowCleaners={showCleaners}
               onShowPayouts={showPayouts}
               onShowClients={showClients}
+              canAccessDevCenter={devCenterController.access.authorized}
+              onShowDevCenter={showDevCenter}
             />
           </div>
           <div className="header-actions">
@@ -710,6 +726,17 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOpenJob={openDashboardJob}
             onShowJobs={showJobs}
             onShowJobsWithFilter={showJobsWithFilter}
+          />
+        )}
+
+        {view === "dev-center" && devCenterController.access.authorized && (
+          <DevCenter
+            access={devCenterController.access}
+            isWorking={devCenterController.isWorking}
+            hasError={devCenterController.hasError}
+            lastResult={devCenterController.lastResult}
+            onGenerate={devCenterController.generate}
+            onClear={devCenterController.clear}
           />
         )}
 
@@ -1182,6 +1209,8 @@ function MainNavigation({
   onShowCleaners,
   onShowPayouts,
   onShowClients,
+  canAccessDevCenter,
+  onShowDevCenter,
 }) {
   return (
     <nav className="main-navigation" aria-label={translate("common.mainNavigation")}>
@@ -1233,6 +1262,16 @@ function MainNavigation({
       >
         {translate("navigation.clients")}
       </button>
+      {canAccessDevCenter && (
+        <button
+          className="navigation-button navigation-button--dev"
+          type="button"
+          aria-current={activeSection === "dev-center" ? "page" : undefined}
+          onClick={onShowDevCenter}
+        >
+          {translate("navigation.devCenter")}
+        </button>
+      )}
     </nav>
   );
 }

@@ -350,3 +350,20 @@ Cleaner offer links must not grant anonymous Firestore access. An authenticated 
 The public Function may update only its linked offer from `PENDING` to `INTERESTED` or `DECLINED`; this response never assigns a Job. The Function enforces a seven-day prototype expiry and checks that the parent Job remains `OFFERED`. These checks are intentionally centralized so later lifecycle-based expiry rules can replace or extend the initial duration.
 
 The public projection excludes client price, generic manager notes, property access data, other cleaners and other offers. Firestore rules remain authenticated-manager-only until narrower role authorization is designed.
+
+---
+
+## DEC-023 — Development demo data is server-authorized and explicitly marked
+
+Status: Accepted for the prototype
+
+The Dev Center creates only fictitious, batch-scoped records through authenticated
+server functions. Every generated record carries `demoSeed`, `demoSeedBatch`, and
+`demoSeedScenario`; cleanup may target only those marked records. The user interface
+is shown only after a server-side Firebase Auth UID allowlist check, and
+generation/cleanup functions enforce that check again so hiding the interface is not
+the authorization boundary.
+
+Generated reference Clients, Properties, and Cleaners are separate from normal
+operational records. Cleanup refuses to remove a demo Job with non-demo child data or
+a payout link, preserving data created outside the Dev Center for manual review.

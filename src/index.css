@@ -1834,6 +1834,12 @@ button.summary-card {
   background: var(--color-brand);
 }
 
+.button--danger {
+  border-color: var(--color-alert-text);
+  color: var(--color-on-brand);
+  background: var(--color-alert-text);
+}
+
 .button:hover:not(:disabled) {
   filter: brightness(0.96);
 }
@@ -2553,7 +2559,7 @@ button.summary-card {
     grid-template-columns: 1fr;
   }
 
-  .dashboard-summary {
+.dashboard-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
@@ -2618,6 +2624,121 @@ button.summary-card {
   .dashboard-next-item > span:last-child {
     grid-column: 1 / -1;
     grid-row: 3;
+  }
+}
+
+.dev-center {
+  display: grid;
+  gap: 18px;
+}
+
+.dev-center__intro,
+.dev-center__cleanup,
+.dev-center__count,
+.dev-center__scenario {
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: 0 16px 40px var(--shadow-card);
+}
+
+.dev-center__intro,
+.dev-center__cleanup,
+.dev-center__count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+}
+
+.dev-center__intro h2,
+.dev-center__cleanup h3 {
+  margin-bottom: 6px;
+}
+
+.dev-center__intro p:not(.eyebrow),
+.dev-center__cleanup p,
+.dev-center__scenario p {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.dev-center__environment {
+  flex: none;
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--color-warning-text);
+  background: var(--color-status-warning-bg);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.dev-center__environment--emulator {
+  color: var(--color-brand-text);
+  background: var(--color-selected-bg);
+}
+
+.dev-center__count {
+  align-items: baseline;
+}
+
+.dev-center__count span {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.dev-center__count strong {
+  font-size: 2rem;
+}
+
+.dev-center__scenarios {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dev-center__scenario {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.dev-center__scenario h3 {
+  margin: 0;
+}
+
+.dev-center__scenario .button {
+  justify-self: start;
+}
+
+.dev-center__cleanup {
+  align-items: flex-start;
+}
+
+.dev-center__confirm {
+  display: grid;
+  gap: 10px;
+  min-width: min(100%, 280px);
+}
+
+.dev-center__confirm .button-row {
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .dev-center__intro,
+  .dev-center__cleanup {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dev-center__scenarios {
+    grid-template-columns: 1fr;
+  }
+
+  .dev-center__confirm {
+    width: 100%;
   }
 }
 

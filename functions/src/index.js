@@ -1,10 +1,20 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
+import {
+  buildDemoScenario,
+  isDemoSeedRecord,
+  selectDemoCleanupTargets,
+} from "./devCenterData.js";
+import {
+  developerUidsFromSecret,
+  isAuthorizedDeveloper,
+  requireAuthorizedDeveloper,
+} from "./devCenterAuthorization.js";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -23,6 +33,7 @@ const feedbackTypes = {
 };
 const pushDeviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
 const pushTokenMaximumLength = 4096;
+const devCenterDeveloperUids = defineSecret("DEV_CENTER_DEVELOPER_UIDS");
 
 function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
@@ -43,6 +54,147 @@ function validPushToken(token) {
 function validToken(token) {
   return typeof token === "string" && tokenPattern.test(token);
 }
+
+function allowedDeveloperUids() {
+  return developerUidsFromSecret(devCenterDeveloperUids.value());
+}
+
+function devCenterEnvironment() {
+  return process.env.FUNCTIONS_EMULATOR === "true" ? "emulator" : "production";
+}
+
+function organizationReference() {
+  return db.collection("organizations").doc(organizationId);
+}
+
+async function demoJobCount() {
+  const snapshot = await organizationReference()
+    .collection("jobs")
+    .where("demoSeed", "==", true)
+    .count()
+    .get();
+
+  return snapshot.data().count;
+}
+
+async function clearDemoData() {
+  const organization = organizationReference();
+  const demoJobs = (await organization.collection("jobs").where("demoSeed", "==", true).get()).docs;
+  const deletes = [];
+  const protectedBatches = new Set();
+
+  for (const job of demoJobs) {
+    const jobData = job.data();
+    const [offers, issues] = await Promise.all([
+      job.ref.collection("offers").get(),
+      job.ref.collection("issues").get(),
+    ]);
+    const hasNonDemoChild = [...offers.docs, ...issues.docs].some(
+      (child) => !isDemoSeedRecord({ data: child.data() }),
+    );
+
+    if (jobData.payoutId || hasNonDemoChild) {
+      protectedBatches.add(jobData.demoSeedBatch);
+      continue;
+    }
+
+    deletes.push(...selectDemoCleanupTargets(offers.docs.map((doc) => ({ ref: doc.ref, data: doc.data() }))));
+    deletes.push(...selectDemoCleanupTargets(issues.docs.map((doc) => ({ ref: doc.ref, data: doc.data() }))));
+    deletes.push({ ref: job.ref, data: jobData });
+  }
+
+  const references = await Promise.all([
+    organization.collection("properties").where("demoSeed", "==", true).get(),
+    organization.collection("cleaners").where("demoSeed", "==", true).get(),
+    organization.collection("clients").where("demoSeed", "==", true).get(),
+  ]);
+  references.flatMap((snapshot) => snapshot.docs).forEach((document) => {
+    const data = document.data();
+    if (!protectedBatches.has(data.demoSeedBatch)) {
+      deletes.push({ ref: document.ref, data });
+    }
+  });
+
+  for (let start = 0; start < deletes.length; start += 400) {
+    const batch = db.batch();
+    deletes.slice(start, start + 400).forEach(({ ref }) => batch.delete(ref));
+    await batch.commit();
+  }
+
+  return {
+    deleted: deletes.length,
+    skippedBatches: protectedBatches.size,
+    demoJobCount: await demoJobCount(),
+  };
+}
+
+export const getDevCenterAccess = onCall(
+  { region: "us-central1", secrets: [devCenterDeveloperUids] },
+  async (request) => {
+    if (!request.auth || !isAuthorizedDeveloper(request, allowedDeveloperUids())) {
+      return { authorized: false };
+    }
+
+    return {
+      authorized: true,
+      environment: devCenterEnvironment(),
+      demoJobCount: await demoJobCount(),
+    };
+  },
+);
+
+export const generateDevCenterScenario = onCall(
+  { region: "us-central1", secrets: [devCenterDeveloperUids] },
+  async (request) => {
+    requireAuthorizedDeveloper(request, allowedDeveloperUids());
+    const scenario = request.data?.scenario;
+    const batchId = `dev-center-${randomUUID()}`;
+    let records;
+
+    try {
+      records = buildDemoScenario({
+        scenario,
+        batch: batchId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch {
+      throw new HttpsError("invalid-argument", "Demo scenario is invalid.");
+    }
+
+    const organization = organizationReference();
+    const writeBatch = db.batch();
+    writeBatch.set(organization.collection("clients").doc(records.client.id), records.client.data);
+    records.properties.forEach((property) => {
+      writeBatch.set(organization.collection("properties").doc(property.id), property.data);
+    });
+    records.cleaners.forEach((cleaner) => {
+      writeBatch.set(organization.collection("cleaners").doc(cleaner.id), cleaner.data);
+    });
+    records.jobs.forEach((job) => {
+      writeBatch.set(organization.collection("jobs").doc(job.id), job.data);
+    });
+    records.offers.forEach((offer) => {
+      writeBatch.set(
+        organization.collection("jobs").doc(offer.jobId).collection("offers").doc(offer.id),
+        offer.data,
+      );
+    });
+    await writeBatch.commit();
+
+    logger.info("Dev Center scenario generated.", { scenario, batchId, jobs: records.jobs.length });
+    return { demoJobCount: await demoJobCount(), generatedJobCount: records.jobs.length };
+  },
+);
+
+export const clearDevCenterData = onCall(
+  { region: "us-central1", secrets: [devCenterDeveloperUids] },
+  async (request) => {
+    requireAuthorizedDeveloper(request, allowedDeveloperUids());
+    const result = await clearDemoData();
+    logger.info("Dev Center demo data cleared.", result);
+    return result;
+  },
+);
 
 function configureResponse(response) {
   response.set("Cache-Control", "no-store, private");
