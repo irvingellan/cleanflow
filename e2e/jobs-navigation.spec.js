@@ -42,6 +42,23 @@ test("Dashboard needs-assignment metric preserves its Jobs filter through detail
   await expect(needsAssignment).toHaveAttribute("aria-pressed", "true");
 });
 
+test("Dashboard Needs Attention returns to Dashboard through Job Detail", async ({ page }) => {
+  const attentionItem = page
+    .locator(".attention-list .attention-item")
+    .filter({ hasText: "E2E Needs Assignment Property" });
+
+  await expect(attentionItem).toBeVisible();
+  await attentionItem.click();
+  await expect(
+    page.getByRole("heading", { name: "E2E Needs Assignment Property" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: /Back/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Operations dashboard" }),
+  ).toBeVisible();
+});
+
 test("Jobs completed filter and search persist after opening a Job detail", async ({ page }) => {
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", {
     name: "Jobs",
