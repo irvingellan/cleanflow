@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { OperationalIcon } from "./components/OperationalIcon.jsx";
 import {
-  BackButton,
   DetailItem,
   StateCard,
 } from "./components/UiPrimitives.jsx";
@@ -25,18 +24,15 @@ import {
   CleanerProfileSuccess,
 } from "./features/cleaners/CleanerProfileForm.jsx";
 import { useCleanersController } from "./features/cleaners/useCleanersController.js";
-import {
-  createClient,
-  getClients,
-} from "./features/clients/clientService.js";
+import { ClientDetail } from "./features/clients/ClientDetail.jsx";
+import { ClientDirectory } from "./features/clients/ClientDirectory.jsx";
+import { ClientForm } from "./features/clients/ClientForm.jsx";
+import { useClientsController } from "./features/clients/useClientsController.js";
 import { getOperationalDashboard } from "./features/dashboard/dashboardService.js";
 import {
   formatIssueCategory,
   issueIconName,
 } from "./features/issues/issuePresentation.js";
-import {
-  getClientJobHistory,
-} from "./features/jobs/jobService.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
 import { CleaningSuccess, CreateCleaningForm } from "./features/jobs/JobForm.jsx";
 import { JobsPage } from "./features/jobs/JobsPage.jsx";
@@ -67,7 +63,6 @@ import {
   formatPrice,
   formatShortWeekday,
   formatStatus,
-  hasValue,
 } from "./lib/presentation.js";
 import { PropertyDetail } from "./features/properties/PropertyDetail.jsx";
 import { PropertyDirectory } from "./features/properties/PropertyDirectory.jsx";
@@ -75,7 +70,6 @@ import {
   PropertyClientLinkForm,
   PropertyForm,
 } from "./features/properties/PropertyForm.jsx";
-import { getPropertiesForClient } from "./features/properties/propertyService.js";
 import { usePropertiesController } from "./features/properties/usePropertiesController.js";
 
 const content = {
@@ -314,9 +308,6 @@ function PublicOfferPage({ token }) {
 
 function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
-  const [clients, setClients] = useState([]);
-  const [isLoadingClients, setIsLoadingClients] = useState(false);
-  const [hasClientsError, setHasClientsError] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [hasDashboardError, setHasDashboardError] = useState(false);
@@ -324,7 +315,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [view, setView] = useState("dashboard");
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
-  const [selectedClient, setSelectedClient] = useState(null);
   const [createdJob, setCreatedJob] = useState(null);
   const jobWorklist = useJobsWorklist({ view });
   const jobDetail = useJobDetailController({
@@ -332,6 +322,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     onJobUpdated: jobWorklist.replaceJob,
   });
   const cleanersController = useCleanersController({ view });
+  const clientsController = useClientsController({ view });
   const payoutsController = usePayoutsController({ view });
   const propertiesController = usePropertiesController();
   const {
@@ -396,6 +387,24 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   } = cleanersController;
   const {
     directory: {
+      clients,
+      isLoading: isLoadingClients,
+      hasError: hasClientsError,
+    },
+    detail: {
+      selectedClient,
+      properties: clientProperties,
+      isLoadingProperties: isLoadingClientProperties,
+      hasPropertiesError: hasClientPropertiesError,
+      jobHistory: clientJobHistory,
+      hasJobHistoryError: hasClientJobHistoryError,
+      clearClient,
+      openClient: selectClient,
+    },
+    saveClient,
+  } = clientsController;
+  const {
+    directory: {
       payoutGroups,
       recentPayouts,
       isLoading: isLoadingPayouts,
@@ -450,45 +459,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     }
   }, [view]);
 
-  useEffect(() => {
-    if (view !== "client-list") {
-      return undefined;
-    }
-
-    let isCurrent = true;
-    setIsLoadingClients(true);
-    setHasClientsError(false);
-
-    async function loadClients() {
-      try {
-        const loadedClients = await getClients();
-
-        if (isCurrent) {
-          setClients(loadedClients);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasClientsError(true);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoadingClients(false);
-        }
-      }
-    }
-
-    loadClients();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [view]);
-
   function showProperties() {
     setActiveSection("properties");
     setPropertyDetailOrigin("properties");
     clearProperty();
-    setSelectedClient(null);
+    clearClient();
     closeJobDetail();
     setCreatedJob(null);
     clearOffersSentCount();
@@ -498,7 +473,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function showNewProperty() {
     setPropertyDetailOrigin("properties");
     clearProperty();
-    setSelectedClient(null);
+    clearClient();
     setView("property-create");
   }
 
@@ -566,7 +541,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function showClients() {
     setActiveSection("clients");
     clearProperty();
-    setSelectedClient(null);
+    clearClient();
     closeJobDetail();
     clearCleaner();
     setView("client-list");
@@ -594,21 +569,21 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function showNewClient() {
-    setSelectedClient(null);
+    clearClient();
     setView("client-create");
   }
 
   function openClient(client) {
     setActiveSection("clients");
     clearProperty();
-    setSelectedClient(client);
+    selectClient(client);
     setView("client-detail");
   }
 
   function openProperty(property) {
     setActiveSection("properties");
     setPropertyDetailOrigin("properties");
-    setSelectedClient(null);
+    clearClient();
     selectProperty(property);
     setView("property-detail");
   }
@@ -948,6 +923,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "client-detail" && selectedClient && (
           <ClientDetail
             client={selectedClient}
+            properties={clientProperties}
+            isLoadingProperties={isLoadingClientProperties}
+            hasPropertiesError={hasClientPropertiesError}
+            jobHistory={clientJobHistory}
+            hasJobHistoryError={hasClientJobHistoryError}
             onBack={showClients}
             onOpenProperty={openClientProperty}
             onCreateProperty={showNewPropertyForClient}
@@ -956,10 +936,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "client-create" && (
-          <ClientCreateForm
+          <ClientForm
             onBack={showClients}
-            onSaved={(client) => {
-              setClients((currentClients) => [...currentClients, client]);
+            onSaved={async (values) => {
+              await saveClient(values);
               setView("client-list");
             }}
           />
@@ -1819,383 +1799,6 @@ function selectPriorityAttentionItems(priorityGroups, maximumItems) {
   }
 
   return visibleItems;
-}
-
-function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect }) {
-  const { translate } = useTranslation();
-
-  if (isLoading) {
-    return <StateCard message={translate("clients.loading")} status="status" />;
-  }
-
-  if (hasError) {
-    return <StateCard message={translate("clients.error")} status="alert" isError />;
-  }
-
-  const sortedClients = [...clients].sort((firstClient, secondClient) =>
-    (firstClient.name || "").localeCompare(secondClient.name || ""),
-  );
-
-  return (
-    <section aria-labelledby="clients-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.clients")}</p>
-          <h2 id="clients-title" className="list-title">
-            {translate("clients.title")}
-          </h2>
-        </div>
-        <button className="button button--primary" type="button" onClick={onCreate}>
-          {translate("clients.new")}
-        </button>
-      </div>
-
-      {sortedClients.length === 0 ? (
-        <StateCard message={translate("clients.empty")} />
-      ) : (
-        <div className="client-directory">
-          {sortedClients.map((client) => {
-            const clientName = client.name || translate("common.notProvided");
-
-            return (
-            <button
-              key={client.id}
-              className="client-card"
-              type="button"
-              aria-label={translate("clients.view", { client: clientName })}
-              onClick={() => onSelect(client)}
-            >
-              <strong>{client.name || translate("common.notProvided")}</strong>
-              <span className="status-badge">
-                {client.active === false
-                  ? translate("common.inactive")
-                  : translate("common.active")}
-              </span>
-            </button>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ClientDetail({
-  client,
-  onBack,
-  onOpenProperty,
-  onCreateProperty,
-  onOpenJob,
-}) {
-  const { language, translate } = useTranslation();
-  const [properties, setProperties] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
-  const [jobHistory, setJobHistory] = useState(null);
-  const [hasJobHistoryError, setHasJobHistoryError] = useState(false);
-  const clientName = client.name || translate("common.notProvided");
-  const clientStatus = client.active === false
-    ? translate("common.inactive")
-    : translate("common.active");
-
-  useEffect(() => {
-    let isCurrent = true;
-    setIsLoading(true);
-    setHasError(false);
-
-    async function loadLinkedProperties() {
-      try {
-        const loadedProperties = await getPropertiesForClient(client.id);
-
-        if (isCurrent) {
-          setProperties(loadedProperties);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasError(true);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadLinkedProperties();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [client.id]);
-
-  const sortedProperties = [...properties].sort((firstProperty, secondProperty) =>
-    (firstProperty.name || "").localeCompare(secondProperty.name || ""),
-  );
-
-  useEffect(() => {
-    if (isLoading) {
-      return undefined;
-    }
-
-    let isCurrent = true;
-    setJobHistory(null);
-    setHasJobHistoryError(false);
-
-    async function loadJobHistory() {
-      try {
-        const loadedHistory = await getClientJobHistory(
-          client.id,
-          hasError ? [] : properties.map((property) => property.id),
-        );
-
-        if (isCurrent) {
-          setJobHistory(loadedHistory);
-        }
-      } catch {
-        if (isCurrent) {
-          setHasJobHistoryError(true);
-        }
-      }
-    }
-
-    loadJobHistory();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [client.id, hasError, isLoading, properties]);
-
-  return (
-    <section className="panel" aria-labelledby="client-detail-title">
-      <BackButton onClick={onBack} />
-
-      <p className="eyebrow">{translate("clients.details")}</p>
-      <h2 id="client-detail-title" className="panel__title">
-        {clientName}
-      </h2>
-
-      <dl className="detail-list">
-        <DetailItem label={translate("common.status")} value={clientStatus} />
-      </dl>
-
-      <div className="button-row">
-        <button className="button button--primary" type="button" onClick={onCreateProperty}>
-          {translate("properties.new")}
-        </button>
-      </div>
-
-      <section className="client-properties" aria-labelledby="client-properties-title">
-        <h3 id="client-properties-title">{translate("clients.linkedProperties")}</h3>
-
-        {isLoading && (
-          <p className="property-history-state">{translate("clients.propertiesLoading")}</p>
-        )}
-
-        {hasError && (
-          <p className="property-history-state property-history-state--error" role="alert">
-            {translate("clients.propertiesError")}
-          </p>
-        )}
-
-        {!isLoading && !hasError && sortedProperties.length === 0 && (
-          <p className="property-history-state">{translate("clients.noLinkedProperties")}</p>
-        )}
-
-        {!isLoading && !hasError && sortedProperties.length > 0 && (
-          <div className="client-properties__list">
-            {sortedProperties.map((property) => {
-              const propertyName = property.name || translate("properties.unnamed");
-              const propertyStatus = property.active === false
-                ? translate("common.inactive")
-                : translate("common.active");
-
-              return (
-                <article key={property.id} className="client-property-card">
-                  <div className="client-property-card__summary">
-                    <strong>{propertyName}</strong>
-                  </div>
-                  <span className="status-badge">{propertyStatus}</span>
-                  <div className="client-property-card__prices">
-                    <span>
-                      {translate("properties.defaultClientPrice")}: {hasValue(
-                        property.defaultClientPrice,
-                      )
-                        ? formatPrice(property.defaultClientPrice, translate, language)
-                        : "—"}
-                    </span>
-                    <span>
-                      {translate("properties.defaultCleanerPrice")}: {hasValue(
-                        property.defaultCleanerPrice,
-                      )
-                        ? formatPrice(property.defaultCleanerPrice, translate, language)
-                        : "—"}
-                    </span>
-                  </div>
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => onOpenProperty(property)}
-                  >
-                    {translate("clients.openProperty")}
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <ClientOperationalHistory
-        history={jobHistory}
-        hasError={hasJobHistoryError}
-        onOpenJob={onOpenJob}
-      />
-    </section>
-  );
-}
-
-function ClientOperationalHistory({ history, hasError, onOpenJob }) {
-  const { language, translate } = useTranslation();
-
-  return (
-    <div className="property-history client-history">
-      <section className="property-history-section" aria-labelledby="client-upcoming-job-title">
-        <h3 id="client-upcoming-job-title">{translate("clients.upcomingService")}</h3>
-
-        {!history && !hasError && (
-          <p className="property-history-state">{translate("clients.historyLoading")}</p>
-        )}
-
-        {hasError && (
-          <p className="property-history-state property-history-state--error" role="alert">
-            {translate("clients.historyError")}
-          </p>
-        )}
-
-        {history && !history.upcomingJob && (
-          <p className="property-history-state">{translate("clients.noUpcomingService")}</p>
-        )}
-
-        {history?.upcomingJob && (
-          <ClientHistoryJob job={history.upcomingJob} onOpen={onOpenJob} />
-        )}
-      </section>
-
-      <section className="property-history-section" aria-labelledby="client-recent-history-title">
-        <h3 id="client-recent-history-title">{translate("clients.recentHistory")}</h3>
-
-        {history && history.recentJobs.length === 0 && (
-          <p className="property-history-state">{translate("clients.noRecentHistory")}</p>
-        )}
-
-        {history && history.recentJobs.length > 0 && (
-          <div className="property-history-list">
-            {history.recentJobs.map((job) => (
-              <ClientHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function ClientHistoryJob({ job, onOpen }) {
-  const { language, translate } = useTranslation();
-  const scheduledService = [
-    formatDate(job.scheduledDate, translate, language),
-    job.scheduledStart,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <article className="property-history-job">
-      <div className="property-history-job__summary">
-        <strong>{scheduledService}</strong>
-        <span>{job.propertyName || translate("properties.unnamed")}</span>
-        <span>{job.assignedCleanerName || translate("dashboard.notAssigned")}</span>
-      </div>
-      <span className="status-badge">
-        {formatOperationalStatus(job.operationalStatus, translate)}
-      </span>
-      {hasValue(job.clientPrice) && (
-        <span className="property-history-job__payout">
-          {translate("jobs.clientPrice")}: {formatPrice(job.clientPrice, translate, language)}
-        </span>
-      )}
-      <button className="button" type="button" onClick={() => onOpen(job)}>
-        {translate("jobs.viewJob")}
-      </button>
-    </article>
-  );
-}
-
-function ClientCreateForm({ onBack, onSaved }) {
-  const { translate } = useTranslation();
-  const [name, setName] = useState("");
-  const [active, setActive] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-
-  async function saveClient(event) {
-    event.preventDefault();
-    const clientName = name.trim();
-
-    if (!clientName) {
-      setFormError(translate("clients.nameRequired"));
-      return;
-    }
-
-    setIsSaving(true);
-    setFormError("");
-
-    try {
-      const client = await createClient({ name: clientName, active });
-      onSaved(client);
-    } catch {
-      setFormError(translate("clients.createError"));
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <section className="panel" aria-labelledby="client-create-title">
-      <BackButton onClick={onBack} />
-      <p className="eyebrow">{translate("navigation.clients")}</p>
-      <h2 id="client-create-title" className="panel__title">
-        {translate("clients.createTitle")}
-      </h2>
-
-      <form className="cleaning-form" noValidate onSubmit={saveClient}>
-        <label>
-          {translate("clients.name")}
-          <input value={name} onChange={(event) => setName(event.target.value)} required />
-        </label>
-
-        <label className="cleaner-active-field">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={(event) => setActive(event.target.checked)}
-          />
-          {translate("common.active")}
-        </label>
-
-        {formError && (
-          <p className="form-error" role="alert">
-            {formError}
-          </p>
-        )}
-
-        <div className="button-row">
-          <button className="button button--primary" type="submit" disabled={isSaving}>
-            {isSaving ? translate("clients.creating") : translate("clients.save")}
-          </button>
-        </div>
-      </form>
-    </section>
-  );
 }
 
 export default App;

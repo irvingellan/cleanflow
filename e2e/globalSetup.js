@@ -70,6 +70,13 @@ export default async function seedE2eFixtures() {
     createdAt: now,
     updatedAt: now,
   };
+  const client = {
+    name: "E2E Linked Client",
+    active: true,
+    organizationId,
+    createdAt: now,
+    updatedAt: now,
+  };
   const properties = [
     ["e2e-needs-assignment-property", "E2E Needs Assignment Property"],
     ["e2e-assigned-property", "E2E Assigned Property"],
@@ -78,6 +85,17 @@ export default async function seedE2eFixtures() {
   ].map(([id, name]) => [id, {
     name,
     clientName: "E2E Test Client",
+    active: true,
+    organizationId,
+    defaultClientPrice: 250,
+    defaultCleanerPrice: 150,
+    createdAt: now,
+    updatedAt: now,
+  }]);
+  properties.push(["e2e-client-property", {
+    name: "E2E Client Property",
+    clientId: "e2e-linked-client",
+    clientName: client.name,
     active: true,
     organizationId,
     defaultClientPrice: 250,
@@ -150,6 +168,7 @@ export default async function seedE2eFixtures() {
   const batch = db.batch();
 
   batch.set(organization.collection("cleaners").doc("e2e-cleaner"), cleaner);
+  batch.set(organization.collection("clients").doc("e2e-linked-client"), client);
   properties.forEach(([propertyId, property]) => {
     batch.set(organization.collection("properties").doc(propertyId), property);
   });

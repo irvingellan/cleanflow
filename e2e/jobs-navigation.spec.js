@@ -80,3 +80,19 @@ test("an assigned Job starts safely in the emulator", async ({ page }) => {
   await expect(page.getByText("Cleaning in progress")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start cleaning" })).toHaveCount(0);
 });
+
+test("Client property navigation returns to the originating Client", async ({ page }) => {
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", {
+    name: "Clients",
+  }).click();
+  await expect(page.getByRole("heading", { name: "Clients" })).toBeVisible();
+
+  await page.getByRole("button", { name: "View E2E Linked Client" }).click();
+  await expect(page.getByRole("heading", { name: "E2E Linked Client" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Open property" }).click();
+  await expect(page.getByRole("heading", { name: "E2E Client Property" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Back/ }).click();
+  await expect(page.getByRole("heading", { name: "E2E Linked Client" })).toBeVisible();
+});
