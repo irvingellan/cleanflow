@@ -163,7 +163,9 @@ export const generateDevCenterScenario = onCall(
 
     const organization = organizationReference();
     const writeBatch = db.batch();
-    writeBatch.set(organization.collection("clients").doc(records.client.id), records.client.data);
+    (records.clients || [records.client]).forEach((client) => {
+      writeBatch.set(organization.collection("clients").doc(client.id), client.data);
+    });
     records.properties.forEach((property) => {
       writeBatch.set(organization.collection("properties").doc(property.id), property.data);
     });
@@ -177,6 +179,12 @@ export const generateDevCenterScenario = onCall(
       writeBatch.set(
         organization.collection("jobs").doc(offer.jobId).collection("offers").doc(offer.id),
         offer.data,
+      );
+    });
+    (records.issues || []).forEach((issue) => {
+      writeBatch.set(
+        organization.collection("jobs").doc(issue.jobId).collection("issues").doc(issue.id),
+        issue.data,
       );
     });
     await writeBatch.commit();

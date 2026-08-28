@@ -6,6 +6,7 @@ const scenarios = [
   { id: "quick", label: "devCenter.quick", description: "devCenter.quickDescription" },
   { id: "busyWeek", label: "devCenter.busyWeek", description: "devCenter.busyWeekDescription" },
   { id: "payoutTest", label: "devCenter.payoutTest", description: "devCenter.payoutTestDescription" },
+  { id: "managerTraining", label: "devCenter.managerTraining", description: "devCenter.managerTrainingDescription" },
 ];
 
 export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate, onClear }) {
