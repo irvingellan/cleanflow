@@ -15,6 +15,7 @@ import {
   getInterestedJobOffers,
   getPendingJobOffers,
 } from "../jobs/jobOfferService.js";
+import { normalizeJobRecord } from "../jobs/jobCompatibility.js";
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = [
@@ -33,10 +34,7 @@ function jobsCollection() {
 }
 
 function jobFromSnapshot(snapshot) {
-  return {
-    ...snapshot.data(),
-    id: snapshot.id,
-  };
+  return normalizeJobRecord(snapshot.data(), snapshot.id);
 }
 
 function localDateKey(date) {

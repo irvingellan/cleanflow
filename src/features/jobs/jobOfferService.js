@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { normalizeJobRecord } from "./jobCompatibility.js";
 
 const organizationId = "cleanflow-demo";
 const publicOfferTokenLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
@@ -61,10 +62,7 @@ function jobDocument(jobId) {
 }
 
 function jobFromSnapshot(snapshot) {
-  return {
-    ...snapshot.data(),
-    id: snapshot.id,
-  };
+  return normalizeJobRecord(snapshot.data(), snapshot.id);
 }
 
 export async function getJobOffers(jobId) {

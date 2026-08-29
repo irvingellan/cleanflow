@@ -113,3 +113,21 @@ test("Client property navigation returns to the originating Client", async ({ pa
   await page.getByRole("button", { name: /Back/ }).click();
   await expect(page.getByRole("heading", { name: "E2E Linked Client" })).toBeVisible();
 });
+
+test("a manager-created Job keeps optional guest context from a linked Property", async ({ page }) => {
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", {
+    name: "Properties",
+  }).click();
+
+  await page.getByRole("button", { name: "View E2E Client Property" }).click();
+  await expect(page.getByRole("heading", { name: "E2E Client Property" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Create cleaning" }).click();
+  await page.getByRole("textbox", { name: "Date" }).fill("2026-09-15");
+  await page.getByLabel("Guest name (optional)").fill("E2E Guest");
+  await page.getByRole("button", { name: "Create cleaning" }).click();
+  await expect(page.getByRole("heading", { name: "Cleaning created" })).toBeVisible();
+
+  await page.getByRole("button", { name: "View job" }).click();
+  await expect(page.getByText("E2E Guest")).toBeVisible();
+});

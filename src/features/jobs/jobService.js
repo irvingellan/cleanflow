@@ -14,6 +14,10 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import {
+  buildCurrentJobCreateData,
+  normalizeJobRecord,
+} from "./jobCompatibility.js";
 
 const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
@@ -33,10 +37,7 @@ function jobDocument(jobId) {
 }
 
 function jobFromSnapshot(snapshot) {
-  return {
-    ...snapshot.data(),
-    id: snapshot.id,
-  };
+  return normalizeJobRecord(snapshot.data(), snapshot.id);
 }
 
 function currentLocalDate(date = new Date()) {
@@ -501,27 +502,33 @@ export async function completeInProgressJob(jobId) {
 export async function createJob({
   propertyId,
   propertyName,
+  clientId,
   clientName,
   scheduledDate,
   clientPrice,
   cleanerPayout,
   notes,
+  guestName,
 }) {
+  const job = buildCurrentJobCreateData({
+    organizationId,
+    propertyId,
+    propertyName,
+    clientId,
+    clientName,
+    scheduledDate,
+    clientPrice,
+    cleanerPayout,
+    notes,
+    guestName,
+  });
   const jobDocument = await addDoc(
     jobsCollection(),
     {
-      organizationId,
-      propertyId,
-      propertyName,
-      clientName,
-      scheduledDate,
-      clientPrice,
-      cleanerPayout,
-      notes,
-      operationalStatus: "UNASSIGNED",
+      ...job,
       createdAt: serverTimestamp(),
     },
   );
 
-  return jobDocument.id;
+  return normalizeJobRecord(job, jobDocument.id);
 }

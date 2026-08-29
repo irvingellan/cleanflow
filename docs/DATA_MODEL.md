@@ -257,6 +257,13 @@ snapshots preserve what was operationally or financially true at the time.
 additive migration. New Assignment-based behavior must provide safe fallbacks
 for records that do not yet have Assignment entities.
 
+**Phase 0 compatibility marker:** a versionless or invalid `schemaVersion`
+remains a legacy Job (`0`). Newly manager-created Jobs write
+`schemaVersion: 1` while preserving the current singular-cleaner fields and
+lifecycle. The marker is additive: reading a legacy Job must never backfill it
+or enable planned Assignment, pricing, payout, invoice, QA, or rescheduling
+behavior.
+
 ## Relationship overview
 
 ```text

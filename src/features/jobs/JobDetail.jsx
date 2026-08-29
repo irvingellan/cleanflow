@@ -250,6 +250,9 @@ export function JobDetail({
           label={translate("common.client")}
           value={job.clientName || translate("common.notProvided")}
         />
+        {job.guestName && (
+          <DetailItem label={translate("jobs.guestName")} value={job.guestName} />
+        )}
         <DetailItem
           label={translate("jobs.scheduledDate")}
           value={formatDate(job.scheduledDate, translate, language)}

@@ -62,4 +62,46 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByText("No issues reported.")).toBeVisible();
     expect(screen.queryByText("common.notProvided")).not.toBeInTheDocument();
   });
+
+  it("shows the manager-only guest name only when the Job has one", () => {
+    const { rerender } = renderJobDetail("UNASSIGNED", {
+      guestName: "Taylor Morgan",
+    });
+
+    expect(screen.getByText("Guest name (optional)")).toBeVisible();
+    expect(screen.getByText("Taylor Morgan")).toBeVisible();
+
+    rerender(
+      <TranslationProvider>
+        <JobDetail
+          job={{
+            id: "job-1",
+            propertyName: "Pacific Beach Condo",
+            operationalStatus: "UNASSIGNED",
+          }}
+          knownCleaners={[]}
+          offers={[]}
+          isLoadingOffers={false}
+          hasOffersError={false}
+          issues={[]}
+          isLoadingIssues={false}
+          hasIssuesError={false}
+          onBack={vi.fn()}
+          onOfferToCleaners={vi.fn()}
+          onRefreshOffers={vi.fn()}
+          onRefreshIssues={vi.fn()}
+          onSimulateOffer={vi.fn()}
+          onCreatePublicOfferLink={vi.fn()}
+          onAssignCleaner={vi.fn()}
+          onStartCleaning={vi.fn()}
+          onCompleteCleaning={vi.fn()}
+          onSimulateAssignedCleaner={vi.fn()}
+          onResolveIssue={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.queryByText("Guest name (optional)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Taylor Morgan")).not.toBeInTheDocument();
+  });
 });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BackButton } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
+import { maximumGuestNameLength } from "./jobCompatibility.js";
 import { createJob } from "./jobService.js";
 
 export function CreateCleaningForm({ property, onBack, onCreated }) {
@@ -14,6 +15,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
     scheduledDate: "",
     clientPrice: property.defaultClientPrice ?? "",
     cleanerPayout: property.defaultCleanerPrice ?? "",
+    guestName: "",
     notes: "",
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -42,27 +44,19 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
     const notes = formValues.notes.trim();
 
     try {
-      const jobId = await createJob({
+      const job = await createJob({
         propertyId: property.id,
         propertyName,
+        ...(property.clientId ? { clientId: property.clientId } : {}),
         clientName,
         scheduledDate: formValues.scheduledDate,
         clientPrice,
         cleanerPayout,
         notes,
+        guestName: formValues.guestName,
       });
 
-      onCreated({
-        id: jobId,
-        propertyId: property.id,
-        propertyName,
-        clientName,
-        scheduledDate: formValues.scheduledDate,
-        clientPrice,
-        cleanerPayout,
-        notes,
-        operationalStatus: "UNASSIGNED",
-      });
+      onCreated(job);
     } catch {
       setHasSaveError(true);
       setIsSaving(false);
@@ -125,6 +119,17 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
             />
           </label>
         </div>
+
+        <label>
+          {translate("jobs.guestName")}
+          <input
+            type="text"
+            name="guestName"
+            value={formValues.guestName}
+            maxLength={maximumGuestNameLength}
+            onChange={updateField}
+          />
+        </label>
 
         <label>
           {translate("common.notes")}

@@ -29,6 +29,13 @@ describe("Dev Center demo scenarios", () => {
         createdAt,
       });
     });
+    scenario.jobs.forEach((job) => {
+      expect(job.data).toMatchObject({
+        schemaVersion: 1,
+        demoSeed: true,
+        demoSeedBatch: batch,
+      });
+    });
   });
 
   it("creates the intended rough status distribution for each scenario", () => {
@@ -43,6 +50,17 @@ describe("Dev Center demo scenarios", () => {
     expect(busyWeek.jobs).toHaveLength(35);
     expect(payoutTest.jobs).toHaveLength(5);
     expect(payoutTest.jobs.every((job) => job.data.operationalStatus === "COMPLETED")).toBe(true);
+    [quick, busyWeek, payoutTest].flatMap((scenario) => scenario.jobs).forEach((job) => {
+      expect(job.data.schemaVersion).toBe(1);
+    });
+    const assignedJob = quick.jobs.find((job) => job.data.operationalStatus === "ASSIGNED");
+    expect(assignedJob.data).toMatchObject({
+      demoSeed: true,
+      schemaVersion: 1,
+      assignedCleanerId: expect.any(String),
+      assignedCleanerName: expect.any(String),
+      cleanerPayout: 150,
+    });
     expect(payoutTest.jobs.every((job) => !job.data.payoutId)).toBe(true);
   });
 
