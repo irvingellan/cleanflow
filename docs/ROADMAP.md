@@ -1,171 +1,173 @@
 # CleanFlow — Product & Engineering Roadmap
 
-This roadmap prioritizes validated workflows and complete vertical slices over feature quantity. Product discovery is informed by an anonymized design partner and converted into reusable engineering requirements rather than person-specific implementation.
+This roadmap prioritizes validated operational burdens and complete vertical
+slices over feature quantity. It distinguishes implemented foundations from
+planned work; discovery does not automatically authorize a feature.
 
-## Phase 0 — Discovery and architecture
-
-**Status: Active / ongoing**
-
-Goals:
-
-- observe real operational workflows;
-- map current-state processes and tool boundaries;
-- identify repeated sources of manual coordination;
-- document domain language and invariants;
-- validate prototype concepts;
-- record architecture decisions;
-- keep public technical documentation privacy-safe.
-
-## Phase 1 — Project foundation
+## Current foundation
 
 **Status: Implemented / evolving**
 
-Foundation includes:
+The current prototype includes:
 
-- React + Vite;
-- Firebase service boundaries;
-- Firebase Authentication;
-- Firestore realtime state;
-- Firebase Storage foundations;
-- PWA/mobile-web support;
-- internationalization structure;
-- fictitious development data;
-- Vitest / Testing Library;
-- Playwright + Firebase Emulator Suite.
+- React/Vite application and feature/service boundaries;
+- Firebase Authentication, Firestore, Storage, and Functions foundations;
+- manager PWA/mobile-web experience and EN/PT/ES i18n;
+- Clients, Properties, Cleaners, Jobs, Offers, Issues, dashboard, and Dev
+  Center foundations;
+- a legacy single-cleaner Job execution model;
+- a first Cleaner payout-record and optional proof flow;
+- Vitest/Testing Library and Playwright with Firebase Emulators.
 
-## Phase 2 — Core realtime operational slice
+The current model is not yet the validated multi-cleaner, QA-aware operational
+model described below.
 
-**Status: Active development**
+## Phase 0 — Discovery, compatibility, and data-model preparation
 
-Target end-to-end scenario:
-
-```text
-Manager creates Job
-→ Job appears in realtime
-→ Manager selects workers
-→ Offers are created
-→ Worker opens mobile offer
-→ Worker responds interested / declined
-→ Manager sees response in realtime
-→ Manager assigns worker
-→ Worker starts Job
-→ Manager sees IN_PROGRESS
-→ Issue can be reported and resolved
-→ Worker completes Job
-→ Manager sees COMPLETED
-→ Important actions are auditable
-```
-
-Initial Job lifecycle:
-
-`UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED`
-
-Manager assignment remains explicit; worker interest never automatically assigns a Job.
-
-## Phase 3 — Property & execution structure
+**Status: Active / highest priority**
 
 Goals:
 
-- reusable Property records;
-- persistent property instructions;
-- access-information boundaries;
-- supply requirements;
-- pricing defaults;
-- checklist templates;
-- per-Job checklist execution;
-- historical preservation of Job-effective values;
-- worker-facing Job pages.
+- maintain privacy-safe design-partner discovery;
+- document stable business rules and open questions;
+- preserve legacy Jobs while introducing compatibility helpers;
+- capture canonical Client relationships on new Jobs where available;
+- establish test fixtures for legacy and future Assignment-aware records;
+- decide money representation, time-zone, and schedule-revision policy.
 
-## Phase 4 — Photos & attachments
+Small independent improvements may proceed where safe:
 
-Goals:
+- optional guest name on a Job;
+- advanced Job date-range filters;
+- clearer Job-creation UX;
+- current Cleaner-name visibility in Offer/manager views.
 
-- Firebase/object-storage integration;
-- image upload and validation;
-- compression strategy;
-- upload progress and retry behavior;
-- photo requirements;
-- job-level organization;
-- client-delivery tracking distinct from upload state;
-- issue attachments;
-- retention/cost strategy.
+## Phase 1 — Multi-cleaner Assignment foundation
 
-## Phase 5 — Operations dashboard
+**Status: Planned**
 
 Goals:
 
-- desktop-oriented manager dashboard;
-- today / upcoming views;
-- attention-required queue;
-- current Jobs;
-- unified operational history;
-- date/client/worker/property filters;
-- realtime activity;
-- issue and exception handling.
+- treat Job as the operational aggregate;
+- introduce per-cleaner Assignment entities;
+- retain explicit manager assignment control;
+- preserve the Offer → interest → Assignment distinction;
+- support one or more cleaners on a Job;
+- add Assignment-aware cleaner history and manager displays;
+- preserve legacy singular-cleaner records through additive fallbacks.
 
-## Phase 6 — Financial workflows
+## Phase 2 — Pricing, hours, and manager QA
 
-Only after the operational model is reliable.
+**Status: Planned**
 
-Goals may include:
+Goals:
 
-- worker payout view;
-- accounts receivable;
-- invoice delivery state;
-- client payment state;
-- payout state;
-- financial totals and profitability;
-- invoice generation;
-- payment reconciliation.
+- support fixed and hourly client pricing;
+- support fixed and hourly cleaner compensation per Assignment;
+- record worked and manager-approved hours per cleaner;
+- support explicit manager compensation override;
+- introduce submission, QA, and manager finalization;
+- make resolved payable amounts historically stable.
 
-Real payment processing remains out of scope until security, compliance and workflow requirements are explicitly reviewed.
+## Phase 3 — Assignment-aware payouts and financial worklists
 
-## Phase 7 — Notifications & messaging
+**Status: Planned**
 
-Potential goals:
+Goals:
 
-- official messaging-platform integration;
-- worker opportunity notifications;
-- assignment confirmation;
-- reminders;
-- secure deep links.
+- calculate unpaid work per Cleaner Assignment;
+- preserve existing legacy payout records;
+- prevent duplicate payment of an Assignment;
+- support unpaid-to-cleaner filters;
+- retain optional manager-only payment proof;
+- prepare weekly payroll review/reminder foundations without automating money
+  movement.
 
-Messaging should remain an entry/notification channel while structured work stays inside CleanFlow.
+## Phase 4 — Client invoicing and receivables
 
-## Phase 8 — Reservation-platform integrations
+**Status: Planned**
+
+Goals:
+
+- create Client invoices with one or more Job line items;
+- keep invoice delivery and client payment states independent;
+- support unpaid-by-client worklists and reconciliation;
+- preserve historical Job charges and Client snapshots;
+- later evaluate PDF, email, messaging, and delivery integrations.
+
+Real payment processing remains out of scope until security, compliance, and
+workflow requirements are explicitly reviewed.
+
+## Phase 5 — Rescheduling and reminders
+
+**Status: Planned**
+
+Goals:
+
+- record schedule revisions and auditable history;
+- preserve Offer and Assignment context through a reschedule;
+- define confirmation behavior after changed dates/times;
+- add idempotent Cleaner assignment/upcoming-work reminders;
+- add weekly payroll reminders with explicit manager controls.
+
+Reminder cadence, delivery channel, and time-zone policy require discovery and
+must not be guessed from implementation convenience.
+
+## Phase 6 — Operational evidence and availability assistance
+
+**Status: Planned / incremental**
+
+Goals:
+
+- Property checklist templates and per-Job checklist runs;
+- reference photos and required completion evidence;
+- photo upload, retry, delivery tracking, and retention strategy;
+- manager-maintained Cleaner availability/preferences;
+- eligibility assistance only after rules are validated.
+
+Automatic Cleaner matching, ranking, or recommendation must not remove manager
+assignment control.
+
+## Phase 7 — External operational integrations
+
+**Status: Planned after internal model stability**
 
 Potential targets:
 
-- Hospitable;
-- Guesty.
+- reservation synchronization with Guesty and Hospitable;
+- messaging as notification/entry channel;
+- secure links and role-appropriate mobile access.
 
-Synchronization must be idempotent, preserve external references and explicitly reconcile new reservations, date changes and cancellations with the related operational Jobs.
+Synchronization must be idempotent, preserve external references, and explicitly
+reconcile new reservations, date changes, and cancellations with related Jobs.
 
-## Phase 9 — AI-assisted operations
+## Phase 8 — AI-assisted operations
 
-Only after operational data is sufficiently structured.
+**Status: Deferred until data/workflows are reliable**
 
 Potential capabilities:
 
 - multilingual user-generated content;
 - classification of unstructured reports;
-- live-operation summaries;
-- natural-language manager assistant;
-- risk detection;
-- interpretation of unstructured job intake.
+- operational summaries;
+- natural-language manager assistance;
+- interpretation of unstructured Job intake.
 
-AI should enhance reliable workflows, not replace deterministic state transitions or permissions.
+AI should enhance structured workflows, not replace deterministic state
+transitions, permission checks, or financial calculations.
 
-## Deferred until validated
+## Deferred until explicitly validated
 
 - native iOS/Android applications;
 - direct Airbnb integration;
 - automated payment execution;
-- enterprise analytics;
+- generalized enterprise analytics;
 - marketplace behavior;
-- generalized SaaS billing;
+- finalized SaaS billing/pricing;
 - autonomous operational agents.
 
 ## Roadmap principle
 
-A feature earns priority when it reduces a validated operational burden, strengthens the core workflow, or materially improves reliability/security. Plausible features are not automatically roadmap features.
+A feature earns priority when it reduces a validated operational burden,
+strengthens a dependency needed by later work, or materially improves
+reliability/security. Plausible features are not automatically roadmap work.

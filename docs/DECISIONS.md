@@ -253,7 +253,7 @@ In the interface, `interested` may appear as “Tenho interesse” and `declined
 
 ## DEC-015 — Simplify the initial Job lifecycle
 
-Status: Accepted
+Status: Superseded for the planned model; retained as the current legacy implementation
 
 The initial Job lifecycle is:
 
@@ -263,6 +263,10 @@ The initial Job lifecycle is:
 
 `CANCELLED` and `REOPENED` remain possible future states but are not part of the first vertical slice.
 
+This decision accurately describes the singular-cleaner prototype. DEC-025
+records the validated multi-cleaner and QA evolution without retroactively
+claiming that the migration is complete.
+
 ---
 
 ## DEC-016 — Manager controls cleaner assignment
@@ -271,7 +275,9 @@ Status: Accepted
 
 For the first vertical slice, the manager manually selects which cleaners receive a job offer.
 
-Cleaners may express interest, but interest never assigns the Job. The manager chooses the assigned cleaner.
+Cleaners may express interest, but interest never assigns the Job. The manager
+chooses the assigned cleaner in the current implementation; the validated future
+model allows the manager to create one or more Assignments.
 
 Automatic eligibility rules and cleaner recommendations are deferred until later discovery and implementation. Future recommendations may inform the manager but must not silently take assignment control away from the manager.
 
@@ -367,3 +373,145 @@ the authorization boundary.
 Generated reference Clients, Properties, and Cleaners are separate from normal
 operational records. Cleanup refuses to remove a demo Job with non-demo child data or
 a payout link, preserving data created outside the Dev Center for manual review.
+
+---
+
+## DEC-024 — Model team work with per-cleaner Assignments
+
+Date: 2026-08-29
+Status: Accepted direction; not yet fully implemented
+
+A Job remains the operational aggregate. A Cleaner Assignment becomes the
+separate entity representing one cleaner's participation in that Job.
+
+Reasons:
+
+- one Job can require multiple cleaners;
+- each cleaner needs independent execution, hours, compensation, and payout
+  state;
+- an Offer records interest, while an Assignment records the manager's actual
+  selection;
+- a single `assignedCleanerId` cannot safely represent team work.
+
+The planned persistence direction is a Job-owned Assignment collection with a
+canonical Cleaner reference and historical snapshots. Existing singular fields
+remain legacy compatibility data until an additive migration is complete.
+
+---
+
+## DEC-025 — Separate Job lifecycle from Assignment lifecycle and manager QA
+
+Date: 2026-08-29
+Status: Accepted direction; detailed edge cases remain open
+
+The planned Job lifecycle is:
+
+`UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → WAITING_FOR_QA → COMPLETED`
+
+The planned Assignment lifecycle is:
+
+`ASSIGNED → IN_PROGRESS → SUBMITTED → APPROVED`
+
+Cleaner submission and manager completion are different business events. A Job
+does not auto-complete when the final cleaner submits work. Manager QA and
+finalization remain the operational completion boundary.
+
+**OPEN QUESTION:** exact behavior for partial team completion, late additions
+to a team, and exceptional manager completion requires workflow design before
+implementation.
+
+---
+
+## DEC-026 — Separate client pricing from cleaner compensation
+
+Date: 2026-08-29
+Status: Accepted direction; monetary representation remains open
+
+Jobs may have fixed or hourly client pricing. Each Cleaner Assignment may
+independently have fixed or hourly compensation.
+
+Client-billable hours and cleaner-payable hours are separate concepts. Cleaner
+pay may be calculated from manager-approved hours or fixed compensation, then
+explicitly overridden by a manager when necessary. The approved payable amount
+must remain historically stable.
+
+**OPEN QUESTION:** client-billable-hour policy for multi-cleaner hourly work,
+currency representation, rounding, and adjustment behavior require a focused
+financial design before implementation.
+
+---
+
+## DEC-027 — Use an additive legacy migration for the Assignment model
+
+Date: 2026-08-29
+Status: Accepted
+
+Do not destructively rewrite historical Jobs. Legacy singular fields such as
+`assignedCleanerId`, `assignedCleanerName`, `cleanerPayout`, `payoutId`, and
+`payoutPaidAt` remain readable. New Assignment-aware services must use safe
+legacy fallbacks until records are explicitly migrated or naturally replaced by
+newer Jobs.
+
+Migration code must preserve canonical IDs, historical snapshots, and payment
+auditability. It must not infer hours from timestamps or invent invoice/payment
+state for legacy records.
+
+---
+
+## DEC-028 — Keep invoices separate from cleaner payouts
+
+Date: 2026-08-29
+Status: Accepted direction; implementation planned
+
+An Invoice is a Client-facing financial aggregate that can contain multiple Job
+line items. Invoice delivery state and client payment/reconciliation state are
+separate from Cleaner payout state.
+
+A payout can occur independently of client payment. The system must not use one
+generic payment status to represent either concern.
+
+**OPEN QUESTION:** invoice generation, delivery, payment allocation, and
+reconciliation workflow remain to be designed.
+
+---
+
+## DEC-029 — Rescheduling requires audit history and context preservation
+
+Date: 2026-08-29
+Status: Accepted direction; implementation planned
+
+Rescheduling is a first-class operational change. A date/time change must
+record previous and new schedule context, actor, timestamp, and revision. It
+must not silently delete, overwrite, or discard related Offers, Assignments, or
+operational history.
+
+**OPEN QUESTION:** whether an active Offer or Assignment must reconfirm after a
+schedule revision, and which reminder behavior follows, remains open.
+
+---
+
+## DEC-030 — Keep public and cleaner-facing data intentionally narrow
+
+Date: 2026-08-29
+Status: Accepted
+
+Public offer links and future cleaner-facing views must expose only the data
+needed for that cleaner's current action. They must not expose client charges,
+business profit, other cleaner compensation, internal notes, unrelated Offers
+or Assignments, private financial state, or unapproved sensitive property data.
+
+This extends DEC-022 as per-cleaner compensation and team assignments are
+introduced. Authorization and safe payload projection belong at the service or
+server boundary, not solely in UI hiding.
+
+---
+
+## DEC-031 — Reminder policy remains an operational-design question
+
+Date: 2026-08-29
+Status: Open
+
+Cleaner reminders and weekly payroll reminders are validated needs. Their exact
+cadence, delivery channel, time-zone model, retry policy, idempotency behavior,
+and user controls have not been decided. Scheduled automation must wait for the
+Assignment, pricing, payout, and reschedule foundations it depends on.

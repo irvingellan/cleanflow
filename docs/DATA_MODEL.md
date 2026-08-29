@@ -1,259 +1,261 @@
 # CleanFlow — Domain Model
 
-This document describes the conceptual business domain. It is intentionally provider-agnostic: domain concepts come first; Firestore structure is an implementation decision.
+This document describes CleanFlow's conceptual business domain. It is
+provider-agnostic: the concepts and invariants come first; Firestore paths,
+indexes, and service APIs are implementation decisions.
+
+Labels in this document distinguish **CURRENT** implementation behavior from
+**VALIDATED REQUIREMENT** and **PLANNED** domain evolution.
 
 ## Core distinctions
 
-These entities must remain separate:
+These entities remain separate:
 
-- **Organization** — one business using CleanFlow.
-- **Client** — a customer that engages and pays the Organization.
-- **Property** — a physical service location with reusable operational defaults.
-- **Reservation** — an external or manually entered guest-stay/intake record.
-- **Cleaning Job (Job)** — the unit of operational work that is scheduled, offered, assigned, executed and completed.
-- **Cleaner / Worker** — a person eligible to perform Jobs.
+- **Organization** — one operating business using CleanFlow.
+- **Client** — the customer that engages and pays the Organization.
+- **Property** — a service location with reusable operational defaults.
+- **Reservation** — an external or manual guest-stay/intake record.
+- **Cleaning Job (Job)** — the operational aggregate for one service event.
+- **Offer** — an invitation to one Cleaner, including their response.
+- **Assignment** — the manager's selection of one Cleaner to perform work on a
+  Job.
+- **Cleaner / Worker** — a person eligible for operational assignments.
+- **Issue** — an operational exception separate from Job lifecycle.
+- **Invoice / Client Payment** — money owed by or received from a Client.
+- **Cleaner Payout** — money paid or owed to a Cleaner for approved work.
 
-A Reservation may create or change the need for a Job, but Reservation and Job are not the same record and do not share one lifecycle.
+A Reservation can create or alter the need for a Job, but Reservation and Job
+do not share a lifecycle. An Offer can lead to an Assignment, but interest is
+never assignment by itself.
 
-## Organization
+## Organization and roles
 
-Represents one tenant/business using CleanFlow, including the anonymized design-partner organization and future operators.
+An Organization represents one operating business. Records should remain
+organization-aware so CleanFlow can evolve from the initial design-partner focus
+without treating it as a permanent single tenant.
 
-Conceptual fields:
-
-- `id`
-- `name`
-- `timezone`
-- `defaultLanguage`
-- `status`
-- `createdAt`
-
-Operational records should be organization-aware to support future multi-tenant authorization.
-
-## User
-
-Represents an authenticated identity.
-
-Potential roles:
-
-- owner/admin
-- manager
-- supervisor
-- cleaner/worker
-
-Authentication identity and business profile may remain separate concepts.
+Potential roles include owner/admin, manager, supervisor, and cleaner. The
+exact authorization model remains **PLANNED**; authentication identity and a
+business profile may remain separate.
 
 ## Client
 
-Represents the business/customer responsible for service payment.
+A Client is the business/customer responsible for service payment.
 
-Conceptual fields:
+Conceptual fields include:
 
-- `id`
-- `organizationId`
-- `name`
-- contact metadata
-- billing preferences
-- invoice schedule
-- status
+- identity and Organization relationship;
+- name and permitted contact metadata;
+- billing preferences and invoice schedule;
+- active/status information.
+
+New Jobs should eventually retain canonical `clientId` where available, plus a
+historical client-name snapshot for display. **CURRENT:** legacy Properties and
+Jobs can still be name-based; migration must preserve them safely.
 
 ## Property
 
-Represents a physical short-term-rental/service location.
+A Property is a physical service location with reusable defaults. It may have:
 
-Conceptual fields:
+- Client relationship;
+- name/address as authorized operational data;
+- access, parking, and supply information;
+- checklist and reference-photo configuration;
+- default client pricing and cleaner-compensation guidance;
+- operational notes and active status.
 
-- `id`
-- `organizationId`
-- `clientId`
-- `name`
-- `address`
-- pricing defaults
-- parking instructions
-- access instructions
-- supply information
-- checklist reference
-- photo requirements
-- operational notes
-- active status
-
-Sensitive access information requires stronger authorization than ordinary operational data.
-
-Property defaults should populate new Jobs without silently rewriting historical Jobs when those defaults later change.
-
-## Cleaner / Worker
-
-Represents a worker available for operational assignment.
-
-Conceptual fields:
-
-- `id`
-- `organizationId`
-- `userId` when authenticated
-- `name`
-- `preferredLanguage`
-- active status
-- capability/preferences metadata
-- internal operational notes
-
-Subjective ranking/recommendation logic should not be encoded until product discovery supports reliable criteria.
+Property defaults populate a new Job but must not rewrite historical Job
+snapshots. Sensitive access information requires stronger authorization than
+ordinary operational data.
 
 ## Reservation
 
-Represents a guest stay or booking received from an external platform or manual intake.
+A Reservation represents a guest stay or booking received from an external
+provider or manual intake.
 
-Conceptual fields:
+Conceptual fields include Organization, Client, and Property references;
+provider/source reference; check-in/check-out; guest count; cancellation and
+sync metadata.
 
-- `id`
-- `organizationId`
-- `clientId`
-- `propertyId`
-- `source`
-- `externalReference`
-- `sourceStatus`
-- `checkInAt`
-- `checkOutAt`
-- `guestCount`
-- `cancelledAt`
-- `lastSyncedAt`
-- timestamps
-
-Provider-specific statuses must not be copied directly into the Job lifecycle.
+Provider-specific statuses must not be copied into the Job lifecycle.
 
 ## Cleaning Job
 
-Represents one specific cleaning/turnover operation.
+A Job is the operational aggregate for one cleaning/turnover event. It owns
+schedule, operational lifecycle, Job-effective snapshots, Offer/Assignment
+relationships, issues, evidence, and client-billing eligibility.
 
-Conceptual fields:
+Conceptual fields include:
 
-- `id`
-- `organizationId`
-- `clientId`
-- `propertyId`
-- optional `reservationId`
-- `scheduledDate`
-- `scheduledStart`
-- `assignedCleanerId`
-- `operationalStatus`
-- compensation type/value
-- client price
-- guest count
-- special instructions
-- actual start/completion timestamps
-- source/external reference
-- timestamps
+- identity, Organization, Client, Property, and optional Reservation reference;
+- property/client snapshots and optional `guestName`;
+- scheduled date/time, timezone, current schedule revision, and audit history;
+- overall operational status;
+- Job-effective instructions, checklist/evidence references, and notes;
+- client pricing model and resolved client charge;
+- assignment summary suitable for manager queries;
+- client-invoice linkage when invoiced;
+- actual start, QA-ready, completion, and audit timestamps.
 
-Initial operational lifecycle:
+### Job lifecycle
 
-`UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED`
+**CURRENT legacy implementation:**
 
-Job-effective instructions, checklist references and financial values must remain historically accurate even when Property defaults change later.
+```text
+UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED
+```
 
-## Job Invite / Offer
+**VALIDATED REQUIREMENT / PLANNED evolution:**
 
-Represents an offer of one Job to one Cleaner.
+```text
+UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → WAITING_FOR_QA → COMPLETED
+```
 
-Conceptual fields:
+The Job is not a proxy for any one cleaner's work. `WAITING_FOR_QA` represents
+the point at which all active Assignment work is submitted and manager review
+is required before final operational completion.
 
-- `id`
-- `organizationId`
-- `jobId`
-- `cleanerId`
-- `status`
-- `sentAt`
-- `respondedAt`
+## Cleaner Assignment
 
-Initial statuses:
+An Assignment represents one Cleaner's operational and financial participation
+in one Job. A Job may have zero, one, or multiple active Assignments.
 
-- `pending`
-- `interested`
-- `declined`
-- `expired`
-- `withdrawn`
+Conceptual fields include:
 
-`accepted` is intentionally not an Invite status. The Cleaner expresses interest; the manager performs assignment on the Job.
+- Job, Organization, and Cleaner references;
+- cleaner-name snapshot and optional source Offer reference;
+- assignment lifecycle and per-cleaner timestamps;
+- fixed or hourly compensation configuration;
+- worked hours and manager-approved hours;
+- calculated amount, optional override, and immutable approved payable amount;
+- payout status/linkage;
+- minimal Job/schedule projections when needed for worker-history or payout
+  queries.
 
-## Issue
+### Assignment lifecycle
 
-Represents an exception/problem associated with a Job.
+```text
+ASSIGNED → IN_PROGRESS → SUBMITTED → APPROVED
+```
 
-Conceptual fields:
+`SUBMITTED` means the Cleaner says their part of the work is finished.
+`APPROVED` means the manager has approved the work/hours/compensation relevant
+to payment. A future explicit removal/reassignment state may be needed, but is
+an **OPEN QUESTION**, not a current lifecycle rule.
 
-- `id`
-- `organizationId`
-- `jobId`
-- reporter/actor reference
-- type
-- severity
-- description
-- status
-- resolution metadata
-- timestamps
+## Offers
 
-Issue lifecycle is separate from Job lifecycle. A Job may be `IN_PROGRESS` while an Issue is `OPEN`.
+An Offer represents an invitation to one Cleaner. Its response is private from
+other cleaners.
 
-## Checklist Template & Checklist Run
+Conceptual statuses:
 
-A **Checklist Template** is reusable configuration, usually associated with a Property.
+- pending;
+- interested;
+- declined;
+- expired;
+- withdrawn.
 
-A **Checklist Run** captures execution for a specific Job so historical completion remains stable when templates evolve.
+`accepted` is intentionally not an Offer status. The Cleaner expresses
+interest; the manager creates one or more Assignments.
 
-## Photo / Attachment
+For future individual compensation, an Offer may carry only the safe proposed
+compensation relevant to its recipient. It must not expose client charges,
+profit, other cleaner compensation, internal notes, or competing Offers.
 
-Represents metadata for an uploaded object. Binary content belongs in object storage rather than Firestore.
+## Pricing, hours, and compensation
 
-Important dimensions may include:
+### Client pricing
 
-- Job association
-- uploader
-- storage path
-- media type
-- timestamps
-- upload state
-- delivery state
+A Job may be priced as:
 
-Uploading an image and delivering it to a client are different business events.
+- **FIXED** — predetermined client charge;
+- **HOURLY** — rate multiplied by manager-approved client-billable hours;
+- **OVERRIDE** — explicit manager-approved final charge when required.
 
-## Activity / Audit Event
+### Cleaner compensation
 
-Represents an important operational or administrative mutation.
+Each Assignment may independently be:
 
-Conceptual fields:
+- fixed compensation;
+- hourly compensation using approved payable hours;
+- manually overridden by a manager with an audit reason.
 
-- `organizationId`
-- actor type/id
-- action
-- entity type/id
-- optional `jobId`
-- timestamp
-- source
-- metadata
+Client-billable hours and cleaner-payable hours are separate concepts. The
+model must not assume that elapsed Job time, total team labor, or client billing
+hours are interchangeable.
 
-Examples include Job creation, offer response, assignment, start/completion, issue handling, administrative overrides and payment-state changes.
+The resolved payable amount should become historically stable once approved.
+Money representation, rounding, and currency policy remain implementation
+details that require an explicit decision before financial migration.
+
+## QA, evidence, and issues
+
+Cleaner submission, manager QA, and Job completion are separate business
+events. Checklists, photos, and reference information are operational evidence;
+they do not automatically prove manager approval.
+
+An Issue remains independent from lifecycle. A Job can be `IN_PROGRESS` or
+`WAITING_FOR_QA` while an Issue is `OPEN`.
+
+## Scheduling and reschedule history
+
+Frequent schedule changes are a validated workflow. A reschedule should retain:
+
+- previous and new schedule values;
+- schedule revision;
+- actor, timestamp, and optional reason;
+- Offer and Assignment context rather than deleting or overwriting it.
+
+Whether a reschedule requires a cleaner to reconfirm, withdraws a pending Offer,
+or triggers a reminder is an **OPEN QUESTION**. The audit model must support
+those later choices.
+
+## Cleaner availability and preferences
+
+Cleaner records may hold manager-maintained availability/preferences, capability
+metadata, language, and limited internal operational notes. They must not become
+an excessive personal-data profile.
+
+Automatic matching, ranking, or recommendations are **PLANNED** only after
+eligibility rules, scheduling policy, and authorization boundaries are proven.
 
 ## Financial entities
 
+### Cleaner Payout
+
+A Cleaner Payout records money paid or owed to a Cleaner for approved
+Assignments. It is separate from client invoicing and client payment.
+
+**CURRENT legacy implementation:** payout records group completed,
+single-cleaner Jobs and mark the Job with payout linkage to avoid duplicate
+payment.
+
+**PLANNED:** payouts become Assignment-aware so one Job can contribute payable
+work to more than one Cleaner while each Assignment can be paid exactly once.
+Payment proof remains optional evidence, not payment processing.
+
 ### Invoice
 
-Represents money owed by a Client. Invoice delivery state and payment state remain distinct.
+An Invoice is a financial aggregate representing money owed by a Client. It may
+contain multiple Job line items and has its own delivery state.
 
 ### Client Payment / Reconciliation
 
-Represents received money and the process of allocating it to invoices/Jobs. One transfer may cover multiple operational records.
+Client payment records represent received money and reconciliation to invoices.
+Invoice delivery and payment state remain separate: a sent invoice can be
+unpaid, and a received transfer may require reconciliation.
 
-### Cleaner Payout
+## Historical snapshots and migration
 
-Represents money paid or owed to a Cleaner for completed Jobs.
+Historical correctness is more important than silently normalizing old records.
+Canonical IDs and current live names can improve navigation/display, while
+snapshots preserve what was operationally or financially true at the time.
 
-The implemented payout slice records completed payout records under:
-
-`organizations/{organizationId}/payouts/{payoutId}`
-
-A Job included in a payout receives payout linkage to prevent accidental duplicate payout inclusion.
-
-Optional payment-proof images are stored in Firebase Storage, while Firestore keeps only metadata and storage references.
-
-Client receivables and Cleaner payouts must remain separate financial concerns.
+**CURRENT legacy fields** such as `assignedCleanerId`, `assignedCleanerName`,
+`cleanerPayout`, `payoutId`, and `payoutPaidAt` remain readable during an
+additive migration. New Assignment-based behavior must provide safe fallbacks
+for records that do not yet have Assignment entities.
 
 ## Relationship overview
 
@@ -265,33 +267,29 @@ Organization
  │       └─ Jobs
  ├─ Cleaners
  └─ Financial records
+     ├─ Invoices / Client Payments
+     └─ Cleaner Payouts
 
 Job
- ├─ Invites / Offers
- ├─ Assigned Cleaner
+ ├─ Offers
+ ├─ Assignments
  ├─ Issues
- ├─ Checklist Run
+ ├─ Checklist Runs
  ├─ Photos / Attachments
+ ├─ Schedule-change history
  └─ Activity / Audit Events
 ```
 
-## Persistence principles
+## Persistence and privacy principles
 
-Do not translate this domain diagram mechanically into nested Firestore collections.
+Do not mechanically translate this diagram into one persistence layout. Storage
+design must consider required queries, authorization, cost, lifecycle,
+historical accuracy, indexes, and migration flexibility.
 
-Persistence design should account for:
+Intentional denormalization is acceptable when it improves queryability or
+preserves historical snapshots, but the authoritative source and update rules
+must be explicit.
 
-- required queries;
-- realtime listeners;
-- authorization boundaries;
-- cost;
-- lifecycle and ownership;
-- historical accuracy;
-- index requirements;
-- migration flexibility.
-
-Some denormalization may be intentional when it improves queryability or preserves historical snapshots. Such decisions should be explicit in `docs/DECISIONS.md`.
-
-## Privacy rule
-
-Examples and fixtures in the public repository must be fictitious. Domain documentation should describe roles and workflow patterns, never personally identifying design-partner details, real property access data or payment credentials.
+Public-repository examples and fixtures must be fictitious. Public/cleaner
+payloads must be minimized and must never expose unrelated financial,
+operational, or private property information.
