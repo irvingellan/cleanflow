@@ -18,6 +18,7 @@ export function ClientDetail({
   onOpenProperty,
   onCreateProperty,
   onOpenJob,
+  onViewAllUpcoming,
 }) {
   const { language, translate } = useTranslation();
   const clientName = client.name || translate("common.notProvided");
@@ -112,18 +113,24 @@ export function ClientDetail({
         history={jobHistory}
         hasError={hasJobHistoryError}
         onOpenJob={onOpenJob}
+        onViewAllUpcoming={onViewAllUpcoming}
       />
     </section>
   );
 }
 
-function ClientOperationalHistory({ history, hasError, onOpenJob }) {
+function ClientOperationalHistory({ history, hasError, onOpenJob, onViewAllUpcoming }) {
   const { translate } = useTranslation();
+  const upcomingJobs = history?.upcomingJobs ?? (
+    history?.upcomingJob ? [history.upcomingJob] : []
+  );
+  const displayedUpcomingJobs = upcomingJobs.slice(0, 3);
+  const hasMoreUpcoming = Boolean(history?.hasMoreUpcoming) || upcomingJobs.length > 3;
 
   return (
     <div className="property-history client-history">
       <section className="property-history-section" aria-labelledby="client-upcoming-job-title">
-        <h3 id="client-upcoming-job-title">{translate("clients.upcomingService")}</h3>
+        <h3 id="client-upcoming-job-title">{translate("clients.upcomingServices")}</h3>
 
         {!history && !hasError && (
           <p className="property-history-state">{translate("clients.historyLoading")}</p>
@@ -135,12 +142,22 @@ function ClientOperationalHistory({ history, hasError, onOpenJob }) {
           </p>
         )}
 
-        {history && !history.upcomingJob && (
+        {history && displayedUpcomingJobs.length === 0 && (
           <p className="property-history-state">{translate("clients.noUpcomingService")}</p>
         )}
 
-        {history?.upcomingJob && (
-          <ClientHistoryJob job={history.upcomingJob} onOpen={onOpenJob} />
+        {displayedUpcomingJobs.length > 0 && (
+          <div className="property-history-list">
+            {displayedUpcomingJobs.map((job) => (
+              <ClientHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
+            ))}
+          </div>
+        )}
+
+        {hasMoreUpcoming && (
+          <button className="button" type="button" onClick={onViewAllUpcoming}>
+            {translate("jobs.viewAllUpcoming")}
+          </button>
         )}
       </section>
 

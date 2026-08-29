@@ -65,6 +65,12 @@ export function JobsPage({
         .filter(
           (job) => !filters.propertyId || job.propertyId === filters.propertyId,
         )
+        .filter(
+          (job) =>
+            !filters.clientId ||
+            job.clientId === filters.clientId ||
+            propertiesById[job.propertyId]?.clientId === filters.clientId,
+        )
         .filter((job) => {
           if (!normalizedSearch) return true;
 
@@ -76,6 +82,7 @@ export function JobsPage({
         .sort(sortJobWorklist),
     [
       filters.cleanerId,
+      filters.clientId,
       filters.propertyId,
       jobs,
       language,
@@ -107,6 +114,7 @@ export function JobsPage({
     filters.datePreset !== "any",
     Boolean(filters.cleanerId),
     Boolean(filters.propertyId),
+    Boolean(filters.clientId),
     !["all", ...quickStatusValues].includes(filters.status),
   ].filter(Boolean).length;
 
@@ -213,6 +221,11 @@ export function JobsPage({
             )}
           </div>
         </div>
+        {filters.clientName && (
+          <p className="job-filters__context">
+            {translate("jobs.clientContext", { client: filters.clientName })}
+          </p>
+        )}
         {isAdvancedFiltersOpen && (
           <div className="job-filters__advanced">
             <label>

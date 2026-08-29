@@ -4,6 +4,8 @@ export function createJobListFilters(overrides = {}) {
     datePreset: "any",
     cleanerId: "",
     propertyId: "",
+    clientId: "",
+    clientName: "",
     search: "",
     ...overrides,
   };

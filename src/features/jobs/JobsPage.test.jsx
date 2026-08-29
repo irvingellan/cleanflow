@@ -62,8 +62,8 @@ function JobsPageHarness({ initialFilters = createJobListFilters() }) {
         filters={filters}
         cleaners={[{ id: "cleaner-1", name: "Carla Perez" }]}
         properties={[
-          { id: "property-a", name: "Pacific Beach Condo" },
-          { id: "property-b", name: "Sunset House" },
+          { id: "property-a", name: "Pacific Beach Condo", clientId: "client-carl" },
+          { id: "property-b", name: "Sunset House", clientId: "client-sara" },
         ]}
         onFiltersChange={(updates) =>
           setFilters((currentFilters) => ({ ...currentFilters, ...updates }))
@@ -105,6 +105,21 @@ describe("sortJobWorklist", () => {
 });
 
 describe("JobsPage filters", () => {
+  it("applies a Client context through canonical Property relationships for legacy Jobs", () => {
+    render(
+      <JobsPageHarness
+        initialFilters={createJobListFilters({
+          clientId: "client-carl",
+          clientName: "Carl",
+        })}
+      />
+    );
+
+    expect(screen.getByText("Client: Carl")).toBeVisible();
+    expect(screen.getAllByText("Pacific Beach Condo")).toHaveLength(2);
+    expect(screen.queryByText("Sunset House")).not.toBeInTheDocument();
+  });
+
   it("toggles quick filters using the existing filter state", async () => {
     const user = userEvent.setup();
     render(<JobsPageHarness />);

@@ -1237,6 +1237,12 @@ button.summary-card {
   gap: 12px;
 }
 
+.job-filters__context {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
 .job-filter-chip,
 .job-filters__advanced-toggle,
 .job-filters__clear {

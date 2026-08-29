@@ -498,6 +498,17 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     showJobList(dashboardJobListFilters(filter));
   }
 
+  function showJobsForClient(client) {
+    showJobList(createJobListFilters({
+      clientId: client.id,
+      clientName: client.name || "",
+    }));
+  }
+
+  function showJobsForProperty(property) {
+    showJobList(createJobListFilters({ propertyId: property.id }));
+  }
+
   function returnToJobs() {
     showJobList(jobListFilters);
   }
@@ -781,6 +792,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onCreateCleaning={() => setView("create-cleaning")}
             onOpenJob={openPropertyJob}
             onLinkClient={showPropertyClientLink}
+            onViewAllUpcoming={() => showJobsForProperty(selectedProperty)}
           />
         )}
 
@@ -937,6 +949,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOpenProperty={openClientProperty}
             onCreateProperty={showNewPropertyForClient}
             onOpenJob={openClientJob}
+            onViewAllUpcoming={() => showJobsForClient(selectedClient)}
           />
         )}
 

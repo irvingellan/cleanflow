@@ -66,10 +66,13 @@ describe("JobDetail lifecycle actions", () => {
   it("shows the manager-only guest name only when the Job has one", () => {
     const { rerender } = renderJobDetail("UNASSIGNED", {
       guestName: "Taylor Morgan",
+      scheduledStart: "10:00",
     });
 
     expect(screen.getByText("Guest name (optional)")).toBeVisible();
     expect(screen.getByText("Taylor Morgan")).toBeVisible();
+    expect(screen.getByText("Scheduled time")).toBeVisible();
+    expect(screen.getByText("10:00")).toBeVisible();
 
     rerender(
       <TranslationProvider>
@@ -103,5 +106,6 @@ describe("JobDetail lifecycle actions", () => {
 
     expect(screen.queryByText("Guest name (optional)")).not.toBeInTheDocument();
     expect(screen.queryByText("Taylor Morgan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Scheduled time")).not.toBeInTheDocument();
   });
 });

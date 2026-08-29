@@ -124,10 +124,12 @@ test("a manager-created Job keeps optional guest context from a linked Property"
 
   await page.getByRole("button", { name: "Create cleaning" }).click();
   await page.getByRole("textbox", { name: "Date" }).fill("2026-09-15");
+  await page.getByRole("textbox", { name: "Scheduled time" }).fill("10:00");
   await page.getByLabel("Guest name (optional)").fill("E2E Guest");
   await page.getByRole("button", { name: "Create cleaning" }).click();
-  await expect(page.getByRole("heading", { name: "Cleaning created" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Service created" })).toBeVisible();
 
-  await page.getByRole("button", { name: "View job" }).click();
+  await page.getByRole("button", { name: "View service" }).click();
   await expect(page.getByText("E2E Guest")).toBeVisible();
+  await expect(page.getByText("10:00")).toBeVisible();
 });

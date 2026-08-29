@@ -56,12 +56,14 @@ export function buildCurrentJobCreateData({
   clientId,
   clientName,
   scheduledDate,
+  scheduledStart,
   clientPrice,
   cleanerPayout,
   notes,
   guestName,
 }) {
   const normalizedGuestName = optionalText(guestName);
+  const normalizedScheduledStart = optionalText(scheduledStart);
 
   if (normalizedGuestName.length > maximumGuestNameLength) {
     throw new Error("Guest name is too long.");
@@ -83,6 +85,10 @@ export function buildCurrentJobCreateData({
 
   if (normalizedClientId) {
     job.clientId = normalizedClientId;
+  }
+
+  if (normalizedScheduledStart) {
+    job.scheduledStart = normalizedScheduledStart;
   }
 
   if (normalizedGuestName) {

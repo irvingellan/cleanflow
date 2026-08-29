@@ -21,6 +21,7 @@ import {
 
 const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
+const upcomingSummaryLimit = 3;
 const activeOperationalStatuses = [
   "UNASSIGNED",
   "OFFERED",
@@ -88,6 +89,18 @@ function recentJobsFromSnapshots(snapshots) {
   )
     .sort((firstJob, secondJob) => historySortValue(secondJob) - historySortValue(firstJob))
     .slice(0, 10);
+}
+
+function upcomingJobSortValue(job) {
+  return `${job.scheduledDate || ""}T${job.scheduledStart || ""}`;
+}
+
+function upcomingJobsFromSnapshots(snapshots) {
+  return uniqueJobs(
+    snapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
+  ).sort((firstJob, secondJob) =>
+    upcomingJobSortValue(firstJob).localeCompare(upcomingJobSortValue(secondJob)),
+  );
 }
 
 function activeStatusesForFilter(status) {
@@ -235,7 +248,7 @@ export async function getPropertyJobHistory(propertyId) {
         ]),
         where("scheduledDate", ">=", today),
         orderBy("scheduledDate", "asc"),
-        limit(1),
+        limit(upcomingSummaryLimit + 1),
       ),
     ),
     getDocs(
@@ -258,8 +271,12 @@ export async function getPropertyJobHistory(propertyId) {
     ),
   ]);
 
+  const upcomingJobs = upcomingJobsFromSnapshots([upcomingSnapshot]);
+
   return {
-    upcomingJob: upcomingSnapshot.empty ? null : jobFromSnapshot(upcomingSnapshot.docs[0]),
+    upcomingJob: upcomingJobs[0] || null,
+    upcomingJobs: upcomingJobs.slice(0, upcomingSummaryLimit),
+    hasMoreUpcoming: upcomingJobs.length > upcomingSummaryLimit,
     recentJobs: recentJobsFromSnapshots([
       scheduledHistorySnapshot,
       completedHistorySnapshot,
@@ -322,7 +339,7 @@ export async function getClientJobHistory(clientId, propertyIds) {
       where("operationalStatus", "in", activeStatuses),
       where("scheduledDate", ">=", today),
       orderBy("scheduledDate", "asc"),
-      limit(1),
+      limit(upcomingSummaryLimit + 1),
     ),
     ...propertyIdGroups.flatMap((propertyIdGroup) =>
       activeStatuses.map((operationalStatus) =>
@@ -332,7 +349,7 @@ export async function getClientJobHistory(clientId, propertyIds) {
           where("operationalStatus", "==", operationalStatus),
           where("scheduledDate", ">=", today),
           orderBy("scheduledDate", "asc"),
-          limit(1),
+          limit(upcomingSummaryLimit + 1),
         ),
       ),
     ),
@@ -378,11 +395,7 @@ export async function getClientJobHistory(clientId, propertyIds) {
     Promise.all(historyQueries.map((jobQuery) => getDocs(jobQuery))),
     Promise.all(completedHistoryQueries.map((jobQuery) => getDocs(jobQuery))),
   ]);
-  const byScheduledDateAscending = (firstJob, secondJob) =>
-    (firstJob.scheduledDate || "").localeCompare(secondJob.scheduledDate || "");
-  const upcomingJobs = uniqueJobs(
-    upcomingSnapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
-  ).sort(byScheduledDateAscending);
+  const upcomingJobs = upcomingJobsFromSnapshots(upcomingSnapshots);
   const recentJobs = recentJobsFromSnapshots([
     ...historySnapshots,
     ...completedHistorySnapshots,
@@ -390,6 +403,8 @@ export async function getClientJobHistory(clientId, propertyIds) {
 
   return {
     upcomingJob: upcomingJobs[0] || null,
+    upcomingJobs: upcomingJobs.slice(0, upcomingSummaryLimit),
+    hasMoreUpcoming: upcomingJobs.length > upcomingSummaryLimit,
     recentJobs,
   };
 }
@@ -505,6 +520,7 @@ export async function createJob({
   clientId,
   clientName,
   scheduledDate,
+  scheduledStart,
   clientPrice,
   cleanerPayout,
   notes,
@@ -517,6 +533,7 @@ export async function createJob({
     clientId,
     clientName,
     scheduledDate,
+    scheduledStart,
     clientPrice,
     cleanerPayout,
     notes,

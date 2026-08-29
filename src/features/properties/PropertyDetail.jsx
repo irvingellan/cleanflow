@@ -9,7 +9,14 @@ import {
 } from "../../lib/presentation.js";
 import { getPropertyJobHistory } from "../jobs/jobService.js";
 
-export function PropertyDetail({ property, onBack, onCreateCleaning, onOpenJob, onLinkClient }) {
+export function PropertyDetail({
+  property,
+  onBack,
+  onCreateCleaning,
+  onOpenJob,
+  onLinkClient,
+  onViewAllUpcoming,
+}) {
   const { language, translate } = useTranslation();
   const propertyName = property.name || translate("properties.unnamed");
   const clientName = property.clientName || translate("common.notProvided");
@@ -64,15 +71,24 @@ export function PropertyDetail({ property, onBack, onCreateCleaning, onOpenJob, 
         </button>
       </div>
 
-      <PropertyOperationalHistory propertyId={property.id} onOpenJob={onOpenJob} />
+      <PropertyOperationalHistory
+        propertyId={property.id}
+        onOpenJob={onOpenJob}
+        onViewAllUpcoming={onViewAllUpcoming}
+      />
     </section>
   );
 }
 
-function PropertyOperationalHistory({ propertyId, onOpenJob }) {
+function PropertyOperationalHistory({ propertyId, onOpenJob, onViewAllUpcoming }) {
   const { translate } = useTranslation();
   const [history, setHistory] = useState(null);
   const [hasHistoryError, setHasHistoryError] = useState(false);
+  const upcomingJobs = history?.upcomingJobs ?? (
+    history?.upcomingJob ? [history.upcomingJob] : []
+  );
+  const displayedUpcomingJobs = upcomingJobs.slice(0, 3);
+  const hasMoreUpcoming = Boolean(history?.hasMoreUpcoming) || upcomingJobs.length > 3;
 
   useEffect(() => {
     let isCurrent = true;
@@ -104,7 +120,7 @@ function PropertyOperationalHistory({ propertyId, onOpenJob }) {
   return (
     <div className="property-history">
       <section className="property-history-section" aria-labelledby="property-upcoming-job-title">
-        <h3 id="property-upcoming-job-title">{translate("properties.upcomingService")}</h3>
+        <h3 id="property-upcoming-job-title">{translate("properties.upcomingServices")}</h3>
 
         {!history && !hasHistoryError && (
           <p className="property-history-state">{translate("properties.historyLoading")}</p>
@@ -116,12 +132,22 @@ function PropertyOperationalHistory({ propertyId, onOpenJob }) {
           </p>
         )}
 
-        {history && !history.upcomingJob && (
+        {history && displayedUpcomingJobs.length === 0 && (
           <p className="property-history-state">{translate("properties.noUpcomingService")}</p>
         )}
 
-        {history?.upcomingJob && (
-          <PropertyHistoryJob job={history.upcomingJob} onOpen={onOpenJob} />
+        {displayedUpcomingJobs.length > 0 && (
+          <div className="property-history-list">
+            {displayedUpcomingJobs.map((job) => (
+              <PropertyHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
+            ))}
+          </div>
+        )}
+
+        {hasMoreUpcoming && (
+          <button className="button" type="button" onClick={onViewAllUpcoming}>
+            {translate("jobs.viewAllUpcoming")}
+          </button>
         )}
       </section>
 

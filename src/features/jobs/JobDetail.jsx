@@ -257,6 +257,9 @@ export function JobDetail({
           label={translate("jobs.scheduledDate")}
           value={formatDate(job.scheduledDate, translate, language)}
         />
+        {job.scheduledStart && (
+          <DetailItem label={translate("jobs.scheduledTime")} value={job.scheduledStart} />
+        )}
         <DetailItem
           label={translate("jobs.operationalStatus")}
           value={formatOperationalStatus(job.operationalStatus, translate)}

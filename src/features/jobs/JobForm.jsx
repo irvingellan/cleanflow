@@ -13,6 +13,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
   const displayClientName = clientName || translate("common.notProvided");
   const [formValues, setFormValues] = useState({
     scheduledDate: "",
+    scheduledStart: "",
     clientPrice: property.defaultClientPrice ?? "",
     cleanerPayout: property.defaultCleanerPrice ?? "",
     guestName: "",
@@ -50,6 +51,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
         ...(property.clientId ? { clientId: property.clientId } : {}),
         clientName,
         scheduledDate: formValues.scheduledDate,
+        scheduledStart: formValues.scheduledStart,
         clientPrice,
         cleanerPayout,
         notes,
@@ -91,6 +93,16 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
             value={formValues.scheduledDate}
             onChange={updateField}
             required
+          />
+        </label>
+
+        <label>
+          {translate("jobs.scheduledTime")}
+          <input
+            type="time"
+            name="scheduledStart"
+            value={formValues.scheduledStart}
+            onChange={updateField}
           />
         </label>
 
@@ -176,13 +188,15 @@ export function CleaningSuccess({ job, onBack, onViewJob }) {
       </span>
       <p className="eyebrow">{translate("jobs.saved")}</p>
       <h2 id="success-title" className="panel__title">
-        {translate("jobs.created")}
+        {translate("jobs.serviceCreated")}
       </h2>
       <p className="success-panel__detail">
         {job.propertyName || translate("properties.unnamed")}
       </p>
       <p className="success-panel__date">
-        {formatDate(job.scheduledDate, translate, language)}
+        {[formatDate(job.scheduledDate, translate, language), job.scheduledStart]
+          .filter(Boolean)
+          .join(" · ")}
       </p>
 
       <div className="button-row">
@@ -191,7 +205,7 @@ export function CleaningSuccess({ job, onBack, onViewJob }) {
           type="button"
           onClick={onViewJob}
         >
-          {translate("jobs.viewJob")}
+          {translate("jobs.viewService")}
         </button>
         <button className="button" type="button" onClick={onBack}>
           {translate("jobs.backToProperties")}
