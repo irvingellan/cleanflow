@@ -28,6 +28,7 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+artifacts/visual-smoke/
 .vite/
 .cache/
 .eslintcache

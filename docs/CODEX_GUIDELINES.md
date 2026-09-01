@@ -38,6 +38,9 @@ git diff --check
 - Do not weaken or delete an existing test merely to make a change pass.
 - Add focused unit/component coverage when practical; use emulator-backed E2E tests
   for navigation or persistence behavior that depends on backend state.
+- For meaningful visual or multi-step workflow changes, use the local visual-smoke
+  workflow when available after deterministic checks. Treat it as exploratory evidence,
+  not a replacement for Playwright regression coverage.
 
 ## Safety
 
