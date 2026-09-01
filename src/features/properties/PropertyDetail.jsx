@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BackButton, DetailItem } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
+import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
 import {
   formatDate,
   formatOperationalStatus,
@@ -183,7 +184,7 @@ function PropertyHistoryJob({ job, onOpen }) {
     <article className="property-history-job">
       <div className="property-history-job__summary">
         <strong>{scheduledService}</strong>
-        <span>{job.assignedCleanerName || translate("dashboard.notAssigned")}</span>
+        <span>{assignedCleanerSummary(job, {}, translate, translate("dashboard.notAssigned"))}</span>
       </div>
       <span className="status-badge">
         {formatOperationalStatus(job.operationalStatus, translate)}

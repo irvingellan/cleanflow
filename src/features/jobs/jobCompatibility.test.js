@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   CURRENT_JOB_SCHEMA_VERSION,
+  ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION,
   LEGACY_JOB_SCHEMA_VERSION,
+  SINGULAR_JOB_SCHEMA_VERSION,
   buildCurrentJobCreateData,
+  canManageAssignmentAwareOffers,
+  getAssignedCleanerIds,
   getJobSchemaVersion,
   isLegacyJob,
   normalizeJobRecord,
@@ -44,9 +48,9 @@ describe("Job compatibility", () => {
     });
   });
 
-  it("keeps current compatible identity snapshots and optional guest context", () => {
+  it("keeps singular schema v1 identity snapshots and optional guest context", () => {
     const job = normalizeJobRecord({
-      schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
+      schemaVersion: SINGULAR_JOB_SCHEMA_VERSION,
       clientId: " client-1 ",
       clientName: "Client Snapshot",
       guestName: " Jordan Lee ",
@@ -54,14 +58,14 @@ describe("Job compatibility", () => {
 
     expect(job).toMatchObject({
       id: "job-1",
-      schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
+      schemaVersion: SINGULAR_JOB_SCHEMA_VERSION,
       clientId: "client-1",
       clientName: "Client Snapshot",
       guestName: "Jordan Lee",
     });
   });
 
-  it("builds a v1-compatible Job without inferring a Client ID or keeping a blank guest name", () => {
+  it("builds an assignment-aware v2 Job without inferring a Client ID or keeping a blank guest name", () => {
     const job = buildCurrentJobCreateData({
       organizationId: "cleanflow-demo",
       propertyId: "property-1",
@@ -78,6 +82,7 @@ describe("Job compatibility", () => {
       schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
       clientName: "Snapshot Client",
       operationalStatus: "UNASSIGNED",
+      assignedCleanerIds: [],
     });
     expect(job).not.toHaveProperty("clientId");
     expect(job).not.toHaveProperty("guestName");
@@ -102,5 +107,28 @@ describe("Job compatibility", () => {
       clientName: "Client Snapshot",
       guestName: "Guest Name",
     });
+  });
+
+  it("keeps a v2 roster projection normalized without fabricating assignments", () => {
+    const job = normalizeJobRecord({
+      schemaVersion: ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION,
+      assignedCleanerIds: [" cleaner-1 ", "cleaner-1", "cleaner-2", ""],
+    }, "team-job");
+
+    expect(getAssignedCleanerIds(job)).toEqual(["cleaner-1", "cleaner-2"]);
+    expect(job).not.toHaveProperty("assignments");
+  });
+
+  it("allows v2 offer management only before work starts", () => {
+    for (const operationalStatus of ["UNASSIGNED", "OFFERED", "ASSIGNED"]) {
+      expect(
+        canManageAssignmentAwareOffers({ schemaVersion: 2, operationalStatus }),
+      ).toBe(true);
+    }
+
+    expect(
+      canManageAssignmentAwareOffers({ schemaVersion: 2, operationalStatus: "IN_PROGRESS" }),
+    ).toBe(false);
+    expect(canManageAssignmentAwareOffers({ operationalStatus: "OFFERED" })).toBe(false);
   });
 });

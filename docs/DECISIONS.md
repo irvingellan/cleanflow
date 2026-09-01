@@ -353,7 +353,7 @@ Status: Accepted for the prototype
 
 Cleaner offer links must not grant anonymous Firestore access. An authenticated manager creates an opaque, high-entropy token in the browser; only its hash and expiry are stored on the linked Offer document. A public HTTPS Function resolves that hash server-side and returns only a cleaner-safe projection of one offer.
 
-The public Function may update only its linked offer from `PENDING` to `INTERESTED` or `DECLINED`; this response never assigns a Job. The Function enforces a seven-day prototype expiry and checks that the parent Job remains `OFFERED`. These checks are intentionally centralized so later lifecycle-based expiry rules can replace or extend the initial duration.
+The public Function may update only its linked offer from `PENDING` to `INTERESTED` or `DECLINED`; this response never assigns a Job. The Function enforces a seven-day prototype expiry. A legacy Job must remain `OFFERED`; an Assignment-aware Job may remain available through `ASSIGNED` so the manager can build a pre-start team roster, but becomes unavailable at `IN_PROGRESS`. These checks are intentionally centralized so later lifecycle-based expiry rules can replace or extend the initial duration.
 
 The public projection excludes client price, generic manager notes, property access data, other cleaners and other offers. Firestore rules remain authenticated-manager-only until narrower role authorization is designed.
 

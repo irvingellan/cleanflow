@@ -41,7 +41,7 @@ describe("CreateCleaningForm", () => {
     const onCreated = vi.fn();
     const savedJob = {
       id: "job-1",
-      schemaVersion: 1,
+      schemaVersion: 2,
       propertyId: "property-1",
       propertyName: "Pacific Beach Condo",
       clientId: "client-carl",
@@ -52,6 +52,7 @@ describe("CreateCleaningForm", () => {
       guestName: "Taylor Morgan",
       notes: "",
       operationalStatus: "UNASSIGNED",
+      assignedCleanerIds: [],
     };
     createJob.mockResolvedValue(savedJob);
 

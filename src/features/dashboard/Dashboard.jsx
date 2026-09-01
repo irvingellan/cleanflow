@@ -1,6 +1,7 @@
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
+import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
 import {
   formatIssueCategory,
   issueIconName,
@@ -271,10 +272,10 @@ export function Dashboard({
                   <strong>{job.propertyName || translate("properties.unnamed")}</strong>
                   <span>{formatDate(job.scheduledDate, translate, language)}</span>
                   <span>
-                    {currentCleanerName(
-                      job.assignedCleanerId,
-                      job.assignedCleanerName,
+                    {assignedCleanerSummary(
+                      job,
                       cleanerNamesById,
+                      translate,
                       translate("common.notProvided"),
                     )}
                   </span>
@@ -343,10 +344,10 @@ function DashboardNextJob({ job, cleanerNamesById, onOpen }) {
         {formatOperationalStatus(job.operationalStatus, translate)}
       </span>
       <span>
-        {currentCleanerName(
-          job.assignedCleanerId,
-          job.assignedCleanerName,
+        {assignedCleanerSummary(
+          job,
           cleanerNamesById,
+          translate,
           translate("dashboard.needsAssignment"),
         )}
       </span>

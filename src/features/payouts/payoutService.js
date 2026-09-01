@@ -10,6 +10,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
 const organizationId = "cleanflow-demo";
 const allowedPaymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
@@ -40,8 +41,9 @@ function completionSortValue(job) {
   return Number.isNaN(scheduledAt) ? 0 : scheduledAt;
 }
 
-function isEligibleForPayout(job) {
+export function isEligibleForLegacyPayout(job) {
   return (
+    !isAssignmentAwareJob(job) &&
     job.operationalStatus === "COMPLETED" &&
     Boolean(job.assignedCleanerId) &&
     Number.isFinite(job.cleanerPayout) &&
@@ -65,7 +67,7 @@ export async function getUnpaidCompletedJobs() {
   // records a payout; some also have no completedAt, so do not order them out of the query.
   return snapshot.docs
     .map(jobFromSnapshot)
-    .filter(isEligibleForPayout)
+    .filter(isEligibleForLegacyPayout)
     .sort((firstJob, secondJob) => completionSortValue(secondJob) - completionSortValue(firstJob));
 }
 
@@ -114,7 +116,7 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     const jobs = snapshots.map(jobFromSnapshot);
 
     for (const job of jobs) {
-      if (!isEligibleForPayout(job) || job.assignedCleanerId !== cleaner.id) {
+      if (!isEligibleForLegacyPayout(job) || job.assignedCleanerId !== cleaner.id) {
         // Re-reading every selected Job inside the transaction prevents a completed Job
         // from being included in two payouts when two manager sessions overlap.
         throw payoutError("job-not-payable", "One or more jobs are no longer payable.");

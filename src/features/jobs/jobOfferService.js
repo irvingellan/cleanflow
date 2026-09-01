@@ -10,10 +10,13 @@ import {
   Timestamp,
   updateDoc,
   where,
-  writeBatch,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
-import { normalizeJobRecord } from "./jobCompatibility.js";
+import {
+  canManageAssignmentAwareOffers,
+  isAssignmentAwareJob,
+  normalizeJobRecord,
+} from "./jobCompatibility.js";
 
 const organizationId = "cleanflow-demo";
 const publicOfferTokenLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
@@ -65,6 +68,16 @@ function jobFromSnapshot(snapshot) {
   return normalizeJobRecord(snapshot.data(), snapshot.id);
 }
 
+function canCreateOffersForJob(job) {
+  return !isAssignmentAwareJob(job) || canManageAssignmentAwareOffers(job);
+}
+
+function canCreatePublicOfferLinkForJob(job) {
+  return isAssignmentAwareJob(job)
+    ? ["OFFERED", "ASSIGNED"].includes(job.operationalStatus)
+    : job.operationalStatus === "OFFERED";
+}
+
 export async function getJobOffers(jobId) {
   const snapshot = await getDocs(offersCollection(jobId));
 
@@ -108,23 +121,6 @@ export async function respondToJobOffer({ jobId, cleanerId, status }) {
 }
 
 export async function createJobOffers({ jobId, cleaners }) {
-  const batch = writeBatch(db);
-
-  for (const cleaner of cleaners) {
-    batch.set(
-      offerDocument(jobId, cleaner.id),
-      {
-        jobId,
-        cleanerId: cleaner.id,
-        cleanerName: cleaner.name,
-        status: "PENDING",
-        createdAt: serverTimestamp(),
-      },
-    );
-  }
-
-  await batch.commit();
-
   const reference = jobDocument(jobId);
 
   await runTransaction(db, async (transaction) => {
@@ -136,7 +132,27 @@ export async function createJobOffers({ jobId, cleaners }) {
       throw error;
     }
 
-    if (snapshot.data().operationalStatus === "UNASSIGNED") {
+    const job = jobFromSnapshot(snapshot);
+    if (!canCreateOffersForJob(job)) {
+      const error = new Error("Offers cannot be created after work starts.");
+      error.code = "offer-management-locked";
+      throw error;
+    }
+
+    for (const cleaner of cleaners) {
+      transaction.set(
+        offerDocument(jobId, cleaner.id),
+        {
+          jobId,
+          cleanerId: cleaner.id,
+          cleanerName: cleaner.name,
+          status: "PENDING",
+          createdAt: serverTimestamp(),
+        },
+      );
+    }
+
+    if (job.operationalStatus === "UNASSIGNED") {
       transaction.update(reference, {
         operationalStatus: "OFFERED",
         offeredAt: serverTimestamp(),
@@ -167,10 +183,8 @@ export async function createPublicOfferLink({ jobId, cleanerId }) {
       throw error;
     }
 
-    if (
-      jobSnapshot.data().operationalStatus !== "OFFERED" ||
-      offerSnapshot.data().status !== "PENDING"
-    ) {
+    const job = jobFromSnapshot(jobSnapshot);
+    if (!canCreatePublicOfferLinkForJob(job) || offerSnapshot.data().status !== "PENDING") {
       const error = new Error("Offer is not available for a public link.");
       error.code = "offer-unavailable";
       throw error;

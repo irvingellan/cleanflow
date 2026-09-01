@@ -1,5 +1,7 @@
 export const LEGACY_JOB_SCHEMA_VERSION = 0;
-export const CURRENT_JOB_SCHEMA_VERSION = 1;
+export const SINGULAR_JOB_SCHEMA_VERSION = 1;
+export const ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION = 2;
+export const CURRENT_JOB_SCHEMA_VERSION = ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION;
 export const maximumGuestNameLength = 120;
 
 function optionalText(value) {
@@ -18,6 +20,31 @@ export function getJobSchemaVersion(job) {
 
 export function isLegacyJob(job) {
   return getJobSchemaVersion(job) === LEGACY_JOB_SCHEMA_VERSION;
+}
+
+export function isAssignmentAwareJob(job) {
+  return getJobSchemaVersion(job) >= ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION;
+}
+
+/**
+ * Assignment-aware Jobs may continue building a roster until work starts.
+ * Legacy offer behavior remains on its existing singular-cleaner path.
+ */
+export function canManageAssignmentAwareOffers(job) {
+  return (
+    isAssignmentAwareJob(job) &&
+    ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job?.operationalStatus)
+  );
+}
+
+export function getAssignedCleanerIds(job) {
+  if (!isAssignmentAwareJob(job) || !Array.isArray(job?.assignedCleanerIds)) {
+    return [];
+  }
+
+  return [...new Set(job.assignedCleanerIds.filter((cleanerId) =>
+    typeof cleanerId === "string" && cleanerId.trim(),
+  ).map((cleanerId) => cleanerId.trim()))];
 }
 
 /**
@@ -80,6 +107,7 @@ export function buildCurrentJobCreateData({
     notes,
     operationalStatus: "UNASSIGNED",
     schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
+    assignedCleanerIds: [],
   };
   const normalizedClientId = optionalText(clientId);
 

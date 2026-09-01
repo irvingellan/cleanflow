@@ -16,6 +16,11 @@ import {
   hasValue,
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
+import {
+  canManageAssignmentAwareOffers,
+  getAssignedCleanerIds,
+  isAssignmentAwareJob,
+} from "./jobCompatibility.js";
 
 export function JobDetail({
   job,
@@ -23,6 +28,9 @@ export function JobDetail({
   offers,
   isLoadingOffers,
   hasOffersError,
+  assignments,
+  isLoadingAssignments,
+  hasAssignmentsError,
   issues,
   isLoadingIssues,
   hasIssuesError,
@@ -33,6 +41,8 @@ export function JobDetail({
   onSimulateOffer,
   onCreatePublicOfferLink,
   onAssignCleaner,
+  onRemoveAssignment,
+  onReplaceAssignment,
   onStartCleaning,
   onCompleteCleaning,
   onSimulateAssignedCleaner,
@@ -42,6 +52,10 @@ export function JobDetail({
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
+  const [removingAssignmentId, setRemovingAssignmentId] = useState(null);
+  const [replacementTargetId, setReplacementTargetId] = useState(null);
+  const [replacingAssignmentId, setReplacingAssignmentId] = useState(null);
+  const [replacementOfferId, setReplacementOfferId] = useState("");
   const [resolvingIssueId, setResolvingIssueId] = useState(null);
   const [resolutionNote, setResolutionNote] = useState("");
   const [isResolvingIssue, setIsResolvingIssue] = useState(false);
@@ -58,26 +72,39 @@ export function JobDetail({
   const assignedAt = formatCreatedAt(job.assignedAt, language);
   const startedAt = formatCreatedAt(job.startedAt, language);
   const completedAt = formatCreatedAt(job.completedAt, language);
+  const isAssignmentAware = isAssignmentAwareJob(job);
+  const assignedCleanerIds = getAssignedCleanerIds(job);
+  const activeAssignments = (assignments || []).filter(
+    (assignment) => assignment.isActive === true,
+  );
   const isAssigned = Boolean(
     job.assignedCleanerId ||
       ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(
         job.operationalStatus,
       ),
   );
-  const canSimulateAssignedCleaner = [
+  const canSimulateAssignedCleaner = !isAssignmentAware && [
     "ASSIGNED",
     "IN_PROGRESS",
     "COMPLETED",
   ].includes(job.operationalStatus);
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
   const isCompleted = job.operationalStatus === "COMPLETED";
-  const canManageOffers = !isCompleted;
+  const canEditRoster =
+    isAssignmentAware &&
+    ["OFFERED", "ASSIGNED"].includes(job.operationalStatus);
+  const canManageOffers = isAssignmentAware
+    ? canManageAssignmentAwareOffers(job)
+    : !isCompleted;
+  // An assignment-aware Job can still need additional cleaners before work starts.
+  const canOfferToCleaners = canManageOffers;
   const knownCleanerNames = Object.fromEntries(
     knownCleaners.map((cleaner) => [cleaner.id, cleaner.name]),
   );
   const cleanerNamesById = { ...resolvedCleanerNames, ...knownCleanerNames };
   const unresolvedCleanerIds = [
     job.assignedCleanerId,
+    ...activeAssignments.map((assignment) => assignment.cleanerId),
     ...offers.map((offer) => offer.cleanerId),
   ]
     .filter(Boolean)
@@ -103,6 +130,12 @@ export function JobDetail({
 
     return secondCreatedAt - firstCreatedAt;
   });
+  const eligibleReplacementOffers = sortedOffers.filter(
+    (offer) =>
+      offer.status === "INTERESTED" &&
+      offer.cleanerId &&
+      !assignedCleanerIds.includes(offer.cleanerId),
+  );
 
   useEffect(() => {
     let isCurrent = true;
@@ -150,6 +183,38 @@ export function JobDetail({
       );
     } finally {
       setAssigningCleanerId(null);
+    }
+  }
+
+  async function removeCleanerAssignment(assignmentId) {
+    setRemovingAssignmentId(assignmentId);
+    setAssignmentError(null);
+
+    try {
+      await onRemoveAssignment(assignmentId);
+    } catch {
+      setAssignmentError(translate("jobs.rosterUpdateError"));
+    } finally {
+      setRemovingAssignmentId(null);
+    }
+  }
+
+  async function replaceCleanerAssignment(assignmentId) {
+    if (!replacementOfferId) {
+      return;
+    }
+
+    setReplacingAssignmentId(assignmentId);
+    setAssignmentError(null);
+
+    try {
+      await onReplaceAssignment(assignmentId, replacementOfferId);
+      setReplacementOfferId("");
+      setReplacementTargetId(null);
+    } catch {
+      setAssignmentError(translate("jobs.rosterUpdateError"));
+    } finally {
+      setReplacingAssignmentId(null);
     }
   }
 
@@ -272,13 +337,13 @@ export function JobDetail({
           label={translate("jobs.cleanerPayout")}
           value={formatPrice(job.cleanerPayout, translate, language)}
         />
-        {isAssigned && (
+        {!isAssignmentAware && isAssigned && (
           <DetailItem
             label={translate("jobs.assignedCleaner")}
             value={assignedCleanerName}
           />
         )}
-        {isAssigned && (
+        {!isAssignmentAware && isAssigned && (
           <DetailItem
             label={translate("jobs.assignedTime")}
             value={assignedAt || translate("common.notProvided")}
@@ -301,7 +366,7 @@ export function JobDetail({
         )}
       </dl>
 
-      {(job.operationalStatus === "ASSIGNED" ||
+      {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
         isInProgress ||
         isCompleted) && (
         <section
@@ -358,6 +423,117 @@ export function JobDetail({
               {translate("jobs.completeCleaningError")}
             </p>
           )}
+        </section>
+      )}
+
+      {isAssignmentAware && (
+        <section className="assignment-roster" aria-labelledby="assigned-cleaners-title">
+          <div className="assignment-roster__header">
+            <div>
+              <h3 id="assigned-cleaners-title">{translate("jobs.assignedCleaners")}</h3>
+              <span>
+                {assignedCleanerIds.length === 1
+                  ? translate("jobs.cleanerAssignedOne", { count: assignedCleanerIds.length })
+                  : translate("jobs.cleanersAssignedMany", { count: assignedCleanerIds.length })}
+              </span>
+            </div>
+          </div>
+
+          {isLoadingAssignments && (
+            <StateCard message={translate("jobs.rosterLoading")} status="status" />
+          )}
+          {!isLoadingAssignments && hasAssignmentsError && (
+            <StateCard message={translate("jobs.rosterError")} status="alert" isError />
+          )}
+          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length === 0 && (
+            <StateCard message={translate("jobs.noAssignedCleaners")} />
+          )}
+          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length > 0 && (
+            <div className="assignment-roster__list">
+              {activeAssignments.map((assignment) => {
+                const assignmentCleanerName = currentCleanerName(
+                  assignment.cleanerId,
+                  assignment.cleanerNameSnapshot,
+                  cleanerNamesById,
+                  translate("common.notProvided"),
+                );
+                const isReplacing = replacementTargetId === assignment.id;
+
+                return (
+                  <article key={assignment.id} className="assignment-roster__item">
+                    <strong>{assignmentCleanerName}</strong>
+                    <span className="status-badge">
+                      {formatOperationalStatus(assignment.executionStatus, translate)}
+                    </span>
+                    {canEditRoster && !isReplacing && (
+                      <div className="assignment-roster__actions">
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={removingAssignmentId !== null || replacingAssignmentId !== null}
+                          onClick={() => removeCleanerAssignment(assignment.id)}
+                        >
+                          {removingAssignmentId === assignment.id
+                            ? translate("jobs.removingCleaner")
+                            : translate("jobs.removeCleaner")}
+                        </button>
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={removingAssignmentId !== null || replacingAssignmentId !== null || eligibleReplacementOffers.length === 0}
+                          onClick={() => setReplacementTargetId(assignment.id)}
+                        >
+                          {translate("jobs.replaceCleaner")}
+                        </button>
+                      </div>
+                    )}
+                    {canEditRoster && isReplacing && (
+                      <div className="assignment-replacement">
+                        <label>
+                          {translate("jobs.replacementCleaner")}
+                          <select
+                            value={replacementOfferId}
+                            onChange={(event) => setReplacementOfferId(event.target.value)}
+                          >
+                            <option value="">{translate("common.notProvided")}</option>
+                            {eligibleReplacementOffers.map((offer) => (
+                              <option key={offer.id} value={offer.id}>
+                                {currentCleanerName(
+                                  offer.cleanerId,
+                                  offer.cleanerName,
+                                  cleanerNamesById,
+                                  translate("common.notProvided"),
+                                )}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="button-row">
+                          <button className="button" type="button" disabled={replacingAssignmentId !== null} onClick={() => {
+                            setReplacementTargetId(null);
+                            setReplacementOfferId("");
+                          }}>
+                            {translate("common.cancel")}
+                          </button>
+                          <button
+                            className="button button--primary"
+                            type="button"
+                            disabled={!replacementOfferId || replacingAssignmentId !== null}
+                            onClick={() => replaceCleanerAssignment(assignment.id)}
+                          >
+                            {replacingAssignmentId === assignment.id
+                              ? translate("jobs.replacingCleaner")
+                              : translate("jobs.confirmReplacement")}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+          {assignmentError && <p className="form-error assignment-error" role="alert">{assignmentError}</p>}
         </section>
       )}
 
@@ -513,14 +689,30 @@ export function JobDetail({
       <section className="offers-section" aria-labelledby="offers-title">
         <div className="offers-section__header">
           <h3 id="offers-title">{translate("offers.title")}</h3>
-          <button
-            className="button"
-            type="button"
-            onClick={onRefreshOffers}
-            disabled={isLoadingOffers}
-          >
-            {translate("offers.refresh")}
-          </button>
+          <div className="offers-section__actions">
+            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length === 0 && (
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={onOfferToCleaners}
+              >
+                {translate("offers.offerCleaningToCleaners")}
+              </button>
+            )}
+            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length > 0 && (
+              <button className="button" type="button" onClick={onOfferToCleaners}>
+                {translate("offers.sendToMoreCleaners")}
+              </button>
+            )}
+            <button
+              className="button"
+              type="button"
+              onClick={onRefreshOffers}
+              disabled={isLoadingOffers}
+            >
+              {translate("offers.refresh")}
+            </button>
+          </div>
         </div>
 
         {isLoadingOffers && (
@@ -549,6 +741,11 @@ export function JobDetail({
                 cleanerNamesById,
                 translate("common.notProvided"),
               );
+              const canCreatePublicLink =
+                offer.status === "PENDING" &&
+                (!isAssignmentAware
+                  ? job.operationalStatus === "OFFERED"
+                  : ["OFFERED", "ASSIGNED"].includes(job.operationalStatus));
 
               return (
                 <article key={offer.id} className="offer-status-item">
@@ -578,7 +775,7 @@ export function JobDetail({
                       >
                         {translate("offers.simulateOffer")}
                       </button>
-                      {offer.status === "PENDING" && (
+                      {canCreatePublicLink && (
                         <button
                           className="button"
                           type="button"
@@ -590,7 +787,10 @@ export function JobDetail({
                             : translate("offers.createPublicLink")}
                         </button>
                       )}
-                      {offer.status === "INTERESTED" && !isAssigned && (
+                      {offer.status === "INTERESTED" &&
+                        (isAssignmentAware
+                          ? canEditRoster && !assignedCleanerIds.includes(offer.cleanerId)
+                          : !isAssigned) && (
                         <button
                           className="button button--primary"
                           type="button"
@@ -625,7 +825,7 @@ export function JobDetail({
           </div>
         )}
 
-        {assignmentError && (
+        {!isAssignmentAware && assignmentError && (
           <p className="form-error assignment-error" role="alert">
             {assignmentError}
           </p>
@@ -640,15 +840,6 @@ export function JobDetail({
             onClick={onSimulateAssignedCleaner}
           >
             {translate("offers.simulateAssignedCleaner")}
-          </button>
-        )}
-        {canManageOffers && (
-          <button
-            className="button button--primary"
-            type="button"
-            onClick={onOfferToCleaners}
-          >
-            {translate("offers.offerToCleaners")}
           </button>
         )}
       </div>

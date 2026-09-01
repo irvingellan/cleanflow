@@ -215,6 +215,16 @@ function sendPublicError(response, status, error) {
   response.status(status).json({ error });
 }
 
+function isAssignmentAwareJobData(jobData) {
+  return Number.isInteger(jobData?.schemaVersion) && jobData.schemaVersion >= 2;
+}
+
+function canUsePublicOffer(jobData) {
+  return isAssignmentAwareJobData(jobData)
+    ? ["OFFERED", "ASSIGNED"].includes(jobData.operationalStatus)
+    : jobData.operationalStatus === "OFFERED";
+}
+
 function offerState(offerData, jobData, now) {
   const expiresAt = offerData.publicOfferExpiresAt;
 
@@ -222,10 +232,7 @@ function offerState(offerData, jobData, now) {
     return "expired";
   }
 
-  if (
-    jobData.operationalStatus !== "OFFERED" ||
-    !["PENDING", "INTERESTED", "DECLINED"].includes(offerData.status)
-  ) {
+  if (!canUsePublicOffer(jobData) || !["PENDING", "INTERESTED", "DECLINED"].includes(offerData.status)) {
     return "unavailable";
   }
 
@@ -263,22 +270,29 @@ async function offerReferenceForTokenHash(tokenHash) {
   return jobReferenceFromOffer(offerDocument) ? offerDocument : null;
 }
 
-function publicOfferResult(offerData, jobData) {
+export function publicOfferResult(offerData, jobData) {
   const state = offerState(offerData, jobData, new Date());
 
   if (state !== "available") {
     return { state };
   }
 
+  const offer = {
+    propertyName: jobData.propertyName || null,
+    scheduledDate: jobData.scheduledDate || null,
+    scheduledStart: jobData.scheduledStart || null,
+    status: offerData.status,
+  };
+
+  // Legacy Job payouts remain part of the existing public offer contract; v2
+  // compensation belongs to Assignments and is intentionally not defined yet.
+  if (!isAssignmentAwareJobData(jobData)) {
+    offer.cleanerPayout = jobData.cleanerPayout ?? null;
+  }
+
   return {
     state,
-    offer: {
-      propertyName: jobData.propertyName || null,
-      scheduledDate: jobData.scheduledDate || null,
-      scheduledStart: jobData.scheduledStart || null,
-      cleanerPayout: jobData.cleanerPayout ?? null,
-      status: offerData.status,
-    },
+    offer,
   };
 }
 

@@ -16,6 +16,7 @@ import {
 import { db } from "../../services/firebase/client.js";
 import {
   buildCurrentJobCreateData,
+  isAssignmentAwareJob,
   normalizeJobRecord,
 } from "./jobCompatibility.js";
 
@@ -423,6 +424,13 @@ export async function assignCleanerToJob(jobId, cleaner) {
 
     const job = snapshot.data();
 
+    if (isAssignmentAwareJob(job)) {
+      const error = new Error("Assignment-aware Jobs use the team assignment workflow.");
+      error.code = "assignment-aware-job";
+      error.job = jobFromSnapshot(snapshot);
+      throw error;
+    }
+
     if (job.assignedCleanerId || job.operationalStatus === "ASSIGNED") {
       const error = new Error("This job is already assigned.");
       error.code = "job-already-assigned";
@@ -455,6 +463,13 @@ export async function startAssignedJob(jobId) {
     }
 
     const job = snapshot.data();
+
+    if (isAssignmentAwareJob(job)) {
+      const error = new Error("Team Job execution is not available in this slice.");
+      error.code = "assignment-aware-execution-deferred";
+      error.job = jobFromSnapshot(snapshot);
+      throw error;
+    }
 
     if (job.operationalStatus !== "ASSIGNED") {
       const error = new Error("This job cannot be started from its current status.");
@@ -491,6 +506,13 @@ export async function completeInProgressJob(jobId) {
     }
 
     const job = snapshot.data();
+
+    if (isAssignmentAwareJob(job)) {
+      const error = new Error("Team Job execution is not available in this slice.");
+      error.code = "assignment-aware-execution-deferred";
+      error.job = jobFromSnapshot(snapshot);
+      throw error;
+    }
 
     if (job.operationalStatus !== "IN_PROGRESS") {
       const error = new Error("This job cannot be completed from its current status.");

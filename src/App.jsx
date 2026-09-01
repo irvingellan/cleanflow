@@ -251,10 +251,12 @@ function PublicOfferPage({ token }) {
               {offer.scheduledStart && (
                 <DetailItem label={translate("publicOffer.startTime")} value={offer.scheduledStart} />
               )}
-              <DetailItem
-                label={translate("publicOffer.yourPayment")}
-                value={formatPrice(offer.cleanerPayout, translate, language)}
-              />
+              {offer.cleanerPayout !== null && offer.cleanerPayout !== undefined && (
+                <DetailItem
+                  label={translate("publicOffer.yourPayment")}
+                  value={formatPrice(offer.cleanerPayout, translate, language)}
+                />
+              )}
               <DetailItem
                 label={translate("publicOffer.status")}
                 value={formatStatus(offer.status, translate)}
@@ -313,6 +315,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const jobDetail = useJobDetailController({
     view,
     onJobUpdated: jobWorklist.replaceJob,
+    actorUid: authUser?.uid,
   });
   const cleanersController = useCleanersController({ view });
   const clientsController = useClientsController({ view });
@@ -344,6 +347,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       offers: jobOffers,
       isLoadingOffers,
       hasOffersError,
+      assignments: jobAssignments,
+      isLoadingAssignments,
+      hasAssignmentsError,
       issues: jobIssues,
       isLoadingIssues,
       hasIssuesError,
@@ -363,6 +369,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     },
     actions: {
       assignCleaner,
+      removeCleanerAssignment,
+      replaceCleanerAssignment,
       startCleaning,
       completeCleaning,
       resolveJobIssue,
@@ -970,6 +978,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             offers={jobOffers}
             isLoadingOffers={isLoadingOffers}
             hasOffersError={hasOffersError}
+            assignments={jobAssignments}
+            isLoadingAssignments={isLoadingAssignments}
+            hasAssignmentsError={hasAssignmentsError}
             issues={jobIssues}
             isLoadingIssues={isLoadingIssues}
             hasIssuesError={hasIssuesError}
@@ -990,6 +1001,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onSimulateOffer={openCleanerOffer}
             onCreatePublicOfferLink={createCleanerOfferLink}
             onAssignCleaner={assignCleaner}
+            onRemoveAssignment={removeCleanerAssignment}
+            onReplaceAssignment={replaceCleanerAssignment}
             onStartCleaning={startCleaning}
             onCompleteCleaning={completeCleaning}
             onSimulateAssignedCleaner={openAssignedCleanerJob}

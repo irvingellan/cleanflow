@@ -1,4 +1,6 @@
 const organizationId = "cleanflow-demo";
+// Dev Center scenarios intentionally remain singular-cleaner fixtures so v2 roster
+// behavior is exercised explicitly rather than hidden behind generated legacy data.
 const currentJobSchemaVersion = 1;
 
 export const demoScenarios = {

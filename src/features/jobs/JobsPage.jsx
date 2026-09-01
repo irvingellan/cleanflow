@@ -8,6 +8,8 @@ import {
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { createJobListFilters } from "./jobListFilters.js";
+import { getAssignedCleanerIds } from "./jobCompatibility.js";
+import { assignedCleanerSummary } from "./assignmentPresentation.js";
 
 export { createJobListFilters, dashboardJobListFilters } from "./jobListFilters.js";
 
@@ -60,7 +62,9 @@ export function JobsPage({
       jobs
         .filter(
           (job) =>
-            !filters.cleanerId || job.assignedCleanerId === filters.cleanerId,
+            !filters.cleanerId ||
+            job.assignedCleanerId === filters.cleanerId ||
+            getAssignedCleanerIds(job).includes(filters.cleanerId),
         )
         .filter(
           (job) => !filters.propertyId || job.propertyId === filters.propertyId,
@@ -365,6 +369,14 @@ export function JobsPage({
                   </strong>
                   <span>
                     {job.clientName || translate("common.notProvided")}
+                  </span>
+                  <span>
+                    {assignedCleanerSummary(
+                      job,
+                      {},
+                      translate,
+                      translate("dashboard.notAssigned"),
+                    )}
                   </span>
                 </span>
                 <span className="status-badge">

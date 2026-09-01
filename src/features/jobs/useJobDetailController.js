@@ -3,6 +3,13 @@ import { getCleaners } from "../cleaners/cleanerService.js";
 import { getJobIssues, resolveIssue } from "../issues/issueService.js";
 import { createPublicOfferLink, getJobOffers } from "./jobOfferService.js";
 import {
+  assignInterestedCleaner,
+  getJobAssignments,
+  removeAssignment,
+  replaceAssignment,
+} from "./assignmentService.js";
+import { isAssignmentAwareJob } from "./jobCompatibility.js";
+import {
   assignCleanerToJob,
   completeInProgressJob,
   startAssignedJob,
@@ -13,6 +20,9 @@ function emptyDetailData() {
     offers: [],
     isLoadingOffers: false,
     hasOffersError: false,
+    assignments: [],
+    isLoadingAssignments: false,
+    hasAssignmentsError: false,
     issues: [],
     isLoadingIssues: false,
     hasIssuesError: false,
@@ -23,7 +33,7 @@ function emptyDetailData() {
  * Owns Job-detail data and mutations. It reports changed Jobs to the worklist
  * rather than duplicating Firestore state outside the Jobs feature.
  */
-export function useJobDetailController({ view, onJobUpdated }) {
+export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const [selectedJob, setSelectedJob] = useState(null);
   const [detailData, setDetailData] = useState(emptyDetailData);
   const [availableCleaners, setAvailableCleaners] = useState([]);
@@ -74,10 +84,33 @@ export function useJobDetailController({ view, onJobUpdated }) {
     }
   }
 
+  async function refreshAssignments(job = selectedJob) {
+    if (!job || !isAssignmentAwareJob(job)) {
+      setDetailData((currentData) => ({ ...currentData, assignments: [] }));
+      return;
+    }
+
+    setDetailData((currentData) => ({
+      ...currentData,
+      isLoadingAssignments: true,
+      hasAssignmentsError: false,
+    }));
+
+    try {
+      const assignments = await getJobAssignments(job.id);
+      setDetailData((currentData) => ({ ...currentData, assignments }));
+    } catch {
+      setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
+    } finally {
+      setDetailData((currentData) => ({ ...currentData, isLoadingAssignments: false }));
+    }
+  }
+
   useEffect(() => {
     if (view === "job-detail" && selectedJob) {
       refreshOffers();
       refreshIssues();
+      refreshAssignments();
     }
   }, [view, selectedJob]);
 
@@ -126,6 +159,7 @@ export function useJobDetailController({ view, onJobUpdated }) {
       ...emptyDetailData(),
       isLoadingOffers: true,
       isLoadingIssues: true,
+      isLoadingAssignments: isAssignmentAwareJob(job),
     });
     setSelectedOffer(null);
   }
@@ -141,6 +175,7 @@ export function useJobDetailController({ view, onJobUpdated }) {
       ...emptyDetailData(),
       isLoadingOffers: true,
       isLoadingIssues: true,
+      isLoadingAssignments: isAssignmentAwareJob(selectedJob),
     });
     setSelectedOffer(null);
   }
@@ -151,7 +186,9 @@ export function useJobDetailController({ view, onJobUpdated }) {
     }
 
     try {
-      updateSelectedJob(await action(selectedJob));
+      const updatedJob = await action(selectedJob);
+      updateSelectedJob(updatedJob);
+      return updatedJob;
     } catch (error) {
       if (error.job) {
         updateSelectedJob(error.job);
@@ -162,12 +199,38 @@ export function useJobDetailController({ view, onJobUpdated }) {
   }
 
   async function assignCleaner(offer) {
-    return updateJob((job) =>
-      assignCleanerToJob(job.id, {
-        id: offer.cleanerId,
-        name: offer.cleanerName,
-      }),
+    const updatedJob = await updateJob((job) =>
+      isAssignmentAwareJob(job)
+        ? assignInterestedCleaner(job.id, offer.id)
+        : assignCleanerToJob(job.id, {
+          id: offer.cleanerId,
+          name: offer.cleanerName,
+        }),
     );
+
+    if (updatedJob && isAssignmentAwareJob(updatedJob)) {
+      await refreshAssignments(updatedJob);
+    }
+  }
+
+  async function removeCleanerAssignment(assignmentId) {
+    const updatedJob = await updateJob((job) =>
+      removeAssignment(job.id, assignmentId, actorUid),
+    );
+
+    if (updatedJob) {
+      await refreshAssignments(updatedJob);
+    }
+  }
+
+  async function replaceCleanerAssignment(assignmentId, replacementOfferId) {
+    const updatedJob = await updateJob((job) =>
+      replaceAssignment(job.id, assignmentId, replacementOfferId, actorUid),
+    );
+
+    if (updatedJob) {
+      await refreshAssignments(updatedJob);
+    }
   }
 
   async function startCleaning() {
@@ -232,6 +295,9 @@ export function useJobDetailController({ view, onJobUpdated }) {
       offers: detailData.offers,
       isLoadingOffers: detailData.isLoadingOffers,
       hasOffersError: detailData.hasOffersError,
+      assignments: detailData.assignments,
+      isLoadingAssignments: detailData.isLoadingAssignments,
+      hasAssignmentsError: detailData.hasAssignmentsError,
       issues: detailData.issues,
       isLoadingIssues: detailData.isLoadingIssues,
       hasIssuesError: detailData.hasIssuesError,
@@ -251,6 +317,8 @@ export function useJobDetailController({ view, onJobUpdated }) {
     },
     actions: {
       assignCleaner,
+      removeCleanerAssignment,
+      replaceCleanerAssignment,
       startCleaning,
       completeCleaning,
       resolveJobIssue,
