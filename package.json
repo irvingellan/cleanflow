@@ -19,7 +19,10 @@
     "seed:properties": "node scripts/seedProperties.js",
     "seed:cleaners": "node scripts/seedCleaners.js",
     "seed:dashboard": "node scripts/seedDashboard.js",
-    "seed:public-offer-emulator": "npm --prefix functions run seed:public-offer-emulator"
+    "seed:public-offer-emulator": "npm --prefix functions run seed:public-offer-emulator",
+    "firebase:emulators": "firebase emulators:start --project demo-cleanflow --only auth,firestore,functions,hosting",
+    "firebase:emulators:ui": "firebase emulators:start --project demo-cleanflow --only auth,firestore,functions,hosting",
+    "verify": "npm test && npm run build"
   },
   "dependencies": {
     "firebase": "^12.18.0",

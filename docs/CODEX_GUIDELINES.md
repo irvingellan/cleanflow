@@ -44,10 +44,16 @@ git diff --check
 
 ## Safety
 
+- Treat `demo-cleanflow` + Firebase emulators as the default backend for development and tests.
+- A configured live Firebase project is context, not authorization.
 - Do not deploy, commit, push, force-push, or alter production data unless explicitly
   requested.
 - Do not change schemas, indexes, or security rules unless the task requires it; state
   the reason and impact clearly.
+- Before any approved remote Firebase action, name the target project and services and
+  distinguish the action from emulator/local work.
+- Never use a production dataset to make tests pass or to generate development fixtures.
+- See `FIREBASE_OPERATIONS.md` for the environment/deploy checklist.
 - Never add secrets, live environment values, or identifying design-partner data to the
   repository.
 
