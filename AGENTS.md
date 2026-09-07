@@ -68,6 +68,22 @@ Firebase or another backend provider
 
 Provider-specific behavior should remain at system boundaries. Domain rules should not depend unnecessarily on Firestore document shapes.
 
+## Firebase environment and production guardrails
+
+Firebase-aware agents must treat environment selection as a safety boundary, not a convenience setting.
+
+- Default all development, debugging, seed data, integration tests and E2E work to the Firebase Emulator Suite.
+- The local emulator project ID is `demo-cleanflow`; it is intentionally separate from the live Firebase project.
+- Never infer permission to deploy from the presence of `.firebaserc`, `firebase.json`, Firebase CLI authentication, or a configured Blaze project.
+- Never run production writes, production seed scripts, remote data migrations, remote rule/index deployments, Hosting deploys, Functions deploys, or Storage mutations without an explicit user request for that exact remote action.
+- Before any explicitly approved remote Firebase action, report the target project, affected service(s), expected impact, and rollback/recovery path.
+- Prefer pull requests and reviewable configuration changes over direct mutation of live infrastructure.
+- Security rules and indexes are source-controlled infrastructure. Changes require focused validation and a short explanation of the authorization/query impact.
+- Emulator success is necessary but not sufficient for deployment approval; deployment remains a separate human-approved step.
+- When uncertain whether a command touches local emulators or remote Firebase, stop and inspect the command/configuration before running it.
+
+For the detailed operating procedure, see `docs/FIREBASE_OPERATIONS.md`.
+
 ## Testing expectations
 
 For behavioral changes:
