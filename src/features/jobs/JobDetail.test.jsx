@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { JobDetail } from "./JobDetail.jsx";
@@ -45,6 +45,41 @@ function renderJobDetail(status, overrides = {}, callbacks = {}) {
 }
 
 describe("JobDetail lifecycle actions", () => {
+  it("copies a cleaner-specific reminder for an assigned legacy Job", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    renderJobDetail("ASSIGNED", {
+      assignedCleanerId: "cleaner-a",
+      assignedCleanerName: "Ana",
+      scheduledDate: "2026-09-08",
+      scheduledStart: "10:30",
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copy message for Ana" }),
+    );
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringContaining("Hi Ana! 😊"),
+      );
+    });
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("Time: 10:30"),
+    );
+    expect(screen.getByRole("button", { name: "Message copied" })).toBeVisible();
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
   it("shows a primary offer CTA for an unassigned v2 Job with no offers", () => {
     const onOfferToCleaners = vi.fn();
     renderJobDetail(
@@ -226,5 +261,70 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.queryByText("Assigned cleaner")).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
     expect(onAssignCleaner).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-b" }));
+  });
+
+  it("creates a recipient-specific reminder for an assigned cleaner in a team Job", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <TranslationProvider>
+        <JobDetail
+          job={{
+            id: "team-job",
+            propertyName: "Team Property",
+            scheduledDate: "2026-09-08",
+            operationalStatus: "ASSIGNED",
+            schemaVersion: 2,
+            assignedCleanerIds: ["cleaner-a", "cleaner-b"],
+          }}
+          knownCleaners={[
+            { id: "cleaner-a", name: "Ana" },
+            { id: "cleaner-b", name: "Beatriz" },
+          ]}
+          offers={[]}
+          isLoadingOffers={false}
+          hasOffersError={false}
+          assignments={[
+            { id: "assignment-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Ana", isActive: true, executionStatus: "ASSIGNED" },
+            { id: "assignment-b", cleanerId: "cleaner-b", cleanerNameSnapshot: "Beatriz", isActive: true, executionStatus: "ASSIGNED" },
+          ]}
+          isLoadingAssignments={false}
+          hasAssignmentsError={false}
+          issues={[]}
+          isLoadingIssues={false}
+          hasIssuesError={false}
+          onBack={vi.fn()}
+          onOfferToCleaners={vi.fn()}
+          onRefreshOffers={vi.fn()}
+          onRefreshIssues={vi.fn()}
+          onSimulateOffer={vi.fn()}
+          onCreatePublicOfferLink={vi.fn()}
+          onAssignCleaner={vi.fn()}
+          onRemoveAssignment={vi.fn()}
+          onReplaceAssignment={vi.fn()}
+          onStartCleaning={vi.fn()}
+          onCompleteCleaning={vi.fn()}
+          onSimulateAssignedCleaner={vi.fn()}
+          onResolveIssue={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Hi Ana! 😊"));
+    });
+    expect(writeText).toHaveBeenCalledWith(expect.not.stringContaining("Beatriz"));
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
   });
 });

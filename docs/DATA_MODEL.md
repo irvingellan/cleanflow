@@ -95,7 +95,8 @@ Conceptual fields include:
 - client pricing model and resolved client charge;
 - assignment summary suitable for manager queries;
 - client-invoice linkage when invoiced;
-- actual start, QA-ready, completion, and audit timestamps.
+- actual start, completion, and audit timestamps; optional review data only
+  when a later workflow requires it.
 
 ### Job lifecycle
 
@@ -105,26 +106,22 @@ Conceptual fields include:
 UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED
 ```
 
-**VALIDATED REQUIREMENT / PLANNED evolution:**
-
-```text
-UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → WAITING_FOR_QA → COMPLETED
-```
-
-The Job is not a proxy for any one cleaner's work. `WAITING_FOR_QA` represents
-the point at which all active Assignment work is submitted and manager review
-is required before final operational completion.
+**VALIDATED REQUIREMENT / PLANNED evolution:** the Job is not a proxy for any
+one Cleaner's work. Aggregate state must remain distinct from per-Cleaner
+execution. `WAITING_FOR_QA` is an optional future review concept, not the
+normal design-partner pilot completion gate.
 
 ## Cleaner Assignment
 
 An Assignment represents one Cleaner's operational and financial participation
-in one Job. A Job may have zero, one, or multiple active Assignments.
+in one Job. Most Jobs will have one active Assignment; a Job may have multiple
+for exceptional heavier or specialist work.
 
 Conceptual fields include:
 
 - Job, Organization, and Cleaner references;
 - cleaner-name snapshot and optional source Offer reference;
-- assignment lifecycle and per-cleaner timestamps;
+- per-Cleaner execution/timing and future lifecycle timestamps;
 - fixed or hourly compensation configuration;
 - worked hours and manager-approved hours;
 - calculated amount, optional override, and immutable approved payable amount;
@@ -132,16 +129,12 @@ Conceptual fields include:
 - minimal Job/schedule projections when needed for worker-history or payout
   queries.
 
-### Assignment lifecycle
+### Assignment execution
 
-```text
-ASSIGNED → IN_PROGRESS → SUBMITTED → APPROVED
-```
-
-`SUBMITTED` means the Cleaner says their part of the work is finished.
-`APPROVED` means the manager has approved the work/hours/compensation relevant
-to payment. A future explicit removal/reassignment state may be needed, but is
-an **OPEN QUESTION**, not a current lifecycle rule.
+Per-Cleaner starts, finishes, and work duration are validated needs for team
+Jobs. Exact submission/approval states are future design work; they must not
+create a mandatory normal QA gate. A future explicit removal/reassignment state
+may be needed, but is an **OPEN QUESTION**, not a current lifecycle rule.
 
 ## Offers
 
@@ -189,14 +182,13 @@ The resolved payable amount should become historically stable once approved.
 Money representation, rounding, and currency policy remain implementation
 details that require an explicit decision before financial migration.
 
-## QA, evidence, and issues
+## Evidence and issues
 
-Cleaner submission, manager QA, and Job completion are separate business
-events. Checklists, photos, and reference information are operational evidence;
-they do not automatically prove manager approval.
-
-An Issue remains independent from lifecycle. A Job can be `IN_PROGRESS` or
-`WAITING_FOR_QA` while an Issue is `OPEN`.
+Checklists, photos, and reference information are Job-level operational
+evidence in the normal cleaning flow; multiple Cleaners do not normally submit
+duplicate evidence. A manager is not required to approve that evidence before
+normal completion. An Issue remains independent from lifecycle and may be a
+rare post-completion callback/correction trigger in a future explicit flow.
 
 ## Scheduling and reschedule history
 

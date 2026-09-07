@@ -243,7 +243,9 @@ Initial Job Invite statuses are:
 
 A cleaner expresses interest or declines. The manager is responsible for assigning the job.
 
-Assignment is represented on the Job, not by adding another Job Invite status.
+Assignment is represented by the Job's assignment model, not by adding another
+Job Invite status. Legacy Jobs retain direct singular assignment fields;
+Assignment-aware Jobs retain manager-created Job-owned Assignment records.
 
 Cleaner responses are private from other cleaners. A cleaner must not see competing cleaners, their responses or the number of other interested cleaners.
 
@@ -379,7 +381,7 @@ a payout link, preserving data created outside the Dev Center for manual review.
 ## DEC-024 — Model team work with per-cleaner Assignments
 
 Date: 2026-08-29
-Status: Accepted direction; not yet fully implemented
+Status: Accepted direction; manager-roster persistence partially implemented
 
 A Job remains the operational aggregate. A Cleaner Assignment becomes the
 separate entity representing one cleaner's participation in that Job.
@@ -393,28 +395,24 @@ Reasons:
   selection;
 - a single `assignedCleanerId` cannot safely represent team work.
 
-The planned persistence direction is a Job-owned Assignment collection with a
-canonical Cleaner reference and historical snapshots. Existing singular fields
-remain legacy compatibility data until an additive migration is complete.
+The persistence direction is a Job-owned Assignment collection with a canonical
+Cleaner reference and historical snapshots. Assignment-aware manager roster
+persistence now exists; per-Cleaner execution/timing and future financial state
+remain planned. Most Jobs are expected to use one Cleaner, with team work an
+exceptional supported case. Existing singular fields remain legacy compatibility
+data until an additive migration is complete.
 
 ---
 
-## DEC-025 — Separate Job lifecycle from Assignment lifecycle and manager QA
+## DEC-025 — Separate Job lifecycle from Assignment lifecycle and optional QA
 
 Date: 2026-08-29
-Status: Accepted direction; detailed edge cases remain open
+Status: Refined by DEC-032 for normal pilot completion; detailed future review
+edge cases remain open
 
-The planned Job lifecycle is:
-
-`UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → WAITING_FOR_QA → COMPLETED`
-
-The planned Assignment lifecycle is:
-
-`ASSIGNED → IN_PROGRESS → SUBMITTED → APPROVED`
-
-Cleaner submission and manager completion are different business events. A Job
-does not auto-complete when the final cleaner submits work. Manager QA and
-finalization remain the operational completion boundary.
+Cleaner execution and Job completion remain distinct business concerns. Future
+submission/review states may support hours or exceptional quality work, but
+they are not the mandatory normal design-partner pilot completion boundary.
 
 **OPEN QUESTION:** exact behavior for partial team completion, late additions
 to a team, and exceptional manager completion requires workflow design before
@@ -515,3 +513,22 @@ Cleaner reminders and weekly payroll reminders are validated needs. Their exact
 cadence, delivery channel, time-zone model, retry policy, idempotency behavior,
 and user controls have not been decided. Scheduled automation must wait for the
 Assignment, pricing, payout, and reschedule foundations it depends on.
+
+---
+
+## DEC-032 — Pilot normal completion, evidence, and manual reminders
+
+Date: 2026-09-07
+Status: Accepted pilot direction
+
+Most Jobs use one Cleaner; multi-Cleaner work remains an exceptional supported
+case. Assignments remain the correct entity for individual team execution and
+time, while the Job remains the operational aggregate. Normal Job-level
+checklists/photos may be supplied by one Cleaner and can arrive after cleaners
+leave. Manager QA is not required before normal completion.
+
+Rare corrections/callbacks after completion require a future explicit Issue or
+callback workflow rather than a routine `NEEDS_CORRECTION` Assignment state.
+During the active gradual pilot alongside the existing spreadsheet, the
+immediate reminder capability is a manager-reviewed copy-and-paste message;
+automatic messaging remains deferred under DEC-031.

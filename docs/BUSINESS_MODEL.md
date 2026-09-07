@@ -37,12 +37,14 @@ Validated discovery supports the need for:
 
 - coordinated work across multiple Properties and Clients;
 - private Cleaner Offers with explicit manager assignment;
-- team Jobs with independent Cleaner work and compensation;
+- a simple one-Cleaner normal path plus exceptional team Jobs with independent
+  Cleaner execution/time;
 - reliable schedule-change history;
 - operational evidence, instructions, and issue handling;
 - Cleaner payout tracking separate from Client receivables;
 - searchable history and practical manager worklists;
-- mobile/browser access for Cleaners.
+- mobile/browser access for Cleaners;
+- gradual parallel pilot use alongside an existing spreadsheet.
 
 This validation informs the product direction. It does not establish a general
 market claim or an implementation commitment for every possible feature.
@@ -55,11 +57,11 @@ the manager currently acts as the integration layer.
 
 Potential differentiation comes from combining:
 
-- Job, Offer, Assignment, and QA semantics;
+- Job, Offer, and Assignment semantics;
 - reusable Property context with historical snapshots;
 - mobile-friendly Cleaner actions;
 - manager-controlled multi-cleaner coordination;
-- operational exceptions and evidence;
+- Job-level operational evidence and exceptions;
 - explicit financial auditability.
 
 ## Expansion hypothesis

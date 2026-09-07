@@ -13,8 +13,8 @@ They are not a claim that every workflow is already implemented.
 ## Reservation versus cleaning work
 
 A Reservation records a guest stay from a provider or manual intake. A Cleaning
-Job records operational work: scheduling, Offers, Assignments, execution, QA,
-and completion.
+Job records operational work: scheduling, Offers, Assignments, execution,
+evidence, and completion.
 
 A reservation date change or cancellation may require a manager to reconcile a
 related Job. It does not automatically impose an external status on the Job.
@@ -25,8 +25,8 @@ related Job. It does not automatically impose an external status on the Job.
 one Offer per cleaner. A cleaner can respond `INTERESTED` or `DECLINED`; the
 manager retains assignment control.
 
-**VALIDATED REQUIREMENT / PLANNED:** the manager may create one or more Cleaner
-Assignments from interested Offers.
+**CURRENT transition:** an Assignment-aware Job may retain one or more explicit
+manager-created Cleaner Assignments from interested Offers.
 
 ```text
 Manager creates Job
@@ -40,27 +40,27 @@ Interest never automatically assigns a Job. `accepted` is not an Offer status.
 Cleaners must not see competing Offers, responses, assignment count, or another
 cleaner's compensation.
 
-## Team Job execution
+## Normal and team Job execution
 
-**CURRENT:** the prototype uses one legacy assigned-cleaner field and a Job
-lifecycle that moves directly from `IN_PROGRESS` to `COMPLETED`.
+**CURRENT:** most Jobs use one Cleaner. Legacy Jobs use one assigned-Cleaner
+field and move directly from `IN_PROGRESS` to `COMPLETED`; Assignment-aware
+Jobs retain a manager roster for exceptional team work.
 
-**PLANNED:** a Job can have several active Assignments, each with its own work
-state.
+**VALIDATED REQUIREMENT / PLANNED:** a team Job can have several active
+Assignments, each with its own timing/work state.
 
 ```text
 Job ASSIGNED
 → one cleaner starts
 → Job IN_PROGRESS
-→ each cleaner submits their work independently
-→ all active Assignments submitted
-→ Job WAITING_FOR_QA
-→ manager approves/finalizes
+→ each Cleaner can finish independently
+→ Job-level evidence/checklist may arrive later from one Cleaner
 → Job COMPLETED
 ```
 
-One cleaner submitting work does not finish the whole Job. A Job must not
-auto-complete merely because the final Cleaner submits work.
+One Cleaner finishing does not finish every other Assignment. Exact aggregate
+completion for a future execution model remains to be validated; manager QA is
+not a mandatory normal completion gate.
 
 ## Job lifecycle
 
@@ -70,26 +70,18 @@ auto-complete merely because the final Cleaner submits work.
 UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED
 ```
 
-**PLANNED validated lifecycle:**
-
-```text
-UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → WAITING_FOR_QA → COMPLETED
-```
+**PLANNED:** future aggregate execution derivation must retain the distinction
+between Job and Assignment state. Any `WAITING_FOR_QA` state is optional and
+requires a focused validated workflow.
 
 `CONFIRMED`, `CANCELLED`, and `REOPENED` are not part of the currently planned
 core lifecycle. They require separate discovery before addition.
 
-## Assignment lifecycle
+## Assignment execution
 
-**PLANNED:**
-
-```text
-ASSIGNED → IN_PROGRESS → SUBMITTED → APPROVED
-```
-
-- `SUBMITTED` means the Cleaner has reported their work complete.
-- `APPROVED` means the manager has approved the relevant work, hours, and
-  compensation for QA/payment purposes.
+**VALIDATED REQUIREMENT / PLANNED:** a Cleaner Assignment will own its own
+start, finish, and work duration. Future submission/approval states need a
+separate financial/execution design.
 
 **OPEN QUESTION:** the exact treatment of a removed, replaced, or late-added
 Cleaner Assignment requires a dedicated manager override workflow.
@@ -206,13 +198,18 @@ Cleaner reports Issue
 → manager resolves Issue explicitly
 ```
 
-A Job can remain `IN_PROGRESS` or `WAITING_FOR_QA` while an Issue is open.
+A Job can remain `IN_PROGRESS` while an Issue is open. A rare callback after
+completion should be an explicit Issue/callback concept, not a normal lifecycle
+rollback.
 Confirmed categories include access, supplies, broken item, heavy cleaning, and
 other. Categories aid filtering but must not block descriptive reporting.
 
-## Reminder concepts
+## Reminders
 
-**VALIDATED REQUIREMENT / PLANNED:** reminders may include:
+**CURRENT DESIGN-PARTNER PILOT:** a manager may copy a cleaner-safe message and paste it
+manually into WhatsApp. No reminder is sent automatically.
+
+**VALIDATED REQUIREMENT / PLANNED:** later reminders may include:
 
 - new Assignment notification;
 - upcoming service reminder;

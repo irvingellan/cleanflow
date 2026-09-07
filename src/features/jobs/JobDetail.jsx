@@ -21,6 +21,10 @@ import {
   getAssignedCleanerIds,
   isAssignmentAwareJob,
 } from "./jobCompatibility.js";
+import {
+  buildCleanerReminderMessage,
+  copyCleanerReminderMessage,
+} from "./cleanerReminderMessage.js";
 
 export function JobDetail({
   job,
@@ -68,6 +72,8 @@ export function JobDetail({
   const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
   const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
   const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
+  const [copiedCleanerId, setCopiedCleanerId] = useState(null);
+  const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
   const startedAt = formatCreatedAt(job.startedAt, language);
@@ -258,6 +264,26 @@ export function JobDetail({
     }
   }
 
+  async function copyMessageForCleaner(cleanerId, cleanerName) {
+    setCopyMessageErrorCleanerId(null);
+
+    try {
+      await copyCleanerReminderMessage(
+        buildCleanerReminderMessage({
+          cleanerName,
+          propertyName: job.propertyName || translate("properties.unnamed"),
+          scheduledDate: job.scheduledDate,
+          scheduledStart: job.scheduledStart,
+          language,
+          translate,
+        }),
+      );
+      setCopiedCleanerId(cleanerId);
+    } catch {
+      setCopyMessageErrorCleanerId(cleanerId);
+    }
+  }
+
   function openResolutionForm(issue) {
     setResolvingIssueId(issue.id);
     setResolutionNote("");
@@ -426,6 +452,30 @@ export function JobDetail({
         </section>
       )}
 
+      {!isAssignmentAware &&
+        job.operationalStatus === "ASSIGNED" &&
+        (job.assignedCleanerId || job.assignedCleanerName) && (
+        <section className="job-cleaner-reminder" aria-label={translate("jobs.cleanerReminder")}>
+          <button
+            className="button"
+            type="button"
+            onClick={() =>
+              copyMessageForCleaner(
+                job.assignedCleanerId || "legacy-assigned-cleaner",
+                assignedCleanerName,
+              )
+            }
+          >
+            {copiedCleanerId === (job.assignedCleanerId || "legacy-assigned-cleaner")
+              ? translate("jobs.messageCopied")
+              : translate("jobs.copyMessageForCleaner", { cleaner: assignedCleanerName })}
+          </button>
+          {copyMessageErrorCleanerId === (job.assignedCleanerId || "legacy-assigned-cleaner") && (
+            <p className="form-error" role="alert">{translate("jobs.copyMessageError")}</p>
+          )}
+        </section>
+      )}
+
       {isAssignmentAware && (
         <section className="assignment-roster" aria-labelledby="assigned-cleaners-title">
           <div className="assignment-roster__header">
@@ -465,6 +515,26 @@ export function JobDetail({
                     <span className="status-badge">
                       {formatOperationalStatus(assignment.executionStatus, translate)}
                     </span>
+                    {job.operationalStatus === "ASSIGNED" && (
+                      <div className="assignment-roster__message-action">
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={() =>
+                            copyMessageForCleaner(assignment.cleanerId, assignmentCleanerName)
+                          }
+                        >
+                          {copiedCleanerId === assignment.cleanerId
+                            ? translate("jobs.messageCopied")
+                            : translate("jobs.copyMessageForCleaner", {
+                              cleaner: assignmentCleanerName,
+                            })}
+                        </button>
+                        {copyMessageErrorCleanerId === assignment.cleanerId && (
+                          <p className="form-error" role="alert">{translate("jobs.copyMessageError")}</p>
+                        )}
+                      </div>
+                    )}
                     {canEditRoster && !isReplacing && (
                       <div className="assignment-roster__actions">
                         <button

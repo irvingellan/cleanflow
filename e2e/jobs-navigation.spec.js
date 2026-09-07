@@ -120,7 +120,7 @@ test("a v2 Job supports an additive manager roster before work starts", async ({
     .getByRole("button", { name: "Remove" })
     .click();
   await expect(page.getByText("1 cleaner assigned")).toBeVisible();
-  await expect(roster.getByText("E2E Team Cleaner B")).toBeVisible();
+  await expect(roster.locator("strong", { hasText: "E2E Team Cleaner B" })).toBeVisible();
 
   const db = getE2eFirestore();
   const jobSnapshot = await db

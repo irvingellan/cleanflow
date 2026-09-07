@@ -23,6 +23,16 @@ workflow state, and architectural decisions remain in `PRODUCT.md`, `DATA_MODEL.
 - Preserve canonical IDs, historical snapshots, and safe fallbacks for legacy records.
 - Do not introduce broad Context/global-state systems without a demonstrated need.
 
+## Build / Borrow / Port / Integrate / Defer gate
+
+Before adding a dependency, provider, or borrowed implementation, classify the
+choice explicitly: **Build** differentiated domain behavior; **Borrow** a small
+permissively licensed utility; **Port** an isolated, attributed pattern after
+adapting it to CleanFlow boundaries; **Integrate** a commodity provider behind a
+service boundary; or **Defer** an unvalidated need. Check product fit, privacy,
+license/provenance, maintenance cost, and testability first. Record material
+decisions in `DECISIONS.md`; do not fork a product or copy unclear/copyleft code.
+
 ## Testing and validation
 
 For meaningful code changes, run:

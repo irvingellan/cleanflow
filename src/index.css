@@ -1993,6 +1993,14 @@ button.summary-card {
   margin-top: 0;
 }
 
+.job-cleaner-reminder {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 20px;
+}
+
 .assignment-roster {
   display: grid;
   gap: 12px;
@@ -2043,6 +2051,11 @@ button.summary-card {
 .assignment-replacement .button {
   padding: 8px 10px;
   font-size: 0.8125rem;
+}
+
+.assignment-roster__message-action {
+  grid-column: 1 / -1;
+  justify-self: start;
 }
 
 .assignment-replacement {

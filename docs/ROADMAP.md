@@ -19,12 +19,24 @@ The current prototype includes:
 - a first Cleaner payout-record and optional proof flow;
 - Vitest/Testing Library and Playwright with Firebase Emulators.
 
-The current model is not yet the validated multi-cleaner, QA-aware operational
-model described below.
+The current model is evolving toward the validated multi-cleaner operational
+model. Mandatory QA is not the normal design-partner pilot completion workflow.
+
+## Active design-partner pilot — real-use learning
+
+**Status: Active / highest priority**
+
+- support gradual parallel use with the existing spreadsheet;
+- make Today/Tomorrow and upcoming cleaning visibility reliable;
+- keep the normal one-Cleaner path simple while retaining exceptional team
+  support;
+- use manager feedback before adding speculative execution, finance, or
+  integration complexity;
+- provide manual copy-and-paste cleaner reminders before any automated messaging.
 
 ## Phase 0 — Discovery, compatibility, and data-model preparation
 
-**Status: Active / highest priority**
+**Status: Implemented foundation / evolving**
 
 Goals:
 
@@ -44,19 +56,20 @@ Small independent improvements may proceed where safe:
 
 ## Phase 1 — Multi-cleaner Assignment foundation
 
-**Status: Planned**
+**Status: Partially implemented / incremental**
 
 Goals:
 
 - treat Job as the operational aggregate;
-- introduce per-cleaner Assignment entities;
+- retain the implemented manager Assignment roster and evolve per-cleaner
+  execution only after pilot validation;
 - retain explicit manager assignment control;
 - preserve the Offer → interest → Assignment distinction;
 - support one or more cleaners on a Job;
 - add Assignment-aware cleaner history and manager displays;
 - preserve legacy singular-cleaner records through additive fallbacks.
 
-## Phase 2 — Pricing, hours, and manager QA
+## Phase 2 — Pricing, hours, and optional manager review
 
 **Status: Planned**
 
@@ -66,7 +79,7 @@ Goals:
 - support fixed and hourly cleaner compensation per Assignment;
 - record worked and manager-approved hours per cleaner;
 - support explicit manager compensation override;
-- introduce submission, QA, and manager finalization;
+- design optional submission/review only where it serves a validated exception;
 - make resolved payable amounts historically stable.
 
 ## Phase 3 — Assignment-aware payouts and financial worklists

@@ -36,12 +36,13 @@ manager capacity.
 ## Current implementation and validated direction
 
 **CURRENT:** the prototype supports a manager-facing operational workflow with
-Properties, Clients, Cleaners, Jobs, offers, single-cleaner assignment,
-execution states, issues, and a first payout record flow.
+Properties, Clients, Cleaners, Jobs, offers, legacy single-cleaner execution,
+Assignment-aware manager rosters, issues, and a first payout record flow.
 
-**VALIDATED REQUIREMENT:** the operational model must evolve beyond the current
-singular-cleaner Job fields. A Job may require multiple cleaners, each with
-their own work, approved hours, compensation, and payout state.
+**VALIDATED REQUIREMENT:** one Cleaner is the predominant operational path.
+Exceptional heavier or specialist Jobs may require multiple cleaners, each with
+their own execution/time; future hours, compensation, and payout state remain
+per-Assignment concerns.
 
 **PLANNED:** this evolution will be additive. Existing Jobs remain readable
 while a per-cleaner Assignment model is introduced. Documentation must not be
@@ -58,13 +59,11 @@ Manager selects cleaners to receive offers
         ↓
 Cleaners express interest or decline
         ↓
-Manager creates one or more assignments
+Manager creates one or more assignments when needed
         ↓
 Assigned cleaners execute their work
         ↓
-Each cleaner submits work / hours / evidence
-        ↓
-Manager QA and finalization
+Job-level evidence/checklists may arrive later
         ↓
 Job completion
         ↓
@@ -91,8 +90,9 @@ sensitive context, not broad list or public-link data.
 
 ## Cleaner coordination and team Jobs
 
-CleanFlow must support a manager offering a Job to multiple cleaners and
-choosing one or more cleaners to perform it. Offers and Assignments are
+CleanFlow supports a manager offering a Job to multiple cleaners and choosing
+one or more cleaners when a team is needed. The common one-cleaner flow must
+remain simple. Offers and Assignments are
 different concepts:
 
 - an **Offer** records an invitation and a cleaner's interest or decline;
@@ -113,10 +113,10 @@ remains planned work.
 **CURRENT:** the initial implementation uses a Job lifecycle ending at
 `COMPLETED` and singular assignment fields.
 
-**VALIDATED REQUIREMENT:** cleaner execution and manager completion are
-separate concepts. A future Job may enter `WAITING_FOR_QA` after all active
-cleaner assignments have been submitted. The manager reviews the operational
-record, approved hours, and compensation before finalizing the Job.
+**VALIDATED CURRENT DESIGN-PARTNER PILOT:** cleaners normally finish and leave without a
+mandatory manager QA gate. Photos/checklists can arrive later. A future optional
+QA workflow must not be treated as the normal completion path without more
+validation.
 
 Photos, checklists, reference information, and issue reports are important
 operational evidence. They are not interchangeable with lifecycle state: a Job
@@ -175,10 +175,18 @@ boundary.
 
 ## Reminders and integrations
 
-Cleaners should not need to repeatedly inspect a calendar to discover new or
-upcoming work. Assignment, upcoming-work, and weekly payroll reminders are
-validated needs, but their cadence, delivery channel, time-zone behavior, and
-idempotency rules remain planned work.
+**CURRENT DESIGN-PARTNER PILOT:** managers can copy a cleaner-safe reminder and paste it
+manually into WhatsApp. Cleaners should not need to repeatedly inspect a
+calendar to discover work. Automated assignment, upcoming-work, and payroll
+reminders remain planned: cadence, delivery channel, time-zone behavior, and
+idempotency rules are open.
+
+## Design-partner pilot
+
+The active pilot is a gradual parallel migration alongside the manager's
+existing spreadsheet, not a claim that CleanFlow is the sole source of truth.
+Entering upcoming cleanings and using the Dashboard Today/Tomorrow view provide
+immediate value; real use and feedback determine the next work.
 
 Guesty, Hospitable, messaging channels, and other platforms remain future
 integrations. CleanFlow should first establish a stable internal operational

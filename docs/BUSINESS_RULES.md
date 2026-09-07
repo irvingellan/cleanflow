@@ -32,6 +32,9 @@ status is not confused with validated product direction.
 ## Jobs
 
 - A Job is one operational service event, not a Reservation.
+- **VALIDATED CURRENT DESIGN-PARTNER PILOT:** one Cleaner is the normal/simple Job path.
+  Multiple Cleaners remain supported for exceptional heavier or specialist work;
+  that capability must not complicate ordinary Jobs.
 - **CURRENT:** a legacy Job owns its overall schedule, operational lifecycle,
   Job-effective snapshots, evidence, and Issues.
 - **PLANNED TARGET MODEL:** a Job may have zero, one, or many Cleaner
@@ -48,21 +51,24 @@ status is not confused with validated product direction.
 - Interest never automatically creates an Assignment.
 - Offers and competing Cleaner responses are private from other cleaners.
 
-## Assignments — planned target model
+## Assignments — current transition and planned target model
 
 - **CURRENT legacy implementation:** a Job stores one optional assigned Cleaner
   directly on the Job record.
-- **PLANNED:** an Assignment is the manager's explicit selection of one Cleaner
-  for one Job; one Job can have multiple active Assignments.
-- **PLANNED:** each Assignment independently owns its execution state, worked
-  hours, approved hours, compensation, and payout state.
+- **CURRENT transition:** Assignment-aware Jobs can retain one or more explicit
+  manager-created Cleaner Assignments while legacy Jobs retain their singular
+  assignment fields.
+- **VALIDATED REQUIREMENT / PLANNED:** each Assignment independently owns
+  per-Cleaner execution/timing; future hours, compensation, and payout state
+  also belong there.
 - **PLANNED:** canonical Cleaner IDs identify the participant; name snapshots
   preserve historical context.
 
-## Team Jobs — planned target model
+## Team Jobs — exceptional supported model
 
-- **PLANNED:** a Job may require multiple cleaners.
-- **PLANNED:** starting or submitting one Assignment does not, by itself, start
+- A Job may require multiple cleaners, normally for heavier or specialist work.
+- **VALIDATED REQUIREMENT / PLANNED:** starting or completing one Assignment
+  does not, by itself, start
   or complete every other Assignment.
 - **PLANNED:** future Assignment changes must be explicit manager actions.
 - **OPEN QUESTION:** the exact add, remove, replace, and reassignment policy
@@ -72,18 +78,18 @@ status is not confused with validated product direction.
 
 - **CURRENT legacy lifecycle:**
   `UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED`.
-- **PLANNED lifecycle:**
-  `UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → WAITING_FOR_QA → COMPLETED`.
+- **PLANNED:** future aggregate lifecycle derivation must remain separate from
+  per-Cleaner execution. `WAITING_FOR_QA` is not a mandatory normal completion
+  gate for the design-partner pilot.
 - Job lifecycle is separate from Issue state and Assignment lifecycle.
 - A Job must not auto-complete merely because a Cleaner submits work.
 
-## Assignment lifecycle
+## Assignment execution
 
-- **PLANNED lifecycle:**
-  `ASSIGNED → IN_PROGRESS → SUBMITTED → APPROVED`.
-- `SUBMITTED` is Cleaner-reported completion of that Assignment's work.
-- `APPROVED` is manager approval of the work/hours/compensation relevant to QA
-  and payout.
+- **VALIDATED REQUIREMENT / PLANNED:** Assignment timing must be independently
+  visible when more than one Cleaner works the same Job.
+- Future submission, approval, and compensation states require a focused
+  execution/financial design; they are not a mandatory normal Gabi Pilot flow.
 
 ## Pricing — planned target model
 
@@ -108,12 +114,12 @@ status is not confused with validated product direction.
 
 ## QA and completion
 
-- **PLANNED:** Cleaner submission and manager completion are separate events.
-- **PLANNED:** a Job enters `WAITING_FOR_QA` when all active Assignments have
-  been `SUBMITTED`.
-- **PLANNED:** manager review and approval occur after `WAITING_FOR_QA`; manager
-  finalization then moves the Job to `COMPLETED`.
-- **OPEN QUESTION:** exceptional completion behavior remains undecided.
+- **VALIDATED CURRENT DESIGN-PARTNER PILOT:** Cleaners can finish and leave without waiting for
+  a manager to review photos. Manager approval is not a normal completion gate.
+- Job-level checklists and evidence are valid for a cleaning; multiple cleaners
+  do not normally duplicate them per Assignment.
+- **PLANNED / OPEN QUESTION:** optional QA, exceptional completion, and the
+  conditions for any `WAITING_FOR_QA` state require further validation.
 
 ## Cleaner payouts
 
@@ -168,14 +174,26 @@ status is not confused with validated product direction.
 - Issues are separate from Job lifecycle.
 - An open Issue does not silently change Job status.
 - Resolution is an explicit manager action with preserved history.
+- **VALIDATED REQUIREMENT / PLANNED:** rare callback/correction work after
+  completion should be modeled as an explicit post-completion Issue/callback
+  concept, not as the normal Assignment lifecycle.
 
 ## Reminders
 
+- **CURRENT DESIGN-PARTNER PILOT:** a manager can copy a cleaner-safe reminder and paste
+  it manually into WhatsApp. It never sends automatically.
 - Cleaners should not have to repeatedly inspect a calendar to find work.
 - Potential reminders include new Assignment, upcoming Job, expected-start,
   late/not-started, and weekly payroll reminders.
 - **OPEN QUESTION:** delivery channel, cadence, time zone, opt-in/control,
   retry, and idempotency policies remain undecided.
+
+## Design-partner pilot
+
+- **CURRENT:** gradual parallel use with the existing spreadsheet; CleanFlow is
+  not yet the sole source of truth.
+- **CURRENT:** managers may enter upcoming cleanings and use the Dashboard's
+  Today/Tomorrow operational context while feedback guides the next slices.
 
 ## Historical and audit rules
 
