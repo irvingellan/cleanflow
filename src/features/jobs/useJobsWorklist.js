@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAllCleaners } from "../cleaners/cleanerService.js";
 import { getJobs } from "./jobService.js";
 import { createJobListFilters } from "./jobListFilters.js";
@@ -22,7 +22,7 @@ function mergeJobs(currentJobs, incomingJobs) {
  * Owns the bounded Jobs worklist. Navigation stays in the application shell so
  * Dashboard and detail-origin behavior remain explicit at the integration boundary.
  */
-export function useJobsWorklist({ view }) {
+export function useJobsWorklist({ view, preserveLoadedJobs = false }) {
   const [jobs, setJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -31,8 +31,14 @@ export function useJobsWorklist({ view }) {
   const [pageCursors, setPageCursors] = useState(initialPageCursors);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const previousViewRef = useRef(view);
+  const isEnteringJobList =
+    view === "job-list" && previousViewRef.current !== "job-list";
+  const isWorklistLoading = isLoading || isEnteringJobList;
 
   useEffect(() => {
+    previousViewRef.current = view;
+
     if (view !== "job-list") {
       return undefined;
     }
@@ -49,7 +55,11 @@ export function useJobsWorklist({ view }) {
         ]);
 
         if (isCurrent) {
-          setJobs(loadedJobPage.jobs);
+          setJobs((currentJobs) =>
+            preserveLoadedJobs
+              ? mergeJobs(currentJobs, loadedJobPage.jobs)
+              : loadedJobPage.jobs,
+          );
           setCleaners(loadedCleaners);
           setPageCursors(loadedJobPage.nextPageCursors);
           setHasMore(loadedJobPage.hasMore);
@@ -100,7 +110,7 @@ export function useJobsWorklist({ view }) {
 
   return {
     jobs,
-    isLoading,
+    isLoading: isWorklistLoading,
     hasError,
     filters,
     cleaners,
