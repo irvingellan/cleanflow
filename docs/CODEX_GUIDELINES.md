@@ -75,5 +75,7 @@ git diff --check
 
 - Read the minimum relevant files first; avoid broad repository scans once feature
   boundaries are known.
+- Use [AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md) to select a
+  proportionate planning, execution, and review mode for the task.
 - Final reports should be concise: files changed, behavior impact, validation, risks,
   and a recommended commit message.
