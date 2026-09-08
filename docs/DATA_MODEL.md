@@ -256,6 +256,15 @@ lifecycle. The marker is additive: reading a legacy Job must never backfill it
 or enable planned Assignment, pricing, payout, invoice, QA, or rescheduling
 behavior.
 
+## Record provenance
+
+Records carry additive `dataProvenance` metadata: `REAL` for manager-created
+operational records, `DEMO` for explicit Dev Center or fixture records, and
+`UNKNOWN` for legacy or malformed records. Reads normalize old `demoSeed` and
+`fixture` markers to `DEMO`; unmarked records are never inferred to be real.
+This is descriptive metadata only, not authorization or lifecycle state. No
+bulk migration or write-back is required for existing records.
+
 ## Relationship overview
 
 ```text

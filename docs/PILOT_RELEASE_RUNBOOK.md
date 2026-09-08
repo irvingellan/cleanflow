@@ -60,8 +60,11 @@ may have changed after the snapshot.
 - Any unmarked production record is **unknown/possibly real**. Never delete or
   modify it through a cleanup action without a reviewed inventory.
 - `npm run seed:properties`, `npm run seed:cleaners`, and `npm run seed:dashboard`
-  are development tooling, not pilot operations. Do not run them against the
-  production Firebase project.
+  are emulator-only development tooling and refuse production or ambiguous
+  targets. Do not run them as pilot operations.
+- `npm run inventory:data -- --project <project-id>` is read-only and reports
+  provenance counts. Production reads require the separate explicit
+  `--allow-production-read` acknowledgement; it never mutates data.
 
 Before pilot use, perform a private, read-only Console inventory of top-level
 Clients, Properties, Cleaners, Jobs, Payouts, and Job Offer/Issue children. Count
