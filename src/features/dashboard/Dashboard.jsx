@@ -77,7 +77,7 @@ export function Dashboard({
     icon: "assignment",
     isUrgent,
     job,
-    label: translate("dashboard.needsAssignment"),
+    label: assignmentAttentionLabel(job, translate),
     detail:
       job.operationalStatus === "UNASSIGNED"
         ? translate("dashboard.noOffers")
@@ -520,6 +520,23 @@ function isNearTermJob(job) {
   }
 
   return scheduledAt.getTime() <= Date.now() + 48 * 60 * 60 * 1000;
+}
+
+function assignmentAttentionLabel(job, translate) {
+  const today = localDateKeyForDashboard(new Date());
+  const tomorrow = localDateKeyForDashboard(
+    new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1),
+  );
+
+  if (job.scheduledDate === today) {
+    return translate("dashboard.todayWithoutCleaner");
+  }
+
+  if (job.scheduledDate === tomorrow) {
+    return translate("dashboard.tomorrowWithoutCleaner");
+  }
+
+  return translate("dashboard.needsAssignment");
 }
 
 function selectPriorityAttentionItems(priorityGroups, maximumItems) {
