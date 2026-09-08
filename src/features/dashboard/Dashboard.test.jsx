@@ -38,6 +38,12 @@ function renderDashboard(language = "en") {
         scheduledDate: localDateKey(0),
         operationalStatus: "UNASSIGNED",
       },
+      ...Array.from({ length: 6 }, (_, index) => ({
+        id: `old-unassigned-${index}`,
+        propertyName: `Old August Property ${index + 1}`,
+        scheduledDate: `2026-08-${String(index + 1).padStart(2, "0")}`,
+        operationalStatus: "UNASSIGNED",
+      })),
       {
         id: "tomorrow-unassigned",
         propertyName: "Tomorrow Property",
@@ -98,7 +104,17 @@ describe("Dashboard near-term cleaner attention", () => {
     expect(within(attentionList).getByText("Tomorrow — no cleaner assigned")).toBeVisible();
     expect(within(attentionList).getByText("Today Property")).toBeVisible();
     expect(within(attentionList).getByText("Tomorrow Property")).toBeVisible();
+    expect(within(attentionList).getByText("Old August Property 1")).toBeVisible();
     expect(within(attentionList).queryByText("Assigned Property")).not.toBeInTheDocument();
+
+    const attentionLabels = Array.from(
+      attentionList.querySelectorAll(".attention-item__label"),
+      (label) => label.textContent,
+    );
+    expect(attentionLabels.slice(0, 2)).toEqual([
+      "⏰Today — no cleaner assigned",
+      "⏰Tomorrow — no cleaner assigned",
+    ]);
   });
 
   it.each([

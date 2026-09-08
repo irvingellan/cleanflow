@@ -519,7 +519,15 @@ function isNearTermJob(job) {
     return false;
   }
 
-  return scheduledAt.getTime() <= Date.now() + 48 * 60 * 60 * 1000;
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // A Job without an exact time is still urgent for its scheduled calendar day.
+  // Older open work remains generic attention, rather than competing as near-term.
+  return (
+    scheduledAt.getTime() >= todayStart.getTime() &&
+    scheduledAt.getTime() <= now.getTime() + 48 * 60 * 60 * 1000
+  );
 }
 
 function assignmentAttentionLabel(job, translate) {
@@ -551,7 +559,13 @@ function selectPriorityAttentionItems(priorityGroups, maximumItems) {
     visibleItems.push(item);
   };
 
-  for (const group of priorityGroups) {
+  // Today/tomorrow assignment gaps are the pilot's most time-sensitive action.
+  // Keep them ahead of generic open work before retaining the mixed queue.
+  for (const item of priorityGroups[0] || []) {
+    addItem(item);
+  }
+
+  for (const group of priorityGroups.slice(1)) {
     addItem(group[0]);
   }
 

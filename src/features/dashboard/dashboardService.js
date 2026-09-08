@@ -84,6 +84,17 @@ function uniqueJobs(jobs) {
   return [...new Map(jobs.map((job) => [job.id, job])).values()];
 }
 
+export function composeAttentionJobCandidates(attentionJobs, next48HoursJobs) {
+  // The stale-status query intentionally retains older open work, while the bounded
+  // next-48-hours query guarantees current assignment gaps are available to rank.
+  return uniqueJobs([
+    ...attentionJobs,
+    ...next48HoursJobs.filter((job) =>
+      ["UNASSIGNED", "OFFERED"].includes(job.operationalStatus),
+    ),
+  ]);
+}
+
 export async function getOperationalDashboard() {
   const now = new Date();
   const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
@@ -207,13 +218,14 @@ export async function getOperationalDashboard() {
       ),
     ),
   ]);
-  const attentionJobs = attentionSnapshot.docs.map(jobFromSnapshot);
+  const staleAttentionJobs = attentionSnapshot.docs.map(jobFromSnapshot);
   const inProgressJobs = inProgressSnapshot.docs.map(jobFromSnapshot);
   const recentlyCompletedJobs = recentlyCompletedSnapshot.docs.map(jobFromSnapshot);
   const next48HoursJobs = next48HoursSnapshot.docs
     .map(jobFromSnapshot)
     .filter((job) => isWithinNext48Hours(job, now, windowEnd))
     .sort(sortByScheduledDateTime);
+  const attentionJobs = composeAttentionJobCandidates(staleAttentionJobs, next48HoursJobs);
   const offeredAttentionJobs = attentionJobs.filter(
     (job) => job.operationalStatus === "OFFERED",
   );
