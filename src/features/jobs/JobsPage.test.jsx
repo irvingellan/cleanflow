@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import {
   createJobListFilters,
@@ -48,6 +48,8 @@ const jobs = [
     completedAt: { toMillis: () => 100 },
   },
 ];
+
+afterEach(() => vi.restoreAllMocks());
 
 function JobsPageHarness({ initialFilters = createJobListFilters() }) {
   const [filters, setFilters] = useState(initialFilters);
@@ -105,6 +107,137 @@ describe("sortJobWorklist", () => {
 });
 
 describe("JobsPage filters", () => {
+  it("waits for asynchronous Jobs content, then restores the originating row", () => {
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const onScrollRestored = vi.fn();
+    const restoreScroll = {
+      anchorJobId: "job-active-sooner",
+      anchorViewportOffset: 180,
+    };
+    let scrollY = 0;
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      get: () => scrollY,
+    });
+
+    const { rerender } = render(
+      <TranslationProvider>
+        <JobsPage
+          jobs={[]}
+          isLoading
+          hasError={false}
+          onSelect={vi.fn()}
+          filters={createJobListFilters({ search: "pacific" })}
+          cleaners={[]}
+          properties={[]}
+          onFiltersChange={vi.fn()}
+          onClearFilters={vi.fn()}
+          hasMore={false}
+          isLoadingMore={false}
+          onLoadMore={vi.fn()}
+          restoreScroll={restoreScroll}
+          onScrollRestored={onScrollRestored}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(onScrollRestored).not.toHaveBeenCalled();
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      top: 1240,
+    });
+
+    rerender(
+      <TranslationProvider>
+        <JobsPage
+          jobs={jobs}
+          isLoading={false}
+          hasError={false}
+          onSelect={vi.fn()}
+          filters={createJobListFilters({ search: "pacific" })}
+          cleaners={[]}
+          properties={[]}
+          onFiltersChange={vi.fn()}
+          onClearFilters={vi.fn()}
+          hasMore={false}
+          isLoadingMore={false}
+          onLoadMore={vi.fn()}
+          restoreScroll={restoreScroll}
+          onScrollRestored={onScrollRestored}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1060, behavior: "auto" });
+    expect(onScrollRestored).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not restore stale Jobs context when no return context exists", () => {
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+    render(
+      <TranslationProvider>
+        <JobsPage
+          jobs={jobs}
+          isLoading={false}
+          hasError={false}
+          onSelect={vi.fn()}
+          filters={createJobListFilters()}
+          cleaners={[]}
+          properties={[]}
+          onFiltersChange={vi.fn()}
+          onClearFilters={vi.fn()}
+          hasMore={false}
+          isLoadingMore={false}
+          onLoadMore={vi.fn()}
+          restoreScroll={null}
+          onScrollRestored={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("captures the selected Job as the restoration anchor", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      top: 160,
+    });
+
+    render(
+      <TranslationProvider>
+        <JobsPage
+          jobs={jobs}
+          isLoading={false}
+          hasError={false}
+          onSelect={onSelect}
+          filters={createJobListFilters()}
+          cleaners={[]}
+          properties={[]}
+          onFiltersChange={vi.fn()}
+          onClearFilters={vi.fn()}
+          hasMore={false}
+          isLoadingMore={false}
+          onLoadMore={vi.fn()}
+          restoreScroll={null}
+          onScrollRestored={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    await user.click(document.querySelector('[data-job-id="job-active-sooner"]'));
+
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "job-active-sooner" }),
+      {
+        anchorJobId: "job-active-sooner",
+        anchorViewportOffset: 160,
+      },
+    );
+  });
   it("applies a Client context through canonical Property relationships for legacy Jobs", () => {
     render(
       <JobsPageHarness

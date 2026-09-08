@@ -1444,6 +1444,36 @@ button.summary-card {
   letter-spacing: 0.04em;
 }
 
+.data-provenance-badge {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: var(--color-muted);
+  background: var(--color-surface-subtle);
+  font-size: 0.625rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.data-provenance-badge--demo { color: var(--color-brand-muted); }
+.data-provenance-badge--unknown { color: var(--color-warning-text); }
+
+.scroll-to-top-button {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  color: var(--color-brand-text);
+  background: var(--color-surface);
+  box-shadow: 0 10px 24px var(--shadow-card);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
 .job-card__prices {
   display: grid;
   gap: 3px;

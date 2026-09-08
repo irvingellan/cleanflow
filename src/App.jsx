@@ -309,9 +309,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [activeSection, setActiveSection] = useState("dashboard");
   const [view, setView] = useState("dashboard");
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
+  const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
   const [createdJob, setCreatedJob] = useState(null);
-  const jobWorklist = useJobsWorklist({ view });
+  const jobWorklist = useJobsWorklist({
+    view,
+    preserveLoadedJobs: Boolean(jobsScrollRestore),
+  });
   const jobDetail = useJobDetailController({
     view,
     onJobUpdated: jobWorklist.replaceJob,
@@ -489,6 +493,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function showJobList(filters = createJobListFilters()) {
+    setJobsScrollRestore(null);
     setActiveSection("jobs");
     clearProperty();
     closeJobDetail();
@@ -518,7 +523,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function returnToJobs() {
-    showJobList(jobListFilters);
+    setActiveSection("jobs");
+    clearProperty();
+    closeJobDetail();
+    clearOffersSentCount();
+    setView("job-list");
   }
 
   function showCleaners() {
@@ -636,7 +645,15 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("property-create");
   }
 
-  function openJob(job) {
+  function openJob(job, jobsOrigin) {
+    if (view === "job-list") {
+      setJobsScrollRestore(
+        jobsOrigin || {
+          anchorJobId: job.id,
+          anchorViewportOffset: 0,
+        },
+      );
+    }
     setActiveSection("jobs");
     setJobDetailOrigin("jobs");
     openJobDetail(job);
@@ -850,6 +867,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasMore={hasMoreJobs}
             isLoadingMore={isLoadingMoreJobs}
             onLoadMore={loadMoreJobs}
+            restoreScroll={jobsScrollRestore}
+            onScrollRestored={() => setJobsScrollRestore(null)}
           />
         )}
 

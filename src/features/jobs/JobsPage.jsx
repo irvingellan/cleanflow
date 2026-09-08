@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
+import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import {
   formatDate,
   formatOperationalStatus,
@@ -49,9 +51,12 @@ export function JobsPage({
   hasMore,
   isLoadingMore,
   onLoadMore,
+  restoreScroll,
+  onScrollRestored,
 }) {
   const { language, translate } = useTranslation();
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
+  const jobCardElements = useRef(new Map());
   const propertiesById = useMemo(
     () => Object.fromEntries(properties.map((property) => [property.id, property])),
     [properties],
@@ -94,6 +99,22 @@ export function JobsPage({
       propertiesById,
     ],
   );
+
+  useEffect(() => {
+    if (!restoreScroll || isLoading || hasError) return;
+
+    const anchorElement = jobCardElements.current.get(restoreScroll.anchorJobId);
+    if (!anchorElement) return;
+
+    const anchorTop = anchorElement.getBoundingClientRect().top;
+    const targetScrollY = Math.max(
+      0,
+      window.scrollY + anchorTop - restoreScroll.anchorViewportOffset,
+    );
+    window.scrollTo({ top: targetScrollY, behavior: "auto" });
+    onScrollRestored?.();
+  }, [hasError, isLoading, onScrollRestored, restoreScroll, sortedJobs]);
+
   const defaultFilters = createJobListFilters();
   const hasActiveFilters = Object.entries(filters).some(
     ([key, value]) => value !== defaultFilters[key],
@@ -358,7 +379,20 @@ export function JobsPage({
                   property:
                     job.propertyName || translate("properties.unnamed"),
                 })}
-                onClick={() => onSelect(job)}
+                data-job-id={job.id}
+                ref={(element) => {
+                  if (element) {
+                    jobCardElements.current.set(job.id, element);
+                  } else {
+                    jobCardElements.current.delete(job.id);
+                  }
+                }}
+                onClick={(event) =>
+                  onSelect(job, {
+                    anchorJobId: job.id,
+                    anchorViewportOffset: event.currentTarget.getBoundingClientRect().top,
+                  })
+                }
               >
                 <span className="job-card__date">
                   {formatDate(job.scheduledDate, translate, language)}
@@ -382,6 +416,7 @@ export function JobsPage({
                 <span className="status-badge">
                   {formatOperationalStatus(job.operationalStatus, translate)}
                 </span>
+                <DataProvenanceBadge record={job} />
                 {(hasValue(job.clientPrice) || hasValue(job.cleanerPayout)) && (
                   <span className="job-card__prices">
                     {hasValue(job.clientPrice) && (
@@ -415,6 +450,7 @@ export function JobsPage({
           )}
         </>
       )}
+      <ScrollToTopButton />
     </section>
   );
 }
