@@ -15,6 +15,7 @@ import {
   isAuthorizedDeveloper,
   requireAuthorizedDeveloper,
 } from "./devCenterAuthorization.js";
+import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -147,6 +148,11 @@ export const generateDevCenterScenario = onCall(
   { region: "us-central1", secrets: [devCenterDeveloperUids] },
   async (request) => {
     requireAuthorizedDeveloper(request, allowedDeveloperUids());
+    try {
+      assertDevCenterMutationEnvironment();
+    } catch (error) {
+      throw new HttpsError("failed-precondition", error.message);
+    }
     const scenario = request.data?.scenario;
     const batchId = `dev-center-${randomUUID()}`;
     let records;
@@ -198,6 +204,11 @@ export const clearDevCenterData = onCall(
   { region: "us-central1", secrets: [devCenterDeveloperUids] },
   async (request) => {
     requireAuthorizedDeveloper(request, allowedDeveloperUids());
+    try {
+      assertDevCenterMutationEnvironment();
+    } catch (error) {
+      throw new HttpsError("failed-precondition", error.message);
+    }
     const result = await clearDemoData();
     logger.info("Dev Center demo data cleared.", result);
     return result;

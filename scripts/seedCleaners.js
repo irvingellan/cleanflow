@@ -1,7 +1,8 @@
 import { deleteApp, initializeApp } from "firebase/app";
-import { doc, getFirestore, writeBatch } from "firebase/firestore";
+import { connectFirestoreEmulator, doc, getFirestore, writeBatch } from "firebase/firestore";
 import { loadEnv } from "vite";
 import { createFirebaseConfig } from "../src/services/firebase/config.js";
+import { assertLocalDemoSeedEnvironment } from "./seedSafety.js";
 
 // Public-repository fixtures are intentionally fictional.
 const cleaners = [
@@ -16,8 +17,10 @@ const cleaners = [
 ];
 
 async function seedCleaners() {
+  const safety = assertLocalDemoSeedEnvironment();
   const environment = loadEnv("development", process.cwd());
   const firebaseConfig = createFirebaseConfig(environment);
+  firebaseConfig.projectId = safety.projectId;
   const missingConfigValues = Object.entries(firebaseConfig)
     .filter(([, value]) => !value)
     .map(([key]) => key);
@@ -30,6 +33,8 @@ async function seedCleaners() {
 
   const firebaseApp = initializeApp(firebaseConfig, "cleaners-seed");
   const db = getFirestore(firebaseApp);
+  const [host, port] = safety.firestoreHost.split(":");
+  connectFirestoreEmulator(db, host, Number(port));
 
   try {
     const batch = writeBatch(db);
@@ -42,6 +47,7 @@ async function seedCleaners() {
           active: true,
           organizationId: "cleanflow-demo",
           fixture: true,
+          dataProvenance: "DEMO",
         },
       );
     }

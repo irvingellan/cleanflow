@@ -1,7 +1,8 @@
 import { deleteApp, initializeApp } from "firebase/app";
-import { doc, getFirestore, Timestamp, writeBatch } from "firebase/firestore";
+import { connectFirestoreEmulator, doc, getFirestore, Timestamp, writeBatch } from "firebase/firestore";
 import { loadEnv } from "vite";
 import { createFirebaseConfig } from "../src/services/firebase/config.js";
+import { assertLocalDemoSeedEnvironment } from "./seedSafety.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -169,8 +170,10 @@ function offerData(jobId, cleaner, status, index) {
 }
 
 async function seedDashboard() {
+  const safety = assertLocalDemoSeedEnvironment();
   const environment = loadEnv("development", process.cwd());
   const firebaseConfig = createFirebaseConfig(environment);
+  firebaseConfig.projectId = safety.projectId;
   const missingConfigValues = Object.entries(firebaseConfig)
     .filter(([, value]) => !value)
     .map(([key]) => key);
@@ -181,6 +184,8 @@ async function seedDashboard() {
 
   const firebaseApp = initializeApp(firebaseConfig, "dashboard-seed");
   const db = getFirestore(firebaseApp);
+  const [host, port] = safety.firestoreHost.split(":");
+  connectFirestoreEmulator(db, host, Number(port));
 
   try {
     const batch = writeBatch(db);

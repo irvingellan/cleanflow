@@ -12,6 +12,7 @@ const scenarios = [
 export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate, onClear }) {
   const { translate } = useTranslation();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+  const canMutate = access.environment === "emulator";
 
   async function generate(scenario) {
     await onGenerate(scenario);
@@ -37,6 +38,8 @@ export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate,
         </span>
       </div>
 
+      {!canMutate && <StateCard message={translate("devCenter.mutationsEmulatorOnly")} status="status" />}
+
       <section className="dev-center__count" aria-label={translate("devCenter.demoJobCount")}>
         <span>{translate("devCenter.demoJobCount")}</span>
         <strong>{access.demoJobCount || 0}</strong>
@@ -50,7 +53,7 @@ export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate,
             <button
               className="button button--primary"
               type="button"
-              disabled={isWorking}
+              disabled={isWorking || !canMutate}
               onClick={() => generate(scenario.id)}
             >
               {isWorking ? translate("devCenter.working") : translate("devCenter.generate")}
@@ -71,13 +74,13 @@ export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate,
               <button className="button" type="button" disabled={isWorking} onClick={() => setIsConfirmingClear(false)}>
                 {translate("common.cancel")}
               </button>
-              <button className="button button--danger" type="button" disabled={isWorking} onClick={clear}>
+              <button className="button button--danger" type="button" disabled={isWorking || !canMutate} onClick={clear}>
                 {isWorking ? translate("devCenter.working") : translate("devCenter.clearAction")}
               </button>
             </div>
           </div>
         ) : (
-          <button className="button button--danger" type="button" disabled={isWorking} onClick={() => setIsConfirmingClear(true)}>
+          <button className="button button--danger" type="button" disabled={isWorking || !canMutate} onClick={() => setIsConfirmingClear(true)}>
             {translate("devCenter.clearAction")}
           </button>
         )}

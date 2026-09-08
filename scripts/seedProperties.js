@@ -1,7 +1,8 @@
 import { deleteApp, initializeApp } from "firebase/app";
-import { doc, getFirestore, writeBatch } from "firebase/firestore";
+import { connectFirestoreEmulator, doc, getFirestore, writeBatch } from "firebase/firestore";
 import { loadEnv } from "vite";
 import { createFirebaseConfig } from "../src/services/firebase/config.js";
+import { assertLocalDemoSeedEnvironment } from "./seedSafety.js";
 
 // Fictional portfolio/demo data only. These names are not real customer properties.
 const properties = [
@@ -68,8 +69,10 @@ const properties = [
 ];
 
 async function seedProperties() {
+  const safety = assertLocalDemoSeedEnvironment();
   const environment = loadEnv("development", process.cwd());
   const firebaseConfig = createFirebaseConfig(environment);
+  firebaseConfig.projectId = safety.projectId;
   const missingConfigValues = Object.entries(firebaseConfig)
     .filter(([, value]) => !value)
     .map(([key]) => key);
@@ -82,6 +85,8 @@ async function seedProperties() {
 
   const firebaseApp = initializeApp(firebaseConfig, "properties-seed");
   const db = getFirestore(firebaseApp);
+  const [host, port] = safety.firestoreHost.split(":");
+  connectFirestoreEmulator(db, host, Number(port));
 
   try {
     const batch = writeBatch(db);

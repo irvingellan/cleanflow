@@ -7,6 +7,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -17,7 +18,7 @@ function clientsCollection() {
 export async function getClients() {
   const snapshot = await getDocs(clientsCollection());
 
-  return snapshot.docs.map((clientDocument) => ({
+  return snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
     ...clientDocument.data(),
     id: clientDocument.id,
   }));
@@ -28,7 +29,7 @@ export async function getActiveClients() {
     query(clientsCollection(), where("active", "==", true)),
   );
 
-  return snapshot.docs.map((clientDocument) => ({
+  return snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
     ...clientDocument.data(),
     id: clientDocument.id,
   }));
@@ -41,7 +42,8 @@ export async function createClient({ name, active }) {
     active,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    dataProvenance: "REAL",
   });
 
-  return { id: reference.id, name, active, organizationId };
+  return { id: reference.id, name, active, organizationId, dataProvenance: "REAL" };
 }

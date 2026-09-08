@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BackButton, DetailItem } from "../../components/UiPrimitives.jsx";
+import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import {
   formatDate,
@@ -57,6 +58,7 @@ export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob }) {
       <h2 id="cleaner-detail-title" className="panel__title">
         {cleanerName}
       </h2>
+      <DataProvenanceBadge record={cleaner} />
 
       <dl className="detail-list">
         <DetailItem label={translate("common.status")} value={cleanerStatus} />

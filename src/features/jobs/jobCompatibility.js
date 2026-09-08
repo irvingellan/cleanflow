@@ -4,6 +4,8 @@ export const ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION = 2;
 export const CURRENT_JOB_SCHEMA_VERSION = ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION;
 export const maximumGuestNameLength = 120;
 
+import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
+
 function optionalText(value) {
   if (typeof value !== "string") {
     return "";
@@ -53,11 +55,11 @@ export function getAssignedCleanerIds(job) {
  */
 export function normalizeJobRecord(data = {}, id) {
   const source = data && typeof data === "object" ? data : {};
-  const job = {
+  const job = withNormalizedDataProvenance({
     ...source,
     id,
     schemaVersion: getJobSchemaVersion(source),
-  };
+  });
   const clientId = optionalText(source.clientId);
   const guestName = optionalText(source.guestName);
 
@@ -108,6 +110,7 @@ export function buildCurrentJobCreateData({
     operationalStatus: "UNASSIGNED",
     schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
     assignedCleanerIds: [],
+    dataProvenance: "REAL",
   };
   const normalizedClientId = optionalText(clientId);
 

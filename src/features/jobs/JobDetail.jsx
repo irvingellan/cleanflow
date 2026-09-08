@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
+import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import {
   BackButton,
   DetailItem,
@@ -331,6 +332,7 @@ export function JobDetail({
       <h2 id="job-detail-title" className="panel__title">
         {job.propertyName || translate("properties.unnamed")}
       </h2>
+      <DataProvenanceBadge record={job} />
 
       <dl className="detail-list">
         <DetailItem

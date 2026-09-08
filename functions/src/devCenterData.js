@@ -27,6 +27,7 @@ function dateFromOffset(now, offset) {
 
 function demoFields({ batch, scenario, createdAt }) {
   return {
+    dataProvenance: "DEMO",
     demoSeed: true,
     demoSeedBatch: batch,
     demoSeedScenario: scenario,

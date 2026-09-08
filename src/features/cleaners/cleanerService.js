@@ -10,6 +10,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
 
 const organizationId = "cleanflow-demo";
 const cleanerLookupBatchSize = 30;
@@ -72,7 +73,7 @@ export async function getCleaners() {
   );
   const snapshot = await getDocs(cleanersQuery);
 
-  return snapshot.docs.map((cleanerDocument) => ({
+  return snapshot.docs.map((cleanerDocument) => withNormalizedDataProvenance({
     ...cleanerDocument.data(),
     id: cleanerDocument.id,
   }));
@@ -81,7 +82,7 @@ export async function getCleaners() {
 export async function getAllCleaners() {
   const snapshot = await getDocs(cleanersCollection());
 
-  return snapshot.docs.map((cleanerDocumentSnapshot) => ({
+  return snapshot.docs.map((cleanerDocumentSnapshot) => withNormalizedDataProvenance({
     ...cleanerDocumentSnapshot.data(),
     id: cleanerDocumentSnapshot.id,
   }));
@@ -111,11 +112,12 @@ export async function createCleaner({
     preferredPaymentMethod,
     paymentContact,
     organizationId,
+    dataProvenance: "REAL",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 
-  return {
+  return withNormalizedDataProvenance({
     id: reference.id,
     name,
     phone,
@@ -126,7 +128,8 @@ export async function createCleaner({
     internalNotes,
     preferredPaymentMethod,
     paymentContact,
-  };
+    dataProvenance: "REAL",
+  });
 }
 
 export async function updateCleaner(cleanerId, {

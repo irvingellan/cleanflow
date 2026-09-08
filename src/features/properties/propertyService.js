@@ -8,6 +8,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -22,7 +23,7 @@ function propertyDocument(propertyId) {
 export async function getProperties() {
   const snapshot = await getDocs(propertiesCollection());
 
-  return snapshot.docs.map((propertyDocument) => ({
+  return snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
     ...propertyDocument.data(),
     id: propertyDocument.id,
   }));
@@ -33,7 +34,7 @@ export async function getPropertiesForClient(clientId) {
     query(propertiesCollection(), where("clientId", "==", clientId)),
   );
 
-  return snapshot.docs.map((propertyDocument) => ({
+  return snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
     ...propertyDocument.data(),
     id: propertyDocument.id,
   }));
@@ -52,6 +53,7 @@ export async function createProperty({
     clientName,
     active,
     organizationId,
+    dataProvenance: "REAL",
   };
 
   if (clientId) {
@@ -68,7 +70,7 @@ export async function createProperty({
 
   const reference = await addDoc(propertiesCollection(), property);
 
-  return { id: reference.id, ...property };
+  return withNormalizedDataProvenance({ id: reference.id, ...property });
 }
 
 export async function linkPropertyToClient(propertyId, client) {

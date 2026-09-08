@@ -1,4 +1,5 @@
 import { BackButton, DetailItem } from "../../components/UiPrimitives.jsx";
+import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
 import {
@@ -38,6 +39,7 @@ export function ClientDetail({
       <h2 id="client-detail-title" className="panel__title">
         {clientName}
       </h2>
+      <DataProvenanceBadge record={client} />
 
       <dl className="detail-list">
         <DetailItem label={translate("common.status")} value={clientStatus} />

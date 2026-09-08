@@ -14,13 +14,14 @@ function hashToken(token) {
 }
 
 function requireEmulators() {
-  if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+  const localEndpoint = (value) => /^(127\.0\.0\.1|localhost):\d+$/.test(value || "");
+  if (!localEndpoint(process.env.FIRESTORE_EMULATOR_HOST) || !localEndpoint(process.env.FIREBASE_AUTH_EMULATOR_HOST)) {
     throw new Error(
       "This seed is emulator-only. Set FIRESTORE_EMULATOR_HOST and FIREBASE_AUTH_EMULATOR_HOST.",
     );
   }
 
-  if (process.env.GCLOUD_PROJECT && process.env.GCLOUD_PROJECT !== projectId) {
+  if (process.env.GCLOUD_PROJECT !== projectId) {
     throw new Error(`This seed requires the ${projectId} demo project.`);
   }
 }
@@ -36,6 +37,7 @@ function jobData({ propertyId, propertyName, scheduledDate }) {
     cleanerPayout: 150,
     notes: "EMULATOR FIXTURE - manager-only note",
     operationalStatus: "OFFERED",
+    dataProvenance: "DEMO",
     createdAt: Timestamp.now(),
     offeredAt: Timestamp.now(),
   };
@@ -47,6 +49,7 @@ function offerData({ jobId, cleanerId, cleanerName, expiresAt = null }) {
     cleanerId,
     cleanerName,
     status: "PENDING",
+    dataProvenance: "DEMO",
     createdAt: Timestamp.now(),
   };
 

@@ -1,4 +1,5 @@
 import { StateCard } from "../../components/UiPrimitives.jsx";
+import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
 export function PropertyDirectory({ properties, isLoading, hasError, onSelect, onCreate }) {
@@ -47,6 +48,7 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
                   <span className="status-dot" aria-hidden="true" />
                   {translate("common.property")}
                 </span>
+                <DataProvenanceBadge record={property} />
               </button>
             );
           })}

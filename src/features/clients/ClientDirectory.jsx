@@ -1,4 +1,5 @@
 import { StateCard } from "../../components/UiPrimitives.jsx";
+import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
 export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect }) {
@@ -51,6 +52,7 @@ export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSele
                     ? translate("common.inactive")
                     : translate("common.active")}
                 </span>
+                <DataProvenanceBadge record={client} />
               </button>
             );
           })}
