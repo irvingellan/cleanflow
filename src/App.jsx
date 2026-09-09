@@ -41,7 +41,6 @@ import { useJobDetailController } from "./features/jobs/useJobDetailController.j
 import { useJobsWorklist } from "./features/jobs/useJobsWorklist.js";
 import {
   AssignedCleanerJob,
-  CleanerOfferSimulation,
   IssueForm,
   IssueSuccess,
   OfferCleaners,
@@ -362,12 +361,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     },
     offerFlow: {
       offersSentCount,
-      selectedOffer,
       availableCleaners: cleaners,
       isLoadingCleaners,
       hasCleanerError,
       clearOffersSentCount,
-      setSelectedOffer,
       recordOffersSent,
       createCleanerOfferLink,
     },
@@ -688,13 +685,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("offer-cleaners");
   }
 
-  function openCleanerOffer(offer) {
-    setSelectedOffer(offer);
-    setView("cleaner-offer");
-  }
-
   function openAssignedCleanerJob() {
-    setSelectedOffer(null);
     setView("cleaner-job");
   }
 
@@ -1030,7 +1021,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOfferToCleaners={showOfferCleaners}
             onRefreshOffers={refreshJobOffers}
             onRefreshIssues={refreshJobIssues}
-            onSimulateOffer={openCleanerOffer}
             onCreatePublicOfferLink={createCleanerOfferLink}
             onAssignCleaner={assignCleaner}
             onRemoveAssignment={removeCleanerAssignment}
@@ -1062,14 +1052,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             count={offersSentCount}
             onBackToJob={returnToJobDetail}
             onBackToJobs={showJobs}
-          />
-        )}
-
-        {view === "cleaner-offer" && selectedJob && selectedOffer && (
-          <CleanerOfferSimulation
-            job={selectedJob}
-            offer={selectedOffer}
-            onBackToJob={returnToJobDetail}
           />
         )}
 

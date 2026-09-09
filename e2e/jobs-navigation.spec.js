@@ -159,12 +159,23 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
   await page.getByRole("button", { name: "Back to job", exact: true }).click();
 
   const offers = page.locator(".offer-status-item");
-  for (const cleanerName of ["E2E Team Cleaner A", "E2E Team Cleaner B"]) {
-    const offer = offers.filter({ hasText: cleanerName });
-    await offer.getByRole("button", { name: "Simulate offer" }).click();
-    await page.getByRole("button", { name: "I'm interested" }).click();
-    await page.getByRole("button", { name: /Back/ }).click();
-  }
+  await expect(page.getByRole("button", { name: "Simulate offer" })).toHaveCount(0);
+
+  // Public Offer response is covered at the Function boundary. Set deterministic
+  // emulator fixture responses here so this manager test does not depend on dev UI.
+  const db = getE2eFirestore();
+  const offersReference = db
+    .collection("organizations")
+    .doc("cleanflow-demo")
+    .collection("jobs")
+    .doc("e2e-v2-offer-job")
+    .collection("offers");
+  await Promise.all(
+    ["e2e-team-cleaner-a", "e2e-team-cleaner-b"].map((cleanerId) =>
+      offersReference.doc(cleanerId).update({ status: "INTERESTED", respondedAt: new Date() }),
+    ),
+  );
+  await page.getByRole("button", { name: "Refresh offers" }).click();
 
   await offers
     .filter({ hasText: "E2E Team Cleaner A" })
@@ -177,7 +188,6 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
     .click();
   await expect(page.getByText("2 cleaners assigned")).toBeVisible();
 
-  const db = getE2eFirestore();
   const jobSnapshot = await db
     .collection("organizations")
     .doc("cleanflow-demo")

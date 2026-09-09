@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { JobDetail } from "./JobDetail.jsx";
@@ -30,8 +30,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}) {
         onOfferToCleaners={callbacks.onOfferToCleaners || noOp}
         onRefreshOffers={callbacks.onRefreshOffers || noOp}
         onRefreshIssues={noOp}
-        onSimulateOffer={noOp}
-        onCreatePublicOfferLink={noOp}
+        onCreatePublicOfferLink={callbacks.onCreatePublicOfferLink || noOp}
         onAssignCleaner={noOp}
         onRemoveAssignment={noOp}
         onReplaceAssignment={noOp}
@@ -102,6 +101,38 @@ describe("JobDetail lifecycle actions", () => {
     expect(
       screen.getByRole("button", { name: "Offer cleaning to cleaners" }),
     ).toBeVisible();
+  });
+
+  it("keeps real public-offer actions and response statuses without exposing simulation", async () => {
+    const onCreatePublicOfferLink = vi.fn().mockResolvedValue({
+      url: "https://cleanflow.example/offer/test-token",
+    });
+    renderJobDetail(
+      "OFFERED",
+      {
+        offers: [
+          { id: "pending-offer", cleanerId: "cleaner-pending", cleanerName: "Ana", status: "PENDING" },
+          { id: "interested-offer", cleanerId: "cleaner-interested", cleanerName: "Beatriz", status: "INTERESTED" },
+          { id: "declined-offer", cleanerId: "cleaner-declined", cleanerName: "Carla", status: "DECLINED" },
+        ],
+      },
+      { onCreatePublicOfferLink },
+    );
+
+    const pendingOffer = screen.getByText("Ana").closest("article");
+    expect(pendingOffer).not.toBeNull();
+    expect(pendingOffer).toHaveTextContent("Pending");
+    fireEvent.click(within(pendingOffer).getByRole("button", { name: "Create public link" }));
+
+    await waitFor(() => {
+      expect(onCreatePublicOfferLink).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "pending-offer", status: "PENDING" }),
+      );
+    });
+    expect(screen.getByRole("link", { name: "Open public cleaner offer" })).toBeVisible();
+    expect(screen.getByText("Interested")).toBeVisible();
+    expect(screen.getByText("Not available")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Simulate offer" })).not.toBeInTheDocument();
   });
 
   it("shows a secondary add-more action for an assignment-aware Job with offers", () => {
@@ -193,7 +224,6 @@ describe("JobDetail lifecycle actions", () => {
           onOfferToCleaners={vi.fn()}
           onRefreshOffers={vi.fn()}
           onRefreshIssues={vi.fn()}
-          onSimulateOffer={vi.fn()}
           onCreatePublicOfferLink={vi.fn()}
           onAssignCleaner={vi.fn()}
           onRemoveAssignment={vi.fn()}
@@ -243,7 +273,6 @@ describe("JobDetail lifecycle actions", () => {
           onOfferToCleaners={vi.fn()}
           onRefreshOffers={vi.fn()}
           onRefreshIssues={vi.fn()}
-          onSimulateOffer={vi.fn()}
           onCreatePublicOfferLink={vi.fn()}
           onAssignCleaner={onAssignCleaner}
           onRemoveAssignment={vi.fn()}
@@ -302,7 +331,6 @@ describe("JobDetail lifecycle actions", () => {
           onOfferToCleaners={vi.fn()}
           onRefreshOffers={vi.fn()}
           onRefreshIssues={vi.fn()}
-          onSimulateOffer={vi.fn()}
           onCreatePublicOfferLink={vi.fn()}
           onAssignCleaner={vi.fn()}
           onRemoveAssignment={vi.fn()}

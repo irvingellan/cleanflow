@@ -41,7 +41,6 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
   const [hasCleanerError, setHasCleanerError] = useState(false);
   const [offersSentCount, setOffersSentCount] = useState(null);
-  const [selectedOffer, setSelectedOffer] = useState(null);
 
   async function refreshOffers() {
     if (!selectedJob) {
@@ -162,13 +161,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       isLoadingIssues: true,
       isLoadingAssignments: isAssignmentAwareJob(job),
     });
-    setSelectedOffer(null);
   }
 
   function closeJob() {
     setSelectedJob(null);
     setDetailData(emptyDetailData());
-    setSelectedOffer(null);
   }
 
   function prepareJobDetailRefresh() {
@@ -178,7 +175,6 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       isLoadingIssues: true,
       isLoadingAssignments: isAssignmentAwareJob(selectedJob),
     });
-    setSelectedOffer(null);
   }
 
   async function updateJob(action) {
@@ -314,12 +310,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     },
     offerFlow: {
       offersSentCount,
-      selectedOffer,
       availableCleaners,
       isLoadingCleaners,
       hasCleanerError,
       clearOffersSentCount: () => setOffersSentCount(null),
-      setSelectedOffer,
       recordOffersSent,
       createCleanerOfferLink,
     },

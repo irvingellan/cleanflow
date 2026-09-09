@@ -43,7 +43,6 @@ export function JobDetail({
   onOfferToCleaners,
   onRefreshOffers,
   onRefreshIssues,
-  onSimulateOffer,
   onCreatePublicOfferLink,
   onAssignCleaner,
   onRemoveAssignment,
@@ -841,13 +840,6 @@ export function JobDetail({
                   </span>
                   {canManageOffers && (
                     <div className="offer-status-actions">
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => onSimulateOffer(offer)}
-                      >
-                        {translate("offers.simulateOffer")}
-                      </button>
                       {canCreatePublicLink && (
                         <button
                           className="button"
