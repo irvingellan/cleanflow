@@ -10,7 +10,10 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
-import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
+import {
+  buildDataProvenanceUpdate,
+  withNormalizedDataProvenance,
+} from "../../lib/dataProvenance.js";
 
 const organizationId = "cleanflow-demo";
 const cleanerLookupBatchSize = 30;
@@ -170,4 +173,13 @@ export async function updateCleaner(cleanerId, {
     preferredPaymentMethod,
     paymentContact,
   };
+}
+
+export async function updateCleanerDataProvenance(cleanerId, dataProvenance, actorUid) {
+  await updateDoc(
+    cleanerDocument(cleanerId),
+    buildDataProvenanceUpdate(dataProvenance, actorUid, serverTimestamp()),
+  );
+
+  return { id: cleanerId, dataProvenance };
 }

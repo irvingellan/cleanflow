@@ -1458,6 +1458,88 @@ button.summary-card {
 .data-provenance-badge--demo { color: var(--color-brand-muted); }
 .data-provenance-badge--unknown { color: var(--color-warning-text); }
 
+.data-provenance-review {
+  margin: -16px 0 24px;
+}
+
+.data-provenance-review__summary,
+.data-provenance-review__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button--text {
+  border: 0;
+  padding: 4px 2px;
+  color: var(--color-brand-muted);
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.data-provenance-review__panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--color-surface-subtle);
+}
+
+.data-provenance-review__panel h3,
+.data-provenance-review__panel p {
+  margin: 0;
+}
+
+.data-provenance-review__panel p {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.data-provenance-review__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.data-provenance-review__option {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.data-provenance-review__option--selected {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.data-provenance-review__option span {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.data-provenance-review__actions {
+  justify-content: flex-end;
+}
+
+.form-success {
+  margin: 0;
+  color: var(--color-brand-text);
+  font-weight: 700;
+}
+
 .scroll-to-top-button {
   position: fixed;
   right: max(18px, env(safe-area-inset-right));
@@ -2514,6 +2596,14 @@ button.summary-card {
   .detail-list,
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .data-provenance-review__options {
+    grid-template-columns: 1fr;
+  }
+
+  .data-provenance-review__actions .button {
+    flex: 1 1 120px;
   }
 
   .job-card {

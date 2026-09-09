@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { getClientJobHistory } from "../jobs/jobService.js";
 import { getPropertiesForClient } from "../properties/propertyService.js";
-import { createClient, getClients } from "./clientService.js";
+import {
+  createClient,
+  getClients,
+  updateClientDataProvenance,
+} from "./clientService.js";
 
 function emptyClientDetail() {
   return {
@@ -17,7 +21,7 @@ function emptyClientDetail() {
  * Owns Client data and its explicit Property/Job read-model integration.
  * The application shell owns Client-to-Property/Job navigation origins.
  */
-export function useClientsController({ view }) {
+export function useClientsController({ view, actorUid }) {
   const [clients, setClients] = useState([]);
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [hasDirectoryError, setHasDirectoryError] = useState(false);
@@ -126,6 +130,24 @@ export function useClientsController({ view }) {
     return client;
   }
 
+  async function saveDataProvenance(client, dataProvenance) {
+    const clientUpdate = await updateClientDataProvenance(
+      client.id,
+      dataProvenance,
+      actorUid,
+    );
+    const updatedClient = { ...client, ...clientUpdate };
+
+    setSelectedClient(updatedClient);
+    setClients((currentClients) =>
+      currentClients.map((currentClient) =>
+        currentClient.id === updatedClient.id ? updatedClient : currentClient,
+      ),
+    );
+
+    return updatedClient;
+  }
+
   return {
     directory: {
       clients,
@@ -139,5 +161,6 @@ export function useClientsController({ view }) {
       openClient,
     },
     saveClient,
+    saveDataProvenance,
   };
 }

@@ -321,10 +321,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     onJobUpdated: jobWorklist.replaceJob,
     actorUid: authUser?.uid,
   });
-  const cleanersController = useCleanersController({ view });
-  const clientsController = useClientsController({ view });
+  const cleanersController = useCleanersController({ view, actorUid: authUser?.uid });
+  const clientsController = useClientsController({ view, actorUid: authUser?.uid });
   const payoutsController = usePayoutsController({ view });
-  const propertiesController = usePropertiesController();
+  const propertiesController = usePropertiesController({ actorUid: authUser?.uid });
   const dashboardController = useDashboardController({ view });
   const devCenterController = useDevCenterController({ view });
   const {
@@ -378,6 +378,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       startCleaning,
       completeCleaning,
       resolveJobIssue,
+      saveDataProvenance: saveJobDataProvenance,
     },
     openJob: openJobDetail,
     closeJob: closeJobDetail,
@@ -396,6 +397,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       openCleaner: selectCleaner,
       clearSavedCleaner,
       saveCleaner,
+      saveDataProvenance: saveCleanerDataProvenance,
     },
   } = cleanersController;
   const {
@@ -415,6 +417,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       openClient: selectClient,
     },
     saveClient,
+    saveDataProvenance: saveClientDataProvenance,
   } = clientsController;
   const {
     directory: {
@@ -450,6 +453,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     },
     saveProperty,
     linkClient,
+    saveDataProvenance: savePropertyDataProvenance,
   } = propertiesController;
 
   function showProperties() {
@@ -817,6 +821,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onCreateCleaning={() => setView("create-cleaning")}
             onOpenJob={openPropertyJob}
             onLinkClient={showPropertyClientLink}
+            onSaveDataProvenance={(dataProvenance) =>
+              savePropertyDataProvenance(selectedProperty, dataProvenance)
+            }
             onViewAllUpcoming={() => showJobsForProperty(selectedProperty)}
           />
         )}
@@ -918,6 +925,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onBack={showCleaners}
             onEdit={showEditCleaner}
             onOpenJob={openCleanerJob}
+            onSaveDataProvenance={(dataProvenance) =>
+              saveCleanerDataProvenance(selectedCleaner, dataProvenance)
+            }
           />
         )}
 
@@ -976,6 +986,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOpenProperty={openClientProperty}
             onCreateProperty={showNewPropertyForClient}
             onOpenJob={openClientJob}
+            onSaveDataProvenance={(dataProvenance) =>
+              saveClientDataProvenance(selectedClient, dataProvenance)
+            }
             onViewAllUpcoming={() => showJobsForClient(selectedClient)}
           />
         )}
@@ -1026,6 +1039,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onCompleteCleaning={completeCleaning}
             onSimulateAssignedCleaner={openAssignedCleanerJob}
             onResolveIssue={resolveJobIssue}
+            onSaveDataProvenance={saveJobDataProvenance}
           />
         )}
 

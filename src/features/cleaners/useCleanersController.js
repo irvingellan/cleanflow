@@ -3,13 +3,14 @@ import {
   createCleaner,
   getAllCleaners,
   updateCleaner,
+  updateCleanerDataProvenance,
 } from "./cleanerService.js";
 
 /**
  * Owns Cleaner directory and profile state. The application shell still owns
  * the current screen and cross-feature navigation origins.
  */
-export function useCleanersController({ view }) {
+export function useCleanersController({ view, actorUid }) {
   const [directoryCleaners, setDirectoryCleaners] = useState([]);
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [hasDirectoryError, setHasDirectoryError] = useState(false);
@@ -91,6 +92,26 @@ export function useCleanersController({ view }) {
     return savedUpdate;
   }
 
+  async function saveDataProvenance(cleaner, dataProvenance) {
+    const cleanerUpdate = await updateCleanerDataProvenance(
+      cleaner.id,
+      dataProvenance,
+      actorUid,
+    );
+    const updatedCleaner = { ...cleaner, ...cleanerUpdate };
+
+    setSelectedCleaner(updatedCleaner);
+    setDirectoryCleaners((currentCleaners) =>
+      currentCleaners.map((currentCleaner) =>
+        currentCleaner.id === updatedCleaner.id
+          ? updatedCleaner
+          : currentCleaner,
+      ),
+    );
+
+    return updatedCleaner;
+  }
+
   return {
     directory: {
       cleaners: directoryCleaners,
@@ -104,6 +125,7 @@ export function useCleanersController({ view }) {
       openCleaner,
       clearSavedCleaner,
       saveCleaner,
+      saveDataProvenance,
     },
   };
 }

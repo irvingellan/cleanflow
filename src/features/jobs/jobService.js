@@ -11,9 +11,11 @@ import {
   serverTimestamp,
   startAfter,
   Timestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import {
   buildCurrentJobCreateData,
   isAssignmentAwareJob,
@@ -570,4 +572,13 @@ export async function createJob({
   );
 
   return normalizeJobRecord(job, jobDocument.id);
+}
+
+export async function updateJobDataProvenance(jobId, dataProvenance, actorUid) {
+  await updateDoc(
+    jobDocument(jobId),
+    buildDataProvenanceUpdate(dataProvenance, actorUid, serverTimestamp()),
+  );
+
+  return { id: jobId, dataProvenance };
 }

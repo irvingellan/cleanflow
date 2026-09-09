@@ -1,18 +1,27 @@
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
   query,
   serverTimestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
-import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
+import {
+  buildDataProvenanceUpdate,
+  withNormalizedDataProvenance,
+} from "../../lib/dataProvenance.js";
 
 const organizationId = "cleanflow-demo";
 
 function clientsCollection() {
   return collection(db, "organizations", organizationId, "clients");
+}
+
+function clientDocument(clientId) {
+  return doc(db, "organizations", organizationId, "clients", clientId);
 }
 
 export async function getClients() {
@@ -46,4 +55,13 @@ export async function createClient({ name, active }) {
   });
 
   return { id: reference.id, name, active, organizationId, dataProvenance: "REAL" };
+}
+
+export async function updateClientDataProvenance(clientId, dataProvenance, actorUid) {
+  await updateDoc(
+    clientDocument(clientId),
+    buildDataProvenanceUpdate(dataProvenance, actorUid, serverTimestamp()),
+  );
+
+  return { id: clientId, dataProvenance };
 }

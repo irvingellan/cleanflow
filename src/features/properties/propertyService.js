@@ -4,11 +4,15 @@ import {
   doc,
   getDocs,
   query,
+  serverTimestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
-import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
+import {
+  buildDataProvenanceUpdate,
+  withNormalizedDataProvenance,
+} from "../../lib/dataProvenance.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -84,4 +88,13 @@ export async function linkPropertyToClient(propertyId, client) {
     clientId: client.id,
     clientName: client.name,
   };
+}
+
+export async function updatePropertyDataProvenance(propertyId, dataProvenance, actorUid) {
+  await updateDoc(
+    propertyDocument(propertyId),
+    buildDataProvenanceUpdate(dataProvenance, actorUid, serverTimestamp()),
+  );
+
+  return { id: propertyId, dataProvenance };
 }

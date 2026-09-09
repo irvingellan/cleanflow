@@ -13,6 +13,7 @@ import {
   assignCleanerToJob,
   completeInProgressJob,
   startAssignedJob,
+  updateJobDataProvenance,
 } from "./jobService.js";
 
 function emptyDetailData() {
@@ -241,6 +242,13 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return updateJob((job) => completeInProgressJob(job.id));
   }
 
+  async function saveDataProvenance(dataProvenance) {
+    return updateJob(async (job) => {
+      await updateJobDataProvenance(job.id, dataProvenance, actorUid);
+      return { ...job, dataProvenance };
+    });
+  }
+
   async function resolveJobIssue({ issueId, resolutionNote }) {
     if (!selectedJob) {
       return;
@@ -321,6 +329,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       replaceCleanerAssignment,
       startCleaning,
       completeCleaning,
+      saveDataProvenance,
       resolveJobIssue,
     },
     openJob,
