@@ -3,8 +3,10 @@ import { getClientJobHistory } from "../jobs/jobService.js";
 import { getPropertiesForClient } from "../properties/propertyService.js";
 import {
   createClient,
+  archiveClient,
   getClients,
   updateClientDataProvenance,
+  restoreClient,
 } from "./clientService.js";
 
 function emptyClientDetail() {
@@ -21,7 +23,7 @@ function emptyClientDetail() {
  * Owns Client data and its explicit Property/Job read-model integration.
  * The application shell owns Client-to-Property/Job navigation origins.
  */
-export function useClientsController({ view, actorUid }) {
+export function useClientsController({ view, actorUid, includeArchived = false }) {
   const [clients, setClients] = useState([]);
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [hasDirectoryError, setHasDirectoryError] = useState(false);
@@ -39,7 +41,7 @@ export function useClientsController({ view, actorUid }) {
 
     async function loadClients() {
       try {
-        const loadedClients = await getClients();
+        const loadedClients = await getClients({ includeArchived });
 
         if (isCurrent) {
           setClients(loadedClients);
@@ -60,7 +62,7 @@ export function useClientsController({ view, actorUid }) {
     return () => {
       isCurrent = false;
     };
-  }, [view]);
+  }, [view, includeArchived]);
 
   useEffect(() => {
     if (view !== "client-detail" || !selectedClient) {
@@ -148,6 +150,19 @@ export function useClientsController({ view, actorUid }) {
     return updatedClient;
   }
 
+  async function archive(client) {
+    await archiveClient(client.id, actorUid);
+    setClients((current) => current.filter((item) => item.id !== client.id));
+  }
+
+  async function restore(client) {
+    await restoreClient(client.id, actorUid);
+    const restored = { ...client, archivedAt: null };
+    setSelectedClient(restored);
+    setClients((current) => current.map((item) => item.id === client.id ? restored : item));
+    return restored;
+  }
+
   return {
     directory: {
       clients,
@@ -162,5 +177,7 @@ export function useClientsController({ view, actorUid }) {
     },
     saveClient,
     saveDataProvenance,
+    archive,
+    restore,
   };
 }

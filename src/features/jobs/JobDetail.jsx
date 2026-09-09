@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
+import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
 import {
   BackButton,
   DetailItem,
@@ -52,6 +53,9 @@ export function JobDetail({
   onSimulateAssignedCleaner,
   onResolveIssue,
   onSaveDataProvenance,
+  onArchive,
+  onRestore,
+  canRestore,
 }) {
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
@@ -333,6 +337,7 @@ export function JobDetail({
         {job.propertyName || translate("properties.unnamed")}
       </h2>
       <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
+      <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
       <dl className="detail-list">
         <DetailItem

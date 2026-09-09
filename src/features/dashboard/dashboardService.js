@@ -16,6 +16,7 @@ import {
   getPendingJobOffers,
 } from "../jobs/jobOfferService.js";
 import { normalizeJobRecord } from "../jobs/jobCompatibility.js";
+import { filterArchivedRecords } from "../../lib/archiveState.js";
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = [
@@ -218,11 +219,12 @@ export async function getOperationalDashboard() {
       ),
     ),
   ]);
-  const staleAttentionJobs = attentionSnapshot.docs.map(jobFromSnapshot);
-  const inProgressJobs = inProgressSnapshot.docs.map(jobFromSnapshot);
-  const recentlyCompletedJobs = recentlyCompletedSnapshot.docs.map(jobFromSnapshot);
+  const staleAttentionJobs = filterArchivedRecords(attentionSnapshot.docs.map(jobFromSnapshot));
+  const inProgressJobs = filterArchivedRecords(inProgressSnapshot.docs.map(jobFromSnapshot));
+  const recentlyCompletedJobs = filterArchivedRecords(recentlyCompletedSnapshot.docs.map(jobFromSnapshot));
   const next48HoursJobs = next48HoursSnapshot.docs
     .map(jobFromSnapshot)
+    .filter((job) => !job.archivedAt)
     .filter((job) => isWithinNext48Hours(job, now, windowEnd))
     .sort(sortByScheduledDateTime);
   const attentionJobs = composeAttentionJobCandidates(staleAttentionJobs, next48HoursJobs);

@@ -53,6 +53,9 @@ export function JobsPage({
   onLoadMore,
   restoreScroll,
   onScrollRestored,
+  canManageExcluded,
+  showExcluded,
+  onToggleExcluded,
 }) {
   const { language, translate } = useTranslation();
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
@@ -159,6 +162,7 @@ export function JobsPage({
       <h2 id="jobs-title" className="list-title">
         {translate("jobs.title")}
       </h2>
+      {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
 
       <div className="job-filters" aria-label={translate("jobs.filters")}>
         <label className="job-filters__search">
@@ -417,6 +421,7 @@ export function JobsPage({
                   {formatOperationalStatus(job.operationalStatus, translate)}
                 </span>
                 <DataProvenanceBadge record={job} />
+                {job.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
                 {(hasValue(job.clientPrice) || hasValue(job.cleanerPayout)) && (
                   <span className="job-card__prices">
                     {hasValue(job.clientPrice) && (

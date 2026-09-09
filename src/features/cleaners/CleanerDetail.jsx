@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BackButton, DetailItem } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
+import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import {
   formatDate,
@@ -15,7 +16,7 @@ import {
   preferredLanguageLabel,
 } from "./cleanerPresentation.js";
 
-export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataProvenance }) {
+export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataProvenance, onArchive, onRestore, canRestore }) {
   const { translate } = useTranslation();
   const [history, setHistory] = useState(null);
   const [hasHistoryError, setHasHistoryError] = useState(false);
@@ -59,6 +60,7 @@ export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataPr
         {cleanerName}
       </h2>
       <DataProvenanceReview record={cleaner} onSave={onSaveDataProvenance} />
+      <RecordArchiveControl record={cleaner} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
       <dl className="detail-list">
         <DetailItem label={translate("common.status")} value={cleanerStatus} />

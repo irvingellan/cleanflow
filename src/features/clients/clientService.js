@@ -13,6 +13,7 @@ import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
 } from "../../lib/dataProvenance.js";
+import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -24,13 +25,13 @@ function clientDocument(clientId) {
   return doc(db, "organizations", organizationId, "clients", clientId);
 }
 
-export async function getClients() {
+export async function getClients({ includeArchived = false } = {}) {
   const snapshot = await getDocs(clientsCollection());
 
-  return snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
+  return filterArchivedRecords(snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
     ...clientDocument.data(),
     id: clientDocument.id,
-  }));
+  })), includeArchived);
 }
 
 export async function getActiveClients() {
@@ -38,10 +39,10 @@ export async function getActiveClients() {
     query(clientsCollection(), where("active", "==", true)),
   );
 
-  return snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
+  return filterArchivedRecords(snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
     ...clientDocument.data(),
     id: clientDocument.id,
-  }));
+  })));
 }
 
 export async function createClient({ name, active }) {
@@ -64,4 +65,14 @@ export async function updateClientDataProvenance(clientId, dataProvenance, actor
   );
 
   return { id: clientId, dataProvenance };
+}
+
+export async function archiveClient(clientId, actorUid) {
+  await updateDoc(clientDocument(clientId), buildArchiveUpdate(actorUid, serverTimestamp()));
+  return { id: clientId, archivedAt: true };
+}
+
+export async function restoreClient(clientId, actorUid) {
+  await updateDoc(clientDocument(clientId), buildRestoreUpdate(actorUid, serverTimestamp()));
+  return { id: clientId, archivedAt: null };
 }

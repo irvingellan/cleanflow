@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
 import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
+import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import {
   buildCurrentJobCreateData,
   isAssignmentAwareJob,
@@ -90,6 +91,7 @@ function recentJobsFromSnapshots(snapshots) {
   return uniqueJobs(
     snapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
   )
+    .filter((job) => !job.archivedAt)
     .sort((firstJob, secondJob) => historySortValue(secondJob) - historySortValue(firstJob))
     .slice(0, 10);
 }
@@ -101,7 +103,7 @@ function upcomingJobSortValue(job) {
 function upcomingJobsFromSnapshots(snapshots) {
   return uniqueJobs(
     snapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
-  ).sort((firstJob, secondJob) =>
+  ).filter((job) => !job.archivedAt).sort((firstJob, secondJob) =>
     upcomingJobSortValue(firstJob).localeCompare(upcomingJobSortValue(secondJob)),
   );
 }
@@ -176,11 +178,11 @@ function pagedJobQuery(constraints, cursor) {
   );
 }
 
-function pageFromSnapshot(snapshot) {
+function pageFromSnapshot(snapshot, includeArchived = false) {
   const documents = snapshot.docs.slice(0, jobWorklistLimit);
 
   return {
-    jobs: documents.map(jobFromSnapshot),
+    jobs: filterArchivedRecords(documents.map(jobFromSnapshot), includeArchived),
     cursor: documents.at(-1) || null,
     hasMore: snapshot.docs.length > jobWorklistLimit,
   };
@@ -193,6 +195,7 @@ export async function getJobs(
     completedCursor = null,
     activeExhausted = false,
     completedExhausted = false,
+    includeArchived = false,
   } = {},
 ) {
   const shouldLoadCompleted = status === "all" || status === "completed";
@@ -215,8 +218,8 @@ export async function getJobs(
       ], completedCursor))
     : Promise.resolve(null);
   const [activeSnapshot, completedSnapshot] = await Promise.all([activeQuery, completedQuery]);
-  const activePage = activeSnapshot ? pageFromSnapshot(activeSnapshot) : null;
-  const completedPage = completedSnapshot ? pageFromSnapshot(completedSnapshot) : null;
+  const activePage = activeSnapshot ? pageFromSnapshot(activeSnapshot, includeArchived) : null;
+  const completedPage = completedSnapshot ? pageFromSnapshot(completedSnapshot, includeArchived) : null;
 
   // Cleaner/property/search controls refine these bounded, status/date-indexed candidates.
   // Combining every optional filter in Firestore would require an unsustainable index matrix.
@@ -581,4 +584,14 @@ export async function updateJobDataProvenance(jobId, dataProvenance, actorUid) {
   );
 
   return { id: jobId, dataProvenance };
+}
+
+export async function archiveJob(jobId, actorUid) {
+  await updateDoc(jobDocument(jobId), buildArchiveUpdate(actorUid, serverTimestamp()));
+  return { id: jobId, archivedAt: true };
+}
+
+export async function restoreJob(jobId, actorUid) {
+  await updateDoc(jobDocument(jobId), buildRestoreUpdate(actorUid, serverTimestamp()));
+  return { id: jobId, archivedAt: null };
 }

@@ -2,7 +2,7 @@ import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
-export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect }) {
+export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect, canManageExcluded, showExcluded, onToggleExcluded }) {
   const { translate } = useTranslation();
 
   if (isLoading) {
@@ -29,6 +29,7 @@ export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSele
         <button className="button button--primary" type="button" onClick={onCreate}>
           {translate("clients.new")}
         </button>
+        {canManageExcluded && <button className="button" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
       </div>
 
       {sortedClients.length === 0 ? (
@@ -53,6 +54,7 @@ export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSele
                     : translate("common.active")}
                 </span>
                 <DataProvenanceBadge record={client} />
+                {client.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
               </button>
             );
           })}

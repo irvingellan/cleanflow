@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   createProperty,
+  archiveProperty,
   getProperties,
   linkPropertyToClient,
   updatePropertyDataProvenance,
+  restoreProperty,
 } from "./propertyService.js";
 
 /** Owns Property data and local mutations; the application shell owns screen and origin state. */
-export function usePropertiesController({ actorUid }) {
+export function usePropertiesController({ actorUid, includeArchived = false }) {
   const [properties, setProperties] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -18,7 +20,7 @@ export function usePropertiesController({ actorUid }) {
 
     async function loadProperties() {
       try {
-        const loadedProperties = await getProperties();
+        const loadedProperties = await getProperties({ includeArchived });
 
         if (isCurrent) {
           setProperties(loadedProperties);
@@ -39,7 +41,7 @@ export function usePropertiesController({ actorUid }) {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [includeArchived]);
 
   function clearProperty() {
     setSelectedProperty(null);
@@ -87,11 +89,26 @@ export function usePropertiesController({ actorUid }) {
     return updatedProperty;
   }
 
+  async function archive(property) {
+    await archiveProperty(property.id, actorUid);
+    setProperties((current) => current.filter((item) => item.id !== property.id));
+  }
+
+  async function restore(property) {
+    await restoreProperty(property.id, actorUid);
+    const restored = { ...property, archivedAt: null };
+    setSelectedProperty(restored);
+    setProperties((current) => current.map((item) => item.id === property.id ? restored : item));
+    return restored;
+  }
+
   return {
     directory: { properties, isLoading, hasError },
     selection: { selectedProperty, clearProperty, openProperty },
     saveProperty,
     linkClient,
     saveDataProvenance,
+    archive,
+    restore,
   };
 }

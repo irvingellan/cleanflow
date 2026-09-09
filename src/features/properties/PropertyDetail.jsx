@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BackButton, DetailItem } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
+import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
 import {
@@ -18,6 +19,9 @@ export function PropertyDetail({
   onOpenJob,
   onLinkClient,
   onSaveDataProvenance,
+  onArchive,
+  onRestore,
+  canRestore,
   onViewAllUpcoming,
 }) {
   const { language, translate } = useTranslation();
@@ -42,6 +46,7 @@ export function PropertyDetail({
         {propertyName}
       </h2>
       <DataProvenanceReview record={property} onSave={onSaveDataProvenance} />
+      <RecordArchiveControl record={property} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
       <dl className="detail-list">
         <DetailItem label={translate("common.client")} value={clientName} />

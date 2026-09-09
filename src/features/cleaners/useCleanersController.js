@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import {
   createCleaner,
+  archiveCleaner,
   getAllCleaners,
   updateCleaner,
   updateCleanerDataProvenance,
+  restoreCleaner,
 } from "./cleanerService.js";
 
 /**
  * Owns Cleaner directory and profile state. The application shell still owns
  * the current screen and cross-feature navigation origins.
  */
-export function useCleanersController({ view, actorUid }) {
+export function useCleanersController({ view, actorUid, includeArchived = false }) {
   const [directoryCleaners, setDirectoryCleaners] = useState([]);
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [hasDirectoryError, setHasDirectoryError] = useState(false);
@@ -28,7 +30,7 @@ export function useCleanersController({ view, actorUid }) {
 
     async function loadDirectoryCleaners() {
       try {
-        const cleaners = await getAllCleaners();
+        const cleaners = await getAllCleaners({ includeArchived });
 
         if (isCurrent) {
           setDirectoryCleaners(cleaners);
@@ -49,7 +51,7 @@ export function useCleanersController({ view, actorUid }) {
     return () => {
       isCurrent = false;
     };
-  }, [view]);
+  }, [view, includeArchived]);
 
   function clearCleaner() {
     setSelectedCleaner(null);
@@ -112,6 +114,19 @@ export function useCleanersController({ view, actorUid }) {
     return updatedCleaner;
   }
 
+  async function archive(cleaner) {
+    await archiveCleaner(cleaner.id, actorUid);
+    setDirectoryCleaners((current) => current.filter((item) => item.id !== cleaner.id));
+  }
+
+  async function restore(cleaner) {
+    await restoreCleaner(cleaner.id, actorUid);
+    const restored = { ...cleaner, archivedAt: null };
+    setSelectedCleaner(restored);
+    setDirectoryCleaners((current) => current.map((item) => item.id === cleaner.id ? restored : item));
+    return restored;
+  }
+
   return {
     directory: {
       cleaners: directoryCleaners,
@@ -126,6 +141,8 @@ export function useCleanersController({ view, actorUid }) {
       clearSavedCleaner,
       saveCleaner,
       saveDataProvenance,
+      archive,
+      restore,
     },
   };
 }

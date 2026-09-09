@@ -14,6 +14,7 @@ import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
 } from "../../lib/dataProvenance.js";
+import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 
 const organizationId = "cleanflow-demo";
 const cleanerLookupBatchSize = 30;
@@ -76,19 +77,19 @@ export async function getCleaners() {
   );
   const snapshot = await getDocs(cleanersQuery);
 
-  return snapshot.docs.map((cleanerDocument) => withNormalizedDataProvenance({
+  return filterArchivedRecords(snapshot.docs.map((cleanerDocument) => withNormalizedDataProvenance({
     ...cleanerDocument.data(),
     id: cleanerDocument.id,
-  }));
+  })));
 }
 
-export async function getAllCleaners() {
+export async function getAllCleaners({ includeArchived = false } = {}) {
   const snapshot = await getDocs(cleanersCollection());
 
-  return snapshot.docs.map((cleanerDocumentSnapshot) => withNormalizedDataProvenance({
+  return filterArchivedRecords(snapshot.docs.map((cleanerDocumentSnapshot) => withNormalizedDataProvenance({
     ...cleanerDocumentSnapshot.data(),
     id: cleanerDocumentSnapshot.id,
-  }));
+  })), includeArchived);
 }
 
 export async function createCleaner({
@@ -182,4 +183,14 @@ export async function updateCleanerDataProvenance(cleanerId, dataProvenance, act
   );
 
   return { id: cleanerId, dataProvenance };
+}
+
+export async function archiveCleaner(cleanerId, actorUid) {
+  await updateDoc(cleanerDocument(cleanerId), buildArchiveUpdate(actorUid, serverTimestamp()));
+  return { id: cleanerId, archivedAt: true };
+}
+
+export async function restoreCleaner(cleanerId, actorUid) {
+  await updateDoc(cleanerDocument(cleanerId), buildRestoreUpdate(actorUid, serverTimestamp()));
+  return { id: cleanerId, archivedAt: null };
 }

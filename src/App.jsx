@@ -311,21 +311,25 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
   const [createdJob, setCreatedJob] = useState(null);
+  const [showExcludedRecords, setShowExcludedRecords] = useState(false);
+  const devCenterController = useDevCenterController({ view });
+  const canManageExcludedRecords = devCenterController.access.authorized;
+  const includeArchived = canManageExcludedRecords && showExcludedRecords;
   const jobWorklist = useJobsWorklist({
     view,
     preserveLoadedJobs: Boolean(jobsScrollRestore),
+    includeArchived,
   });
   const jobDetail = useJobDetailController({
     view,
     onJobUpdated: jobWorklist.replaceJob,
     actorUid: authUser?.uid,
   });
-  const cleanersController = useCleanersController({ view, actorUid: authUser?.uid });
-  const clientsController = useClientsController({ view, actorUid: authUser?.uid });
+  const cleanersController = useCleanersController({ view, actorUid: authUser?.uid, includeArchived });
+  const clientsController = useClientsController({ view, actorUid: authUser?.uid, includeArchived });
   const payoutsController = usePayoutsController({ view });
-  const propertiesController = usePropertiesController({ actorUid: authUser?.uid });
+  const propertiesController = usePropertiesController({ actorUid: authUser?.uid, includeArchived });
   const dashboardController = useDashboardController({ view });
-  const devCenterController = useDevCenterController({ view });
   const {
     dashboardData,
     isLoading: isLoadingDashboard,
@@ -343,6 +347,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setFilters: setJobListFilters,
     resetPagination: resetJobPagination,
     loadMore: loadMoreJobs,
+    removeJob: removeJobFromWorklist,
   } = jobWorklist;
   const {
     job: selectedJob,
@@ -376,6 +381,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       completeCleaning,
       resolveJobIssue,
       saveDataProvenance: saveJobDataProvenance,
+      archive: archiveJobRecord,
+      restore: restoreJobRecord,
     },
     openJob: openJobDetail,
     closeJob: closeJobDetail,
@@ -395,6 +402,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       clearSavedCleaner,
       saveCleaner,
       saveDataProvenance: saveCleanerDataProvenance,
+      archive: archiveCleanerRecord,
+      restore: restoreCleanerRecord,
     },
   } = cleanersController;
   const {
@@ -415,6 +424,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     },
     saveClient,
     saveDataProvenance: saveClientDataProvenance,
+    archive: archiveClientRecord,
+    restore: restoreClientRecord,
   } = clientsController;
   const {
     directory: {
@@ -451,6 +462,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     saveProperty,
     linkClient,
     saveDataProvenance: savePropertyDataProvenance,
+    archive: archivePropertyRecord,
+    restore: restorePropertyRecord,
   } = propertiesController;
 
   function showProperties() {
@@ -778,6 +791,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasError={hasPropertyError}
             onSelect={openProperty}
             onCreate={showNewProperty}
+            canManageExcluded={canManageExcludedRecords}
+            showExcluded={showExcludedRecords}
+            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
           />
         )}
 
@@ -815,6 +831,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onSaveDataProvenance={(dataProvenance) =>
               savePropertyDataProvenance(selectedProperty, dataProvenance)
             }
+            canRestore={canManageExcludedRecords}
+            onArchive={async () => { await archivePropertyRecord(selectedProperty); showProperties(); }}
+            onRestore={() => restorePropertyRecord(selectedProperty)}
             onViewAllUpcoming={() => showJobsForProperty(selectedProperty)}
           />
         )}
@@ -867,6 +886,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onLoadMore={loadMoreJobs}
             restoreScroll={jobsScrollRestore}
             onScrollRestored={() => setJobsScrollRestore(null)}
+            canManageExcluded={canManageExcludedRecords}
+            showExcluded={showExcludedRecords}
+            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
           />
         )}
 
@@ -877,6 +899,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasError={hasDirectoryCleanersError}
             onSelect={openCleaner}
             onCreate={showNewCleaner}
+            canManageExcluded={canManageExcludedRecords}
+            showExcluded={showExcludedRecords}
+            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
           />
         )}
 
@@ -919,6 +944,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onSaveDataProvenance={(dataProvenance) =>
               saveCleanerDataProvenance(selectedCleaner, dataProvenance)
             }
+            canRestore={canManageExcludedRecords}
+            onArchive={async () => { await archiveCleanerRecord(selectedCleaner); showCleaners(); }}
+            onRestore={() => restoreCleanerRecord(selectedCleaner)}
           />
         )}
 
@@ -962,6 +990,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasError={hasClientsError}
             onCreate={showNewClient}
             onSelect={openClient}
+            canManageExcluded={canManageExcludedRecords}
+            showExcluded={showExcludedRecords}
+            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
           />
         )}
 
@@ -980,6 +1011,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onSaveDataProvenance={(dataProvenance) =>
               saveClientDataProvenance(selectedClient, dataProvenance)
             }
+            canRestore={canManageExcludedRecords}
+            onArchive={async () => { await archiveClientRecord(selectedClient); showClients(); }}
+            onRestore={() => restoreClientRecord(selectedClient)}
             onViewAllUpcoming={() => showJobsForClient(selectedClient)}
           />
         )}
@@ -1030,6 +1064,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onSimulateAssignedCleaner={openAssignedCleanerJob}
             onResolveIssue={resolveJobIssue}
             onSaveDataProvenance={saveJobDataProvenance}
+            canRestore={canManageExcludedRecords}
+            onArchive={async () => { await archiveJobRecord(); removeJobFromWorklist(selectedJob.id); returnToJobs(); }}
+            onRestore={restoreJobRecord}
           />
         )}
 

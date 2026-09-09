@@ -2019,6 +2019,30 @@ button.summary-card {
   font-weight: 700;
 }
 
+.record-archive-control {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--color-selected-border);
+  border-radius: 10px;
+  background: var(--color-status-warning-bg);
+}
+
+.record-archive-control p { margin: 0; }
+
+.record-archive-badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--color-warning-text);
+  background: var(--color-status-warning-bg);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
 .offer-job-name {
   margin: -12px 0 24px;
   color: var(--color-text-secondary);

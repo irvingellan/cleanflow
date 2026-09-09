@@ -1,5 +1,6 @@
 import { BackButton, DetailItem } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
+import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
 import {
@@ -22,6 +23,9 @@ export function ClientDetail({
   onOpenJob,
   onViewAllUpcoming,
   onSaveDataProvenance,
+  onArchive,
+  onRestore,
+  canRestore,
 }) {
   const { language, translate } = useTranslation();
   const clientName = client.name || translate("common.notProvided");
@@ -41,6 +45,7 @@ export function ClientDetail({
         {clientName}
       </h2>
       <DataProvenanceReview record={client} onSave={onSaveDataProvenance} />
+      <RecordArchiveControl record={client} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
       <dl className="detail-list">
         <DetailItem label={translate("common.status")} value={clientStatus} />

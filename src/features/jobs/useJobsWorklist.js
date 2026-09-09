@@ -22,7 +22,7 @@ function mergeJobs(currentJobs, incomingJobs) {
  * Owns the bounded Jobs worklist. Navigation stays in the application shell so
  * Dashboard and detail-origin behavior remain explicit at the integration boundary.
  */
-export function useJobsWorklist({ view, preserveLoadedJobs = false }) {
+export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchived = false }) {
   const [jobs, setJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -50,7 +50,7 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false }) {
     async function loadJobs() {
       try {
         const [loadedJobPage, loadedCleaners] = await Promise.all([
-          getJobs(filters),
+          getJobs(filters, { includeArchived }),
           getAllCleaners(),
         ]);
 
@@ -80,13 +80,13 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false }) {
     return () => {
       isCurrent = false;
     };
-  }, [view, filters.status, filters.datePreset]);
+  }, [view, filters.status, filters.datePreset, includeArchived]);
 
   async function loadMore() {
     setIsLoadingMore(true);
 
     try {
-      const loadedJobPage = await getJobs(filters, pageCursors);
+      const loadedJobPage = await getJobs(filters, { ...pageCursors, includeArchived });
       setJobs((currentJobs) => mergeJobs(currentJobs, loadedJobPage.jobs));
       setPageCursors(loadedJobPage.nextPageCursors);
       setHasMore(loadedJobPage.hasMore);
@@ -108,6 +108,10 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false }) {
     );
   }
 
+  function removeJob(jobId) {
+    setJobs((currentJobs) => currentJobs.filter((job) => job.id !== jobId));
+  }
+
   return {
     jobs,
     isLoading: isWorklistLoading,
@@ -120,5 +124,6 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false }) {
     resetPagination,
     loadMore,
     replaceJob,
+    removeJob,
   };
 }

@@ -20,7 +20,7 @@ function InformationIcon({ name }) {
   );
 }
 
-export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate }) {
+export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded }) {
   const { translate } = useTranslation();
 
   if (isLoading) {
@@ -47,6 +47,7 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
         <button className="button button--primary" type="button" onClick={onCreate}>
           {translate("cleaners.new")}
         </button>
+        {canManageExcluded && <button className="button" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
       </div>
 
       {sortedCleaners.length === 0 ? (
@@ -82,6 +83,7 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
                   : translate("common.active")}
               </span>
               <DataProvenanceBadge record={cleaner} />
+              {cleaner.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
             </button>
           ))}
         </div>

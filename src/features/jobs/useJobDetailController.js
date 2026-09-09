@@ -14,6 +14,8 @@ import {
   completeInProgressJob,
   startAssignedJob,
   updateJobDataProvenance,
+  archiveJob,
+  restoreJob,
 } from "./jobService.js";
 
 function emptyDetailData() {
@@ -245,6 +247,20 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     });
   }
 
+  async function archive() {
+    if (!selectedJob) return;
+    await archiveJob(selectedJob.id, actorUid);
+    updateSelectedJob({ ...selectedJob, archivedAt: true });
+  }
+
+  async function restore() {
+    if (!selectedJob) return;
+    await restoreJob(selectedJob.id, actorUid);
+    const restored = { ...selectedJob, archivedAt: null };
+    updateSelectedJob(restored);
+    return restored;
+  }
+
   async function resolveJobIssue({ issueId, resolutionNote }) {
     if (!selectedJob) {
       return;
@@ -324,6 +340,8 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       startCleaning,
       completeCleaning,
       saveDataProvenance,
+      archive,
+      restore,
       resolveJobIssue,
     },
     openJob,

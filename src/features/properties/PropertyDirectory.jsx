@@ -2,7 +2,7 @@ import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
-export function PropertyDirectory({ properties, isLoading, hasError, onSelect, onCreate }) {
+export function PropertyDirectory({ properties, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded }) {
   const { translate } = useTranslation();
 
   if (isLoading) {
@@ -25,6 +25,7 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
         <button className="button button--primary" type="button" onClick={onCreate}>
           {translate("properties.new")}
         </button>
+        {canManageExcluded && <button className="button" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
       </div>
 
       {properties.length === 0 ? (
@@ -49,6 +50,7 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
                   {translate("common.property")}
                 </span>
                 <DataProvenanceBadge record={property} />
+                {property.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
               </button>
             );
           })}

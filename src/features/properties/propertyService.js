@@ -13,6 +13,7 @@ import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
 } from "../../lib/dataProvenance.js";
+import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -24,24 +25,24 @@ function propertyDocument(propertyId) {
   return doc(db, "organizations", organizationId, "properties", propertyId);
 }
 
-export async function getProperties() {
+export async function getProperties({ includeArchived = false } = {}) {
   const snapshot = await getDocs(propertiesCollection());
 
-  return snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
+  return filterArchivedRecords(snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
     ...propertyDocument.data(),
     id: propertyDocument.id,
-  }));
+  })), includeArchived);
 }
 
-export async function getPropertiesForClient(clientId) {
+export async function getPropertiesForClient(clientId, { includeArchived = false } = {}) {
   const snapshot = await getDocs(
     query(propertiesCollection(), where("clientId", "==", clientId)),
   );
 
-  return snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
+  return filterArchivedRecords(snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
     ...propertyDocument.data(),
     id: propertyDocument.id,
-  }));
+  })), includeArchived);
 }
 
 export async function createProperty({
@@ -97,4 +98,14 @@ export async function updatePropertyDataProvenance(propertyId, dataProvenance, a
   );
 
   return { id: propertyId, dataProvenance };
+}
+
+export async function archiveProperty(propertyId, actorUid) {
+  await updateDoc(propertyDocument(propertyId), buildArchiveUpdate(actorUid, serverTimestamp()));
+  return { id: propertyId, archivedAt: true };
+}
+
+export async function restoreProperty(propertyId, actorUid) {
+  await updateDoc(propertyDocument(propertyId), buildRestoreUpdate(actorUid, serverTimestamp()));
+  return { id: propertyId, archivedAt: null };
 }
