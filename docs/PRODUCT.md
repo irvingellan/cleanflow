@@ -176,10 +176,11 @@ boundary.
 ## Reminders and integrations
 
 **CURRENT DESIGN-PARTNER PILOT:** managers can copy a cleaner-safe reminder and paste it
-manually into WhatsApp. Cleaners should not need to repeatedly inspect a
-calendar to discover work. Automated assignment, upcoming-work, and payroll
-reminders remain planned: cadence, delivery channel, time-zone behavior, and
-idempotency rules are open.
+manually into WhatsApp. Managers also receive privacy-conscious push summaries
+at 19:00 America/Los_Angeles for tomorrow's operation and at 07:00
+America/Los_Angeles for today's operation. These reminders use the Job's current
+schedule, skip archived/non-operational Jobs, and are durably idempotent. Email,
+automated WhatsApp, Cleaner, and payroll reminders remain planned.
 
 ## Design-partner pilot
 

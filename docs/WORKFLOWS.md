@@ -207,7 +207,10 @@ other. Categories aid filtering but must not block descriptive reporting.
 ## Reminders
 
 **CURRENT DESIGN-PARTNER PILOT:** a manager may copy a cleaner-safe message and paste it
-manually into WhatsApp. No reminder is sent automatically.
+manually into WhatsApp. Manager push summaries run at 19:00 America/Los_Angeles
+for tomorrow's Jobs and 07:00 America/Los_Angeles for today's Jobs. They contain
+counts only, use the current Job schedule, skip archived/non-operational Jobs,
+and send no push when the target date has no operational Jobs.
 
 **VALIDATED REQUIREMENT / PLANNED:** later reminders may include:
 
@@ -217,8 +220,9 @@ manually into WhatsApp. No reminder is sent automatically.
 - late/not-started escalation;
 - weekly payroll reminder.
 
-Reminder delivery channel, timing, timezone behavior, retry policy, and
-idempotency rules remain **OPEN QUESTIONS**. Reminders must use the current
+Cleaner reminder delivery channel, timing, timezone behavior, retry policy, and
+user controls remain **OPEN QUESTIONS**. Manager planning/execution summaries
+use a durable at-most-once delivery claim; reminders must use the current
 schedule revision and must not duplicate payment or operational actions.
 
 ## Historical operations workflow

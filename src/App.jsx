@@ -777,10 +777,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
           <DevCenter
             access={devCenterController.access}
             isWorking={devCenterController.isWorking}
+            pendingPreviewType={devCenterController.pendingPreviewType}
             hasError={devCenterController.hasError}
             lastResult={devCenterController.lastResult}
             onGenerate={devCenterController.generate}
             onClear={devCenterController.clear}
+            onPreviewReminder={devCenterController.previewReminder}
           />
         )}
 

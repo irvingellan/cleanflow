@@ -3,11 +3,13 @@ import {
   clearDevCenterData,
   generateDevCenterScenario,
   getDevCenterAccess,
+  previewManagerReminder,
 } from "./devCenterService.js";
 
 export function useDevCenterController({ view }) {
   const [access, setAccess] = useState({ isChecking: true, authorized: false });
   const [isWorking, setIsWorking] = useState(false);
+  const [pendingPreviewType, setPendingPreviewType] = useState(null);
   const [hasError, setHasError] = useState(false);
   const [lastResult, setLastResult] = useState(null);
 
@@ -32,41 +34,59 @@ export function useDevCenterController({ view }) {
     }
   }, [view, access.authorized]);
 
-  async function generate(scenario) {
+  async function runMutation(work) {
+    if (isWorking) return undefined;
+
     setIsWorking(true);
     setHasError(false);
     setLastResult(null);
 
     try {
+      return await work();
+    } catch (error) {
+      setHasError(true);
+      throw error;
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function generate(scenario) {
+    return runMutation(async () => {
       const result = await generateDevCenterScenario(scenario);
       setAccess((current) => ({ ...current, demoJobCount: result.demoJobCount }));
       setLastResult({ type: "generated", ...result });
       return result;
-    } catch (error) {
-      setHasError(true);
-      throw error;
-    } finally {
-      setIsWorking(false);
-    }
+    });
   }
 
   async function clear() {
-    setIsWorking(true);
+    return runMutation(async () => {
+      const result = await clearDevCenterData();
+      setAccess((current) => ({ ...current, demoJobCount: result.demoJobCount }));
+      setLastResult({ type: "cleared", ...result });
+      return result;
+    });
+  }
+
+  async function previewReminder(type) {
+    if (pendingPreviewType === type) return undefined;
+
+    setPendingPreviewType(type);
     setHasError(false);
     setLastResult(null);
 
     try {
-      const result = await clearDevCenterData();
-      setAccess((current) => ({ ...current, demoJobCount: result.demoJobCount }));
-      setLastResult({ type: "cleared", ...result });
+      const result = await previewManagerReminder(type);
+      setLastResult({ type: "reminder-preview", ...result });
       return result;
     } catch (error) {
       setHasError(true);
       throw error;
     } finally {
-      setIsWorking(false);
+      setPendingPreviewType((current) => (current === type ? null : current));
     }
   }
 
-  return { access, isWorking, hasError, lastResult, generate, clear, refreshAccess };
+  return { access, isWorking, pendingPreviewType, hasError, lastResult, generate, clear, previewReminder, refreshAccess };
 }

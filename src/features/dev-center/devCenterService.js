@@ -4,6 +4,7 @@ import { functions } from "../../services/firebase/client.js";
 const accessCall = httpsCallable(functions, "getDevCenterAccess");
 const generateScenarioCall = httpsCallable(functions, "generateDevCenterScenario");
 const clearDataCall = httpsCallable(functions, "clearDevCenterData");
+const previewManagerReminderCall = httpsCallable(functions, "previewManagerReminder");
 
 export async function getDevCenterAccess() {
   const result = await accessCall();
@@ -17,5 +18,10 @@ export async function generateDevCenterScenario(scenario) {
 
 export async function clearDevCenterData() {
   const result = await clearDataCall();
+  return result.data;
+}
+
+export async function previewManagerReminder(type) {
+  const result = await previewManagerReminderCall({ type });
   return result.data;
 }

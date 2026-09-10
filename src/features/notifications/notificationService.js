@@ -8,6 +8,11 @@ const messagingWorkerScope = "/firebase-messaging-push/";
 const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 const registerPushDeviceCall = httpsCallable(functions, "registerManagerPushDevice");
 
+function managerNotificationLanguage() {
+  const language = window.localStorage.getItem("cleanflow-language");
+  return ["en", "pt", "es"].includes(language) ? language : "pt";
+}
+
 function pushDeviceId() {
   const storedId = window.localStorage.getItem(pushDeviceStorageKey);
 
@@ -48,7 +53,11 @@ async function registerCurrentPushDevice() {
     throw new Error("Unable to get a push token.");
   }
 
-  await registerPushDeviceCall({ deviceId: pushDeviceId(), token });
+  await registerPushDeviceCall({
+    deviceId: pushDeviceId(),
+    token,
+    language: managerNotificationLanguage(),
+  });
 }
 
 export async function enablePushNotifications() {

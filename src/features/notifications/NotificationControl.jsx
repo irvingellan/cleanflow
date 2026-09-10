@@ -7,7 +7,7 @@ import {
 } from "./notificationService.js";
 
 export function NotificationControl() {
-  const { translate } = useTranslation();
+  const { language, translate } = useTranslation();
   const [state, setState] = useState("checking");
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function NotificationControl() {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [language]);
 
   async function enableNotifications() {
     setState("enabling");

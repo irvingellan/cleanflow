@@ -22,6 +22,10 @@ Do not deploy until all of these are true:
   notification enrollment;
 - Secret Manager has enabled versions for `GITHUB_FEEDBACK_TOKEN` and
   `DEV_CENTER_DEVELOPER_UIDS`. Do not read, print, or commit their values.
+- The Cloud Scheduler API is enabled for the project before deploying the
+  manager reminder Functions. Firebase creates their scheduler jobs during the
+  Functions deploy; verify the two `America/Los_Angeles` schedules in Google
+  Cloud Console afterward.
 
 The current Firestore and Storage rules are a closed-pilot development boundary:
 any authenticated user can access `organizations/cleanflow-demo/**`. This is
@@ -112,6 +116,9 @@ reviewed and the release explicitly calls for it.
    client snapshot, and optional guest context where used.
 5. Verify the installed PWA opens the current version and manager push enrollment
    remains available on a supported device.
+6. After a release containing reminder changes, verify both scheduled Functions
+   and their Scheduler jobs exist; use only the emulator-only Dev Center preview
+   for pre-schedule validation, never a production test send.
 
 ### Public cleaner offer
 

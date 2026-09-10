@@ -25,6 +25,7 @@ self.addEventListener("notificationclick", (event) => {
     const existingWindow = windows.find((client) => client.url.startsWith(self.location.origin));
 
     if (existingWindow) {
+      await existingWindow.navigate(new URL(link, self.location.origin).href).catch(() => undefined);
       await existingWindow.focus();
       return;
     }

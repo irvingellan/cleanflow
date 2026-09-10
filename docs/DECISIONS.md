@@ -529,6 +529,26 @@ leave. Manager QA is not required before normal completion.
 
 Rare corrections/callbacks after completion require a future explicit Issue or
 callback workflow rather than a routine `NEEDS_CORRECTION` Assignment state.
-During the active gradual pilot alongside the existing spreadsheet, the
-immediate reminder capability is a manager-reviewed copy-and-paste message;
-automatic messaging remains deferred under DEC-031.
+During the active gradual pilot alongside the existing spreadsheet, Cleaner
+reminders remain manager-reviewed copy-and-paste messages. Manager planning and
+execution push summaries are governed separately by DEC-035.
+
+---
+
+## DEC-035 — Pilot manager planning and execution push reminders
+
+Date: 2026-09-09
+Status: Accepted pilot direction
+
+The pilot sends manager-only, privacy-conscious push summaries at 19:00
+America/Los_Angeles for the next local calendar day and 07:00
+America/Los_Angeles for the current local calendar day. A reminder uses the
+Job's current `scheduledDate`, excludes archived and non-operational Jobs, and
+contains counts rather than property, pricing, access, or note data. Zero-Job
+windows send no push.
+
+Each organization/date/window has one durable Firestore delivery claim. Since
+FCM offers no idempotency key, the pilot chooses at-most-once delivery to avoid
+duplicate manager notifications during scheduler retries. Email, WhatsApp,
+Cleaner, payroll, and configurable per-user/organization timezone reminders
+remain deferred.

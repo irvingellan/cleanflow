@@ -5,6 +5,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   buildDemoScenario,
   isDemoSeedRecord,
@@ -16,6 +17,15 @@ import {
   requireAuthorizedDeveloper,
 } from "./devCenterAuthorization.js";
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
+import {
+  calculateManagerReminder,
+  claimReminderDelivery,
+  managerReminderPayload,
+  managerReminderTypes,
+  pilotReminderTimezone,
+  reminderDeliveryId,
+  summarizeManagerReminderDelivery,
+} from "./managerReminders.js";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -42,6 +52,10 @@ function hashToken(token) {
 
 function managerPushDeviceDocumentId(uid, deviceId) {
   return createHash("sha256").update(`${uid}:${deviceId}`).digest("hex");
+}
+
+function validPushLanguage(language) {
+  return ["en", "pt", "es"].includes(language);
 }
 
 function validPushDeviceId(deviceId) {
@@ -455,6 +469,7 @@ export const registerManagerPushDevice = onCall(
     }
 
     const { deviceId, token } = request.data || {};
+    const language = validPushLanguage(request.data?.language) ? request.data.language : "pt";
 
     if (!validPushDeviceId(deviceId) || !validPushToken(token)) {
       throw new HttpsError("invalid-argument", "Push device registration is invalid.");
@@ -471,6 +486,7 @@ export const registerManagerPushDevice = onCall(
         organizationId,
         userId: request.auth.uid,
         token,
+        language,
         platform: "web",
         active: true,
         updatedAt: FieldValue.serverTimestamp(),
@@ -505,6 +521,25 @@ function invalidPushTokenError(error) {
     "messaging/invalid-registration-token",
     "messaging/registration-token-not-registered",
   ].includes(error?.code);
+}
+
+async function deactivateInvalidManagerPushDevices(deviceSnapshots, responses) {
+  const invalidDeviceUpdates = responses.responses.flatMap((response, index) => {
+    if (response.success || !invalidPushTokenError(response.error)) {
+      return [];
+    }
+
+    return [
+      deviceSnapshots[index].ref.update({
+        active: false,
+        invalidatedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }),
+    ];
+  });
+
+  await Promise.all(invalidDeviceUpdates);
+  return invalidDeviceUpdates.length;
 }
 
 async function sendCleanerInterestNotification({ jobId, propertyName, cleanerId, cleanerName, offerId }) {
@@ -547,28 +582,182 @@ async function sendCleanerInterestNotification({ jobId, propertyName, cleanerId,
     })),
   );
 
-  const invalidDeviceUpdates = responses.responses.flatMap((response, index) => {
-    if (response.success || !invalidPushTokenError(response.error)) {
-      return [];
-    }
-
-    return [
-      deviceSnapshots[index].ref.update({
-        active: false,
-        invalidatedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }),
-    ];
-  });
-
-  await Promise.all(invalidDeviceUpdates);
+  const invalidated = await deactivateInvalidManagerPushDevices(deviceSnapshots, responses);
 
   logger.info("Cleaner-interest notifications processed.", {
     attempted: deviceSnapshots.length,
     delivered: responses.successCount,
-    invalidated: invalidDeviceUpdates.length,
+    invalidated,
   });
 }
+
+async function sendManagerReminderNotification(reminder) {
+  const deviceSnapshots = await activeManagerPushDevices();
+
+  if (deviceSnapshots.length === 0) {
+    return { attempted: 0, delivered: 0, failed: 0, invalidated: 0 };
+  }
+
+  let responses;
+  try {
+    responses = await getMessaging().sendEach(
+      deviceSnapshots.map((snapshot) => {
+        const payload = managerReminderPayload(reminder, snapshot.data().language);
+        return {
+          token: snapshot.data().token,
+          data: {
+            ...payload,
+            eventId: `manager-reminder-${reminder.targetDate}-${reminder.type}`,
+          },
+          webpush: { headers: { Urgency: "high" } },
+        };
+      }),
+    );
+  } catch (error) {
+    // The provider may have accepted some sends before a transport error, so
+    // record the attempt as unknown rather than treating it as retryable.
+    error.managerReminderAttemptedDevices = deviceSnapshots.length;
+    throw error;
+  }
+
+  let invalidated = 0;
+  let invalidDeviceCleanupFailed = false;
+  try {
+    invalidated = await deactivateInvalidManagerPushDevices(deviceSnapshots, responses);
+  } catch (error) {
+    // Delivery is already known at this point; cleanup must not turn that
+    // confirmed outcome into an unknown one.
+    invalidDeviceCleanupFailed = true;
+    logger.warn("Invalid manager push-device cleanup failed.", { failureCode: error?.code || "unknown" });
+  }
+
+  return {
+    attempted: deviceSnapshots.length,
+    delivered: responses.successCount,
+    failed: responses.failureCount,
+    invalidated,
+    invalidDeviceCleanupFailed,
+  };
+}
+
+async function claimManagerReminderDelivery(reminder) {
+  const deliveryReference = organizationReference()
+    .collection("managerReminderDeliveries")
+    .doc(reminderDeliveryId(organizationId, reminder));
+
+  // FCM has no idempotency key. Claiming before delivery intentionally favors
+  // at-most-once pilot pushes over an automatic retry that could spam managers.
+  const claimed = await claimReminderDelivery({
+    database: db,
+    deliveryReference,
+    deliveryData: {
+      organizationId,
+      reminderType: reminder.type,
+      targetDate: reminder.targetDate,
+      timezone: reminder.timezone,
+      jobCount: reminder.jobCount,
+      attentionCount: reminder.attentionCount,
+      deliveryStatus: "SENDING",
+      attemptedAt: FieldValue.serverTimestamp(),
+    },
+  });
+  return { claimed, deliveryReference };
+}
+
+async function loadManagerReminderJobs(targetDate) {
+  const jobsSnapshot = await organizationReference()
+    .collection("jobs")
+    .where("scheduledDate", "==", targetDate)
+    .get();
+  return jobsSnapshot.docs.map((snapshot) => snapshot.data());
+}
+
+async function calculateCurrentManagerReminder(type, now = new Date()) {
+  return calculateManagerReminder({
+    type,
+    now,
+    loadJobsForScheduledDate: loadManagerReminderJobs,
+  });
+}
+
+export async function processManagerReminderWindow(type, { now = new Date() } = {}) {
+  const reminder = await calculateCurrentManagerReminder(type, now);
+
+  if (reminder.jobCount === 0) {
+    logger.info("Manager reminder skipped because no operational Jobs are scheduled.", {
+      reminderType: type,
+      targetDate: reminder.targetDate,
+    });
+    return { ...reminder, skipped: "no-jobs" };
+  }
+
+  const claim = await claimManagerReminderDelivery(reminder);
+  if (!claim.claimed) {
+    logger.info("Manager reminder skipped because the window was already claimed.", {
+      reminderType: type,
+      targetDate: reminder.targetDate,
+    });
+    return { ...reminder, skipped: "already-claimed" };
+  }
+
+  try {
+    const delivery = await sendManagerReminderNotification(reminder);
+    const outcome = summarizeManagerReminderDelivery(delivery);
+    const deliveryUpdate = {
+      deliveryStatus: outcome.deliveryStatus,
+      attemptedDevices: delivery.attempted,
+      deliveredDevices: delivery.delivered,
+      failedDevices: delivery.failed,
+      invalidatedDevices: delivery.invalidated,
+      invalidDeviceCleanupFailed: delivery.invalidDeviceCleanupFailed,
+      ...(outcome.failureSummary ? { failureSummary: outcome.failureSummary } : {}),
+      ...(outcome.hasConfirmedDelivery ? { sentAt: FieldValue.serverTimestamp() } : {}),
+      ...(outcome.deliveryStatus === "FAILED" ? { failedAt: FieldValue.serverTimestamp() } : {}),
+    };
+    await claim.deliveryReference.update(deliveryUpdate);
+    logger.info("Manager reminder delivery processed.", { ...reminder, ...delivery, ...outcome });
+    return { ...reminder, ...delivery, ...outcome };
+  } catch (error) {
+    await claim.deliveryReference.update({
+      deliveryStatus: "UNKNOWN",
+      failedAt: FieldValue.serverTimestamp(),
+      attemptedDevices: error?.managerReminderAttemptedDevices || 0,
+      failureCode: error?.code || "unknown",
+      failureSummary: "FCM request outcome was not confirmed.",
+    });
+    throw error;
+  }
+}
+
+export const sendTomorrowPlanningReminder = onSchedule(
+  { schedule: "0 19 * * *", timeZone: pilotReminderTimezone, region: "us-central1" },
+  () => processManagerReminderWindow(managerReminderTypes.TOMORROW_19),
+);
+
+export const sendTodayExecutionReminder = onSchedule(
+  { schedule: "0 7 * * *", timeZone: pilotReminderTimezone, region: "us-central1" },
+  () => processManagerReminderWindow(managerReminderTypes.TODAY_07),
+);
+
+export const previewManagerReminder = onCall(
+  { region: "us-central1", secrets: [devCenterDeveloperUids] },
+  async (request) => {
+    requireAuthorizedDeveloper(request, allowedDeveloperUids());
+
+    const type = request.data?.type;
+    if (!Object.values(managerReminderTypes).includes(type)) {
+      throw new HttpsError("invalid-argument", "Reminder type is invalid.");
+    }
+
+    const now = request.data?.now ? new Date(request.data.now) : new Date();
+    if (Number.isNaN(now.getTime())) {
+      throw new HttpsError("invalid-argument", "Reminder preview time is invalid.");
+    }
+
+    const reminder = await calculateCurrentManagerReminder(type, now);
+    return { reminder, preview: managerReminderPayload(reminder, request.data?.language) };
+  },
+);
 
 export const publicOffer = onRequest(
   { region: "us-central1", invoker: "public" },

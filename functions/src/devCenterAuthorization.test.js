@@ -16,7 +16,7 @@ describe("Dev Center UID authorization", () => {
     expect(() => requireAuthorizedDeveloper(request, allowedUids)).not.toThrow();
   });
 
-  it("denies an authenticated UID that is not configured", () => {
+  it("denies an authenticated UID that is not configured from server-side Dev Center actions, including preview", () => {
     expect(() => requireAuthorizedDeveloper({ auth: { uid: "other-uid" } }, allowedUids))
       .toThrow(expect.objectContaining({ code: "permission-denied" }));
   });

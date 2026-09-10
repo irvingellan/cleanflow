@@ -9,10 +9,12 @@ const scenarios = [
   { id: "managerTraining", label: "devCenter.managerTraining", description: "devCenter.managerTrainingDescription" },
 ];
 
-export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate, onClear }) {
+export function DevCenter({ access, isWorking, pendingPreviewType, hasError, lastResult, onGenerate, onClear, onPreviewReminder }) {
   const { translate } = useTranslation();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const canMutate = access.environment === "emulator";
+  const canPreview = access.authorized;
+  const isPreviewPending = (type) => pendingPreviewType === type;
 
   async function generate(scenario) {
     await onGenerate(scenario);
@@ -64,6 +66,22 @@ export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate,
 
       <section className="dev-center__cleanup">
         <div>
+          <h3>{translate("devCenter.reminderPreviewTitle")}</h3>
+          <p>{translate("devCenter.reminderPreviewDescription")}</p>
+          {!canMutate && <p><strong>{translate("devCenter.readOnlyProductionData")}</strong> {translate("devCenter.readOnlyPreviewSafety")}</p>}
+        </div>
+        <div className="button-row">
+          <button className="button" type="button" disabled={isPreviewPending("TODAY_07") || !canPreview} onClick={() => onPreviewReminder("TODAY_07")}>
+            {isPreviewPending("TODAY_07") ? translate("devCenter.working") : translate("devCenter.previewTodayReminder")}
+          </button>
+          <button className="button" type="button" disabled={isPreviewPending("TOMORROW_19") || !canPreview} onClick={() => onPreviewReminder("TOMORROW_19")}>
+            {isPreviewPending("TOMORROW_19") ? translate("devCenter.working") : translate("devCenter.previewTomorrowReminder")}
+          </button>
+        </div>
+      </section>
+
+      <section className="dev-center__cleanup">
+        <div>
           <h3>{translate("devCenter.clearTitle")}</h3>
           <p>{translate("devCenter.clearDescription")}</p>
         </div>
@@ -95,6 +113,15 @@ export function DevCenter({ access, isWorking, hasError, lastResult, onGenerate,
       {lastResult?.type === "cleared" && (
         <StateCard
           message={translate("devCenter.cleared", { count: lastResult.deleted })}
+          status="status"
+        />
+      )}
+      {lastResult?.type === "reminder-preview" && (
+        <StateCard
+          message={translate("devCenter.reminderPreviewResult", {
+            count: lastResult.reminder.jobCount,
+            attention: lastResult.reminder.attentionCount,
+          })}
           status="status"
         />
       )}

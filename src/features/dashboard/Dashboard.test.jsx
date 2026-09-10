@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTranslation, TranslationProvider } from "../../i18n/translations.js";
 import { Dashboard } from "./Dashboard.jsx";
 
@@ -94,6 +94,15 @@ function renderDashboard(language = "en") {
 }
 
 describe("Dashboard near-term cleaner attention", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 8, 12));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("makes today and tomorrow unassigned Jobs explicit without flagging assigned Jobs", () => {
     renderDashboard();
 
