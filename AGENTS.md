@@ -16,6 +16,10 @@ Before significant work, consult the relevant documentation:
 
 When documentation and a newer explicit task conflict, surface the conflict before destructive or broad architectural changes.
 
+When resuming substantial CleanFlow work with incomplete conversational context, read
+`docs/CURRENT_STATE.md` first, then the relevant active GitHub Issue, then only the
+source-of-truth documents needed for the task. Do not load all docs by default.
+
 ## Core engineering principles
 
 1. Implement behavior supported by product documentation or an explicit task.
