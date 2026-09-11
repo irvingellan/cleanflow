@@ -552,3 +552,10 @@ FCM offers no idempotency key, the pilot chooses at-most-once delivery to avoid
 duplicate manager notifications during scheduler retries. Email, WhatsApp,
 Cleaner, payroll, and configurable per-user/organization timezone reminders
 remain deferred.
+
+The server transport defaults to FCM and may be explicitly switched to
+OneSignal for a controlled migration. A claimed reminder window uses exactly
+one transport; it never sends through both providers and never automatically
+falls back after an ambiguous provider result. OneSignal targets the existing
+active manager-device audience by Firebase Auth UID as its External ID; a
+future OneSignal-only manager registry remains deferred.

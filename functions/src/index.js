@@ -4,7 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
-import { defineSecret } from "firebase-functions/params";
+import { defineSecret, defineString, projectID } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
@@ -28,6 +28,16 @@ import {
   reminderDeliveryId,
   summarizeManagerReminderDelivery,
 } from "./managerReminders.js";
+import {
+  dispatchManagerReminder,
+  managerReminderDeliveryAuditFields,
+  managerReminderProvider,
+  managerReminderProviders,
+  sendOneSignalManagerReminder,
+  summarizeOneSignalReminderDelivery,
+  unknownManagerReminderDeliveryAuditFields,
+  validateOneSignalReminderConfiguration,
+} from "./managerReminderTransport.js";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -47,6 +57,10 @@ const feedbackTypes = {
 const pushDeviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
 const pushTokenMaximumLength = 4096;
 const devCenterDeveloperUids = defineSecret("DEV_CENTER_DEVELOPER_UIDS");
+const managerReminderProviderParam = defineString("MANAGER_REMINDER_PROVIDER", { default: "fcm" });
+const oneSignalAppId = defineString("ONESIGNAL_APP_ID", { default: "" });
+const managerReminderLaunchUrl = defineString("MANAGER_REMINDER_LAUNCH_URL", { default: "" });
+const oneSignalRestApiKey = defineSecret("ONESIGNAL_REST_API_KEY");
 
 function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
@@ -632,11 +646,17 @@ async function sendCleanerInterestNotification({ jobId, propertyName, cleanerId,
   });
 }
 
-async function sendManagerReminderNotification(reminder) {
+async function sendFcmManagerReminderNotification(reminder) {
   const deviceSnapshots = await activeManagerPushDevices();
 
   if (deviceSnapshots.length === 0) {
-    return { attempted: 0, delivered: 0, failed: 0, invalidated: 0 };
+    return {
+      provider: managerReminderProviders.FCM,
+      attempted: 0,
+      delivered: 0,
+      failed: 0,
+      invalidated: 0,
+    };
   }
 
   let responses;
@@ -673,6 +693,7 @@ async function sendManagerReminderNotification(reminder) {
   }
 
   return {
+    provider: managerReminderProviders.FCM,
     attempted: deviceSnapshots.length,
     delivered: responses.successCount,
     failed: responses.failureCount,
@@ -681,7 +702,31 @@ async function sendManagerReminderNotification(reminder) {
   };
 }
 
-async function claimManagerReminderDelivery(reminder) {
+function configuredManagerReminderProvider() {
+  return managerReminderProvider(managerReminderProviderParam.value());
+}
+
+function oneSignalReminderConfiguration() {
+  return validateOneSignalReminderConfiguration({
+    appId: oneSignalAppId.value(),
+    restApiKey: oneSignalRestApiKey.value(),
+    launchUrl: managerReminderLaunchUrl.value(),
+    projectId: projectID.value(),
+  });
+}
+
+async function sendOneSignalManagerReminderNotification(reminder, configuration) {
+  const deviceSnapshots = await activeManagerPushDevices();
+  return sendOneSignalManagerReminder({
+    reminder,
+    managerDevices: deviceSnapshots,
+    appId: configuration.appId,
+    restApiKey: configuration.restApiKey,
+    launchUrl: configuration.launchUrl,
+  });
+}
+
+async function claimManagerReminderDelivery(reminder, provider) {
   const deliveryReference = organizationReference()
     .collection("managerReminderDeliveries")
     .doc(reminderDeliveryId(organizationId, reminder));
@@ -698,6 +743,7 @@ async function claimManagerReminderDelivery(reminder) {
       timezone: reminder.timezone,
       jobCount: reminder.jobCount,
       attentionCount: reminder.attentionCount,
+      deliveryProvider: provider,
       deliveryStatus: "SENDING",
       attemptedAt: FieldValue.serverTimestamp(),
     },
@@ -732,7 +778,13 @@ export async function processManagerReminderWindow(type, { now = new Date() } = 
     return { ...reminder, skipped: "no-jobs" };
   }
 
-  const claim = await claimManagerReminderDelivery(reminder);
+  const provider = configuredManagerReminderProvider();
+  // Validate an explicitly selected OneSignal transport before claiming the
+  // window. A missing secret must not permanently consume a reminder window.
+  const oneSignalConfiguration = provider === managerReminderProviders.ONESIGNAL
+    ? oneSignalReminderConfiguration()
+    : null;
+  const claim = await claimManagerReminderDelivery(reminder, provider);
   if (!claim.claimed) {
     logger.info("Manager reminder skipped because the window was already claimed.", {
       reminderType: type,
@@ -742,16 +794,20 @@ export async function processManagerReminderWindow(type, { now = new Date() } = 
   }
 
   try {
-    const delivery = await sendManagerReminderNotification(reminder);
-    const outcome = summarizeManagerReminderDelivery(delivery);
+    const delivery = await dispatchManagerReminder({
+      provider,
+      reminder,
+      sendFcm: sendFcmManagerReminderNotification,
+      sendOneSignal: (currentReminder) => (
+        sendOneSignalManagerReminderNotification(currentReminder, oneSignalConfiguration)
+      ),
+    });
+    const outcome = provider === managerReminderProviders.ONESIGNAL
+      ? summarizeOneSignalReminderDelivery(delivery)
+      : summarizeManagerReminderDelivery(delivery);
     const deliveryUpdate = {
       deliveryStatus: outcome.deliveryStatus,
-      attemptedDevices: delivery.attempted,
-      deliveredDevices: delivery.delivered,
-      failedDevices: delivery.failed,
-      invalidatedDevices: delivery.invalidated,
-      invalidDeviceCleanupFailed: delivery.invalidDeviceCleanupFailed,
-      ...(outcome.failureSummary ? { failureSummary: outcome.failureSummary } : {}),
+      ...managerReminderDeliveryAuditFields(delivery, outcome),
       ...(outcome.hasConfirmedDelivery ? { sentAt: FieldValue.serverTimestamp() } : {}),
       ...(outcome.deliveryStatus === "FAILED" ? { failedAt: FieldValue.serverTimestamp() } : {}),
     };
@@ -762,21 +818,29 @@ export async function processManagerReminderWindow(type, { now = new Date() } = 
     await claim.deliveryReference.update({
       deliveryStatus: "UNKNOWN",
       failedAt: FieldValue.serverTimestamp(),
-      attemptedDevices: error?.managerReminderAttemptedDevices || 0,
-      failureCode: error?.code || "unknown",
-      failureSummary: "FCM request outcome was not confirmed.",
+      ...unknownManagerReminderDeliveryAuditFields(error),
     });
     throw error;
   }
 }
 
 export const sendTomorrowPlanningReminder = onSchedule(
-  { schedule: "0 19 * * *", timeZone: pilotReminderTimezone, region: "us-central1" },
+  {
+    schedule: "0 19 * * *",
+    timeZone: pilotReminderTimezone,
+    region: "us-central1",
+    secrets: [oneSignalRestApiKey],
+  },
   () => processManagerReminderWindow(managerReminderTypes.TOMORROW_19),
 );
 
 export const sendTodayExecutionReminder = onSchedule(
-  { schedule: "0 7 * * *", timeZone: pilotReminderTimezone, region: "us-central1" },
+  {
+    schedule: "0 7 * * *",
+    timeZone: pilotReminderTimezone,
+    region: "us-central1",
+    secrets: [oneSignalRestApiKey],
+  },
   () => processManagerReminderWindow(managerReminderTypes.TODAY_07),
 );
 

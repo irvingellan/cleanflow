@@ -71,7 +71,7 @@ describe("manager reminders", () => {
     expect(reminderDeliveryId("cleanflow-demo", today)).not.toBe(reminderDeliveryId("cleanflow-demo", tomorrow));
   });
 
-  it("allows only one concurrent claim for the same logical delivery", async () => {
+  it("allows only one concurrent claim for the same logical delivery across transports", async () => {
     let exists = false;
     let transactionQueue = Promise.resolve();
     const database = {
@@ -86,9 +86,12 @@ describe("manager reminders", () => {
         return result;
       },
     };
-    const input = { database, deliveryReference: { id: "same-window" }, deliveryData: {} };
+    const input = { database, deliveryReference: { id: "same-window" }, deliveryData: { deliveryProvider: "fcm" } };
 
-    const claims = await Promise.all([claimReminderDelivery(input), claimReminderDelivery(input)]);
+    const claims = await Promise.all([
+      claimReminderDelivery(input),
+      claimReminderDelivery({ ...input, deliveryData: { deliveryProvider: "onesignal" } }),
+    ]);
 
     expect(claims.filter(Boolean)).toHaveLength(1);
   });
