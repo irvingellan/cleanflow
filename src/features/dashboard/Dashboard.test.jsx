@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTranslation, TranslationProvider } from "../../i18n/translations.js";
 import { Dashboard } from "./Dashboard.jsx";
@@ -101,6 +101,7 @@ describe("Dashboard near-term cleaner attention", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("makes today and tomorrow unassigned Jobs explicit without flagging assigned Jobs", () => {
@@ -142,5 +143,20 @@ describe("Dashboard near-term cleaner attention", () => {
     expect(screen.getByRole("heading", { name: "Next 48 hours" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Today" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Tomorrow" })).toBeVisible();
+  });
+
+  it("reuses the shared scroll-to-top control after meaningful Dashboard scrolling", () => {
+    let scrollY = 0;
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      get: () => scrollY,
+    });
+
+    renderDashboard();
+
+    expect(screen.queryByRole("button", { name: "Back to top" })).not.toBeInTheDocument();
+    scrollY = 401;
+    fireEvent.scroll(window);
+    expect(screen.getByRole("button", { name: "Back to top" })).toBeVisible();
   });
 });

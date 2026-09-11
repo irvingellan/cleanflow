@@ -1,4 +1,5 @@
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
@@ -323,6 +324,7 @@ export function Dashboard({
       </section>
 
       <DashboardWeekSummary summary={weeklySummary} />
+      <ScrollToTopButton />
     </section>
   );
 }
