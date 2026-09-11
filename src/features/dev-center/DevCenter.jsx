@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
+import { NotificationDiagnostics } from "./NotificationDiagnostics.jsx";
+import { NotificationChannelDiagnostics } from "../notifications/NotificationChannelDiagnostics.jsx";
 
 const scenarios = [
   { id: "quick", label: "devCenter.quick", description: "devCenter.quickDescription" },
@@ -9,7 +11,21 @@ const scenarios = [
   { id: "managerTraining", label: "devCenter.managerTraining", description: "devCenter.managerTrainingDescription" },
 ];
 
-export function DevCenter({ access, isWorking, pendingPreviewType, hasError, lastResult, onGenerate, onClear, onPreviewReminder }) {
+export function DevCenter({
+  access,
+  isWorking,
+  pendingPreviewType,
+  hasError,
+  lastResult,
+  diagnostics,
+  isLoadingDiagnostics,
+  hasDiagnosticsError,
+  onGenerate,
+  onClear,
+  onPreviewReminder,
+  onRefreshDiagnostics,
+  notificationUserId,
+}) {
   const { translate } = useTranslation();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const canMutate = access.environment === "emulator";
@@ -103,6 +119,14 @@ export function DevCenter({ access, isWorking, pendingPreviewType, hasError, las
           </button>
         )}
       </section>
+
+      <NotificationDiagnostics
+        diagnostics={diagnostics}
+        isLoading={isLoadingDiagnostics}
+        hasError={hasDiagnosticsError}
+        onRefresh={onRefreshDiagnostics}
+      />
+      <NotificationChannelDiagnostics userId={notificationUserId} />
 
       {lastResult?.type === "generated" && (
         <StateCard

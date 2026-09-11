@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
@@ -17,6 +18,7 @@ import {
   requireAuthorizedDeveloper,
 } from "./devCenterAuthorization.js";
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
+import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import {
   calculateManagerReminder,
   claimReminderDelivery,
@@ -155,6 +157,45 @@ export const getDevCenterAccess = onCall(
       environment: devCenterEnvironment(),
       demoJobCount: await demoJobCount(),
     };
+  },
+);
+
+async function managerEmailsByUserId(userIds) {
+  if (userIds.length === 0) return new Map();
+
+  try {
+    const result = await getAuth().getUsers(userIds.map((uid) => ({ uid })));
+    return new Map(result.users.map((user) => [user.uid, user.email || null]));
+  } catch (error) {
+    logger.warn("Manager notification diagnostics could not resolve account emails.", {
+      failureCode: error?.code || "unknown",
+    });
+    return new Map();
+  }
+}
+
+export const getManagerNotificationDiagnostics = onCall(
+  { region: "us-central1", secrets: [devCenterDeveloperUids] },
+  async (request) => {
+    requireAuthorizedDeveloper(request, allowedDeveloperUids());
+
+    const [devicesSnapshot, deliveriesSnapshot] = await Promise.all([
+      db.collection("managerPushDevices").where("organizationId", "==", organizationId).get(),
+      organizationReference()
+        .collection("managerReminderDeliveries")
+        .orderBy("attemptedAt", "desc")
+        .limit(20)
+        .get(),
+    ]);
+    const devices = devicesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
+    const userIds = [...new Set(devices.map(({ data }) => data.userId).filter(Boolean))];
+    const emailsByUserId = await managerEmailsByUserId(userIds);
+
+    return buildNotificationDiagnostics({
+      devices,
+      deliveries: deliveriesSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
+      emailsByUserId,
+    });
   },
 );
 

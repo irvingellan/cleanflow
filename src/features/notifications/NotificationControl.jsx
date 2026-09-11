@@ -2,11 +2,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n/translations.js";
 import {
   enablePushNotifications,
-  pushNotificationsAvailable,
-  refreshPushNotifications,
+  getPushChannelDiagnostics,
 } from "./notificationService.js";
 
-export function NotificationControl() {
+export function NotificationControl({ userId }) {
   const { language, translate } = useTranslation();
   const [state, setState] = useState("checking");
 
@@ -14,24 +13,9 @@ export function NotificationControl() {
     let isCurrent = true;
 
     async function checkPushNotifications() {
-      if (!(await pushNotificationsAvailable())) {
-        if (isCurrent) setState("unavailable");
-        return;
-      }
-
-      if (Notification.permission === "denied") {
-        if (isCurrent) setState("denied");
-        return;
-      }
-
-      if (Notification.permission !== "granted") {
-        if (isCurrent) setState("ready");
-        return;
-      }
-
       try {
-        await refreshPushNotifications();
-        if (isCurrent) setState("enabled");
+        const result = await getPushChannelDiagnostics(userId);
+        if (isCurrent) setState(result.state);
       } catch {
         if (isCurrent) setState("error");
       }
@@ -41,14 +25,14 @@ export function NotificationControl() {
     return () => {
       isCurrent = false;
     };
-  }, [language]);
+  }, [language, userId]);
 
   async function enableNotifications() {
     setState("enabling");
 
     try {
-      const result = await enablePushNotifications();
-      setState(result.state === "enabled" ? "enabled" : result.state === "denied" ? "denied" : "ready");
+      const result = await enablePushNotifications({ userId });
+      setState(result.state);
     } catch {
       setState("error");
     }
@@ -61,6 +45,7 @@ export function NotificationControl() {
     ready: { label: "notifications.enable", disabled: false },
     enabling: { label: "notifications.enabling", disabled: true },
     enabled: { label: "notifications.enabled", disabled: true },
+    incomplete: { label: "notifications.incomplete", disabled: false },
     error: { label: "notifications.error", disabled: false },
   }[state];
 

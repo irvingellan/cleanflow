@@ -3,6 +3,7 @@ import {
   clearDevCenterData,
   generateDevCenterScenario,
   getDevCenterAccess,
+  getManagerNotificationDiagnostics,
   previewManagerReminder,
 } from "./devCenterService.js";
 
@@ -12,6 +13,9 @@ export function useDevCenterController({ view }) {
   const [pendingPreviewType, setPendingPreviewType] = useState(null);
   const [hasError, setHasError] = useState(false);
   const [lastResult, setLastResult] = useState(null);
+  const [diagnostics, setDiagnostics] = useState(null);
+  const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(false);
+  const [hasDiagnosticsError, setHasDiagnosticsError] = useState(false);
 
   async function refreshAccess() {
     setHasError(false);
@@ -31,8 +35,22 @@ export function useDevCenterController({ view }) {
   useEffect(() => {
     if (view === "dev-center" && access.authorized) {
       refreshAccess();
+      loadNotificationDiagnostics();
     }
   }, [view, access.authorized]);
+
+  async function loadNotificationDiagnostics() {
+    setIsLoadingDiagnostics(true);
+    setHasDiagnosticsError(false);
+
+    try {
+      setDiagnostics(await getManagerNotificationDiagnostics());
+    } catch {
+      setHasDiagnosticsError(true);
+    } finally {
+      setIsLoadingDiagnostics(false);
+    }
+  }
 
   async function runMutation(work) {
     if (isWorking) return undefined;
@@ -88,5 +106,19 @@ export function useDevCenterController({ view }) {
     }
   }
 
-  return { access, isWorking, pendingPreviewType, hasError, lastResult, generate, clear, previewReminder, refreshAccess };
+  return {
+    access,
+    isWorking,
+    pendingPreviewType,
+    hasError,
+    lastResult,
+    diagnostics,
+    isLoadingDiagnostics,
+    hasDiagnosticsError,
+    generate,
+    clear,
+    previewReminder,
+    refreshAccess,
+    loadNotificationDiagnostics,
+  };
 }

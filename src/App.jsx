@@ -6,6 +6,8 @@ import {
 } from "./components/UiPrimitives.jsx";
 import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
 import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
+import { clearOneSignalUser } from "./features/notifications/oneSignalService.js";
+import { useOneSignalIdentity } from "./features/notifications/useOneSignalIdentity.js";
 import { PwaUpdatePrompt } from "./features/pwa/PwaUpdatePrompt.jsx";
 import { PayoutDirectory, PayoutReview } from "./features/payouts/PayoutViews.jsx";
 import { usePayoutsController } from "./features/payouts/usePayoutsController.js";
@@ -115,6 +117,7 @@ function App() {
 
     try {
       await signOutManager();
+      await clearOneSignalUser().catch(() => undefined);
     } catch {
       setHasSignOutError(true);
     } finally {
@@ -305,6 +308,7 @@ function PublicOfferPage({ token }) {
 
 function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
+  useOneSignalIdentity(authUser?.uid);
   const [activeSection, setActiveSection] = useState("dashboard");
   const [view, setView] = useState("dashboard");
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
@@ -736,7 +740,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
               <div className="manager-account__controls">
                 <LanguageSelector language={language} onChange={setLanguage} />
                 <ThemeToggle />
-                <NotificationControl />
+                <NotificationControl userId={authUser.uid} />
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
                 <button
@@ -780,9 +784,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             pendingPreviewType={devCenterController.pendingPreviewType}
             hasError={devCenterController.hasError}
             lastResult={devCenterController.lastResult}
+            diagnostics={devCenterController.diagnostics}
+            isLoadingDiagnostics={devCenterController.isLoadingDiagnostics}
+            hasDiagnosticsError={devCenterController.hasDiagnosticsError}
             onGenerate={devCenterController.generate}
             onClear={devCenterController.clear}
             onPreviewReminder={devCenterController.previewReminder}
+            onRefreshDiagnostics={devCenterController.loadNotificationDiagnostics}
+            notificationUserId={authUser.uid}
           />
         )}
 
