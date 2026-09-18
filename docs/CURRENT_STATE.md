@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- **Last updated:** 2026-09-11
+- **Last updated:** 2026-09-18
 - **Repository:** `irvingellan/cleanflow` (`main`)
 - **Active product phase:** Gabi Pilot — controlled design-partner learning and
   validation alongside the manager's existing spreadsheet.
@@ -28,18 +28,6 @@ rescheduling, and Cleaner Hub work remain incremental.
   [PILOT_RELEASE_RUNBOOK.md](PILOT_RELEASE_RUNBOOK.md): verify a managed
   Firestore export, intended Auth accounts, required secrets/configuration, and
   deploy Functions before Hosting when public-offer compatibility changes.
-
-## Current highest priorities
-
-1. **Issue #39:** deploy and validate the OneSignal-capable manager reminder
-   transport while retaining FCM as the default until an approved cutover.
-2. **Issue #40:** validate the Dashboard scroll-to-top control on the installed
-   iPhone PWA after its containing build is deployed.
-3. Continue the controlled pilot safely: preserve the spreadsheet in parallel,
-   prioritize Today/Tomorrow visibility and manager feedback, and avoid
-   speculative workflow expansion.
-4. Continue only validated Job-model evolution slices; preserve legacy Jobs and
-   explicit manager assignment control.
 
 ## Verified recent state
 
@@ -78,6 +66,41 @@ E2E tests passed; build and diff checks passed.
 - Commit: `0b7819c feat(dashboard): add scroll-to-top control (#40)`.
 - Production and iPhone validation remain pending until that commit is deployed.
 
+### Issue #42 — Cleaning Checklist Preview
+
+- A shareable Firebase Hosting **preview channel** exposes the isolated
+  `/checklist-preview` route. It is not a live-Hosting release.
+- The design partner opened and tested the preview on mobile. The first
+  validated feedback is incorporated: the checklist now has **28 items**;
+  the under-bed/furniture check has localized **Photo required** guidance; and
+  separate interior and exterior cigarette-butt checks were added.
+- The preview remains demo-only: no Checklist Run persistence, real photo
+  storage, secure production links, or email delivery is implemented.
+- The preferred future workflow is: a manager manually shares a secure
+  checklist link; a cleaner completes it; the submission persists in
+  CleanFlow; the manager views or receives its report; and an optional email
+  can later reach a client or property owner.
+- At the feedback checkpoint, 156 tests and the production build passed.
+
+### Issue #36 — real-data import preparation
+
+- The real Notion export has two underlying source tables, each exported in
+  multiple variants. The richer canonical datasets contain a Property Directory
+  with **43 properties / 3 Company values** and Operations with **269 rows**.
+- The first pilot-week reconciliation window (Sep 18–24) narrows to **3
+  Clients, 6 Properties, 4 Cleaner labels, and 6 Jobs**, including **1
+  unassigned Job**. Historical Jobs are deferred.
+- No real import has occurred. Experimental read-only import-preview work is
+  preserved only in local `stash@{0}: issue-36-import-preview-wip`; neither
+  the real Notion export nor real source data is in that stash or the
+  repository.
+
+### Issue #27 — Astra audit evidence
+
+- Read-only Astra Runs A, D, and E completed. Their findings are preserved as
+  candidate audit evidence in Issue #27; they have not yet been consolidated
+  into an approved implementation plan.
+
 ## Important current invariants and decisions
 
 - GitHub Issues are the execution backlog and actionable work record; repository
@@ -105,13 +128,10 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Run the controlled Issue #39 release gate with FCM still selected by default.
-2. Verify the normal production FCM reminder path and no manager regression.
-3. Configure required OneSignal server values/secrets through the approved
-   production process; do not record secret values here.
-4. During an approved quiet window, deliberately select OneSignal transport and
-   observe one real 07:00 or 19:00 reminder plus its audit outcome.
-5. Validate Issue #40 on the installed iPhone PWA after deployment.
+1. Wait for further design-partner feedback on Issue #42.
+2. Reconcile the six first-week Jobs for Issue #36 before any approved import.
+3. Finish remaining Astra security/reliability audits if useful.
+4. Consolidate audit findings before creating implementation work.
 
 ## Development workflow
 
