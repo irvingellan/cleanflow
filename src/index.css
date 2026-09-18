@@ -601,6 +601,305 @@ h1 {
   font-weight: 700;
 }
 
+.checklist-preview-shell {
+  place-items: start center;
+}
+
+.checklist-preview-foundation {
+  width: min(100%, 680px);
+  padding-bottom: 72px;
+}
+
+.checklist-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.checklist-preview-header h1 {
+  font-size: clamp(2.25rem, 10vw, 3.5rem);
+}
+
+.checklist-preview-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checklist-preview {
+  display: grid;
+  gap: 16px;
+}
+
+.checklist-preview__intro,
+.checklist-preview__section,
+.checklist-report,
+.checklist-preview__feedback {
+  display: grid;
+  gap: 16px;
+}
+
+.checklist-preview__intro h2,
+.checklist-preview__section h2,
+.checklist-report h2,
+.checklist-preview__feedback h2 {
+  margin-bottom: 0;
+  color: var(--color-heading);
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.checklist-preview__intro p:not(.eyebrow),
+.checklist-report > p,
+.checklist-preview__photos,
+.checklist-report__delivery {
+  margin-bottom: 0;
+  color: var(--color-text-secondary);
+}
+
+.checklist-preview__photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.checklist-preview__photo-placeholder {
+  display: grid;
+  gap: 10px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--color-surface-subtle);
+}
+
+.checklist-preview__photo-placeholder h3,
+.checklist-preview__photo-placeholder p {
+  margin: 0;
+}
+
+.checklist-preview__photo-placeholder h3 {
+  color: var(--color-heading);
+  font-size: 0.875rem;
+}
+
+.checklist-preview__photo-placeholder p {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.checklist-preview__details,
+.checklist-preview__inventory {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.checklist-preview__details label,
+.checklist-preview__inventory label,
+.checklist-preview__section > label {
+  display: grid;
+  gap: 7px;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.checklist-preview__details label:last-child {
+  grid-column: 1 / -1;
+}
+
+.checklist-preview input:not([type="checkbox"]),
+.checklist-preview select,
+.checklist-preview textarea {
+  width: 100%;
+  border: 1px solid var(--color-input-border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.checklist-preview textarea {
+  resize: vertical;
+}
+
+.checklist-preview input:focus,
+.checklist-preview select:focus,
+.checklist-preview textarea:focus {
+  border-color: var(--color-focus);
+  outline: 3px solid var(--focus-ring);
+}
+
+.checklist-preview__items {
+  display: grid;
+  gap: 8px;
+}
+
+.checklist-preview__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  border: 1px solid var(--color-divider);
+  border-radius: 11px;
+  padding: 8px 10px;
+}
+
+.checklist-preview__item label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.checklist-preview__item input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--color-brand);
+}
+
+.checklist-preview__na {
+  min-height: 32px;
+  flex: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.checklist-preview__na--active {
+  border-color: var(--color-selected-border);
+  color: var(--color-brand-text);
+  background: var(--color-selected-bg);
+}
+
+.checklist-preview__submit {
+  width: 100%;
+  min-height: 48px;
+}
+
+.checklist-report__status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.checklist-report__status > span {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 999px;
+  place-items: center;
+  color: var(--color-on-brand);
+  background: var(--color-success);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.checklist-report__status .eyebrow {
+  margin-bottom: 4px;
+}
+
+.checklist-report__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.checklist-report__summary > div {
+  display: grid;
+  gap: 4px;
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--color-surface-subtle);
+}
+
+.checklist-report__summary strong {
+  color: var(--color-heading);
+  font-size: 1.25rem;
+}
+
+.checklist-report__summary span {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.checklist-report__alert,
+.checklist-report__notes,
+.checklist-preview__feedback {
+  border: 1px solid var(--color-divider);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.checklist-report__alert {
+  border-color: var(--color-error-border);
+  background: var(--color-status-warning-bg);
+}
+
+.checklist-report__alert h3,
+.checklist-report__notes h3 {
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 0.875rem;
+}
+
+.checklist-report__alert ul,
+.checklist-preview__feedback ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--color-text-secondary);
+}
+
+.checklist-report__notes {
+  display: grid;
+  gap: 8px;
+}
+
+.checklist-report__notes p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+}
+
+.checklist-report__actions {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .checklist-preview__details,
+  .checklist-preview__inventory,
+  .checklist-preview__photo-grid,
+  .checklist-report__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-preview__details label:last-child {
+    grid-column: auto;
+  }
+
+  .checklist-preview input:not([type="checkbox"]),
+  .checklist-preview select,
+  .checklist-preview textarea {
+    font-size: 16px;
+  }
+}
+
 .auth-panel {
   max-width: 440px;
 }

@@ -28,6 +28,7 @@ import { ClientDetail } from "./features/clients/ClientDetail.jsx";
 import { ClientDirectory } from "./features/clients/ClientDirectory.jsx";
 import { ClientForm } from "./features/clients/ClientForm.jsx";
 import { useClientsController } from "./features/clients/useClientsController.js";
+import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningChecklistPreview.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
@@ -92,23 +93,32 @@ function publicOfferTokenFromPathname(pathname = window.location.pathname) {
   }
 }
 
+function isChecklistPreviewPath(pathname = window.location.pathname) {
+  return pathname.replace(/\/+$/, "") === "/checklist-preview";
+}
+
 function App() {
   const publicOfferToken = publicOfferTokenFromPathname();
   const isPublicOfferRoute = publicOfferToken !== null;
+  const isChecklistPreviewRoute = isChecklistPreviewPath();
   const [authUser, setAuthUser] = useState(undefined);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
   useEffect(() => {
-    if (isPublicOfferRoute) {
+    if (isPublicOfferRoute || isChecklistPreviewRoute) {
       return undefined;
     }
 
     return subscribeToAuthState(setAuthUser);
-  }, [isPublicOfferRoute]);
+  }, [isChecklistPreviewRoute, isPublicOfferRoute]);
 
   if (isPublicOfferRoute) {
     return <PublicOfferPage token={publicOfferToken} />;
+  }
+
+  if (isChecklistPreviewRoute) {
+    return <CleaningChecklistPreview />;
   }
 
   async function handleSignOut() {
