@@ -602,6 +602,7 @@ h1 {
 }
 
 .checklist-preview-shell {
+  grid-template-columns: minmax(0, 1fr);
   place-items: start center;
 }
 
