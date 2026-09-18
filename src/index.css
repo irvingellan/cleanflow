@@ -757,6 +757,26 @@ h1 {
   font-weight: 600;
 }
 
+.checklist-preview__item-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+}
+
+.checklist-preview__photo-required {
+  flex: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--color-brand-text);
+  background: var(--color-selected-bg);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .checklist-preview__item input {
   width: 20px;
   height: 20px;
@@ -835,6 +855,12 @@ h1 {
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.25;
+}
+
+.checklist-report__photo-requirement {
+  margin: -4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
 }
 
 .checklist-report__alert,

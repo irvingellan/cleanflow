@@ -43,7 +43,12 @@ export const checklistSections = [
       { id: "living-remotes", labelKey: "checklistPreview.livingRemotes" },
       { id: "living-ac", labelKey: "checklistPreview.livingAc" },
       { id: "living-smells", labelKey: "checklistPreview.livingSmells" },
-      { id: "living-belongings", labelKey: "checklistPreview.livingBelongings" },
+      {
+        id: "living-belongings",
+        labelKey: "checklistPreview.livingBelongings",
+        requiresPhoto: true,
+      },
+      { id: "living-cigarette-butts", labelKey: "checklistPreview.livingCigaretteButts" },
       { id: "living-trash", labelKey: "checklistPreview.livingTrash" },
     ],
   },
@@ -52,6 +57,7 @@ export const checklistSections = [
     titleKey: "checklistPreview.outdoor",
     items: [
       { id: "outdoor-inspect", labelKey: "checklistPreview.outdoorInspect" },
+      { id: "outdoor-cigarette-butts", labelKey: "checklistPreview.outdoorCigaretteButts" },
       { id: "outdoor-pool", labelKey: "checklistPreview.outdoorPool", canBeNotApplicable: true },
       { id: "outdoor-grill", labelKey: "checklistPreview.outdoorGrill", canBeNotApplicable: true },
     ],
@@ -116,5 +122,9 @@ export function summarizeChecklist(checklistState, inventoryState) {
     applicableCount,
     notApplicableCount,
     restockItemIds,
+    photoRequiredCount: items.filter((item) => item.requiresPhoto).length,
+    completedPhotoRequiredCount: items.filter(
+      (item) => item.requiresPhoto && checklistState[item.id]?.completed,
+    ).length,
   };
 }

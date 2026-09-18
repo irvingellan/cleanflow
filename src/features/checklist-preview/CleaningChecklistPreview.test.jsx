@@ -24,8 +24,11 @@ describe("CleaningChecklistPreview", () => {
     expect(screen.getByText("Preview only. Nothing here is saved or sent.")).toBeVisible();
     expect(screen.getByLabelText("Cleaner name")).toHaveValue("Alex Rivera");
     expect(screen.getByLabelText("Property / listing")).toHaveValue("Cedar Grove Apartment");
-    expect(checklistSections.flatMap((section) => section.items)).toHaveLength(26);
+    expect(checklistSections.flatMap((section) => section.items)).toHaveLength(28);
     expect(inventoryItems).toHaveLength(13);
+    expect(screen.getByText("Photo required")).toBeVisible();
+    expect(screen.getByLabelText("Check for cigarette butts inside the property")).toBeVisible();
+    expect(screen.getByLabelText("Check for cigarette butts in exterior/outdoor areas")).toBeVisible();
   });
 
   it("generates a client-facing report from checklist, inventory, and note state", () => {
@@ -46,12 +49,24 @@ describe("CleaningChecklistPreview", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Generate client report preview" }).form);
 
     expect(screen.getByRole("heading", { name: "Completion report" })).toBeVisible();
-    expect(screen.getByText("1 / 25")).toBeVisible();
+    expect(screen.getByText("1 / 27")).toBeVisible();
     expect(screen.getByText("Restock needed")).toBeVisible();
     expect(screen.getByText("Toilet paper")).toBeVisible();
     expect(screen.getByText("The hallway light flickers.")).toBeVisible();
     expect(screen.getByText("Email delivery is not active in this prototype.")).toBeVisible();
     expect(screen.getByText("2")).toBeVisible();
     expect(screen.getByText("Photo placeholders")).toBeVisible();
+    expect(screen.getByText("Photo-required checklist checks completed: 0 of 1. Photo upload is not active in this preview.")).toBeVisible();
+  });
+
+  it("marks the under-bed and furniture check as photo-required without treating a placeholder as an upload", () => {
+    renderPreview();
+
+    fireEvent.click(screen.getByLabelText(
+      "Check underneath beds and furniture for belongings, trash, damage, or anything unusual",
+    ));
+    fireEvent.submit(screen.getByRole("button", { name: "Generate client report preview" }).form);
+
+    expect(screen.getByText("Photo-required checklist checks completed: 1 of 1. Photo upload is not active in this preview.")).toBeVisible();
   });
 });

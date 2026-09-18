@@ -574,10 +574,12 @@ Object.assign(messages.en, {
   "checklistPreview.livingRemotes": "Confirm remotes are returned to designated locations",
   "checklistPreview.livingAc": "Check AC and heating",
   "checklistPreview.livingSmells": "Check for unusual smells",
-  "checklistPreview.livingBelongings": "Check under beds and furniture for belongings",
+  "checklistPreview.livingBelongings": "Check underneath beds and furniture for belongings, trash, damage, or anything unusual",
+  "checklistPreview.livingCigaretteButts": "Check for cigarette butts inside the property",
   "checklistPreview.livingTrash": "Empty all trash",
   "checklistPreview.outdoor": "Outdoor",
   "checklistPreview.outdoorInspect": "Inspect outdoor areas",
+  "checklistPreview.outdoorCigaretteButts": "Check for cigarette butts in exterior/outdoor areas",
   "checklistPreview.outdoorPool": "Check pool/hot tub when applicable",
   "checklistPreview.outdoorGrill": "Check grill/fire pit when applicable",
   "checklistPreview.securityEntryLock": "Confirm entry lock works",
@@ -601,6 +603,8 @@ Object.assign(messages.en, {
   "checklistPreview.photoPlaceholderCount": "{count} of {maximum} placeholders added",
   "checklistPreview.addPhotoPlaceholder": "Add photo placeholder",
   "checklistPreview.photoPlaceholders": "Photo placeholders",
+  "checklistPreview.photoRequired": "Photo required",
+  "checklistPreview.photoRequiredSummary": "Photo-required checklist checks completed: {completed} of {total}. Photo upload is not active in this preview.",
 });
 
 Object.assign(messages.pt, {
@@ -620,10 +624,12 @@ Object.assign(messages.pt, {
   "checklistPreview.livingRemotes": "Confirmar que os controles voltaram aos locais indicados",
   "checklistPreview.livingAc": "Verificar ar-condicionado e aquecimento",
   "checklistPreview.livingSmells": "Verificar odores incomuns",
-  "checklistPreview.livingBelongings": "Verificar pertences sob camas e móveis",
+  "checklistPreview.livingBelongings": "Verificar sob camas e móveis se há pertences, lixo, danos ou algo incomum",
+  "checklistPreview.livingCigaretteButts": "Verificar pontas de cigarro dentro da propriedade",
   "checklistPreview.livingTrash": "Esvaziar todos os lixos",
   "checklistPreview.outdoor": "Áreas externas",
   "checklistPreview.outdoorInspect": "Inspecionar áreas externas",
+  "checklistPreview.outdoorCigaretteButts": "Verificar pontas de cigarro nas áreas externas",
   "checklistPreview.outdoorPool": "Verificar piscina/banheira quando aplicável",
   "checklistPreview.outdoorGrill": "Verificar churrasqueira/fogueira quando aplicável",
   "checklistPreview.securityEntryLock": "Confirmar que a fechadura de entrada funciona",
@@ -647,6 +653,8 @@ Object.assign(messages.pt, {
   "checklistPreview.photoPlaceholderCount": "{count} de {maximum} placeholders adicionados",
   "checklistPreview.addPhotoPlaceholder": "Adicionar placeholder de foto",
   "checklistPreview.photoPlaceholders": "Placeholders de fotos",
+  "checklistPreview.photoRequired": "Foto obrigatória",
+  "checklistPreview.photoRequiredSummary": "Checks que exigem foto concluídos: {completed} de {total}. O envio de fotos não está ativo nesta prévia.",
 });
 
 Object.assign(messages.es, {
@@ -666,10 +674,12 @@ Object.assign(messages.es, {
   "checklistPreview.livingRemotes": "Confirmar que los controles estén en los lugares designados",
   "checklistPreview.livingAc": "Revisar aire acondicionado y calefacción",
   "checklistPreview.livingSmells": "Revisar olores inusuales",
-  "checklistPreview.livingBelongings": "Revisar debajo de camas y muebles por pertenencias",
+  "checklistPreview.livingBelongings": "Revisar debajo de camas y muebles por pertenencias, basura, daños o algo inusual",
+  "checklistPreview.livingCigaretteButts": "Revisar colillas de cigarrillo dentro de la propiedad",
   "checklistPreview.livingTrash": "Vaciar toda la basura",
   "checklistPreview.outdoor": "Áreas exteriores",
   "checklistPreview.outdoorInspect": "Inspeccionar áreas exteriores",
+  "checklistPreview.outdoorCigaretteButts": "Revisar colillas de cigarrillo en áreas exteriores",
   "checklistPreview.outdoorPool": "Revisar piscina/jacuzzi cuando corresponda",
   "checklistPreview.outdoorGrill": "Revisar parrilla/fogón cuando corresponda",
   "checklistPreview.securityEntryLock": "Confirmar que la cerradura de entrada funciona",
@@ -693,6 +703,8 @@ Object.assign(messages.es, {
   "checklistPreview.photoPlaceholderCount": "{count} de {maximum} placeholders agregados",
   "checklistPreview.addPhotoPlaceholder": "Agregar placeholder de foto",
   "checklistPreview.photoPlaceholders": "Placeholders de fotos",
+  "checklistPreview.photoRequired": "Foto obligatoria",
+  "checklistPreview.photoRequiredSummary": "Checks que requieren foto completados: {completed} de {total}. La carga de fotos no está activa en esta vista previa.",
 });
 
 function getInitialLanguage() {

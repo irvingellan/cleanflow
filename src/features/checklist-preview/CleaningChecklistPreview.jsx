@@ -134,21 +134,30 @@ export function CleaningChecklistPreview() {
                         />
                         <span>{translate(item.labelKey)}</span>
                       </label>
-                      {item.canBeNotApplicable && (
-                        <button
-                          className={`checklist-preview__na${itemState.notApplicable ? " checklist-preview__na--active" : ""}`}
-                          type="button"
-                          aria-pressed={itemState.notApplicable}
-                          aria-label={translate("checklistPreview.markNotApplicable", {
-                            item: translate(item.labelKey),
-                          })}
-                          onClick={() => updateChecklistItem(item.id, {
-                            completed: false,
-                            notApplicable: !itemState.notApplicable,
-                          })}
-                        >
-                          {translate("checklistPreview.notApplicable")}
-                        </button>
+                      {(item.requiresPhoto || item.canBeNotApplicable) && (
+                        <div className="checklist-preview__item-actions">
+                          {item.requiresPhoto && (
+                            <span className="checklist-preview__photo-required">
+                              {translate("checklistPreview.photoRequired")}
+                            </span>
+                          )}
+                          {item.canBeNotApplicable && (
+                            <button
+                              className={`checklist-preview__na${itemState.notApplicable ? " checklist-preview__na--active" : ""}`}
+                              type="button"
+                              aria-pressed={itemState.notApplicable}
+                              aria-label={translate("checklistPreview.markNotApplicable", {
+                                item: translate(item.labelKey),
+                              })}
+                              onClick={() => updateChecklistItem(item.id, {
+                                completed: false,
+                                notApplicable: !itemState.notApplicable,
+                              })}
+                            >
+                              {translate("checklistPreview.notApplicable")}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -298,6 +307,15 @@ function ClientReportPreview({ report, language, translate, onEdit }) {
               <span>{translate("checklistPreview.photoPlaceholders")}</span>
             </div>
           </div>
+
+          {report.summary.photoRequiredCount > 0 && (
+            <p className="checklist-report__photo-requirement">
+              {translate("checklistPreview.photoRequiredSummary", {
+                completed: report.summary.completedPhotoRequiredCount,
+                total: report.summary.photoRequiredCount,
+              })}
+            </p>
+          )}
 
           {restockItems.length > 0 && (
             <section className="checklist-report__alert" aria-labelledby="restock-alerts-title">
