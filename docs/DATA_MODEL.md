@@ -68,6 +68,14 @@ Property defaults populate a new Job but must not rewrite historical Job
 snapshots. Sensitive access information requires stronger authorization than
 ordinary operational data.
 
+**Phase 2 checklist foundation:** `checklistSettings` is optional. When absent,
+the current versioned global default definition applies. Its allowlisted
+cleaner-facing fields are additional checklist items, inventory item additions
+or overrides, required photo types, and cleaner instructions. A Checklist Run
+must store a resolved definition and configuration snapshot; it must never read
+later Property changes when rendering a historical Run or a cleaner-facing
+projection.
+
 ## Reservation
 
 A Reservation represents a guest stay or booking received from an external

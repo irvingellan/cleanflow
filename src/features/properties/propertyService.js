@@ -14,6 +14,7 @@ import {
   withNormalizedDataProvenance,
 } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
+import { normalizePropertyChecklistSettings } from "../checklists/checklistRunDefinition.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -51,6 +52,7 @@ export async function createProperty({
   clientName,
   defaultClientPrice,
   defaultCleanerPrice,
+  checklistSettings,
   active,
 }) {
   const property = {
@@ -73,9 +75,19 @@ export async function createProperty({
     property.defaultCleanerPrice = defaultCleanerPrice;
   }
 
+  if (checklistSettings) {
+    property.checklistSettings = normalizePropertyChecklistSettings(checklistSettings);
+  }
+
   const reference = await addDoc(propertiesCollection(), property);
 
   return withNormalizedDataProvenance({ id: reference.id, ...property });
+}
+
+export async function updatePropertyChecklistSettings(propertyId, checklistSettings) {
+  const normalizedSettings = normalizePropertyChecklistSettings(checklistSettings);
+  await updateDoc(propertyDocument(propertyId), { checklistSettings: normalizedSettings });
+  return { id: propertyId, checklistSettings: normalizedSettings };
 }
 
 export async function linkPropertyToClient(propertyId, client) {
