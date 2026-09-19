@@ -21,6 +21,10 @@ import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import { authorizedManagerDevices, requireOrganizationManager } from "./managerAuthorization.js";
 import {
+  createChecklistRunForManager,
+  validChecklistRunJobId,
+} from "./checklistRunService.js";
+import {
   calculateManagerReminder,
   claimReminderDelivery,
   managerReminderPayload,
@@ -548,6 +552,24 @@ export const registerManagerPushDevice = onCall(
     });
 
     return { registered: true };
+  },
+);
+
+export const createChecklistRun = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) {
+      throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
+    }
+
+    return createChecklistRunForManager(db, {
+      organizationId,
+      jobId,
+      actorUid: request.auth.uid,
+    });
   },
 );
 

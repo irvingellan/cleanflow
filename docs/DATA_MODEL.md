@@ -74,7 +74,9 @@ cleaner-facing fields are additional checklist items, inventory item additions
 or overrides, required photo types, and cleaner instructions. A Checklist Run
 must store a resolved definition and configuration snapshot; it must never read
 later Property changes when rendering a historical Run or a cleaner-facing
-projection.
+projection. **Phase 3:** the manager-authorized creator writes a single initial
+`DRAFT` Run beneath its Job. It uses a stable Run ID so retries return the same
+Run rather than silently overwriting or creating duplicates.
 
 ## Reservation
 

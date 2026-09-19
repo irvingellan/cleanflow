@@ -15,7 +15,12 @@ for (const [variable, expected] of Object.entries({
 const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow" });
 const { getFirestore, Timestamp } = await import("firebase-admin/firestore");
-const { registerManagerPushDevice, submitFeedback, publicOffer } = await import("../functions/src/index.js");
+const {
+  createChecklistRun,
+  registerManagerPushDevice,
+  submitFeedback,
+  publicOffer,
+} = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
 const { createHash } = await import("node:crypto");
 const admin = getFirestore();
@@ -179,6 +184,96 @@ test("actual manager callables reject unauthorized/anonymous callers before enro
   assert.equal((await admin.collection("managerPushDevices").get()).size, 0);
   // An approved manager reaches payload validation, without contacting GitHub.
   await assert.rejects(submitFeedback.run(request("manager")), { code: "invalid-argument" });
+});
+
+async function seedChecklistJob({ checklistSettings } = {}) {
+  await admin.doc(`${root}/properties/property`).set({
+    organizationId: org,
+    name: "Fixture Property",
+    ...(checklistSettings ? { checklistSettings } : {}),
+  });
+  await admin.doc(`${root}/jobs/job`).set({
+    organizationId: org,
+    propertyId: "property",
+    propertyName: "Fixture Property",
+  });
+}
+
+test("active manager creates one default DRAFT Checklist Run and a retry returns it", async () => {
+  await seedChecklistJob();
+
+  const [first, retry] = await Promise.all([
+    createChecklistRun.run(request("manager", { jobId: "job" })),
+    createChecklistRun.run(request("manager", { jobId: "job" })),
+  ]);
+
+  assert.equal(first.runId, "initial");
+  assert.equal(retry.runId, "initial");
+  assert.deepEqual(new Set([first.created, retry.created]), new Set([true, false]));
+  const runs = await admin.doc(`${root}/jobs/job`).collection("checklistRuns").get();
+  assert.equal(runs.size, 1);
+  const run = runs.docs[0].data();
+  assert.equal(run.status, "DRAFT");
+  assert.equal(run.definitionVersion, 1);
+  assert.equal(run.resolvedDefinition.sections.flatMap((section) => section.items).length, 28);
+  assert.equal(run.createdByUid, "manager");
+});
+
+test("Checklist Run creation snapshots configured Property fields and ignores later Property edits", async () => {
+  await seedChecklistJob({
+    checklistSettings: {
+      additionalChecklistItems: [{
+        id: "kitchen-wine-glasses",
+        sectionId: "kitchen",
+        label: "Inspect wine glasses",
+      }],
+      inventoryItems: [{ id: "coffee-filters", label: "Coffee filters" }],
+      requiredPhotoTypes: [{ id: "balcony", label: "Balcony photo", maximum: 2 }],
+      cleanerInstructions: "Check the balcony.",
+    },
+  });
+
+  await createChecklistRun.run(request("manager", { jobId: "job" }));
+  await admin.doc(`${root}/properties/property`).update({
+    checklistSettings: { cleanerInstructions: "Changed later." },
+  });
+
+  const run = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
+  assert.equal(run.resolvedDefinition.cleanerInstructions, "Check the balcony.");
+  assert.deepEqual(run.resolvedDefinition.requiredPhotoTypes, [
+    { id: "balcony", label: "Balcony photo", maximum: 2 },
+  ]);
+  assert.ok(run.resolvedDefinition.sections
+    .find((section) => section.id === "kitchen").items
+    .some((item) => item.id === "kitchen-wine-glasses"));
+  assert.deepEqual(
+    run.resolvedDefinition.inventoryItems.find((item) => item.id === "coffee-filters"),
+    { id: "coffee-filters", label: "Coffee filters" },
+  );
+});
+
+test("Checklist Run creation rejects unauthenticated, non-manager, and wrong-organization callers", async () => {
+  await seedChecklistJob();
+
+  for (const [uid, anonymous, code] of [
+    [null, false, "unauthenticated"],
+    ["anonymous-member", true, "unauthenticated"],
+    ["outsider", false, "permission-denied"],
+    ["cleaner", false, "permission-denied"],
+    ["other-manager", false, "permission-denied"],
+  ]) {
+    await assert.rejects(createChecklistRun.run(request(uid, { jobId: "job" }, anonymous)), { code });
+  }
+
+  assert.equal((await admin.doc(`${root}/jobs/job`).collection("checklistRuns").get()).size, 0);
+});
+
+test("Checklist Run creation fails safely for an unknown Job", async () => {
+  await assert.rejects(
+    createChecklistRun.run(request("manager", { jobId: "missing-job" })),
+    { code: "not-found" },
+  );
+  assert.equal((await admin.doc(`${root}/jobs/missing-job`).get()).exists, false);
 });
 
 test("public capability GET/response remains independent of auth and only updates its resolved offer", async () => {
