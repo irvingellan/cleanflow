@@ -2,10 +2,37 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /organizations/cleanflow-demo/{document=**} {
-      allow read, write: if request.auth != null;
+    function signedInAccount() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
+    function activeManager(orgId) {
+      return signedInAccount()
+        && exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.role == 'MANAGER'
+        && get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.active == true;
+    }
+
+    match /organizations/{orgId} {
+      // Membership is provisioned by trusted administrators, never by browser clients.
+      match /members/{uid} {
+        allow get: if signedInAccount() && request.auth.uid == uid;
+      }
+
+      // Exact document depths are intentional: new subcollections do not inherit access.
+      match /{collectionName}/{recordId} {
+        allow read, write: if collectionName in ['clients', 'properties', 'cleaners', 'jobs', 'payouts']
+          && activeManager(orgId);
+      }
+
+      match /jobs/{jobId}/{collectionName}/{recordId} {
+        allow read, write: if collectionName in ['offers', 'assignments', 'issues']
+          && activeManager(orgId);
+      }
+    }
+
+    // Includes reminder/device metadata and all future checklist/settings/evidence paths.
     match /{document=**} {
       allow read, write: if false;
     }

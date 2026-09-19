@@ -66,7 +66,7 @@ export default async function seedE2eFixtures() {
   const app = getApps()[0] || initializeApp({ projectId }, "cleanflow-e2e");
   const auth = getAuth(app);
   const db = getFirestore(app);
-  await ensureManager(auth);
+  const manager = await ensureManager(auth);
 
   const organization = db.collection("organizations").doc(organizationId);
   const now = Timestamp.now();
@@ -203,6 +203,7 @@ export default async function seedE2eFixtures() {
     ],
   ];
   const batch = db.batch();
+  batch.set(organization.collection("members").doc(manager.uid), { role: "MANAGER", active: true });
 
   batch.set(organization.collection("cleaners").doc("e2e-cleaner"), cleaner);
   batch.set(organization.collection("cleaners").doc("e2e-team-cleaner-a"), teamCleanerA);

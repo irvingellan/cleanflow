@@ -2,11 +2,17 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // The current development authorization model treats authenticated users as managers
-    // for cleanflow-demo. Future organization membership/roles must narrow this rule.
-    match /organizations/cleanflow-demo/payouts/{payoutId}/proof/payment-proof {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
+    function activeManager(orgId) {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && firestore.exists(/databases/(default)/documents/organizations/$(orgId)/members/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.role == 'MANAGER'
+        && firestore.get(/databases/(default)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.active == true;
+    }
+
+    match /organizations/{orgId}/payouts/{payoutId}/proof/payment-proof {
+      allow read: if activeManager(orgId);
+      allow write: if activeManager(orgId)
         && request.resource.size <= 10 * 1024 * 1024
         && request.resource.contentType in [
           "image/jpeg",
@@ -17,6 +23,7 @@ service firebase.storage {
         ];
     }
 
+    // Checklist evidence has no browser access until deliberately implemented.
     match /{allPaths=**} {
       allow read, write: if false;
     }

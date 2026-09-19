@@ -11,6 +11,9 @@ export const languageOptions = [
 
 const messages = {
   en: {
+    "auth.managerAccessLoading": "Checking manager access…",
+    "auth.managerAccessDenied": "This account does not have active manager access. Contact your administrator.",
+    "auth.managerAccessError": "Unable to verify manager access. Check your connection and reload.",
     "brand.operationsPlatform": "Operations platform", "brand.foundationBuild": "Foundation build",
     "navigation.dashboard": "Dashboard", "navigation.properties": "Properties", "navigation.jobs": "Jobs", "navigation.cleaners": "Cleaners", "navigation.payouts": "Payouts", "navigation.clients": "Clients", "navigation.devCenter": "Dev Center",
     "common.language": "Language", "common.mainNavigation": "Main navigation", "common.back": "Back", "common.cancel": "Cancel", "common.notProvided": "Not provided", "common.property": "Property", "common.client": "Client", "common.cleaner": "Cleaner", "common.status": "Status", "common.notes": "Notes", "common.active": "Active", "common.inactive": "Inactive", "common.date": "Date", "common.error": "Error",
@@ -42,6 +45,9 @@ const messages = {
     "clients.title": "Clients", "clients.new": "New client", "clients.loading": "Loading clients…", "clients.error": "Unable to load clients.", "clients.empty": "No clients found.", "clients.createTitle": "New client", "clients.name": "Client name", "clients.save": "Save client", "clients.creating": "Saving…", "clients.nameRequired": "Enter a client name.", "clients.createError": "Unable to create client.", "clients.view": "View {client}", "clients.details": "Client details", "clients.linkedProperties": "Linked properties", "clients.propertiesLoading": "Loading linked properties…", "clients.propertiesError": "Unable to load linked properties.", "clients.noLinkedProperties": "No linked properties.", "clients.openProperty": "Open property", "clients.upcomingService": "Upcoming service", "clients.upcomingServices": "Upcoming services", "clients.noUpcomingService": "No upcoming service", "clients.recentHistory": "Recent history", "clients.historyLoading": "Loading client history…", "clients.historyError": "Unable to load client history.", "clients.noRecentHistory": "No recent service history.",
   },
   pt: {
+    "auth.managerAccessLoading": "Verificando acesso de gerente…",
+    "auth.managerAccessDenied": "Esta conta não tem acesso ativo de gerente. Entre em contato com o administrador.",
+    "auth.managerAccessError": "Não foi possível verificar o acesso. Verifique sua conexão e recarregue.",
     "brand.operationsPlatform": "Plataforma de operações", "brand.foundationBuild": "Versão inicial",
     "navigation.dashboard": "Painel", "navigation.properties": "Propriedades", "navigation.jobs": "Serviços", "navigation.cleaners": "Cleaners", "navigation.payouts": "Pagamentos", "navigation.clients": "Clientes", "navigation.devCenter": "Central Dev",
     "common.language": "Idioma", "common.mainNavigation": "Navegação principal", "common.back": "Voltar", "common.cancel": "Cancelar", "common.notProvided": "Não informado", "common.property": "Propriedade", "common.client": "Cliente", "common.cleaner": "Cleaner", "common.status": "Status", "common.notes": "Observações", "common.active": "Ativa", "common.inactive": "Inativa", "common.date": "Data", "common.error": "Erro",
@@ -74,6 +80,9 @@ const messages = {
     "dashboard.needsAttentionDescription": "Principais prioridades operacionais entre atribuições, interesse de cleaners e problemas.",
   },
   es: {
+    "auth.managerAccessLoading": "Verificando acceso de gestión…",
+    "auth.managerAccessDenied": "Esta cuenta no tiene acceso activo de gestión. Contacta al administrador.",
+    "auth.managerAccessError": "No se pudo verificar el acceso. Revisa tu conexión y vuelve a cargar.",
     "brand.operationsPlatform": "Plataforma de operaciones", "brand.foundationBuild": "Versión inicial",
     "navigation.dashboard": "Panel", "navigation.properties": "Propiedades", "navigation.jobs": "Servicios", "navigation.cleaners": "Cleaners", "navigation.payouts": "Pagos", "navigation.clients": "Clientes", "navigation.devCenter": "Centro Dev",
     "common.language": "Idioma", "common.mainNavigation": "Navegación principal", "common.back": "Volver", "common.cancel": "Cancelar", "common.notProvided": "No indicado", "common.property": "Propiedad", "common.client": "Cliente", "common.cleaner": "Cleaner", "common.status": "Estado", "common.notes": "Notas", "common.active": "Activa", "common.inactive": "Inactiva", "common.date": "Fecha", "common.error": "Error",

@@ -115,9 +115,13 @@ async function seedPublicOfferEmulator() {
     },
   ];
 
-  await ensureManager(auth);
+  const manager = await ensureManager(auth);
 
   const batch = db.batch();
+  batch.set(db.doc(`organizations/${organizationId}/members/${manager.uid}`), {
+    role: "MANAGER",
+    active: true,
+  });
 
   for (const fixture of fixtures) {
     const job = jobs.doc(fixture.jobId);

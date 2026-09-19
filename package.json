@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "firebase emulators:exec --project demo-cleanflow --only auth,firestore \"playwright test\"",
+    "test:security": "firebase emulators:exec --project demo-cleanflow --only firestore,storage \"node --test --test-concurrency=1 security/managerAuthorization.test.mjs\"",
     "test:all": "npm test && npm run test:e2e",
     "visual:env": "npm run build:emulators",
     "visual:fixtures": "node scripts/visual-smoke/seedE2eFixtures.mjs",
@@ -29,6 +30,7 @@
     "react-onesignal": "^3.5.6"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",

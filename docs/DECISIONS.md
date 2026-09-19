@@ -559,3 +559,26 @@ one transport; it never sends through both providers and never automatically
 falls back after an ambiguous provider result. OneSignal targets the existing
 active manager-device audience by Firebase Auth UID as its External ID; a
 future OneSignal-only manager registry remains deferred.
+
+---
+
+## DEC-036 — Organization membership is the pilot manager authorization boundary
+
+Date: 2026-09-19
+Status: Accepted, pending production provisioning and rules deployment
+
+An active Manager membership at
+`organizations/{organizationId}/members/{uid}` is required for direct manager
+access. A qualifying record has `role: "MANAGER"` and `active: true`.
+
+Firestore and Storage rules apply this membership to the explicit operational
+collections that the browser currently uses. Membership records are
+server-provisioned: a browser may read only its own record and cannot create,
+change, delete, or list memberships. Unrecognized collections, server-owned
+metadata, and future checklist namespaces remain default-deny.
+
+Server manager callables use the same membership definition. Manager-device
+enrollment and reminder recipient selection re-check it, so a revoked member
+cannot retain manager notification access through an earlier device record.
+Public Offer links remain server-mediated bearer capabilities and do not gain
+general authenticated access.

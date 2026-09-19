@@ -19,6 +19,7 @@ import {
 } from "./devCenterAuthorization.js";
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
+import { authorizedManagerDevices, requireOrganizationManager } from "./managerAuthorization.js";
 import {
   calculateManagerReminder,
   claimReminderDelivery,
@@ -448,9 +449,7 @@ function feedbackIssueBody({ type, message, appVersion, screen, viewport, report
 export const submitFeedback = onCall(
   { region: "us-central1", secrets: [githubFeedbackToken] },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentication is required.");
-    }
+    await requireOrganizationManager(db, request, organizationId);
 
     const type = request.data?.type;
     const message = typeof request.data?.message === "string" ? request.data.message.trim() : "";
@@ -519,9 +518,7 @@ export const submitFeedback = onCall(
 export const registerManagerPushDevice = onCall(
   { region: "us-central1" },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentication is required.");
-    }
+    await requireOrganizationManager(db, request, organizationId);
 
     const { deviceId, token } = request.data || {};
     const language = validPushLanguage(request.data?.language) ? request.data.language : "pt";
@@ -565,10 +562,11 @@ async function activeManagerPushDevices() {
     .where("organizationId", "==", organizationId)
     .get();
 
-  return deviceSnapshots.docs.filter((snapshot) => {
+  const activeDevices = deviceSnapshots.docs.filter((snapshot) => {
     const device = snapshot.data();
     return device.active === true && validPushToken(device.token);
   });
+  return authorizedManagerDevices(db, organizationId, activeDevices);
 }
 
 function invalidPushTokenError(error) {

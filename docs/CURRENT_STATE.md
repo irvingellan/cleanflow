@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- **Last updated:** 2026-09-18
+- **Last updated:** 2026-09-19
 - **Repository:** `irvingellan/cleanflow` (`main`)
 - **Active product phase:** Gabi Pilot — controlled design-partner learning and
   validation alongside the manager's existing spreadsheet.
@@ -100,6 +100,10 @@ E2E tests passed; build and diff checks passed.
 - Read-only Astra Runs A, D, and E completed. Their findings are preserved as
   candidate audit evidence in Issue #27; they have not yet been consolidated
   into an approved implementation plan.
+- The first approved P0 boundary is implemented locally: direct manager access
+  now requires an active `MANAGER` membership for the organization. It is not
+  deployed. Production memberships must be provisioned before the new rules
+  can be safely released.
 
 ## Important current invariants and decisions
 
@@ -125,6 +129,8 @@ E2E tests passed; build and diff checks passed.
   deployment, and controlled cutover validation.
 - FCM retirement is neither decided nor completed.
 - Issue #40 needs real installed-iPhone validation after deployment.
+- The authorization boundary needs production manager membership provisioning
+  and a coordinated Firestore/Storage rules plus Functions/Hosting release.
 
 ## Next actions
 

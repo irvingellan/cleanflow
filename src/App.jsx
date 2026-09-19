@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
+import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
   DetailItem,
   StateCard,
@@ -145,12 +146,20 @@ function App() {
 
   return (
     <ThemeProvider>
-      <ManagerApplication
-        authUser={authUser}
-        hasSignOutError={hasSignOutError}
-        isSigningOut={isSigningOut}
+      <ManagerAccessBoundary
+        key={authUser.uid}
+        user={authUser}
         onSignOut={handleSignOut}
-      />
+        isSigningOut={isSigningOut}
+        hasSignOutError={hasSignOutError}
+      >
+        <ManagerApplication
+          authUser={authUser}
+          hasSignOutError={hasSignOutError}
+          isSigningOut={isSigningOut}
+          onSignOut={handleSignOut}
+        />
+      </ManagerAccessBoundary>
     </ThemeProvider>
   );
 }
