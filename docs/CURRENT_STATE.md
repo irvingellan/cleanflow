@@ -77,8 +77,19 @@ E2E tests passed; build and diff checks passed.
   validated feedback is incorporated: the checklist now has **28 items**;
   the under-bed/furniture check has localized **Photo required** guidance; and
   separate interior and exterior cigarette-butt checks were added.
-- The preview remains demo-only: no Checklist Run persistence, real photo
-  storage, secure production links, or email delivery is implemented.
+- The validated global checklist definition is **v1 with 28 items**. Property
+  checklist configuration is optional; an unconfigured Property receives v1,
+  while approved cleaner-facing additions, inventory, photo requirements, and
+  instructions can be resolved from `Property.checklistSettings`.
+- `d25fc75 feat(checklist): add property-aware checklist run foundation (#42)`
+  established immutable resolved checklist/configuration snapshots, so later
+  Property edits do not alter historical Checklist Runs or reports.
+- `693aafe feat(checklist): persist manager-created checklist runs (#42)` adds
+  manager-authorized `createChecklistRun`. It transactionally creates or
+  returns one initial `DRAFT` Run beneath its Job, preventing accidental retry
+  duplicates without overwriting an existing Run.
+- No cleaner public capability/link, real cleaner submission, photo storage,
+  or email delivery exists yet.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
   CleanFlow; the manager views or receives its report; and an optional email
@@ -136,10 +147,12 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Wait for further design-partner feedback on Issue #42.
-2. Reconcile the six first-week Jobs for Issue #36 before any approved import.
-3. Finish remaining Astra security/reliability audits if useful.
-4. Consolidate audit findings before creating implementation work.
+1. Implement **Job Detail → Create checklist → show/open existing or new
+   `DRAFT` Run** for Issue #42; later add the cleaner capability/link.
+2. Wait for further design-partner feedback on Issue #42.
+3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
+4. Finish remaining Astra security/reliability audits if useful.
+5. Consolidate audit findings before creating implementation work.
 
 ## Development workflow
 
