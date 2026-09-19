@@ -21,9 +21,11 @@ rescheduling, and Cleaner Hub work remain incremental.
 - The controlled pilot uses Firebase Hosting at
   `https://clean-flow-prototipo.web.app` with Firebase Authentication,
   Firestore, Storage, and Functions.
-- `main` currently includes the recent Issue #39 and Issue #40 commits listed
-  below. This checkpoint does **not** establish that either commit has been
-  deployed to Hosting or Functions.
+- The P0 manager-authorization release is live at `167155c`: Firestore Rules,
+  Storage Rules, the affected Functions, and Hosting were deployed together.
+- The two approved pilot managers have active `MANAGER` memberships. A live
+  manager smoke test passed; anonymous protected Firestore access returned
+  `403`.
 - Before a pilot release, follow
   [PILOT_RELEASE_RUNBOOK.md](PILOT_RELEASE_RUNBOOK.md): verify a managed
   Firestore export, intended Auth accounts, required secrets/configuration, and
@@ -47,8 +49,9 @@ rescheduling, and Cleaner Hub work remain incremental.
   sends. OneSignal REST handling has a bounded timeout and conservative
   `UNKNOWN`/ambiguous outcomes.
 - OneSignal reminder cutover has **not** happened. Do not imply production
-  secret configuration, provider selection, or a deployed cutover without
-  fresh evidence.
+  server-side OneSignal configuration or cutover without fresh evidence.
+- Production explicitly runs `MANAGER_REMINDER_PROVIDER=fcm`; no OneSignal REST
+  secret is configured or required for the scheduled-reminder path.
 
 Recent commits:
 
@@ -100,10 +103,11 @@ E2E tests passed; build and diff checks passed.
 - Read-only Astra Runs A, D, and E completed. Their findings are preserved as
   candidate audit evidence in Issue #27; they have not yet been consolidated
   into an approved implementation plan.
-- The first approved P0 boundary is implemented locally: direct manager access
-  now requires an active `MANAGER` membership for the organization. It is not
-  deployed. Production memberships must be provisioned before the new rules
-  can be safely released.
+- The P0 manager-authorization boundary is live. Direct manager access requires
+  an active organization `MANAGER` membership; the approved pilot memberships
+  were provisioned before release. The deployed scope includes `submitFeedback`,
+  `registerManagerPushDevice`, `publicOffer`, and both scheduled manager
+  reminder Functions.
 
 ## Important current invariants and decisions
 
@@ -126,11 +130,9 @@ E2E tests passed; build and diff checks passed.
   `managerPushDevices`; a manager with only OneSignal and no valid active device
   record is not yet included.
 - OneSignal server transport still needs staged production configuration,
-  deployment, and controlled cutover validation.
+  and controlled cutover validation.
 - FCM retirement is neither decided nor completed.
-- Issue #40 needs real installed-iPhone validation after deployment.
-- The authorization boundary needs production manager membership provisioning
-  and a coordinated Firestore/Storage rules plus Functions/Hosting release.
+- Issue #40 needs real installed-iPhone validation after the live deployment.
 
 ## Next actions
 
