@@ -79,6 +79,18 @@ export function managerReminderProvider(value) {
     : managerReminderProviders.FCM;
 }
 
+// Server-side OneSignal delivery remains deferred until its dedicated release.
+// Failing before the durable claim prevents a selected-but-unavailable provider
+// from consuming a reminder window or silently falling back to FCM.
+export function requireAvailablePilotReminderTransport(provider) {
+  if (provider !== managerReminderProviders.ONESIGNAL) return;
+
+  const error = new Error("OneSignal server reminder transport is not available in this release.");
+  error.code = "failed-precondition";
+  error.managerReminderProvider = managerReminderProviders.ONESIGNAL;
+  throw error;
+}
+
 function oneSignalConfigurationError(message) {
   const error = new Error(message);
   error.code = "failed-precondition";

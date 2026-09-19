@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   dispatchManagerReminder,
@@ -8,6 +10,7 @@ import {
   oneSignalRecipientGroups,
   oneSignalRecipientsFromManagerDevices,
   oneSignalRequestTimeoutMs,
+  requireAvailablePilotReminderTransport,
   sendOneSignalManagerReminder,
   summarizeOneSignalReminderDelivery,
   unknownManagerReminderDeliveryAuditFields,
@@ -31,6 +34,13 @@ const response = (body, status = 200) => ({
 });
 
 describe("manager reminder transports", () => {
+  it("keeps FCM scheduled deployment independent from the OneSignal REST secret", async () => {
+    const functionSource = await readFile(join(process.cwd(), "functions/src/index.js"), "utf8");
+
+    expect(functionSource).not.toContain('defineSecret("ONESIGNAL_REST_API_KEY")');
+    expect(functionSource).not.toContain("secrets: [oneSignalRestApiKey]");
+  });
+
   it("keeps FCM as the default and selects OneSignal only explicitly", () => {
     expect(managerReminderProvider()).toBe(managerReminderProviders.FCM);
     expect(managerReminderProvider("unexpected")).toBe(managerReminderProviders.FCM);
@@ -266,6 +276,26 @@ describe("manager reminder transports", () => {
 
     expect(sendOneSignal).toHaveBeenCalledWith(reminder);
     expect(sendFcm).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before any claim or dispatch when OneSignal is explicitly selected", async () => {
+    const sendFcm = vi.fn();
+    const sendOneSignal = vi.fn();
+
+    expect(() => requireAvailablePilotReminderTransport(managerReminderProviders.ONESIGNAL))
+      .toThrow(/not available/i);
+    expect(() => requireAvailablePilotReminderTransport(managerReminderProviders.ONESIGNAL))
+      .toThrow(expect.objectContaining({ code: "failed-precondition", managerReminderProvider: "onesignal" }));
+    expect(() => requireAvailablePilotReminderTransport(managerReminderProviders.FCM)).not.toThrow();
+
+    await dispatchManagerReminder({
+      provider: managerReminderProviders.FCM,
+      reminder,
+      sendFcm,
+      sendOneSignal,
+    });
+
+    expect(sendOneSignal).not.toHaveBeenCalled();
   });
 
   it("continues to dispatch FCM unchanged when the default provider is selected", async () => {
