@@ -21,7 +21,7 @@ export function PublicChecklistPage({ token }) {
       setIsLoading(true); setError(null);
       try {
         const result = await getPublicChecklist(token);
-        if (active) setChecklist(result);
+        if (active) setChecklist(result.checklist);
       } catch (loadError) {
         if (active) setError(loadError.code || "checklist_unavailable");
       } finally { if (active) setIsLoading(false); }

@@ -31,6 +31,7 @@ import {
   issueChecklistCapabilityForManager,
   loadPublicChecklistCapability,
   revokeChecklistCapabilityForManager,
+  savePublicChecklistDraft,
   validChecklistCleanerId,
 } from "./checklistCapabilityService.js";
 import {
@@ -1072,14 +1073,28 @@ export const publicOffer = onRequest(
 export const publicChecklist = onRequest(
   { region: "us-central1", invoker: "public" },
   async (request, response) => {
-    if (request.method !== "GET") {
+    if (!["GET", "POST"].includes(request.method)) {
       sendPublicError(response, 405, "method_not_allowed");
       return;
     }
     try {
-      const token = request.query.token;
+      const token = request.method === "GET" ? request.query.token : request.body?.token;
       if (!validToken(token)) {
         sendPublicError(response, 404, "checklist_not_found");
+        return;
+      }
+      if (request.method === "POST") {
+        const result = await savePublicChecklistDraft(db, {
+          organizationId,
+          tokenHash: hashToken(token),
+          request: {
+            mutationId: request.body?.mutationId,
+            baseRevision: request.body?.baseRevision,
+            changes: request.body?.changes,
+          },
+        });
+        configureResponse(response);
+        response.status(200).json(result);
         return;
       }
       const result = await loadPublicChecklistCapability(db, {
@@ -1088,7 +1103,7 @@ export const publicChecklist = onRequest(
       });
       if (result.state === "active") {
         configureResponse(response);
-        response.status(200).json({ checklist: result.checklist });
+        response.status(200).json({ checklist: result.checklist, draft: result.draft });
         return;
       }
       const status = result.state === "expired" || result.state === "revoked" || result.state === "stale"
@@ -1100,7 +1115,13 @@ export const publicChecklist = onRequest(
         code: error?.code,
         message: error?.message,
       });
-      sendPublicError(response, 500, "checklist_unavailable");
+      const status = error?.code === "invalid-argument" ? 400
+        : error?.code === "not-found" ? 404
+          : error?.code === "already-exists" ? 409
+            : error?.code === "aborted" ? 409
+              : error?.code === "failed-precondition" ? 410
+                : 500;
+      sendPublicError(response, status, status === 404 ? "checklist_not_found" : "checklist_unavailable");
     }
   },
 );

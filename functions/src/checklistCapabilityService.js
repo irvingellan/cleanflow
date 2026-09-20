@@ -1,6 +1,12 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { projectChecklistRunForCleaner } from "./checklistRunDefinition.js";
+import {
+  applyChecklistDraftMutation,
+  checklistDraftMutationHash,
+  normalizeChecklistDraftMutation,
+  projectChecklistDraftForRead,
+} from "./checklistDraftService.js";
 
 export const initialChecklistCapabilityId = "active";
 export const checklistCapabilityLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
@@ -49,6 +55,14 @@ function runReference(database, organizationId, jobId, runId) {
 
 function jobReference(database, organizationId, jobId) {
   return database.doc(`organizations/${organizationId}/jobs/${jobId}`);
+}
+
+function draftReference(database, organizationId, jobId, runId) {
+  return runReference(database, organizationId, jobId, runId).collection("drafts").doc("current");
+}
+
+function mutationReference(database, organizationId, jobId, runId, mutationId) {
+  return runReference(database, organizationId, jobId, runId).collection("draftMutations").doc(mutationId);
 }
 
 /** Manager summaries intentionally never include the bearer token or its hash. */
@@ -168,10 +182,12 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
   if (!location) return { state: "not-found" };
 
   return database.runTransaction(async (transaction) => {
-    const [capabilitySnapshot, jobSnapshot, runSnapshot] = await Promise.all([
+    const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
+    const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot] = await Promise.all([
       transaction.get(capabilityRef),
       transaction.get(jobReference(database, organizationId, location.jobId)),
       transaction.get(runReference(database, organizationId, location.jobId, location.runId)),
+      transaction.get(draftRef),
     ]);
     if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) return { state: "not-found" };
     const capability = capabilitySnapshot.data();
@@ -181,6 +197,83 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
     return {
       state: "active",
       checklist: projectChecklistRunForCleaner(runSnapshot.data()),
+      draft: projectChecklistDraftForRead(
+        runSnapshot.data(), draftSnapshot.exists ? draftSnapshot.data() : null,
+      ),
     };
+  });
+}
+
+/**
+ * A receipt lives beside the mutable draft, never on the immutable Run. The
+ * capability is validated before receipt lookup so revoked access cannot replay
+ * an old success response.
+ */
+export async function savePublicChecklistDraft(database, {
+  organizationId,
+  tokenHash,
+  request,
+  now = new Date(),
+}) {
+  const matches = await database.collectionGroup("checklistCapabilities")
+    .where("tokenHash", "==", tokenHash).limit(2).get();
+  if (matches.size !== 1) throw new HttpsError("not-found", "Checklist capability not found.");
+  const capabilityRef = matches.docs[0].ref;
+  const location = capabilityDocumentFromPath(capabilityRef, organizationId);
+  if (!location) throw new HttpsError("not-found", "Checklist capability not found.");
+  const runRef = runReference(database, organizationId, location.jobId, location.runId);
+  const jobRef = jobReference(database, organizationId, location.jobId);
+  const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
+
+  return database.runTransaction(async (transaction) => {
+    const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot] = await Promise.all([
+      transaction.get(capabilityRef), transaction.get(jobRef), transaction.get(runRef), transaction.get(draftRef),
+    ]);
+    if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) {
+      throw new HttpsError("not-found", "Checklist capability not found.");
+    }
+    const capability = capabilitySnapshot.data();
+    if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, jobSnapshot.data(), runSnapshot.data(), now) !== "ACTIVE") {
+      throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
+    }
+    const mutation = normalizeChecklistDraftMutation(runSnapshot.data(), request);
+    const mutationHash = checklistDraftMutationHash(mutation);
+    const receiptRef = mutationReference(database, organizationId, location.jobId, location.runId, mutation.mutationId);
+    const receiptSnapshot = await transaction.get(receiptRef);
+    const resolvedIdentity = {
+      cleanerId: capability.cleanerId,
+      contextRevision: capability.contextRevision,
+      capabilityRotation: capability.rotation || 0,
+    };
+    if (receiptSnapshot.exists) {
+      const receipt = receiptSnapshot.data();
+      if (receipt.mutationHash !== mutationHash
+        || receipt.cleanerId !== resolvedIdentity.cleanerId
+        || receipt.contextRevision !== resolvedIdentity.contextRevision
+        || receipt.capabilityRotation !== resolvedIdentity.capabilityRotation) {
+        throw new HttpsError("already-exists", "Draft mutation ID was used with a different request.");
+      }
+      return {
+        duplicate: true,
+        revision: receipt.revision,
+        draft: projectChecklistDraftForRead(runSnapshot.data(), draftSnapshot.exists ? draftSnapshot.data() : null),
+      };
+    }
+    const currentDraft = draftSnapshot.exists ? draftSnapshot.data() : null;
+    const currentRevision = Number.isInteger(currentDraft?.revision) ? currentDraft.revision : 0;
+    if (mutation.baseRevision !== currentRevision) {
+      throw new HttpsError("aborted", "Checklist draft revision conflict.");
+    }
+    const draft = applyChecklistDraftMutation(runSnapshot.data(), currentDraft, mutation);
+    transaction.set(draftRef, draft);
+    transaction.create(receiptRef, {
+      mutationHash,
+      cleanerId: resolvedIdentity.cleanerId,
+      contextRevision: resolvedIdentity.contextRevision,
+      capabilityRotation: resolvedIdentity.capabilityRotation,
+      revision: draft.revision,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return { duplicate: false, revision: draft.revision, draft: projectChecklistDraftForRead(runSnapshot.data(), draft) };
   });
 }

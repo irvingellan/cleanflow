@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
+import { projectChecklistDraftForRead } from "./checklistDraftService.js";
 
 export const initialChecklistRunId = "initial";
 
@@ -21,7 +22,7 @@ function toIsoTimestamp(value) {
  * Firestore access. Keep the Property configuration snapshot server-owned so
  * access details or future manager-only fields cannot leak by accident.
  */
-export function projectChecklistRunForManager(run, runId = initialChecklistRunId) {
+export function projectChecklistRunForManager(run, runId = initialChecklistRunId, draft = null) {
   const definition = run?.resolvedDefinition || {};
   const sections = Array.isArray(definition.sections) ? definition.sections : [];
   const requiredPhotoTypes = Array.isArray(definition.requiredPhotoTypes)
@@ -57,15 +58,17 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
       ? definition.cleanerInstructions
       : "",
     createdAt: toIsoTimestamp(run?.createdAt),
+    draft: projectChecklistDraftForRead(run, draft),
   };
 }
 
 export async function getChecklistRunForManager(database, { organizationId, jobId }) {
   const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
   const runReference = jobReference.collection("checklistRuns").doc(initialChecklistRunId);
-  const [jobSnapshot, runSnapshot] = await Promise.all([
+  const [jobSnapshot, runSnapshot, draftSnapshot] = await Promise.all([
     jobReference.get(),
     runReference.get(),
+    runReference.collection("drafts").doc("current").get(),
   ]);
 
   if (!jobSnapshot.exists) {
@@ -73,7 +76,9 @@ export async function getChecklistRunForManager(database, { organizationId, jobI
   }
 
   return runSnapshot.exists
-    ? projectChecklistRunForManager(runSnapshot.data(), runSnapshot.id)
+    ? projectChecklistRunForManager(
+      runSnapshot.data(), runSnapshot.id, draftSnapshot.exists ? draftSnapshot.data() : null,
+    )
     : null;
 }
 

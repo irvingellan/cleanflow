@@ -98,8 +98,13 @@ E2E tests passed; build and diff checks passed.
   token hash; the expiring token is revalidated against the Job, Run, cleaner,
   and context revision on every `/checklist?t=…` read. That route exposes only
   the frozen cleaner-facing projection. It is not deployed yet.
-- Cleaner answers/draft persistence, photo upload, submission, email, and Job
-  completion do not exist yet.
+- Phase 5C.1 locally adds one server-owned mutable cleaner draft per Run. A
+  missing draft reads as virtual revision `0`; capability-authorized patches
+  validate only frozen item IDs and use optimistic revisions plus idempotent
+  receipts. Direct browser access remains denied, and managers receive a safe
+  read projection with answers, notes, timestamps, and progress. It is not
+  deployed yet.
+- Photo upload, final submission, email, and Job completion do not exist yet.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
   CleanFlow; the manager views or receives its report; and an optional email
@@ -158,8 +163,8 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Review and deploy **Issue #42 Phase 5B** when approved; then implement
-   **Phase 5C.1**: authoritative cleaner draft persistence, without photos,
+1. Review and deploy **Issue #42 Phases 5B–5C.1** when approved; then implement
+   **Phase 5C.2**: a narrow cleaner-facing draft editing UI, without photos,
    submission, email, or Job completion.
 2. Wait for further design-partner feedback on Issue #42.
 3. Reconcile the six first-week Jobs for Issue #36 before any approved import.

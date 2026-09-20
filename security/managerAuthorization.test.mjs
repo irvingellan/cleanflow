@@ -14,7 +14,7 @@ for (const [variable, expected] of Object.entries({
 
 const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow" });
-const { getFirestore, Timestamp } = await import("firebase-admin/firestore");
+const { FieldValue, getFirestore, Timestamp } = await import("firebase-admin/firestore");
 const {
   createChecklistRun,
   getChecklistRun,
@@ -174,6 +174,8 @@ test("server metadata, unknown subcollections and future checklist namespaces ar
     `${root}/properties/property/checklistSettings/default`,
     `${root}/jobs/job/checklistRuns/run`, `${root}/jobs/job/checklistRuns/run/photos/photo`,
     `${root}/jobs/job/checklistRuns/run/checklistCapabilities/active`,
+    `${root}/jobs/job/checklistRuns/run/drafts/current`,
+    `${root}/jobs/job/checklistRuns/run/draftMutations/mutation-identifier-1`,
     `${root}/jobs/job/checklistRuns/run/deliveries/delivery`, `${root}/jobs/job/unknown/record`,
   ]) {
     await assertFails(db.doc(path).get());
@@ -241,8 +243,8 @@ async function seedChecklistJob({ checklistSettings } = {}) {
   });
 }
 
-async function seedEligibleChecklistJob() {
-  await seedChecklistJob();
+async function seedEligibleChecklistJob({ checklistSettings } = {}) {
+  await seedChecklistJob({ checklistSettings });
   await admin.doc(`${root}/jobs/job`).update({
     schemaVersion: 2,
     operationalStatus: "ASSIGNED",
@@ -258,6 +260,12 @@ async function seedEligibleChecklistJob() {
 async function publicChecklistGet(token, extraQuery = {}) {
   const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
   await publicChecklist({ method: "GET", query: { token, ...extraQuery } }, response);
+  return response;
+}
+
+async function publicChecklistSave(body) {
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+  await publicChecklist({ method: "POST", query: {}, body }, response);
   return response;
 }
 
@@ -378,6 +386,7 @@ test("Checklist capability is manager-only, rotates atomically, and public reads
   assert.equal(firstPublic.headers["Cache-Control"], "no-store, private");
   assert.equal(firstPublic.headers["Referrer-Policy"], "no-referrer");
   assert.equal(firstPublic.body.checklist.propertyName, "Fixture Property");
+  assert.equal(firstPublic.body.draft.revision, 0);
   const serialized = JSON.stringify(firstPublic.body.checklist);
   for (const forbidden of ["private guest", "manager-only", "999", "organization", "accessCode", "jobId", "runId", "cleanerId"]) assert.equal(serialized.includes(forbidden), false);
   assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), beforeJob);
@@ -393,11 +402,132 @@ test("Checklist capability is manager-only, rotates atomically, and public reads
   assert.equal((await publicChecklistGet(second.token)).code, 410);
 });
 
+test("capability-authorized cleaner drafts validate frozen fields, revisions, and idempotent receipts", async () => {
+  await seedEligibleChecklistJob({
+    checklistSettings: {
+      additionalChecklistItems: [{ id: "extra-item", sectionId: "kitchen", label: "Extra" }],
+      inventoryItems: [{ id: "coffee", label: "Coffee" }],
+    },
+  });
+  await admin.doc(`${root}/properties/property`).update({
+    checklistSettings: {
+      additionalChecklistItems: [{ id: "later-item", sectionId: "kitchen", label: "Later" }],
+    },
+  });
+  // The Run intentionally keeps its original frozen default after the later Property edit.
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const first = await publicChecklistSave({
+    token: issued.token,
+    mutationId: "draft-mutation-0001",
+    baseRevision: 0,
+    changes: { checklistAnswers: { "bed-remake": "DONE" }, issueNotes: "Check lamp" },
+  });
+  assert.equal(first.code, 200);
+  assert.equal(first.body.revision, 1);
+  assert.equal(first.body.duplicate, false);
+  assert.equal(first.body.draft.checklistAnswers["bed-remake"], "DONE");
+  assert.equal(first.body.draft.issueNotes, "Check lamp");
+  const cleared = await publicChecklistSave({
+    token: issued.token,
+    mutationId: "draft-mutation-0002",
+    baseRevision: 1,
+    changes: { issueNotes: "" },
+  });
+  assert.equal(cleared.code, 200);
+  assert.equal(cleared.body.revision, 2);
+  assert.equal(cleared.body.draft.issueNotes, "");
+  const retry = await publicChecklistSave({
+    token: issued.token,
+    mutationId: "draft-mutation-0001",
+    baseRevision: 0,
+    changes: { checklistAnswers: { "bed-remake": "DONE" }, issueNotes: "Check lamp" },
+  });
+  assert.equal(retry.code, 200);
+  assert.equal(retry.body.duplicate, true);
+  assert.equal(retry.body.revision, 1);
+  const changedRetry = await publicChecklistSave({
+    token: issued.token,
+    mutationId: "draft-mutation-0001",
+    baseRevision: 0,
+    changes: { checklistAnswers: { "bed-remake": "DONE" }, issueNotes: "Changed" },
+  });
+  assert.equal(changedRetry.code, 409);
+  const invalidNa = await publicChecklistSave({
+    token: issued.token, mutationId: "draft-mutation-0003", baseRevision: 2,
+    changes: { checklistAnswers: { "bed-remake": "NOT_APPLICABLE" } },
+  });
+  assert.equal(invalidNa.code, 400);
+  const unknown = await publicChecklistSave({
+    token: issued.token, mutationId: "draft-mutation-0004", baseRevision: 2,
+    changes: { checklistAnswers: { unknown: "DONE" } },
+  });
+  assert.equal(unknown.code, 400);
+  const [one, two] = await Promise.all([
+    publicChecklistSave({ token: issued.token, mutationId: "draft-mutation-0005", baseRevision: 2, changes: { generalNotes: "A" } }),
+    publicChecklistSave({ token: issued.token, mutationId: "draft-mutation-0006", baseRevision: 2, changes: { generalNotes: "B" } }),
+  ]);
+  assert.equal([one, two].filter((result) => result.code === 200).length, 1);
+  assert.equal([one, two].filter((result) => result.code === 409).length, 1);
+  const run = await getChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(run.run.draft.revision, 3);
+  assert.equal(run.run.draft.checklistAnswers["bed-remake"], "DONE");
+  assert.equal(run.run.draft.checklistAnswers["extra-item"], "UNANSWERED");
+  assert.equal(run.run.draft.checklistAnswers["later-item"], undefined);
+  assert.equal(run.run.draft.progress.checklist.done, 1);
+  assert.equal(run.run.resolvedDefinition, undefined);
+  await assertFails(account("manager").firestore().doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get());
+});
+
+test("revoked or stale capability cannot replay a saved draft receipt", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const body = {
+    token: issued.token, mutationId: "draft-mutation-0010", baseRevision: 0,
+    changes: { generalNotes: "Saved" },
+  };
+  assert.equal((await publicChecklistSave(body)).code, 200);
+  await revokeChecklistCapability.run(request("manager", { jobId: "job" }));
+  assert.equal((await publicChecklistSave(body)).code, 410);
+  const replacement = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  // A new active link is a new resolved capability identity, not permission to replay an old receipt.
+  assert.equal((await publicChecklistSave({ ...body, token: replacement.token })).code, 409);
+  await admin.doc(`${root}/jobs/job`).update({ checklistContextRevision: 2 });
+  assert.equal((await publicChecklistSave({ ...body, token: replacement.token })).code, 410);
+  const job = (await admin.doc(`${root}/jobs/job`).get()).data();
+  const draft = (await admin.doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get()).data();
+  assert.equal(job.operationalStatus, "ASSIGNED");
+  assert.equal(draft.revision, 1);
+});
+
+test("archived or non-DRAFT context rejects public draft saves without changing the draft", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const body = {
+    token: issued.token, mutationId: "draft-mutation-0020", baseRevision: 0,
+    changes: { generalNotes: "Must not save" },
+  };
+  await admin.doc(`${root}/jobs/job`).update({ archivedAt: Timestamp.now(), checklistContextRevision: 2 });
+  assert.equal((await publicChecklistSave(body)).code, 410);
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get()).exists, false);
+
+  // Restoring the Job advances context again, so the old capability cannot resurrect.
+  await admin.doc(`${root}/jobs/job`).update({ archivedAt: FieldValue.delete(), checklistContextRevision: 3 });
+  assert.equal((await publicChecklistSave(body)).code, 410);
+  const refreshed = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await admin.doc(`${root}/jobs/job/checklistRuns/initial`).update({ status: "SUBMITTED" });
+  assert.equal((await publicChecklistSave({ ...body, token: refreshed.token })).code, 410);
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get()).exists, false);
+});
+
 test("Checklist capability rejects malformed, expired, stale, archived, unauthorized, and concurrent contexts", async () => {
   await seedEligibleChecklistJob();
   for (const [uid, anonymous, code] of [[null, false, "unauthenticated"], ["outsider", false, "permission-denied"], ["cleaner", false, "permission-denied"]]) {
     await assert.rejects(issueChecklistCapability.run(request(uid, { jobId: "job", cleanerId: "cleaner-a" }, anonymous)), { code });
   }
+  await assert.rejects(
+    issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-b" })),
+    { code: "failed-precondition" },
+  );
   assert.equal((await publicChecklistGet("invalid")).code, 404);
   const [first, second] = await Promise.all([
     issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" })),
@@ -408,6 +538,9 @@ test("Checklist capability rejects malformed, expired, stale, archived, unauthor
   const activeToken = statuses.find((result) => result.code === 200) === statuses[0] ? first.token : second.token;
   await admin.doc(`${root}/jobs/job/checklistRuns/initial/checklistCapabilities/active`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
   assert.equal((await publicChecklistGet(activeToken)).code, 410);
+  assert.equal((await publicChecklistSave({
+    token: activeToken, mutationId: "draft-mutation-0030", baseRevision: 0, changes: { generalNotes: "Expired" },
+  })).code, 410);
   const refreshed = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
   await admin.doc(`${root}/jobs/job`).update({ checklistContextRevision: 2 });
   assert.equal((await publicChecklistGet(refreshed.token)).code, 410);
