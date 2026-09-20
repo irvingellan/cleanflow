@@ -89,10 +89,10 @@ E2E tests passed; build and diff checks passed.
   returns one initial `DRAFT` Run beneath its Job, preventing accidental retry
   duplicates without overwriting an existing Run.
 - Phase 5A adds a monotonic `checklistContextRevision` foundation:
-  missing legacy values read as `0`; Job context and Assignment roster changes
-  advance it atomically so a future cleaner capability cannot survive an older
-  Property, schedule, archive, or cleaner context. No cleaner capability/link
-  exists yet.
+  missing legacy values read as `0`; archive/restore, Property, schedule,
+  cleaner/Assignment, and eligibility-context changes advance it atomically so
+  a future cleaner capability cannot survive an earlier context. No public
+  cleaner capability/link exists yet.
 - No cleaner public capability/link, real cleaner submission, photo storage,
   or email delivery exists yet.
 - The preferred future workflow is: a manager manually shares a secure
@@ -152,8 +152,9 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Add the first revocable cleaner checklist capability/link for Issue #42,
-   bound to `checklistContextRevision`.
+1. Implement **Issue #42 Phase 5B**: a server-issued, revocable,
+   cleaner-scoped capability for an existing `DRAFT` Run, bound to
+   `checklistContextRevision`. Do not add submission, photos, or email yet.
 2. Wait for further design-partner feedback on Issue #42.
 3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
 4. Finish remaining Astra security/reliability audits if useful.
