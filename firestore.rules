@@ -14,6 +14,68 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.active == true;
     }
 
+    function hasValidChecklistContextRevision(data) {
+      return !('checklistContextRevision' in data)
+        || (data.checklistContextRevision is int && data.checklistContextRevision >= 0);
+    }
+
+    function checklistContextRevision(data) {
+      return ('checklistContextRevision' in data
+        && data.checklistContextRevision is int
+        && data.checklistContextRevision >= 0)
+        ? data.checklistContextRevision
+        : 0;
+    }
+
+    function checklistEligibleExecutionState(data) {
+      return 'operationalStatus' in data
+        && data.operationalStatus in ['ASSIGNED', 'IN_PROGRESS'];
+    }
+
+    function jobChecklistContextChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'archivedAt',
+          'propertyId',
+          'scheduledDate',
+          'scheduledStart',
+          'assignedCleanerId',
+          'assignedCleanerIds',
+        ])
+        || checklistEligibleExecutionState(request.resource.data)
+          != checklistEligibleExecutionState(resource.data);
+    }
+
+    // Browser clients may preserve a Job revision, but context changes must
+    // advance it exactly once. Server-only checklist namespaces remain denied.
+    function validJobChecklistContextRevisionCreate() {
+      return hasValidChecklistContextRevision(request.resource.data)
+        && (!('checklistContextRevision' in request.resource.data)
+          || checklistContextRevision(request.resource.data) == 0);
+    }
+
+    function validJobChecklistContextRevisionUpdate() {
+      return hasValidChecklistContextRevision(request.resource.data)
+        && (jobChecklistContextChanged()
+          ? ('checklistContextRevision' in request.resource.data
+            && checklistContextRevision(request.resource.data)
+              == checklistContextRevision(resource.data) + 1)
+          : !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['checklistContextRevision']));
+    }
+
+    function assignmentParentRevisionAdvanced(orgId, jobId) {
+      let jobPath = /databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId);
+      return exists(jobPath)
+        && getAfter(jobPath).data.checklistContextRevision is int
+        && getAfter(jobPath).data.checklistContextRevision
+          == checklistContextRevision(get(jobPath).data) + 1;
+    }
+
+    function assignmentCleanerContextChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['cleanerId', 'isActive']);
+    }
+
     match /organizations/{orgId} {
       // Membership is provisioned by trusted administrators, never by browser clients.
       match /members/{uid} {
@@ -22,13 +84,33 @@ service cloud.firestore {
 
       // Exact document depths are intentional: new subcollections do not inherit access.
       match /{collectionName}/{recordId} {
-        allow read, write: if collectionName in ['clients', 'properties', 'cleaners', 'jobs', 'payouts']
+        allow read, delete: if collectionName in ['clients', 'properties', 'cleaners', 'jobs', 'payouts']
           && activeManager(orgId);
+        allow create: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
+          && activeManager(orgId)
+          || (collectionName == 'jobs'
+            && activeManager(orgId)
+            && validJobChecklistContextRevisionCreate());
+        allow update: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
+          && activeManager(orgId)
+          || (collectionName == 'jobs'
+            && activeManager(orgId)
+            && validJobChecklistContextRevisionUpdate());
       }
 
       match /jobs/{jobId}/{collectionName}/{recordId} {
-        allow read, write: if collectionName in ['offers', 'assignments', 'issues']
+        allow read: if collectionName in ['offers', 'assignments', 'issues']
           && activeManager(orgId);
+        allow create, update, delete: if collectionName in ['offers', 'issues']
+          && activeManager(orgId);
+      }
+
+      match /jobs/{jobId}/assignments/{assignmentId} {
+        allow create, delete: if activeManager(orgId)
+          && assignmentParentRevisionAdvanced(orgId, jobId);
+        allow update: if activeManager(orgId)
+          && (!assignmentCleanerContextChanged()
+            || assignmentParentRevisionAdvanced(orgId, jobId));
       }
     }
 

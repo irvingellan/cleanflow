@@ -28,7 +28,8 @@ const admin = getFirestore();
 const org = "cleanflow-demo";
 const root = `organizations/${org}`;
 const paths = ["clients/client", "properties/property", "cleaners/cleaner", "jobs/job",
-  "jobs/job/offers/offer", "jobs/job/assignments/assignment", "jobs/job/issues/issue", "payouts/payout"];
+  "jobs/job/offers/offer", "jobs/job/issues/issue", "payouts/payout"];
+const assignmentPath = "jobs/job/assignments/assignment";
 const proofPath = `${root}/payouts/payout/proof/payment-proof`;
 let environment;
 
@@ -56,7 +57,7 @@ beforeEach(async () => {
   await environment.clearFirestore();
   await environment.clearStorage();
   const batch = admin.batch();
-  for (const path of paths) batch.set(admin.doc(`${root}/${path}`), { organizationId: org, fixture: true });
+  for (const path of [...paths, assignmentPath]) batch.set(admin.doc(`${root}/${path}`), { organizationId: org, fixture: true });
   for (const uid of ["manager", "anonymous-member"]) {
     batch.set(admin.doc(`${root}/members/${uid}`), { role: "MANAGER", active: true });
   }
@@ -93,7 +94,7 @@ for (const [label, context] of [
 ]) {
   test(`${label} cannot read/write operations or payout proofs`, async () => {
     const client = context();
-    for (const path of paths) {
+    for (const path of [...paths, assignmentPath]) {
       await assertFails(client.firestore().doc(`${root}/${path}`).get());
       await assertFails(client.firestore().doc(`${root}/${path}`).set({ organizationId: org }));
     }
@@ -108,6 +109,41 @@ test("organization A manager cannot use organization B paths regardless of paylo
   await assertFails(client.firestore().doc("organizations/other/jobs/job").set({ organizationId: org }));
   await assertFails(client.storage().ref("organizations/other/payouts/p/proof/payment-proof")
     .put(new Uint8Array([1]), { contentType: "image/jpeg" }));
+});
+
+test("Job checklist context revision is monotonic and Assignment mutations advance it atomically", async () => {
+  const db = account("manager").firestore();
+  const job = db.doc(`${root}/jobs/job`);
+  const assignment = db.doc(`${root}/${assignmentPath}`);
+
+  await assertFails(assignment.set({ cleanerId: "cleaner-a", isActive: true }));
+
+  const assign = db.batch();
+  assign.update(job, {
+    assignedCleanerIds: ["cleaner-a"],
+    operationalStatus: "ASSIGNED",
+    checklistContextRevision: 1,
+  });
+  assign.set(assignment, { cleanerId: "cleaner-a", isActive: true });
+  await assertSucceeds(assign.commit());
+
+  await assertSucceeds(job.update({ notes: "Unrelated manager edit" }));
+  await assertFails(job.update({ checklistContextRevision: 0 }));
+  await assertFails(job.update({ checklistContextRevision: -1 }));
+  await assertFails(job.update({ scheduledDate: "2026-09-22", checklistContextRevision: 1 }));
+  await assertSucceeds(job.update({ scheduledDate: "2026-09-22", checklistContextRevision: 2 }));
+  await assertFails(job.set({ organizationId: org, fixture: true }));
+
+  await assertFails(assignment.update({ cleanerId: "cleaner-b" }));
+  await assertFails(assignment.update({ isActive: false }));
+  const remove = db.batch();
+  remove.update(job, {
+    assignedCleanerIds: [],
+    operationalStatus: "OFFERED",
+    checklistContextRevision: 3,
+  });
+  remove.update(assignment, { isActive: false });
+  await assertSucceeds(remove.commit());
 });
 
 test("membership is own-get only; neither manager nor outsider can self-escalate or list members", async () => {

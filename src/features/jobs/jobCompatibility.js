@@ -5,6 +5,7 @@ export const CURRENT_JOB_SCHEMA_VERSION = ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION;
 export const maximumGuestNameLength = 120;
 
 import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
+import { getChecklistContextRevision } from "./checklistContextRevision.js";
 
 function optionalText(value) {
   if (typeof value !== "string") {
@@ -59,6 +60,7 @@ export function normalizeJobRecord(data = {}, id) {
     ...source,
     id,
     schemaVersion: getJobSchemaVersion(source),
+    checklistContextRevision: getChecklistContextRevision(source),
   });
   const clientId = optionalText(source.clientId);
   const guestName = optionalText(source.guestName);
@@ -109,6 +111,7 @@ export function buildCurrentJobCreateData({
     notes,
     operationalStatus: "UNASSIGNED",
     schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
+    checklistContextRevision: 0,
     assignedCleanerIds: [],
     dataProvenance: "REAL",
   };

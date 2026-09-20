@@ -70,6 +70,23 @@ not a mandatory normal completion gate.
 UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED
 ```
 
+## Checklist context revision
+
+**CURRENT Phase 5A foundation:** a Job has a monotonic
+`checklistContextRevision` used only to invalidate a future cleaner checklist
+capability when its access context changes. Missing legacy values are treated as
+`0`; no read backfills them.
+
+```text
+Property / schedule / archive state / cleaner roster changes
+→ Job revision advances atomically once
+→ a future stale cleaner capability must be rejected
+```
+
+The initial eligible execution set is `ASSIGNED` and `IN_PROGRESS`; moving
+within that set does not advance the revision. Pricing, payout, payment, notes,
+provenance, and checklist answers are outside this revision boundary.
+
 **PLANNED:** future aggregate execution derivation must retain the distinction
 between Job and Assignment state. Any `WAITING_FOR_QA` state is optional and
 requires a focused validated workflow.

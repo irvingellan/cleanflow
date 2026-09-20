@@ -582,3 +582,22 @@ enrollment and reminder recipient selection re-check it, so a revoked member
 cannot retain manager notification access through an earlier device record.
 Public Offer links remain server-mediated bearer capabilities and do not gain
 general authenticated access.
+
+---
+
+## DEC-037 — Checklist capabilities bind to a monotonic Job context revision
+
+Date: 2026-09-20
+Status: Accepted foundation; cleaner capability/link remains unimplemented
+
+Future cleaner checklist capabilities must bind to a Job's
+`checklistContextRevision`. Missing legacy fields mean revision `0`; a context
+change advances the value exactly once and never resets it. The initial eligible
+execution set is `ASSIGNED` and `IN_PROGRESS`, so movement within that set does
+not invalidate the same capability context.
+
+Property reassociation, schedule changes, archive/restore, legacy or v2 cleaner
+identity changes, and Assignment create/remove/activity changes advance the
+parent Job revision atomically. Price, payout, payment, notes, provenance, and
+checklist answers do not. This preserves a small future capability boundary
+without prematurely implementing tokens, submissions, or photo handling.

@@ -22,6 +22,7 @@ import {
   isAssignmentAwareJob,
   normalizeJobRecord,
 } from "./jobCompatibility.js";
+import { buildChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
 
 const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
@@ -443,11 +444,15 @@ export async function assignCleanerToJob(jobId, cleaner) {
       throw error;
     }
 
-    transaction.update(reference, {
+    const updates = {
       assignedCleanerId: cleaner.id,
       assignedCleanerName: cleaner.name,
       assignedAt: serverTimestamp(),
       operationalStatus: "ASSIGNED",
+    };
+    transaction.update(reference, {
+      ...updates,
+      ...buildChecklistContextRevisionUpdate(job, updates),
     });
   });
 
@@ -491,7 +496,10 @@ export async function startAssignedJob(jobId) {
       updates.startedAt = serverTimestamp();
     }
 
-    transaction.update(reference, updates);
+    transaction.update(reference, {
+      ...updates,
+      ...buildChecklistContextRevisionUpdate(job, updates),
+    });
   });
 
   const snapshot = await getDoc(reference);
@@ -534,7 +542,10 @@ export async function completeInProgressJob(jobId) {
       updates.completedAt = serverTimestamp();
     }
 
-    transaction.update(reference, updates);
+    transaction.update(reference, {
+      ...updates,
+      ...buildChecklistContextRevisionUpdate(job, updates),
+    });
   });
 
   const snapshot = await getDoc(reference);
@@ -587,11 +598,31 @@ export async function updateJobDataProvenance(jobId, dataProvenance, actorUid) {
 }
 
 export async function archiveJob(jobId, actorUid) {
-  await updateDoc(jobDocument(jobId), buildArchiveUpdate(actorUid, serverTimestamp()));
+  const reference = jobDocument(jobId);
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("Job not found.");
+    const job = snapshot.data();
+    const updates = buildArchiveUpdate(actorUid, serverTimestamp());
+    transaction.update(reference, {
+      ...updates,
+      ...buildChecklistContextRevisionUpdate(job, updates),
+    });
+  });
   return { id: jobId, archivedAt: true };
 }
 
 export async function restoreJob(jobId, actorUid) {
-  await updateDoc(jobDocument(jobId), buildRestoreUpdate(actorUid, serverTimestamp()));
+  const reference = jobDocument(jobId);
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("Job not found.");
+    const job = snapshot.data();
+    const updates = buildRestoreUpdate(actorUid, serverTimestamp());
+    transaction.update(reference, {
+      ...updates,
+      ...buildChecklistContextRevisionUpdate(job, updates),
+    });
+  });
   return { id: jobId, archivedAt: null };
 }

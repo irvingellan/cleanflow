@@ -83,6 +83,7 @@ describe("Job compatibility", () => {
       clientName: "Snapshot Client",
       operationalStatus: "UNASSIGNED",
       assignedCleanerIds: [],
+      checklistContextRevision: 0,
     });
     expect(job).not.toHaveProperty("clientId");
     expect(job).not.toHaveProperty("guestName");

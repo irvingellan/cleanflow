@@ -14,6 +14,7 @@ import {
   isAssignmentAwareJob,
   normalizeJobRecord,
 } from "./jobCompatibility.js";
+import { buildAssignmentChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
 
 const organizationId = "cleanflow-demo";
 const assignmentSchemaVersion = 1;
@@ -162,9 +163,13 @@ export async function assignInterestedCleaner(jobId, offerId) {
     }
 
     transaction.set(newAssignmentReference, buildAssignmentCreateData(job, offer));
-    transaction.update(jobReference, {
+    const jobUpdate = {
       assignedCleanerIds: [...assignedCleanerIds, offer.cleanerId],
       operationalStatus: "ASSIGNED",
+    };
+    transaction.update(jobReference, {
+      ...jobUpdate,
+      ...buildAssignmentChecklistContextRevisionUpdate(job),
     });
   });
 
@@ -208,10 +213,11 @@ export async function removeAssignment(jobId, assignmentId, actorUid) {
     }
 
     transaction.update(assignmentReference, removal);
-    transaction.update(
-      jobReference,
-      assignmentRemovalJobUpdate(job, assignment.cleanerId, jobHasActionableOffers),
-    );
+    const jobUpdate = assignmentRemovalJobUpdate(job, assignment.cleanerId, jobHasActionableOffers);
+    transaction.update(jobReference, {
+      ...jobUpdate,
+      ...buildAssignmentChecklistContextRevisionUpdate(job),
+    });
   });
 
   return jobFromSnapshot(await getDoc(jobReference));
@@ -257,13 +263,17 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
 
     transaction.update(assignmentReference, removal);
     transaction.set(newAssignmentReference, buildAssignmentCreateData(job, replacementOffer));
-    transaction.update(jobReference, {
+    const jobUpdate = {
       assignedCleanerIds: replacementCleanerIds(
         job,
         previousAssignment.cleanerId,
         replacementOffer.cleanerId,
       ),
       operationalStatus: "ASSIGNED",
+    };
+    transaction.update(jobReference, {
+      ...jobUpdate,
+      ...buildAssignmentChecklistContextRevisionUpdate(job),
     });
   });
 

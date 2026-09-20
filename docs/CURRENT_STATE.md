@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- **Last updated:** 2026-09-19
+- **Last updated:** 2026-09-20
 - **Repository:** `irvingellan/cleanflow` (`main`)
 - **Active product phase:** Gabi Pilot — controlled design-partner learning and
   validation alongside the manager's existing spreadsheet.
@@ -88,6 +88,11 @@ E2E tests passed; build and diff checks passed.
   manager-authorized `createChecklistRun`. It transactionally creates or
   returns one initial `DRAFT` Run beneath its Job, preventing accidental retry
   duplicates without overwriting an existing Run.
+- Phase 5A adds a monotonic `checklistContextRevision` foundation:
+  missing legacy values read as `0`; Job context and Assignment roster changes
+  advance it atomically so a future cleaner capability cannot survive an older
+  Property, schedule, archive, or cleaner context. No cleaner capability/link
+  exists yet.
 - No cleaner public capability/link, real cleaner submission, photo storage,
   or email delivery exists yet.
 - The preferred future workflow is: a manager manually shares a secure
@@ -147,8 +152,8 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Implement **Job Detail → Create checklist → show/open existing or new
-   `DRAFT` Run** for Issue #42; later add the cleaner capability/link.
+1. Add the first revocable cleaner checklist capability/link for Issue #42,
+   bound to `checklistContextRevision`.
 2. Wait for further design-partner feedback on Issue #42.
 3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
 4. Finish remaining Astra security/reliability audits if useful.

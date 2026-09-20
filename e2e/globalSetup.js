@@ -187,6 +187,7 @@ export default async function seedE2eFixtures() {
         operationalStatus: "OFFERED",
         offeredAt: now,
         assignedCleanerIds: [],
+        checklistContextRevision: 0,
       },
     ],
     [
@@ -199,6 +200,7 @@ export default async function seedE2eFixtures() {
         scheduledDate: localDateKey(3),
         operationalStatus: "UNASSIGNED",
         assignedCleanerIds: [],
+        checklistContextRevision: 0,
       },
     ],
   ];

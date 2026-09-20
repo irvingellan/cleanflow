@@ -100,6 +100,7 @@ Conceptual fields include:
 - identity, Organization, Client, Property, and optional Reservation reference;
 - property/client snapshots and optional `guestName`;
 - scheduled date/time, timezone, current schedule revision, and audit history;
+- `checklistContextRevision`: a monotonic cleaner-capability invalidation value;
 - overall operational status;
 - Job-effective instructions, checklist/evidence references, and notes;
 - client pricing model and resolved client charge;
@@ -120,6 +121,13 @@ UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED
 one Cleaner's work. Aggregate state must remain distinct from per-Cleaner
 execution. `WAITING_FOR_QA` is an optional future review concept, not the
 normal design-partner pilot completion gate.
+
+**Phase 5A checklist foundation:** missing `checklistContextRevision` means
+legacy revision `0`. Context-changing Job or Assignment mutations advance it
+atomically and never reset it, so a future cleaner capability cannot remain
+valid for an earlier Property, schedule, roster, archive state, or eligibility
+context. This is not a schedule-history replacement and does not change the
+current Job lifecycle.
 
 ## Cleaner Assignment
 

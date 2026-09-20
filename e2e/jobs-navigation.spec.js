@@ -135,6 +135,7 @@ test("a v2 Job supports an additive manager roster before work starts", async ({
   );
 
   expect(jobSnapshot.data().assignedCleanerIds).toEqual(["e2e-team-cleaner-b"]);
+  expect(jobSnapshot.data().checklistContextRevision).toBe(3);
   expect(assignmentByCleanerId["e2e-team-cleaner-a"]).toMatchObject({
     isActive: false,
     sourceOfferId: "e2e-team-cleaner-a",
@@ -200,6 +201,7 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
   expect(jobSnapshot.data()).toMatchObject({
     operationalStatus: "ASSIGNED",
     assignedCleanerIds: ["e2e-team-cleaner-a", "e2e-team-cleaner-b"],
+    checklistContextRevision: 2,
   });
   expect(assignments.docs.filter((snapshot) => snapshot.data().isActive).length).toBe(2);
   expect(offerSnapshots.docs.map((snapshot) => snapshot.data().status).sort()).toEqual([
