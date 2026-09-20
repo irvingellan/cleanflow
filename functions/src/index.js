@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
@@ -23,8 +23,16 @@ import { authorizedManagerDevices, requireOrganizationManager } from "./managerA
 import {
   createChecklistRunForManager,
   getChecklistRunForManager,
+  initialChecklistRunId,
   validChecklistRunJobId,
 } from "./checklistRunService.js";
+import {
+  getChecklistCapabilityForManager,
+  issueChecklistCapabilityForManager,
+  loadPublicChecklistCapability,
+  revokeChecklistCapabilityForManager,
+  validChecklistCleanerId,
+} from "./checklistCapabilityService.js";
 import {
   calculateManagerReminder,
   claimReminderDelivery,
@@ -85,6 +93,10 @@ function validPushToken(token) {
 
 function validToken(token) {
   return typeof token === "string" && tokenPattern.test(token);
+}
+
+function newChecklistCapabilityToken() {
+  return randomBytes(32).toString("base64url");
 }
 
 function allowedDeveloperUids() {
@@ -590,6 +602,65 @@ export const getChecklistRun = onCall(
   },
 );
 
+export const getChecklistCapability = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) {
+      throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
+    }
+    return {
+      capability: await getChecklistCapabilityForManager(db, {
+        organizationId,
+        jobId,
+        runId: initialChecklistRunId,
+      }),
+    };
+  },
+);
+
+export const issueChecklistCapability = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    const cleanerId = request.data?.cleanerId;
+    if (!validChecklistRunJobId(jobId) || !validChecklistCleanerId(cleanerId)) {
+      throw new HttpsError("invalid-argument", "Checklist capability request is invalid.");
+    }
+    const token = newChecklistCapabilityToken();
+    return issueChecklistCapabilityForManager(db, {
+      organizationId,
+      jobId,
+      runId: initialChecklistRunId,
+      cleanerId,
+      actorUid: request.auth.uid,
+      token,
+      tokenHash: hashToken(token),
+    });
+  },
+);
+
+export const revokeChecklistCapability = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) {
+      throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
+    }
+    return {
+      capability: await revokeChecklistCapabilityForManager(db, {
+        organizationId,
+        jobId,
+        runId: initialChecklistRunId,
+        actorUid: request.auth.uid,
+      }),
+    };
+  },
+);
+
 async function activeManagerPushDevices() {
   const deviceSnapshots = await db
     .collection("managerPushDevices")
@@ -990,6 +1061,46 @@ export const publicOffer = onRequest(
         code: error.code || "unknown",
       });
       sendPublicError(response, 500, "internal_error");
+    }
+  },
+);
+
+/**
+ * Public checklist reads are bearer-capability lookups. The token alone selects
+ * the server-owned record; no caller-supplied organization, Job, or Run ID is trusted.
+ */
+export const publicChecklist = onRequest(
+  { region: "us-central1", invoker: "public" },
+  async (request, response) => {
+    if (request.method !== "GET") {
+      sendPublicError(response, 405, "method_not_allowed");
+      return;
+    }
+    try {
+      const token = request.query.token;
+      if (!validToken(token)) {
+        sendPublicError(response, 404, "checklist_not_found");
+        return;
+      }
+      const result = await loadPublicChecklistCapability(db, {
+        organizationId,
+        tokenHash: hashToken(token),
+      });
+      if (result.state === "active") {
+        configureResponse(response);
+        response.status(200).json({ checklist: result.checklist });
+        return;
+      }
+      const status = result.state === "expired" || result.state === "revoked" || result.state === "stale"
+        ? 410
+        : 404;
+      sendPublicError(response, status, status === 410 ? "checklist_unavailable" : "checklist_not_found");
+    } catch (error) {
+      logger.error("Unable to process public checklist request.", {
+        code: error?.code,
+        message: error?.message,
+      });
+      sendPublicError(response, 500, "checklist_unavailable");
     }
   },
 );

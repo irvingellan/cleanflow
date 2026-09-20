@@ -120,6 +120,10 @@ export function buildChecklistRunSnapshot({ job, property }) {
       propertyId: property?.id || job?.propertyId || null,
       propertyName: property?.name || job?.propertyName || null,
     },
+    jobSnapshot: {
+      scheduledDate: typeof job?.scheduledDate === "string" ? job.scheduledDate : null,
+      scheduledStart: typeof job?.scheduledStart === "string" ? job.scheduledStart : null,
+    },
     propertyChecklistSettingsSnapshot: clone(propertyChecklistSettingsSnapshot),
     resolvedDefinition: clone(resolvedDefinition),
   };
@@ -131,6 +135,8 @@ export function projectChecklistRunForCleaner(checklistRun) {
   return {
     definitionVersion: checklistRun?.definitionVersion || null,
     propertyName: checklistRun?.propertySnapshot?.propertyName || null,
+    scheduledDate: checklistRun?.jobSnapshot?.scheduledDate || null,
+    scheduledStart: checklistRun?.jobSnapshot?.scheduledStart || null,
     sections: clone(snapshot.sections || []),
     inventoryItems: clone(snapshot.inventoryItems || []),
     requiredPhotoTypes: clone(snapshot.requiredPhotoTypes || []),

@@ -588,7 +588,7 @@ general authenticated access.
 ## DEC-037 — Checklist capabilities bind to a monotonic Job context revision
 
 Date: 2026-09-20
-Status: Accepted foundation; cleaner capability/link remains unimplemented
+Status: Accepted; server-issued cleaner capability is implemented locally pending review/deployment
 
 Future cleaner checklist capabilities must bind to a Job's
 `checklistContextRevision`. Missing legacy fields mean revision `0`; a context
@@ -601,3 +601,13 @@ identity changes, and Assignment create/remove/activity changes advance the
 parent Job revision atomically. Price, payout, payment, notes, provenance, and
 checklist answers do not. This preserves a small future capability boundary
 without prematurely implementing tokens, submissions, or photo handling.
+
+Phase 5B uses one fixed, server-owned capability record beneath the initial
+Checklist Run. A manager receives a new opaque 32-byte token only at issue or
+replacement time; Firestore retains only its SHA-256 hash, current Job context
+revision, cleaner scope, expiry, and revocation state. Reissuing replaces the
+single active hash, so an earlier link cannot be resurrected. Public reads are
+Function-mediated, revalidate the immutable Run, Job archive/eligibility,
+assignment scope, expiry, and revision on every request, and expose only the
+allowlisted frozen cleaner snapshot. Submission, evidence, and delivery remain
+separate later phases.

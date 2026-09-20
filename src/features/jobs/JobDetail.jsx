@@ -18,6 +18,7 @@ import {
   hasValue,
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
+import { ChecklistCapabilityControls } from "../checklists/ChecklistCapabilityControls.jsx";
 import {
   canManageAssignmentAwareOffers,
   getAssignedCleanerIds,
@@ -45,6 +46,13 @@ export function JobDetail({
   hasChecklistRunError,
   isCreatingChecklistRun,
   hasCreateChecklistRunError,
+  checklistCapability,
+  isLoadingChecklistCapability,
+  hasChecklistCapabilityError,
+  isIssuingChecklistCapability,
+  hasIssueChecklistCapabilityError,
+  isRevokingChecklistCapability,
+  hasRevokeChecklistCapabilityError,
   onBack,
   onOfferToCleaners,
   onRefreshOffers,
@@ -52,6 +60,9 @@ export function JobDetail({
   onRefreshChecklistRun,
   onCreateChecklistRun,
   onOpenChecklistRun,
+  onRefreshChecklistCapability,
+  onIssueChecklistCapability,
+  onRevokeChecklistCapability,
   onCreatePublicOfferLink,
   onAssignCleaner,
   onRemoveAssignment,
@@ -448,6 +459,20 @@ export function JobDetail({
         {hasCreateChecklistRunError && (
           <p className="form-error" role="alert">{translate("checklists.createError")}</p>
         )}
+        <ChecklistCapabilityControls
+          job={job}
+          checklistRun={checklistRun}
+          capability={checklistCapability}
+          isLoading={isLoadingChecklistCapability}
+          hasError={hasChecklistCapabilityError}
+          isIssuing={isIssuingChecklistCapability}
+          hasIssueError={hasIssueChecklistCapabilityError}
+          isRevoking={isRevokingChecklistCapability}
+          hasRevokeError={hasRevokeChecklistCapabilityError}
+          onRefresh={onRefreshChecklistCapability}
+          onIssue={onIssueChecklistCapability}
+          onRevoke={onRevokeChecklistCapability}
+        />
       </section>
 
       {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||

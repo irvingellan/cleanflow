@@ -31,6 +31,13 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {})
         hasChecklistRunError={checklist.hasLoadError || false}
         isCreatingChecklistRun={checklist.isCreating || false}
         hasCreateChecklistRunError={checklist.hasCreateError || false}
+        checklistCapability={checklist.capability || { state: "NONE" }}
+        isLoadingChecklistCapability={checklist.isCapabilityLoading || false}
+        hasChecklistCapabilityError={checklist.hasCapabilityLoadError || false}
+        isIssuingChecklistCapability={checklist.isIssuingCapability || false}
+        hasIssueChecklistCapabilityError={checklist.hasIssueCapabilityError || false}
+        isRevokingChecklistCapability={checklist.isRevokingCapability || false}
+        hasRevokeChecklistCapabilityError={checklist.hasRevokeCapabilityError || false}
         onBack={noOp}
         onOfferToCleaners={callbacks.onOfferToCleaners || noOp}
         onRefreshOffers={callbacks.onRefreshOffers || noOp}
@@ -38,6 +45,9 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {})
         onRefreshChecklistRun={callbacks.onRefreshChecklistRun || noOp}
         onCreateChecklistRun={callbacks.onCreateChecklistRun || noOp}
         onOpenChecklistRun={callbacks.onOpenChecklistRun || noOp}
+        onRefreshChecklistCapability={callbacks.onRefreshChecklistCapability || noOp}
+        onIssueChecklistCapability={callbacks.onIssueChecklistCapability || noOp}
+        onRevokeChecklistCapability={callbacks.onRevokeChecklistCapability || noOp}
         onCreatePublicOfferLink={callbacks.onCreatePublicOfferLink || noOp}
         onAssignCleaner={noOp}
         onRemoveAssignment={noOp}
@@ -201,6 +211,26 @@ describe("JobDetail lifecycle actions", () => {
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent("Unable to create the checklist. Try again.");
+  });
+
+  it("creates, copies, replaces, and revokes a cleaner link only for an eligible Draft Run", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const onIssueChecklistCapability = vi.fn().mockResolvedValue("https://cleanflow.example/checklist?t=token");
+    const onRevokeChecklistCapability = vi.fn();
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2,
+      assignedCleanerIds: ["cleaner-a"],
+    }, { onIssueChecklistCapability, onRevokeChecklistCapability }, {
+      run: { id: "initial", status: "DRAFT", checklistItemCount: 28, inventoryItemCount: 13 },
+      capability: { state: "NONE" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create cleaner link" }));
+    await waitFor(() => expect(onIssueChecklistCapability).toHaveBeenCalledWith("cleaner-a"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith("https://cleanflow.example/checklist?t=token");
+    expect(screen.queryByRole("button", { name: "Revoke link" })).not.toBeInTheDocument();
   });
 
   it("shows a Checklist Run load error with a retry action", () => {

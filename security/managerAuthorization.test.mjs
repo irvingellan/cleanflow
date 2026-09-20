@@ -18,9 +18,13 @@ const { getFirestore, Timestamp } = await import("firebase-admin/firestore");
 const {
   createChecklistRun,
   getChecklistRun,
+  getChecklistCapability,
+  issueChecklistCapability,
+  revokeChecklistCapability,
   registerManagerPushDevice,
   submitFeedback,
   publicOffer,
+  publicChecklist,
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
 const { createHash } = await import("node:crypto");
@@ -169,6 +173,7 @@ test("server metadata, unknown subcollections and future checklist namespaces ar
     `${root}/checklistRuns/run`, `${root}/checklistSettings/default`,
     `${root}/properties/property/checklistSettings/default`,
     `${root}/jobs/job/checklistRuns/run`, `${root}/jobs/job/checklistRuns/run/photos/photo`,
+    `${root}/jobs/job/checklistRuns/run/checklistCapabilities/active`,
     `${root}/jobs/job/checklistRuns/run/deliveries/delivery`, `${root}/jobs/job/unknown/record`,
   ]) {
     await assertFails(db.doc(path).get());
@@ -234,6 +239,26 @@ async function seedChecklistJob({ checklistSettings } = {}) {
     propertyId: "property",
     propertyName: "Fixture Property",
   });
+}
+
+async function seedEligibleChecklistJob() {
+  await seedChecklistJob();
+  await admin.doc(`${root}/jobs/job`).update({
+    schemaVersion: 2,
+    operationalStatus: "ASSIGNED",
+    assignedCleanerIds: ["cleaner-a"],
+    checklistContextRevision: 1,
+    clientPrice: 999,
+    notes: "manager-only",
+    guestName: "private guest",
+  });
+  await createChecklistRun.run(request("manager", { jobId: "job" }));
+}
+
+async function publicChecklistGet(token, extraQuery = {}) {
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+  await publicChecklist({ method: "GET", query: { token, ...extraQuery } }, response);
+  return response;
 }
 
 test("active manager creates one default DRAFT Checklist Run and a retry returns it", async () => {
@@ -340,6 +365,56 @@ test("only an active manager can load the safe Checklist Run summary", async () 
   ]) {
     await assert.rejects(getChecklistRun.run(request(uid, { jobId: "job" }, anonymous)), { code });
   }
+});
+
+test("Checklist capability is manager-only, rotates atomically, and public reads are frozen and side-effect free", async () => {
+  await seedEligibleChecklistJob();
+  const beforeJob = (await admin.doc(`${root}/jobs/job`).get()).data();
+  const beforeRun = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
+  const first = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  assert.match(first.token, /^[A-Za-z0-9_-]{43}$/);
+  const firstPublic = await publicChecklistGet(first.token, { organizationId: "other", jobId: "injected" });
+  assert.equal(firstPublic.code, 200);
+  assert.equal(firstPublic.headers["Cache-Control"], "no-store, private");
+  assert.equal(firstPublic.headers["Referrer-Policy"], "no-referrer");
+  assert.equal(firstPublic.body.checklist.propertyName, "Fixture Property");
+  const serialized = JSON.stringify(firstPublic.body.checklist);
+  for (const forbidden of ["private guest", "manager-only", "999", "organization", "accessCode", "jobId", "runId", "cleanerId"]) assert.equal(serialized.includes(forbidden), false);
+  assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), beforeJob);
+  assert.deepEqual((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data(), beforeRun);
+
+  const second = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  assert.notEqual(first.token, second.token);
+  assert.equal((await publicChecklistGet(first.token)).code, 404);
+  assert.equal((await publicChecklistGet(second.token)).code, 200);
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).collection("checklistCapabilities").get()).size, 1);
+  const revoked = await revokeChecklistCapability.run(request("manager", { jobId: "job" }));
+  assert.equal(revoked.capability.state, "REVOKED");
+  assert.equal((await publicChecklistGet(second.token)).code, 410);
+});
+
+test("Checklist capability rejects malformed, expired, stale, archived, unauthorized, and concurrent contexts", async () => {
+  await seedEligibleChecklistJob();
+  for (const [uid, anonymous, code] of [[null, false, "unauthenticated"], ["outsider", false, "permission-denied"], ["cleaner", false, "permission-denied"]]) {
+    await assert.rejects(issueChecklistCapability.run(request(uid, { jobId: "job", cleanerId: "cleaner-a" }, anonymous)), { code });
+  }
+  assert.equal((await publicChecklistGet("invalid")).code, 404);
+  const [first, second] = await Promise.all([
+    issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" })),
+    issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" })),
+  ]);
+  const statuses = await Promise.all([publicChecklistGet(first.token), publicChecklistGet(second.token)]);
+  assert.equal(statuses.filter((result) => result.code === 200).length, 1);
+  const activeToken = statuses.find((result) => result.code === 200) === statuses[0] ? first.token : second.token;
+  await admin.doc(`${root}/jobs/job/checklistRuns/initial/checklistCapabilities/active`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+  assert.equal((await publicChecklistGet(activeToken)).code, 410);
+  const refreshed = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await admin.doc(`${root}/jobs/job`).update({ checklistContextRevision: 2 });
+  assert.equal((await publicChecklistGet(refreshed.token)).code, 410);
+  await admin.doc(`${root}/jobs/job`).update({ checklistContextRevision: 1, archivedAt: Timestamp.now() });
+  assert.equal((await publicChecklistGet(refreshed.token)).code, 410);
+  await admin.doc(`${root}/members/manager`).delete();
+  await assert.rejects(getChecklistCapability.run(request("manager", { jobId: "job" })), { code: "permission-denied" });
 });
 
 test("public capability GET/response remains independent of auth and only updates its resolved offer", async () => {

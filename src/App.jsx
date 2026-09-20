@@ -31,6 +31,7 @@ import { ClientForm } from "./features/clients/ClientForm.jsx";
 import { useClientsController } from "./features/clients/useClientsController.js";
 import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningChecklistPreview.jsx";
 import { ChecklistRunDetail } from "./features/checklists/ChecklistRunDetail.jsx";
+import { PublicChecklistPage } from "./features/checklists/PublicChecklistPage.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
@@ -99,24 +100,38 @@ function isChecklistPreviewPath(pathname = window.location.pathname) {
   return pathname.replace(/\/+$/, "") === "/checklist-preview";
 }
 
+function publicChecklistTokenFromSearch(
+  pathname = window.location.pathname,
+  search = window.location.search,
+) {
+  if (pathname.replace(/\/+$/, "") !== "/checklist") return null;
+  return new URLSearchParams(search).get("t") || "";
+}
+
 function App() {
   const publicOfferToken = publicOfferTokenFromPathname();
   const isPublicOfferRoute = publicOfferToken !== null;
+  const publicChecklistToken = publicChecklistTokenFromSearch();
+  const isPublicChecklistRoute = publicChecklistToken !== null;
   const isChecklistPreviewRoute = isChecklistPreviewPath();
   const [authUser, setAuthUser] = useState(undefined);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
   useEffect(() => {
-    if (isPublicOfferRoute || isChecklistPreviewRoute) {
+    if (isPublicOfferRoute || isPublicChecklistRoute || isChecklistPreviewRoute) {
       return undefined;
     }
 
     return subscribeToAuthState(setAuthUser);
-  }, [isChecklistPreviewRoute, isPublicOfferRoute]);
+  }, [isChecklistPreviewRoute, isPublicChecklistRoute, isPublicOfferRoute]);
 
   if (isPublicOfferRoute) {
     return <PublicOfferPage token={publicOfferToken} />;
+  }
+
+  if (isPublicChecklistRoute) {
+    return <PublicChecklistPage token={publicChecklistToken} />;
   }
 
   if (isChecklistPreviewRoute) {
@@ -393,6 +408,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       isCreatingChecklistRun,
       hasCreateChecklistRunError,
       refreshChecklistRun,
+      checklistCapability,
+      isLoadingChecklistCapability,
+      hasChecklistCapabilityError,
+      isIssuingChecklistCapability,
+      hasIssueChecklistCapabilityError,
+      isRevokingChecklistCapability,
+      hasRevokeChecklistCapabilityError,
+      refreshChecklistCapability,
     },
     offerFlow: {
       offersSentCount,
@@ -414,6 +437,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       archive: archiveJobRecord,
       restore: restoreJobRecord,
       createChecklistRun: createJobChecklistRun,
+      issueChecklistCapability: issueJobChecklistCapability,
+      revokeChecklistCapability: revokeJobChecklistCapability,
     },
     openJob: openJobDetail,
     closeJob: closeJobDetail,
@@ -1095,6 +1120,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasChecklistRunError={hasChecklistRunError}
             isCreatingChecklistRun={isCreatingChecklistRun}
             hasCreateChecklistRunError={hasCreateChecklistRunError}
+            checklistCapability={checklistCapability}
+            isLoadingChecklistCapability={isLoadingChecklistCapability}
+            hasChecklistCapabilityError={hasChecklistCapabilityError}
+            isIssuingChecklistCapability={isIssuingChecklistCapability}
+            hasIssueChecklistCapabilityError={hasIssueChecklistCapabilityError}
+            isRevokingChecklistCapability={isRevokingChecklistCapability}
+            hasRevokeChecklistCapabilityError={hasRevokeChecklistCapabilityError}
             onBack={
               jobDetailOrigin === "dashboard"
                 ? showDashboard
@@ -1112,6 +1144,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onRefreshChecklistRun={refreshChecklistRun}
             onCreateChecklistRun={createAndOpenChecklistRun}
             onOpenChecklistRun={openChecklistRun}
+            onRefreshChecklistCapability={refreshChecklistCapability}
+            onIssueChecklistCapability={issueJobChecklistCapability}
+            onRevokeChecklistCapability={revokeJobChecklistCapability}
             onCreatePublicOfferLink={createCleanerOfferLink}
             onAssignCleaner={assignCleaner}
             onRemoveAssignment={removeCleanerAssignment}

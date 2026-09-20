@@ -91,15 +91,18 @@ E2E tests passed; build and diff checks passed.
 - Phase 5A adds a monotonic `checklistContextRevision` foundation:
   missing legacy values read as `0`; archive/restore, Property, schedule,
   cleaner/Assignment, and eligibility-context changes advance it atomically so
-  a future cleaner capability cannot survive an earlier context. No public
-  cleaner capability/link exists yet.
-- No cleaner public capability/link, real cleaner submission, photo storage,
-  or email delivery exists yet.
+  an earlier cleaner capability cannot survive a changed context.
+- Phase 5B now has a local, server-issued and revocable capability for the
+  initial `DRAFT` Run. It stores only a token hash, is cleaner- and revision-
+  scoped, rotates one active link per Run, and serves an allowlisted frozen
+  read-only snapshot at `/checklist?t=…`. It is not deployed yet.
+- Real cleaner submission, photo storage, and email delivery do not exist yet.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
   CleanFlow; the manager views or receives its report; and an optional email
   can later reach a client or property owner.
-- At the feedback checkpoint, 156 tests and the production build passed.
+- Phase 5B local validation passed with 180 unit tests, 22 authorization
+  emulator tests, 8 E2E tests, and a production build.
 
 ### Issue #36 — real-data import preparation
 
@@ -152,9 +155,8 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Implement **Issue #42 Phase 5B**: a server-issued, revocable,
-   cleaner-scoped capability for an existing `DRAFT` Run, bound to
-   `checklistContextRevision`. Do not add submission, photos, or email yet.
+1. Review and deploy **Issue #42 Phase 5B** when approved; then implement the
+   smallest cleaner checklist answer/submission slice without photos or email.
 2. Wait for further design-partner feedback on Issue #42.
 3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
 4. Finish remaining Astra security/reliability audits if useful.
