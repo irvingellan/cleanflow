@@ -1,0 +1,275 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getPublicChecklist, savePublicChecklistDraft } from "./checklistCapabilityService.js";
+import {
+  checklistDraftRecoveryScope,
+  clearChecklistDraftRecovery,
+  loadChecklistDraftRecovery,
+  saveChecklistDraftRecovery,
+} from "./checklistDraftRecovery.js";
+
+export const checklistSaveStates = {
+  LOADING: "LOADING",
+  SAVED: "SAVED",
+  SAVING: "SAVING",
+  OFFLINE_PENDING: "OFFLINE_PENDING",
+  CONFLICT: "CONFLICT",
+  UNAVAILABLE: "UNAVAILABLE",
+  RETRY: "RETRY",
+};
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasChanges(changes) {
+  return isPlainObject(changes) && Object.keys(changes).length > 0;
+}
+
+export function mergeChecklistChanges(draft, changes) {
+  return {
+    ...draft,
+    checklistAnswers: { ...(draft?.checklistAnswers || {}), ...(changes?.checklistAnswers || {}) },
+    inventoryAnswers: { ...(draft?.inventoryAnswers || {}), ...(changes?.inventoryAnswers || {}) },
+    ...(Object.hasOwn(changes || {}, "issueNotes") ? { issueNotes: changes.issueNotes } : {}),
+    ...(Object.hasOwn(changes || {}, "generalNotes") ? { generalNotes: changes.generalNotes } : {}),
+  };
+}
+
+export function mergeSparseChecklistChanges(current = {}, next = {}) {
+  const merged = {
+    ...current,
+    ...(next.checklistAnswers ? {
+      checklistAnswers: { ...(current.checklistAnswers || {}), ...next.checklistAnswers },
+    } : {}),
+    ...(next.inventoryAnswers ? {
+      inventoryAnswers: { ...(current.inventoryAnswers || {}), ...next.inventoryAnswers },
+    } : {}),
+  };
+  for (const field of ["issueNotes", "generalNotes"]) {
+    if (Object.hasOwn(next, field)) merged[field] = next[field];
+  }
+  return merged;
+}
+
+function createMutationId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID().replaceAll("-", "");
+  const bytes = new Uint8Array(18);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isOnline() {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
+function isUnavailable(error) {
+  return error?.status === 404 || error?.status === 410
+    || error?.code === "checklist_not_found" || error?.code === "checklist_unavailable";
+}
+
+function isRevisionConflict(error) {
+  return error?.status === 409;
+}
+
+function validDraft(value) {
+  return isPlainObject(value) && Number.isInteger(value.revision) && value.revision >= 0;
+}
+
+/**
+ * Serializes one cleaner editor's sparse mutations. A recovery record retains
+ * the original mutation ID before dispatch, allowing an uncertain response to
+ * retry without creating a second server mutation.
+ */
+export function usePublicChecklistDraft(token) {
+  const [checklist, setChecklist] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [saveState, setSaveState] = useState(checklistSaveStates.LOADING);
+  const scopeRef = useRef(null);
+  const pendingMutationRef = useRef(null);
+  const queuedChangesRef = useRef({});
+  const draftRef = useRef(null);
+  const isSavingRef = useRef(false);
+  const isMountedRef = useRef(false);
+  const noteDebounceRef = useRef(null);
+  const flushRef = useRef(null);
+
+  const persistRecovery = useCallback(() => {
+    if (!scopeRef.current) return;
+    if (!pendingMutationRef.current && !hasChanges(queuedChangesRef.current)) {
+      clearChecklistDraftRecovery(scopeRef.current);
+      return;
+    }
+    saveChecklistDraftRecovery(scopeRef.current, {
+      pendingMutation: pendingMutationRef.current,
+      queuedChanges: queuedChangesRef.current,
+    });
+  }, []);
+
+  const setVisibleDraft = useCallback((nextDraft) => {
+    draftRef.current = nextDraft;
+    if (isMountedRef.current) setDraft(nextDraft);
+  }, []);
+
+  const flush = useCallback(async () => {
+    const pending = pendingMutationRef.current;
+    if (!pending || isSavingRef.current) return;
+    if (!isOnline()) {
+      if (isMountedRef.current) setSaveState(checklistSaveStates.OFFLINE_PENDING);
+      persistRecovery();
+      return;
+    }
+
+    isSavingRef.current = true;
+    if (isMountedRef.current) setSaveState(checklistSaveStates.SAVING);
+    try {
+      const result = await savePublicChecklistDraft({ token, ...pending });
+      if (!validDraft(result?.draft)) throw new Error("Checklist save response was invalid.");
+      if (pendingMutationRef.current !== pending) return;
+
+      pendingMutationRef.current = null;
+      const queued = queuedChangesRef.current;
+      queuedChangesRef.current = {};
+      if (hasChanges(queued)) {
+        const nextMutation = {
+          mutationId: createMutationId(),
+          baseRevision: result.draft.revision,
+          changes: queued,
+        };
+        pendingMutationRef.current = nextMutation;
+        setVisibleDraft(mergeChecklistChanges(result.draft, queued));
+        persistRecovery();
+        if (isMountedRef.current) setSaveState(checklistSaveStates.SAVING);
+        queueMicrotask(() => flushRef.current?.());
+      } else {
+        setVisibleDraft(result.draft);
+        persistRecovery();
+        if (isMountedRef.current) setSaveState(checklistSaveStates.SAVED);
+      }
+    } catch (error) {
+      if (isRevisionConflict(error)) {
+        if (isMountedRef.current) setSaveState(checklistSaveStates.CONFLICT);
+      } else if (isUnavailable(error)) {
+        if (isMountedRef.current) setSaveState(checklistSaveStates.UNAVAILABLE);
+      } else if (isMountedRef.current) {
+        setSaveState(isOnline() ? checklistSaveStates.RETRY : checklistSaveStates.OFFLINE_PENDING);
+      }
+      persistRecovery();
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, [persistRecovery, setVisibleDraft, token]);
+
+  flushRef.current = flush;
+
+  const load = useCallback(async ({ discardRecovery = false } = {}) => {
+    if (isMountedRef.current) {
+      setIsLoading(true);
+      setLoadError(null);
+      setSaveState(checklistSaveStates.LOADING);
+    }
+    try {
+      const [scope, result] = await Promise.all([checklistDraftRecoveryScope(token), getPublicChecklist(token)]);
+      if (!isMountedRef.current) return;
+      scopeRef.current = scope;
+      if (!result?.checklist || !validDraft(result?.draft)) throw new Error("Checklist response was invalid.");
+      if (discardRecovery && scope) clearChecklistDraftRecovery(scope);
+
+      const recovery = discardRecovery || !scope ? null : loadChecklistDraftRecovery(scope);
+      setChecklist(result.checklist);
+      pendingMutationRef.current = recovery?.pendingMutation || null;
+      queuedChangesRef.current = recovery?.queuedChanges || {};
+      const pending = pendingMutationRef.current;
+      const compatiblePending = pending && pending.baseRevision === result.draft.revision;
+      const optimisticDraft = compatiblePending
+        ? mergeChecklistChanges(mergeChecklistChanges(result.draft, pending.changes), queuedChangesRef.current)
+        : result.draft;
+      setVisibleDraft(optimisticDraft);
+      setIsLoading(false);
+
+      if (pending || hasChanges(queuedChangesRef.current)) {
+        if (!pending && hasChanges(queuedChangesRef.current)) {
+          pendingMutationRef.current = {
+            mutationId: createMutationId(),
+            baseRevision: result.draft.revision,
+            changes: queuedChangesRef.current,
+          };
+          queuedChangesRef.current = {};
+          setVisibleDraft(mergeChecklistChanges(result.draft, pendingMutationRef.current.changes));
+        }
+        persistRecovery();
+        setSaveState(checklistSaveStates.OFFLINE_PENDING);
+        if (isOnline()) queueMicrotask(() => flushRef.current?.());
+      } else {
+        setSaveState(checklistSaveStates.SAVED);
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      setIsLoading(false);
+      setLoadError(error?.code || "checklist_unavailable");
+      setSaveState(checklistSaveStates.UNAVAILABLE);
+    }
+  }, [persistRecovery, setVisibleDraft, token]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    load();
+    const retryOnOnline = () => flushRef.current?.();
+    window.addEventListener("online", retryOnOnline);
+    return () => {
+      isMountedRef.current = false;
+      window.removeEventListener("online", retryOnOnline);
+      clearTimeout(noteDebounceRef.current);
+    };
+  }, [load]);
+
+  const queueChanges = useCallback((changes, { debounce = false } = {}) => {
+    if (!hasChanges(changes) || saveState === checklistSaveStates.UNAVAILABLE) return;
+    setVisibleDraft(mergeChecklistChanges(draftRef.current, changes));
+    if (pendingMutationRef.current) {
+      queuedChangesRef.current = mergeSparseChecklistChanges(queuedChangesRef.current, changes);
+    } else {
+      pendingMutationRef.current = {
+        mutationId: createMutationId(),
+        baseRevision: draftRef.current?.revision || 0,
+        changes,
+      };
+    }
+    persistRecovery();
+    if (isMountedRef.current && saveState !== checklistSaveStates.CONFLICT) {
+      setSaveState(checklistSaveStates.SAVING);
+    }
+    clearTimeout(noteDebounceRef.current);
+    if (debounce) {
+      noteDebounceRef.current = setTimeout(() => flushRef.current?.(), 650);
+    } else if (saveState !== checklistSaveStates.CONFLICT) {
+      flushRef.current?.();
+    }
+  }, [persistRecovery, saveState, setVisibleDraft]);
+
+  const retrySave = useCallback(() => {
+    if (saveState === checklistSaveStates.CONFLICT || saveState === checklistSaveStates.UNAVAILABLE) return;
+    clearTimeout(noteDebounceRef.current);
+    flushRef.current?.();
+  }, [saveState]);
+
+  const discardLocalChanges = useCallback(() => {
+    pendingMutationRef.current = null;
+    queuedChangesRef.current = {};
+    if (scopeRef.current) clearChecklistDraftRecovery(scopeRef.current);
+    load({ discardRecovery: true });
+  }, [load]);
+
+  return {
+    checklist,
+    draft,
+    isLoading,
+    loadError,
+    saveState,
+    queueChanges,
+    retrySave,
+    saveNow: retrySave,
+    discardLocalChanges,
+  };
+}

@@ -7,9 +7,10 @@ const revokeChecklistCapabilityCall = httpsCallable(functions, "revokeChecklistC
 const publicChecklistApiPath = "/api/public-checklist";
 
 export class PublicChecklistRequestError extends Error {
-  constructor(code) {
+  constructor(code, status) {
     super(code);
     this.code = code;
+    this.status = status;
   }
 }
 
@@ -41,7 +42,7 @@ async function requestPublicChecklist(token) {
   });
   let body = {};
   try { body = await response.json(); } catch { /* response status is sufficient */ }
-  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable");
+  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status);
   if (!body.checklist || typeof body.checklist !== "object" || !body.draft || typeof body.draft !== "object") {
     throw new PublicChecklistRequestError("checklist_unavailable");
   }
@@ -59,6 +60,6 @@ export async function savePublicChecklistDraft({ token, mutationId, baseRevision
   });
   let body = {};
   try { body = await response.json(); } catch { /* status maps to a safe generic error */ }
-  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable");
+  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status);
   return body;
 }

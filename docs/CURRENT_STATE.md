@@ -104,6 +104,13 @@ E2E tests passed; build and diff checks passed.
   receipts. Direct browser access remains denied, and managers receive a safe
   read projection with answers, notes, timestamps, and progress. It is not
   deployed yet.
+- Phase 5C.2 locally adds the mobile cleaner editing UI on the existing
+  `/checklist?t=…` capability route. It renders only the frozen Run projection,
+  autosaves sparse answers and notes through the existing server mutation API,
+  and reports saved, saving, offline-pending, conflict, and unavailable states.
+  A small bounded local recovery record uses a capability hash rather than the
+  bearer token and retries the same mutation ID after an uncertain response.
+  It is not deployed yet.
 - Photo upload, final submission, email, and Job completion do not exist yet.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
@@ -163,9 +170,9 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Review and deploy **Issue #42 Phases 5B–5C.1** when approved; then implement
-   **Phase 5C.2**: a narrow cleaner-facing draft editing UI, without photos,
-   submission, email, or Job completion.
+1. Review and deploy **Issue #42 Phases 5B–5C.2** when approved; then implement
+   the next bounded cleaner workflow slice without photos, final submission,
+   email, or Job completion unless explicitly scoped.
 2. Wait for further design-partner feedback on Issue #42.
 3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
 4. Finish remaining Astra security/reliability audits if useful.

@@ -42,4 +42,26 @@ describe("ChecklistRunDetail", () => {
     expect(screen.queryByText("private-code")).not.toBeInTheDocument();
     expect(screen.queryByText("propertyChecklistSettingsSnapshot")).not.toBeInTheDocument();
   });
+
+  it("shows only acknowledged cleaner draft progress and notes read-only", () => {
+    renderChecklistRun({
+      draft: {
+        revision: 3,
+        progress: {
+          checklist: { done: 4, unanswered: 24 },
+          inventory: { answered: 2, needsRestock: 1 },
+        },
+        issueNotes: "Replace a burned-out bulb.",
+        generalNotes: "Everything else looks good.",
+        lastSavedAt: "2026-09-20T18:00:00.000Z",
+      },
+    });
+
+    expect(screen.getByRole("heading", { name: "Saved progress" })).toBeVisible();
+    expect(screen.getByText("Checklist: 4 done, 24 unanswered")).toBeVisible();
+    expect(screen.getByText("Inventory: 2 checked, 1 need restock")).toBeVisible();
+    expect(screen.getByText("Replace a burned-out bulb.")).toBeVisible();
+    expect(screen.getByText("Everything else looks good.")).toBeVisible();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
 });

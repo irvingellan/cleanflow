@@ -19,6 +19,8 @@ export function ChecklistRunDetail({ job, checklistRun, onBack }) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
+  const draft = checklistRun.draft;
+  const lastSavedAt = formatRunCreatedAt(draft?.lastSavedAt, language);
 
   return (
     <section className="panel checklist-run" aria-labelledby="checklist-run-title">
@@ -80,6 +82,36 @@ export function ChecklistRunDetail({ job, checklistRun, onBack }) {
         <section className="checklist-run__section" aria-labelledby="checklist-instructions-title">
           <h3 id="checklist-instructions-title">{translate("checklists.cleanerInstructions")}</h3>
           <p className="cleaner-internal-notes">{checklistRun.cleanerInstructions}</p>
+        </section>
+      )}
+
+      {draft && (
+        <section className="checklist-run__section" aria-labelledby="checklist-draft-progress-title">
+          <h3 id="checklist-draft-progress-title">{translate("checklists.draftProgress")}</h3>
+          <dl className="detail-list checklist-run__details">
+            <DetailItem
+              label={translate("checklists.title")}
+              value={translate("checklists.draftChecklistProgress", {
+                done: draft.progress?.checklist?.done || 0,
+                unanswered: draft.progress?.checklist?.unanswered || 0,
+              })}
+            />
+            <DetailItem
+              label={translate("checklists.inventoryCount")}
+              value={translate("checklists.draftInventoryProgress", {
+                answered: draft.progress?.inventory?.answered || 0,
+                restock: draft.progress?.inventory?.needsRestock || 0,
+              })}
+            />
+            <DetailItem label={translate("checklists.draftRevision")} value={draft.revision || 0} />
+            {lastSavedAt && <DetailItem label={translate("checklists.lastSavedAt")} value={lastSavedAt} />}
+          </dl>
+          {(draft.issueNotes || draft.generalNotes) && (
+            <div className="checklist-run__draft-notes">
+              {draft.issueNotes && <p><strong>{translate("checklists.issueNotes")}:</strong> {draft.issueNotes}</p>}
+              {draft.generalNotes && <p><strong>{translate("checklists.generalNotes")}:</strong> {draft.generalNotes}</p>}
+            </div>
+          )}
         </section>
       )}
 
