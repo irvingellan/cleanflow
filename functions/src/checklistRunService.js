@@ -11,6 +11,72 @@ export function validChecklistRunJobId(jobId) {
     && !jobId.includes("/");
 }
 
+function toIsoTimestamp(value) {
+  const date = value?.toDate?.();
+  return date ? date.toISOString() : null;
+}
+
+/**
+ * The browser gets this manager summary through a callable rather than direct
+ * Firestore access. Keep the Property configuration snapshot server-owned so
+ * access details or future manager-only fields cannot leak by accident.
+ */
+export function projectChecklistRunForManager(run, runId = initialChecklistRunId) {
+  const definition = run?.resolvedDefinition || {};
+  const sections = Array.isArray(definition.sections) ? definition.sections : [];
+  const requiredPhotoTypes = Array.isArray(definition.requiredPhotoTypes)
+    ? definition.requiredPhotoTypes
+      .filter((photoType) => typeof photoType?.id === "string" && typeof photoType?.label === "string")
+      .map(({ id, label, maximum }) => ({
+        id,
+        label,
+        ...(Number.isInteger(maximum) && maximum > 0 ? { maximum } : {}),
+      }))
+    : [];
+
+  return {
+    id: runId,
+    status: run?.status || "DRAFT",
+    jobId: typeof run?.jobId === "string" ? run.jobId : null,
+    definitionVersion: Number.isInteger(run?.definitionVersion) ? run.definitionVersion : null,
+    property: {
+      id: typeof run?.propertySnapshot?.propertyId === "string"
+        ? run.propertySnapshot.propertyId
+        : null,
+      name: typeof run?.propertySnapshot?.propertyName === "string"
+        ? run.propertySnapshot.propertyName
+        : null,
+    },
+    checklistItemCount: sections.reduce(
+      (count, section) => count + (Array.isArray(section?.items) ? section.items.length : 0),
+      0,
+    ),
+    inventoryItemCount: Array.isArray(definition.inventoryItems) ? definition.inventoryItems.length : 0,
+    requiredPhotoTypes,
+    cleanerInstructions: typeof definition.cleanerInstructions === "string"
+      ? definition.cleanerInstructions
+      : "",
+    createdAt: toIsoTimestamp(run?.createdAt),
+  };
+}
+
+export async function getChecklistRunForManager(database, { organizationId, jobId }) {
+  const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
+  const runReference = jobReference.collection("checklistRuns").doc(initialChecklistRunId);
+  const [jobSnapshot, runSnapshot] = await Promise.all([
+    jobReference.get(),
+    runReference.get(),
+  ]);
+
+  if (!jobSnapshot.exists) {
+    throw new HttpsError("not-found", "Job not found.");
+  }
+
+  return runSnapshot.exists
+    ? projectChecklistRunForManager(runSnapshot.data(), runSnapshot.id)
+    : null;
+}
+
 export async function createChecklistRunForManager(database, { organizationId, jobId, actorUid }) {
   const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
   const runReference = jobReference.collection("checklistRuns").doc(initialChecklistRunId);
@@ -26,7 +92,8 @@ export async function createChecklistRunForManager(database, { organizationId, j
     }
 
     if (runSnapshot.exists) {
-      return { runId: runSnapshot.id, created: false, status: runSnapshot.data().status || "DRAFT" };
+      const run = projectChecklistRunForManager(runSnapshot.data(), runSnapshot.id);
+      return { runId: run.id, created: false, status: run.status, run };
     }
 
     const job = { id: jobSnapshot.id, ...jobSnapshot.data() };
@@ -41,15 +108,17 @@ export async function createChecklistRunForManager(database, { organizationId, j
     }
 
     const property = { id: propertySnapshot.id, ...propertySnapshot.data() };
-    transaction.create(runReference, {
+    const runData = {
       organizationId,
       jobId,
       status: "DRAFT",
       createdByUid: actorUid,
       createdAt: FieldValue.serverTimestamp(),
       ...buildChecklistRunSnapshot({ job, property }),
-    });
+    };
+    transaction.create(runReference, runData);
 
-    return { runId: runReference.id, created: true, status: "DRAFT" };
+    const run = projectChecklistRunForManager(runData, runReference.id);
+    return { runId: run.id, created: true, status: run.status, run };
   });
 }

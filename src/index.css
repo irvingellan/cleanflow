@@ -2467,6 +2467,42 @@ button.summary-card {
   padding-top: 20px;
 }
 
+.job-checklist,
+.checklist-run__section {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 20px;
+}
+
+.job-checklist .issues-section__header {
+  margin-bottom: 0;
+}
+
+.job-checklist__summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.checklist-run .state-card {
+  margin-bottom: 0;
+}
+
+.checklist-run__section h3 {
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 0.875rem;
+}
+
+.checklist-run__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--color-text-secondary);
+}
+
 .assignment-roster {
   display: grid;
   gap: 12px;

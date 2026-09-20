@@ -30,6 +30,7 @@ import { ClientDirectory } from "./features/clients/ClientDirectory.jsx";
 import { ClientForm } from "./features/clients/ClientForm.jsx";
 import { useClientsController } from "./features/clients/useClientsController.js";
 import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningChecklistPreview.jsx";
+import { ChecklistRunDetail } from "./features/checklists/ChecklistRunDetail.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
@@ -386,6 +387,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       hasIssuesError,
       refreshOffers: refreshJobOffers,
       refreshIssues: refreshJobIssues,
+      checklistRun,
+      isLoadingChecklistRun,
+      hasChecklistRunError,
+      isCreatingChecklistRun,
+      hasCreateChecklistRunError,
+      refreshChecklistRun,
     },
     offerFlow: {
       offersSentCount,
@@ -406,6 +413,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       saveDataProvenance: saveJobDataProvenance,
       archive: archiveJobRecord,
       restore: restoreJobRecord,
+      createChecklistRun: createJobChecklistRun,
     },
     openJob: openJobDetail,
     closeJob: closeJobDetail,
@@ -728,6 +736,17 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function returnToJobDetail() {
     prepareJobDetailRefresh();
     setView("job-detail");
+  }
+
+  async function createAndOpenChecklistRun() {
+    const checklistRun = await createJobChecklistRun();
+    if (checklistRun) {
+      setView("checklist-run");
+    }
+  }
+
+  function openChecklistRun() {
+    setView("checklist-run");
   }
 
   return (
@@ -1071,6 +1090,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             issues={jobIssues}
             isLoadingIssues={isLoadingIssues}
             hasIssuesError={hasIssuesError}
+            checklistRun={checklistRun}
+            isLoadingChecklistRun={isLoadingChecklistRun}
+            hasChecklistRunError={hasChecklistRunError}
+            isCreatingChecklistRun={isCreatingChecklistRun}
+            hasCreateChecklistRunError={hasCreateChecklistRunError}
             onBack={
               jobDetailOrigin === "dashboard"
                 ? showDashboard
@@ -1085,6 +1109,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOfferToCleaners={showOfferCleaners}
             onRefreshOffers={refreshJobOffers}
             onRefreshIssues={refreshJobIssues}
+            onRefreshChecklistRun={refreshChecklistRun}
+            onCreateChecklistRun={createAndOpenChecklistRun}
+            onOpenChecklistRun={openChecklistRun}
             onCreatePublicOfferLink={createCleanerOfferLink}
             onAssignCleaner={assignCleaner}
             onRemoveAssignment={removeCleanerAssignment}
@@ -1097,6 +1124,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             canRestore={canManageExcludedRecords}
             onArchive={async () => { await archiveJobRecord(); removeJobFromWorklist(selectedJob.id); returnToJobs(); }}
             onRestore={restoreJobRecord}
+          />
+        )}
+
+        {view === "checklist-run" && selectedJob && checklistRun && (
+          <ChecklistRunDetail
+            job={selectedJob}
+            checklistRun={checklistRun}
+            onBack={() => setView("job-detail")}
           />
         )}
 

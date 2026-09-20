@@ -17,6 +17,7 @@ initializeApp({ projectId: "demo-cleanflow" });
 const { getFirestore, Timestamp } = await import("firebase-admin/firestore");
 const {
   createChecklistRun,
+  getChecklistRun,
   registerManagerPushDevice,
   submitFeedback,
   publicOffer,
@@ -274,6 +275,35 @@ test("Checklist Run creation fails safely for an unknown Job", async () => {
     { code: "not-found" },
   );
   assert.equal((await admin.doc(`${root}/jobs/missing-job`).get()).exists, false);
+});
+
+test("only an active manager can load the safe Checklist Run summary", async () => {
+  await seedChecklistJob({
+    checklistSettings: {
+      cleanerInstructions: "Check the balcony.",
+      requiredPhotoTypes: [{ id: "balcony", label: "Balcony", maximum: 2 }],
+    },
+  });
+  await admin.doc(`${root}/properties/property`).update({ accessCode: "private-code" });
+  await createChecklistRun.run(request("manager", { jobId: "job" }));
+
+  const response = await getChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(response.run.id, "initial");
+  assert.equal(response.run.status, "DRAFT");
+  assert.equal(response.run.checklistItemCount, 28);
+  assert.deepEqual(response.run.requiredPhotoTypes, [{ id: "balcony", label: "Balcony", maximum: 2 }]);
+  assert.equal(response.run.cleanerInstructions, "Check the balcony.");
+  assert.equal(Object.hasOwn(response.run, "propertyChecklistSettingsSnapshot"), false);
+  assert.equal(JSON.stringify(response.run).includes("private-code"), false);
+
+  for (const [uid, anonymous, code] of [
+    [null, false, "unauthenticated"],
+    ["outsider", false, "permission-denied"],
+    ["cleaner", false, "permission-denied"],
+    ["other-manager", false, "permission-denied"],
+  ]) {
+    await assert.rejects(getChecklistRun.run(request(uid, { jobId: "job" }, anonymous)), { code });
+  }
 });
 
 test("public capability GET/response remains independent of auth and only updates its resolved offer", async () => {

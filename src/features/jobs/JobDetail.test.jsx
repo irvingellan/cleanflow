@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { JobDetail } from "./JobDetail.jsx";
 
-function renderJobDetail(status, overrides = {}, callbacks = {}) {
+function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {}) {
   const noOp = vi.fn();
   const { offers = [], ...jobOverrides } = overrides;
 
@@ -26,10 +26,18 @@ function renderJobDetail(status, overrides = {}, callbacks = {}) {
         issues={[]}
         isLoadingIssues={false}
         hasIssuesError={false}
+        checklistRun={checklist.run || null}
+        isLoadingChecklistRun={checklist.isLoading || false}
+        hasChecklistRunError={checklist.hasLoadError || false}
+        isCreatingChecklistRun={checklist.isCreating || false}
+        hasCreateChecklistRunError={checklist.hasCreateError || false}
         onBack={noOp}
         onOfferToCleaners={callbacks.onOfferToCleaners || noOp}
         onRefreshOffers={callbacks.onRefreshOffers || noOp}
         onRefreshIssues={noOp}
+        onRefreshChecklistRun={callbacks.onRefreshChecklistRun || noOp}
+        onCreateChecklistRun={callbacks.onCreateChecklistRun || noOp}
+        onOpenChecklistRun={callbacks.onOpenChecklistRun || noOp}
         onCreatePublicOfferLink={callbacks.onCreatePublicOfferLink || noOp}
         onAssignCleaner={noOp}
         onRemoveAssignment={noOp}
@@ -77,6 +85,136 @@ describe("JobDetail lifecycle actions", () => {
       configurable: true,
       value: originalClipboard,
     });
+  });
+
+  it("shows a manager Create checklist action and prevents another click while creation is pending", () => {
+    const onCreateChecklistRun = vi.fn();
+    const { rerender } = renderJobDetail(
+      "UNASSIGNED",
+      {},
+      { onCreateChecklistRun },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create checklist" }));
+    expect(onCreateChecklistRun).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TranslationProvider>
+        <JobDetail
+          job={{ id: "job-1", propertyName: "Pacific Beach Condo", operationalStatus: "UNASSIGNED" }}
+          knownCleaners={[]}
+          offers={[]}
+          isLoadingOffers={false}
+          hasOffersError={false}
+          assignments={[]}
+          isLoadingAssignments={false}
+          hasAssignmentsError={false}
+          issues={[]}
+          isLoadingIssues={false}
+          hasIssuesError={false}
+          checklistRun={null}
+          isLoadingChecklistRun={false}
+          hasChecklistRunError={false}
+          isCreatingChecklistRun
+          hasCreateChecklistRunError={false}
+          onBack={vi.fn()}
+          onOfferToCleaners={vi.fn()}
+          onRefreshOffers={vi.fn()}
+          onRefreshIssues={vi.fn()}
+          onRefreshChecklistRun={vi.fn()}
+          onCreateChecklistRun={onCreateChecklistRun}
+          onOpenChecklistRun={vi.fn()}
+          onCreatePublicOfferLink={vi.fn()}
+          onAssignCleaner={vi.fn()}
+          onRemoveAssignment={vi.fn()}
+          onReplaceAssignment={vi.fn()}
+          onStartCleaning={vi.fn()}
+          onCompleteCleaning={vi.fn()}
+          onSimulateAssignedCleaner={vi.fn()}
+          onResolveIssue={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    const pendingButton = screen.getByRole("button", { name: "Creating checklist…" });
+    expect(pendingButton).toBeDisabled();
+    fireEvent.click(pendingButton);
+    expect(onCreateChecklistRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses Open checklist for an existing Run and exposes a creation error", () => {
+    const onOpenChecklistRun = vi.fn();
+    const existingRun = {
+      id: "initial",
+      status: "DRAFT",
+      checklistItemCount: 28,
+      inventoryItemCount: 13,
+      requiredPhotoTypes: [],
+    };
+    const { rerender } = renderJobDetail(
+      "UNASSIGNED",
+      {},
+      { onOpenChecklistRun },
+      { run: existingRun },
+    );
+
+    expect(screen.queryByRole("button", { name: "Create checklist" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open checklist" }));
+    expect(onOpenChecklistRun).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TranslationProvider>
+        <JobDetail
+          job={{ id: "job-1", propertyName: "Pacific Beach Condo", operationalStatus: "UNASSIGNED" }}
+          knownCleaners={[]}
+          offers={[]}
+          isLoadingOffers={false}
+          hasOffersError={false}
+          assignments={[]}
+          isLoadingAssignments={false}
+          hasAssignmentsError={false}
+          issues={[]}
+          isLoadingIssues={false}
+          hasIssuesError={false}
+          checklistRun={null}
+          isLoadingChecklistRun={false}
+          hasChecklistRunError={false}
+          isCreatingChecklistRun={false}
+          hasCreateChecklistRunError
+          onBack={vi.fn()}
+          onOfferToCleaners={vi.fn()}
+          onRefreshOffers={vi.fn()}
+          onRefreshIssues={vi.fn()}
+          onRefreshChecklistRun={vi.fn()}
+          onCreateChecklistRun={vi.fn()}
+          onOpenChecklistRun={vi.fn()}
+          onCreatePublicOfferLink={vi.fn()}
+          onAssignCleaner={vi.fn()}
+          onRemoveAssignment={vi.fn()}
+          onReplaceAssignment={vi.fn()}
+          onStartCleaning={vi.fn()}
+          onCompleteCleaning={vi.fn()}
+          onSimulateAssignedCleaner={vi.fn()}
+          onResolveIssue={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to create the checklist. Try again.");
+  });
+
+  it("shows a Checklist Run load error with a retry action", () => {
+    const onRefreshChecklistRun = vi.fn();
+    renderJobDetail(
+      "UNASSIGNED",
+      {},
+      { onRefreshChecklistRun },
+      { hasLoadError: true },
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to load the checklist.");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRefreshChecklistRun).toHaveBeenCalledTimes(1);
   });
 
   it("shows a primary offer CTA for an unassigned v2 Job with no offers", () => {

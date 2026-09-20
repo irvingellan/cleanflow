@@ -40,10 +40,18 @@ export function JobDetail({
   issues,
   isLoadingIssues,
   hasIssuesError,
+  checklistRun,
+  isLoadingChecklistRun,
+  hasChecklistRunError,
+  isCreatingChecklistRun,
+  hasCreateChecklistRunError,
   onBack,
   onOfferToCleaners,
   onRefreshOffers,
   onRefreshIssues,
+  onRefreshChecklistRun,
+  onCreateChecklistRun,
+  onOpenChecklistRun,
   onCreatePublicOfferLink,
   onAssignCleaner,
   onRemoveAssignment,
@@ -398,6 +406,49 @@ export function JobDetail({
           <DetailItem label={translate("jobs.createdTime")} value={createdAt} />
         )}
       </dl>
+
+      <section className="job-checklist" aria-labelledby="job-checklist-title">
+        <div className="issues-section__header">
+          <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
+          {!isLoadingChecklistRun && checklistRun && (
+            <button className="button button--primary" type="button" onClick={onOpenChecklistRun}>
+              {translate("checklists.open")}
+            </button>
+          )}
+          {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError && (
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={isCreatingChecklistRun}
+              onClick={onCreateChecklistRun}
+            >
+              {isCreatingChecklistRun
+                ? translate("checklists.creating")
+                : translate("checklists.create")}
+            </button>
+          )}
+        </div>
+        {isLoadingChecklistRun && (
+          <StateCard message={translate("checklists.loading")} status="status" />
+        )}
+        {!isLoadingChecklistRun && hasChecklistRunError && (
+          <>
+            <StateCard message={translate("checklists.loadError")} status="alert" isError />
+            <button className="button" type="button" onClick={onRefreshChecklistRun}>
+              {translate("common.retry")}
+            </button>
+          </>
+        )}
+        {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
+          <p className="job-checklist__summary">{translate("checklists.noRun")}</p>
+        )}
+        {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
+          <p className="job-checklist__summary">{translate("checklists.existingRun")}</p>
+        )}
+        {hasCreateChecklistRunError && (
+          <p className="form-error" role="alert">{translate("checklists.createError")}</p>
+        )}
+      </section>
 
       {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
         isInProgress ||

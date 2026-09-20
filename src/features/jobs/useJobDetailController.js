@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  createChecklistRun as createChecklistRunRequest,
+  getChecklistRun,
+} from "../checklists/checklistRunService.js";
 import { getCleaners } from "../cleaners/cleanerService.js";
 import { getJobIssues, resolveIssue } from "../issues/issueService.js";
 import { createPublicOfferLink, getJobOffers } from "./jobOfferService.js";
@@ -29,6 +33,11 @@ function emptyDetailData() {
     issues: [],
     isLoadingIssues: false,
     hasIssuesError: false,
+    checklistRun: null,
+    isLoadingChecklistRun: false,
+    hasChecklistRunError: false,
+    isCreatingChecklistRun: false,
+    hasCreateChecklistRunError: false,
   };
 }
 
@@ -43,6 +52,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
   const [hasCleanerError, setHasCleanerError] = useState(false);
   const [offersSentCount, setOffersSentCount] = useState(null);
+  const checklistRunCreateInFlight = useRef(false);
 
   async function refreshOffers() {
     if (!selectedJob) {
@@ -108,11 +118,33 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }
   }
 
+  async function refreshChecklistRun(job = selectedJob) {
+    if (!job) {
+      return;
+    }
+
+    setDetailData((currentData) => ({
+      ...currentData,
+      isLoadingChecklistRun: true,
+      hasChecklistRunError: false,
+    }));
+
+    try {
+      const checklistRun = await getChecklistRun(job.id);
+      setDetailData((currentData) => ({ ...currentData, checklistRun }));
+    } catch {
+      setDetailData((currentData) => ({ ...currentData, hasChecklistRunError: true }));
+    } finally {
+      setDetailData((currentData) => ({ ...currentData, isLoadingChecklistRun: false }));
+    }
+  }
+
   useEffect(() => {
     if (view === "job-detail" && selectedJob) {
       refreshOffers();
       refreshIssues();
       refreshAssignments();
+      refreshChecklistRun();
     }
   }, [view, selectedJob]);
 
@@ -162,10 +194,12 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       isLoadingOffers: true,
       isLoadingIssues: true,
       isLoadingAssignments: isAssignmentAwareJob(job),
+      isLoadingChecklistRun: true,
     });
   }
 
   function closeJob() {
+    checklistRunCreateInFlight.current = false;
     setSelectedJob(null);
     setDetailData(emptyDetailData());
   }
@@ -176,6 +210,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       isLoadingOffers: true,
       isLoadingIssues: true,
       isLoadingAssignments: isAssignmentAwareJob(selectedJob),
+      isLoadingChecklistRun: true,
     });
   }
 
@@ -304,6 +339,31 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     });
   }
 
+  async function createChecklistRun() {
+    if (!selectedJob || checklistRunCreateInFlight.current) {
+      return detailData.checklistRun;
+    }
+
+    checklistRunCreateInFlight.current = true;
+    setDetailData((currentData) => ({
+      ...currentData,
+      isCreatingChecklistRun: true,
+      hasCreateChecklistRunError: false,
+    }));
+
+    try {
+      const checklistRun = await createChecklistRunRequest(selectedJob.id);
+      setDetailData((currentData) => ({ ...currentData, checklistRun }));
+      return checklistRun;
+    } catch (error) {
+      setDetailData((currentData) => ({ ...currentData, hasCreateChecklistRunError: true }));
+      throw error;
+    } finally {
+      checklistRunCreateInFlight.current = false;
+      setDetailData((currentData) => ({ ...currentData, isCreatingChecklistRun: false }));
+    }
+  }
+
   function recordOffersSent(count, updatedJob) {
     updateSelectedJob(updatedJob);
     setOffersSentCount(count);
@@ -323,6 +383,12 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       hasIssuesError: detailData.hasIssuesError,
       refreshOffers,
       refreshIssues,
+      checklistRun: detailData.checklistRun,
+      isLoadingChecklistRun: detailData.isLoadingChecklistRun,
+      hasChecklistRunError: detailData.hasChecklistRunError,
+      isCreatingChecklistRun: detailData.isCreatingChecklistRun,
+      hasCreateChecklistRunError: detailData.hasCreateChecklistRunError,
+      refreshChecklistRun,
     },
     offerFlow: {
       offersSentCount,
@@ -343,6 +409,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       archive,
       restore,
       resolveJobIssue,
+      createChecklistRun,
     },
     openJob,
     closeJob,
