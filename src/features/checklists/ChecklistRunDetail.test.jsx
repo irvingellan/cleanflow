@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { ChecklistRunDetail } from "./ChecklistRunDetail.jsx";
+
+afterEach(() => vi.unstubAllGlobals());
 
 function renderChecklistRun(runOverrides = {}) {
   return render(
@@ -101,5 +103,25 @@ describe("ChecklistRunDetail", () => {
     expect(screen.getByText("The cleaner sent this saved checklist for manager review. This does not complete the job.")).toBeVisible();
     expect(screen.getByText("Manager should check the lamp.")).toBeVisible();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("shows only a server-retrieved saved photo for the frozen requirement", async () => {
+    const loadEvidence = vi.fn().mockResolvedValue(new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }));
+    const createObjectUrl = vi.fn(() => "blob:manager-photo");
+    vi.stubGlobal("URL", { ...URL, createObjectURL: createObjectUrl, revokeObjectURL: vi.fn() });
+    render(
+      <TranslationProvider>
+        <ChecklistRunDetail
+          job={{ id: "job-1", propertyName: "Job Property", scheduledDate: "2026-09-20" }}
+          checklistRun={{ id: "initial", status: "READY_FOR_REVIEW", property: { name: "Snapshot Property" }, checklistItemCount: 28, inventoryItemCount: 13, evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] }}
+          loadEvidence={loadEvidence}
+          onBack={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(await screen.findByText("Saved evidence")).toBeVisible();
+    expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
+    expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:manager-photo");
   });
 });

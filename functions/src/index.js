@@ -36,6 +36,13 @@ import {
   validChecklistCleanerId,
 } from "./checklistCapabilityService.js";
 import {
+  downloadManagerChecklistEvidence,
+  downloadPublicChecklistEvidence,
+  loadPublicChecklistEvidence,
+  uploadPublicChecklistEvidence,
+} from "./checklistEvidenceService.js";
+import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
+import {
   calculateManagerReminder,
   claimReminderDelivery,
   managerReminderPayload,
@@ -663,6 +670,25 @@ export const revokeChecklistCapability = onCall(
   },
 );
 
+export const getChecklistEvidence = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    const requirementId = request.data?.requirementId;
+    if (!validChecklistRunJobId(jobId) || requirementId !== pilotChecklistPhotoRequirementId) {
+      throw new HttpsError("invalid-argument", "Checklist photo request is invalid.");
+    }
+    const evidence = await downloadManagerChecklistEvidence(db, {
+      organizationId,
+      jobId,
+      runId: initialChecklistRunId,
+      requirementId,
+    });
+    return { contentType: evidence.contentType, base64: evidence.bytes.toString("base64") };
+  },
+);
+
 async function activeManagerPushDevices() {
   const deviceSnapshots = await db
     .collection("managerPushDevices")
@@ -1074,12 +1100,12 @@ export const publicOffer = onRequest(
 export const publicChecklist = onRequest(
   { region: "us-central1", invoker: "public" },
   async (request, response) => {
-    if (!["GET", "POST"].includes(request.method)) {
+    if (!["GET", "POST", "PUT"].includes(request.method)) {
       sendPublicError(response, 405, "method_not_allowed");
       return;
     }
     try {
-      const token = request.method === "GET" ? request.query.token : request.body?.token;
+      const token = ["GET", "PUT"].includes(request.method) ? request.query.token : request.body?.token;
       if (!validToken(token)) {
         sendPublicError(response, 404, "checklist_not_found");
         return;
@@ -1108,13 +1134,41 @@ export const publicChecklist = onRequest(
         response.status(200).json(result);
         return;
       }
+      if (request.method === "PUT") {
+        const result = await uploadPublicChecklistEvidence(db, {
+          organizationId,
+          tokenHash: hashToken(token),
+          requirementId: request.get("X-CleanFlow-Checklist-Item"),
+          contentType: request.get("Content-Type")?.split(";")[0]?.trim().toLowerCase(),
+          bytes: request.rawBody,
+        });
+        configureResponse(response);
+        response.status(200).json(result);
+        return;
+      }
+      const evidenceItem = request.query.evidenceItem;
+      if (typeof evidenceItem === "string" && evidenceItem) {
+        const evidence = await downloadPublicChecklistEvidence(db, {
+          organizationId,
+          tokenHash: hashToken(token),
+          requirementId: evidenceItem,
+        });
+        configureResponse(response);
+        response.set("Content-Type", evidence.contentType);
+        response.status(200).send(evidence.bytes);
+        return;
+      }
       const result = await loadPublicChecklistCapability(db, {
         organizationId,
         tokenHash: hashToken(token),
       });
       if (result.state === "active") {
+        const evidence = await loadPublicChecklistEvidence(db, {
+          organizationId,
+          tokenHash: hashToken(token),
+        });
         configureResponse(response);
-        response.status(200).json({ checklist: result.checklist, draft: result.draft });
+        response.status(200).json({ checklist: { ...result.checklist, evidence }, draft: result.draft });
         return;
       }
       const status = result.state === "expired" || result.state === "revoked" || result.state === "stale"

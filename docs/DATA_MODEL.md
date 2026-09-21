@@ -78,6 +78,13 @@ projection. **Phase 3:** the manager-authorized creator writes a single initial
 `DRAFT` Run beneath its Job. It uses a stable Run ID so retries return the same
 Run rather than silently overwriting or creating duplicates.
 
+**Phase 5D.1 pilot evidence:** the frozen `living-belongings` item may have
+one server-owned evidence record beneath the Run. It contains the requirement
+ID, content type, byte size, creation timestamp, content hash, and private
+Storage reference; only safe display metadata is projected to the cleaner or
+manager. The image bytes remain private in Storage and are retrieved through a
+revalidated capability or active-manager server path, never a persisted URL.
+
 ## Reservation
 
 A Reservation represents a guest stay or booking received from an external
@@ -207,6 +214,12 @@ evidence in the normal cleaning flow; multiple Cleaners do not normally submit
 duplicate evidence. A manager is not required to approve that evidence before
 normal completion. An Issue remains independent from lifecycle and may be a
 rare post-completion callback/correction trigger in a future explicit flow.
+
+**CURRENT Phase 5D.1:** the initial pilot supports exactly one required image
+for the frozen under-bed/furniture requirement while its Checklist Run is
+`DRAFT`. `READY_FOR_REVIEW` is read-only and requires that evidence record; it
+does not change Job or Assignment lifecycle. Additional photo types, galleries,
+and client delivery remain separate future work.
 
 ## Scheduling and reschedule history
 

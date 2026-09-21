@@ -7,14 +7,18 @@ const mocks = vi.hoisted(() => ({
   getPublicChecklist: vi.fn(),
   readyPublicChecklistForReview: vi.fn(),
   savePublicChecklistDraft: vi.fn(),
+  uploadPublicChecklistEvidence: vi.fn(),
 }));
-const { getPublicChecklist, readyPublicChecklistForReview, savePublicChecklistDraft } = mocks;
+const {
+  getPublicChecklist, readyPublicChecklistForReview, savePublicChecklistDraft, uploadPublicChecklistEvidence,
+} = mocks;
 
 vi.mock("./checklistCapabilityService.js", async (importOriginal) => ({
   ...(await importOriginal()),
   getPublicChecklist: mocks.getPublicChecklist,
   readyPublicChecklistForReview: mocks.readyPublicChecklistForReview,
   savePublicChecklistDraft: mocks.savePublicChecklistDraft,
+  uploadPublicChecklistEvidence: mocks.uploadPublicChecklistEvidence,
 }));
 
 const { PublicChecklistPage } = await import("./PublicChecklistPage.jsx");
@@ -29,6 +33,7 @@ const frozenChecklist = {
     title: "Bedrooms",
     items: [
       { id: "bed", label: "Make the bed" },
+      { id: "living-belongings", label: "Check under beds and furniture", requiresPhoto: true },
       { id: "pool", label: "Check the pool", canBeNotApplicable: true },
     ],
   }],
@@ -39,12 +44,12 @@ const frozenChecklist = {
 function createDraft(overrides = {}) {
   return {
     revision: 0,
-    checklistAnswers: { bed: "UNANSWERED", pool: "UNANSWERED" },
+    checklistAnswers: { bed: "UNANSWERED", pool: "UNANSWERED", "living-belongings": "UNANSWERED" },
     inventoryAnswers: { soap: "UNANSWERED" },
     issueNotes: "",
     generalNotes: "",
     progress: {
-      checklist: { total: 2, done: 0, unanswered: 2 },
+      checklist: { total: 3, done: 0, unanswered: 3 },
       inventory: { total: 1, answered: 0, needsRestock: 0 },
     },
     ...overrides,
@@ -74,11 +79,12 @@ beforeEach(() => {
   getPublicChecklist.mockReset();
   readyPublicChecklistForReview.mockReset();
   savePublicChecklistDraft.mockReset();
+  uploadPublicChecklistEvidence.mockReset();
   getPublicChecklist.mockResolvedValue({ checklist: frozenChecklist, draft: createDraft() });
   savePublicChecklistDraft.mockImplementation(async ({ baseRevision, changes }) => ({
     draft: createDraft({
       revision: baseRevision + 1,
-      checklistAnswers: { bed: "UNANSWERED", pool: "UNANSWERED", ...(changes.checklistAnswers || {}) },
+      checklistAnswers: { bed: "UNANSWERED", pool: "UNANSWERED", "living-belongings": "UNANSWERED", ...(changes.checklistAnswers || {}) },
       inventoryAnswers: { soap: "UNANSWERED", ...(changes.inventoryAnswers || {}) },
       issueNotes: Object.hasOwn(changes, "issueNotes") ? changes.issueNotes : "",
       generalNotes: Object.hasOwn(changes, "generalNotes") ? changes.generalNotes : "",
@@ -89,6 +95,7 @@ beforeEach(() => {
     checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW", readyForReviewAt: "2026-09-22T18:00:00.000Z" },
     draft: createDraft({ revision: baseRevision }),
   }));
+  uploadPublicChecklistEvidence.mockResolvedValue({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] });
 });
 
 afterEach(() => {
@@ -107,6 +114,78 @@ describe("PublicChecklistPage", () => {
     expect(screen.getByLabelText("Hand soap")).toHaveValue("UNANSWERED");
     expect(screen.getByText("Use the frozen instructions.")).toBeVisible();
     expect(savePublicChecklistDraft).not.toHaveBeenCalled();
+  });
+
+  it("shows one mobile-safe required-photo control", async () => {
+    const { container } = renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    expect(screen.getByText("Photo required")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Choose photo" })).toBeVisible();
+    const inputs = container.querySelectorAll('input[type="file"]');
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0]).toHaveAttribute("capture", "environment");
+    expect(inputs[1]).not.toHaveAttribute("capture");
+
+  });
+
+  it("does not advertise a future property photo requirement that this pilot slice cannot save", async () => {
+    getPublicChecklist.mockResolvedValue({
+      checklist: {
+        ...frozenChecklist,
+        sections: [{
+          ...frozenChecklist.sections[0],
+          items: [
+            ...frozenChecklist.sections[0].items,
+            { id: "property-photo", label: "Property-specific photo", requiresPhoto: true },
+          ],
+        }],
+      },
+      draft: createDraft(),
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    expect(within(itemFieldset("Property-specific photo")).queryByText("Photo required")).not.toBeInTheDocument();
+  });
+
+  it("keeps the saved photo read-only after handoff", async () => {
+    getPublicChecklist.mockResolvedValue({
+      checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW", evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] },
+      draft: createDraft(),
+    });
+    renderPage();
+    await screen.findAllByText("Ready for manager review");
+    expect(screen.queryByRole("button", { name: "Take photo" })).not.toBeInTheDocument();
+  });
+
+  it("uploads the selected image only through the capability request", async () => {
+    const createObjectUrl = vi.fn(() => "blob:photo");
+    vi.stubGlobal("URL", { ...URL, createObjectURL: createObjectUrl, revokeObjectURL: vi.fn() });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "under-bed.jpg", { type: "image/jpeg" });
+    const [cameraInput] = document.querySelectorAll('input[type="file"]');
+    fireEvent.change(cameraInput, { target: { files: [file] } });
+    await waitFor(() => expect(uploadPublicChecklistEvidence).toHaveBeenCalledWith({
+      token: "opaque-capability-token", requirementId: "living-belongings", file,
+    }));
+    expect(await screen.findByText("Photo saved")).toBeVisible();
+  });
+
+  it("keeps a failed selected file for an explicit retry", async () => {
+    uploadPublicChecklistEvidence
+      .mockRejectedValueOnce({ code: "checklist_photo_unavailable" })
+      .mockResolvedValueOnce({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] });
+    vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:photo"), revokeObjectURL: vi.fn() });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "under-bed.jpg", { type: "image/jpeg" });
+    const [cameraInput] = document.querySelectorAll('input[type="file"]');
+    fireEvent.change(cameraInput, { target: { files: [file] } });
+    expect(await screen.findByText("Photo could not be saved. Try again.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry photo" }));
+    await waitFor(() => expect(uploadPublicChecklistEvidence).toHaveBeenCalledTimes(2));
+    expect(uploadPublicChecklistEvidence.mock.calls[1][0].file).toBe(file);
   });
 
   it("optimistically saves checklist and inventory choices through the capability API", async () => {

@@ -87,6 +87,25 @@ The initial eligible execution set is `ASSIGNED` and `IN_PROGRESS`; moving
 within that set does not advance the revision. Pricing, payout, payment, notes,
 provenance, and checklist answers are outside this revision boundary.
 
+## Checklist photo evidence
+
+**CURRENT Phase 5D.1 pilot flow:** a cleaner holding an active capability may
+take or choose one JPEG, PNG, or WebP image (up to 5 MB) for the frozen
+`living-belongings` requirement while the Run is `DRAFT`. The Function derives
+the private Storage location, then rechecks capability, Job, Run, and context
+before recording server-owned metadata. Retrying identical bytes is safe; the
+browser never receives a Storage path or durable download URL.
+
+```text
+DRAFT + active capability
+→ private evidence saved for living-belongings
+→ reload shows safe evidence metadata/image through the same capability
+→ READY_FOR_REVIEW requires that evidence and becomes read-only
+```
+
+This is evidence collection only, not Job completion, Assignment completion,
+manager approval, email delivery, or a generic photo system.
+
 **PLANNED:** future aggregate execution derivation must retain the distinction
 between Job and Assignment state. Any `WAITING_FOR_QA` state is optional and
 requires a focused validated workflow.

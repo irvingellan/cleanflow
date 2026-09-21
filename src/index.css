@@ -2694,6 +2694,49 @@ button.summary-card {
   background: var(--color-selected-bg);
 }
 
+.public-checklist__photo {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.public-checklist__photo-required {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--color-warning-text) 14%, var(--color-surface));
+  color: var(--color-warning-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.public-checklist__photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.public-checklist__photo-preview {
+  width: min(100%, 360px);
+  max-height: 280px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  object-fit: contain;
+  background: var(--color-surface-muted);
+}
+
+.public-checklist__photo-status,
+.public-checklist__photo-error p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.public-checklist__photo-status { color: var(--color-success); }
+.public-checklist__photo-error { display: grid; gap: 8px; }
+.public-checklist__photo-error p { color: var(--color-error-text); }
+
 .public-checklist__inventory {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2747,6 +2790,31 @@ button.summary-card {
   overflow-wrap: anywhere;
 }
 
+.checklist-run__evidence {
+  display: grid;
+  gap: 10px;
+}
+
+.checklist-run__evidence p,
+.checklist-run__evidence-loading,
+.checklist-run__evidence-error {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.checklist-run__evidence-error { color: var(--color-error-text); }
+
+.checklist-run__evidence-photo {
+  width: min(100%, 520px);
+  max-height: 420px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  object-fit: contain;
+  background: var(--color-surface-muted);
+}
+
 @media (max-width: 640px) {
   .public-checklist__header,
   .public-checklist__save-status {
@@ -2758,6 +2826,7 @@ button.summary-card {
   .public-checklist__inventory { grid-template-columns: 1fr; }
   .public-checklist__save-actions .button { width: 100%; }
   .public-checklist__review-actions .button { width: 100%; }
+  .public-checklist__photo-actions .button { width: 100%; }
   .public-checklist select,
   .public-checklist textarea { font-size: 16px; }
 }

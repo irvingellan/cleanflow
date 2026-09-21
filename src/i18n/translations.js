@@ -117,6 +117,19 @@ const messages = {
 };
 
 Object.assign(messages.en, {
+  "checklists.savedEvidence": "Saved evidence",
+  "checklists.photoForRequirement": "Photo for {requirement}",
+  "checklists.photoLoading": "Loading saved photo…",
+  "checklists.photoUnavailable": "Saved photo is unavailable.",
+  "checklists.photoRequired": "Photo required",
+  "checklists.takePhoto": "Take photo",
+  "checklists.choosePhoto": "Choose photo",
+  "checklists.photoUploading": "Uploading photo…",
+  "checklists.photoSaved": "Photo saved",
+  "checklists.photoUploadFailed": "Photo could not be saved. Try again.",
+  "checklists.photoTooLarge": "Choose a JPEG, PNG, or WebP image no larger than 5 MB.",
+  "checklists.retryPhoto": "Retry photo",
+  "checklists.savedPhoto": "Saved checklist photo",
   "devCenter.thisBrowserNotifications": "This browser",
   "devCenter.browserPermission": "Browser permission",
   "devCenter.fcmRegistration": "FCM registration",
@@ -207,6 +220,19 @@ Object.assign(messages.en, {
 });
 
 Object.assign(messages.pt, {
+  "checklists.savedEvidence": "Evidência salva",
+  "checklists.photoForRequirement": "Foto de {requirement}",
+  "checklists.photoLoading": "Carregando foto salva…",
+  "checklists.photoUnavailable": "A foto salva não está disponível.",
+  "checklists.photoRequired": "Foto obrigatória",
+  "checklists.takePhoto": "Tirar foto",
+  "checklists.choosePhoto": "Escolher foto",
+  "checklists.photoUploading": "Enviando foto…",
+  "checklists.photoSaved": "Foto salva",
+  "checklists.photoUploadFailed": "Não foi possível salvar a foto. Tente novamente.",
+  "checklists.photoTooLarge": "Escolha uma imagem JPEG, PNG ou WebP de no máximo 5 MB.",
+  "checklists.retryPhoto": "Tentar foto novamente",
+  "checklists.savedPhoto": "Foto salva do checklist",
   "devCenter.thisBrowserNotifications": "Este navegador",
   "devCenter.browserPermission": "Permissão do navegador",
   "devCenter.fcmRegistration": "Registro no FCM",
@@ -297,6 +323,19 @@ Object.assign(messages.pt, {
 });
 
 Object.assign(messages.es, {
+  "checklists.savedEvidence": "Evidencia guardada",
+  "checklists.photoForRequirement": "Foto de {requirement}",
+  "checklists.photoLoading": "Cargando foto guardada…",
+  "checklists.photoUnavailable": "La foto guardada no está disponible.",
+  "checklists.photoRequired": "Foto obligatoria",
+  "checklists.takePhoto": "Tomar foto",
+  "checklists.choosePhoto": "Elegir foto",
+  "checklists.photoUploading": "Subiendo foto…",
+  "checklists.photoSaved": "Foto guardada",
+  "checklists.photoUploadFailed": "No se pudo guardar la foto. Inténtalo de nuevo.",
+  "checklists.photoTooLarge": "Elige una imagen JPEG, PNG o WebP de máximo 5 MB.",
+  "checklists.retryPhoto": "Reintentar foto",
+  "checklists.savedPhoto": "Foto guardada del checklist",
   "devCenter.thisBrowserNotifications": "Este navegador",
   "devCenter.browserPermission": "Permiso del navegador",
   "devCenter.fcmRegistration": "Registro de FCM",

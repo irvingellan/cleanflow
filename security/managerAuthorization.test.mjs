@@ -13,12 +13,13 @@ for (const [variable, expected] of Object.entries({
 }
 
 const { initializeApp } = await import("firebase-admin/app");
-initializeApp({ projectId: "demo-cleanflow" });
+initializeApp({ projectId: "demo-cleanflow", storageBucket: "demo-cleanflow.appspot.com" });
 const { FieldValue, getFirestore, Timestamp } = await import("firebase-admin/firestore");
 const {
   createChecklistRun,
   getChecklistRun,
   getChecklistCapability,
+  getChecklistEvidence,
   issueChecklistCapability,
   revokeChecklistCapability,
   registerManagerPushDevice,
@@ -258,15 +259,36 @@ async function seedEligibleChecklistJob({ checklistSettings } = {}) {
 }
 
 async function publicChecklistGet(token, extraQuery = {}) {
-  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
   await publicChecklist({ method: "GET", query: { token, ...extraQuery } }, response);
   return response;
 }
 
 async function publicChecklistSave(body) {
-  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
   await publicChecklist({ method: "POST", query: {}, body }, response);
   return response;
+}
+
+async function publicChecklistUpload(token, requirementId, bytes, contentType = "image/jpeg") {
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
+  await publicChecklist({
+    method: "PUT",
+    query: { token, organizationId: "injected", jobId: "injected" },
+    rawBody: bytes,
+    get(header) {
+      if (header === "X-CleanFlow-Checklist-Item") return requirementId;
+      if (header === "Content-Type") return contentType;
+      return undefined;
+    },
+  }, response);
+  return response;
+}
+
+async function saveRequiredChecklistPhoto(token) {
+  const result = await publicChecklistUpload(token, "living-belongings", Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  assert.equal(result.code, 200);
+  return result;
 }
 
 test("active manager creates one default DRAFT Checklist Run and a retry returns it", async () => {
@@ -478,9 +500,84 @@ test("capability-authorized cleaner drafts validate frozen fields, revisions, an
   await assertFails(account("manager").firestore().doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get());
 });
 
+test("capability-authorized DRAFT photo is server-scoped, idempotent, reloadable, and manager-only", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const first = await publicChecklistUpload(issued.token, "living-belongings", jpeg);
+  assert.equal(first.code, 200);
+  assert.equal(first.body.duplicate, false);
+  assert.deepEqual(first.body.evidence, [{
+    requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 4, createdAt: null,
+  }]);
+
+  const evidencePath = `${root}/jobs/job/checklistRuns/initial/evidence/living-belongings`;
+  const evidence = (await admin.doc(evidencePath).get()).data();
+  assert.equal(evidence.runId, "initial");
+  assert.equal(evidence.requirementId, "living-belongings");
+  assert.equal(evidence.contentType, "image/jpeg");
+  assert.equal(evidence.sizeBytes, 4);
+  assert.match(evidence.storagePath, /^organizations\/cleanflow-demo\/jobs\/job\/checklistRuns\/initial\/evidence\/living-belongings\/[a-f0-9]{64}\.jpg$/);
+  assert.equal(evidence.createdAt?.toDate instanceof Function, true);
+  assert.equal(JSON.stringify(evidence).includes(issued.token), false);
+
+  const retry = await publicChecklistUpload(issued.token, "living-belongings", jpeg);
+  assert.equal(retry.code, 200);
+  assert.equal(retry.body.duplicate, true);
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).collection("evidence").get()).size, 1);
+
+  const loaded = await publicChecklistGet(issued.token);
+  assert.equal(loaded.code, 200);
+  assert.deepEqual(loaded.body.checklist.evidence.map(({ requirementId, contentType, sizeBytes }) => ({ requirementId, contentType, sizeBytes })), [{
+    requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 4,
+  }]);
+  assert.equal(JSON.stringify(loaded.body).includes(evidence.storagePath), false);
+  const downloaded = await publicChecklistGet(issued.token, { evidenceItem: "living-belongings" });
+  assert.equal(downloaded.code, 200);
+  assert.deepEqual(downloaded.body, jpeg);
+  assert.equal(downloaded.headers["Cache-Control"], "no-store, private");
+
+  const managerView = await getChecklistEvidence.run(request("manager", { jobId: "job", requirementId: "living-belongings" }));
+  assert.equal(managerView.contentType, "image/jpeg");
+  assert.deepEqual(Buffer.from(managerView.base64, "base64"), jpeg);
+  const managerRun = await getChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.deepEqual(managerRun.run.evidence.map(({ requirementId, contentType, sizeBytes }) => ({ requirementId, contentType, sizeBytes })), [{
+    requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 4,
+  }]);
+  assert.equal(JSON.stringify(managerRun.run).includes(evidence.storagePath), false);
+  for (const [uid, anonymous, code] of [[null, false, "unauthenticated"], ["outsider", false, "permission-denied"], ["cleaner", false, "permission-denied"], ["other-manager", false, "permission-denied"]]) {
+    await assert.rejects(getChecklistEvidence.run(request(uid, { jobId: "job", requirementId: "living-belongings" }, anonymous)), { code });
+  }
+  await assertFails(account("manager").firestore().doc(evidencePath).get());
+  await assertFails(account("manager").storage().ref(evidence.storagePath).getMetadata());
+});
+
+test("checklist evidence rejects wrong requirement, bad image data, stale capability, and non-DRAFT writes", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  assert.equal((await publicChecklistUpload(issued.token, "injected-item", jpeg)).code, 400);
+  assert.equal((await publicChecklistUpload(issued.token, "living-belongings", Buffer.from("not-an-image"), "image/jpeg")).code, 400);
+  assert.equal((await publicChecklistUpload(issued.token, "living-belongings", jpeg, "image/heic")).code, 400);
+  await admin.doc(`${root}/jobs/job`).update({ checklistContextRevision: 2 });
+  assert.equal((await publicChecklistUpload(issued.token, "living-belongings", jpeg)).code, 410);
+
+  const replacement = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await revokeChecklistCapability.run(request("manager", { jobId: "job" }));
+  assert.equal((await publicChecklistUpload(replacement.token, "living-belongings", jpeg)).code, 410);
+  const expiring = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await admin.doc(`${root}/jobs/job/checklistRuns/initial/checklistCapabilities/active`)
+    .update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+  assert.equal((await publicChecklistUpload(expiring.token, "living-belongings", jpeg)).code, 410);
+  const active = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await admin.doc(`${root}/jobs/job/checklistRuns/initial`).update({ status: "READY_FOR_REVIEW" });
+  assert.equal((await publicChecklistUpload(active.token, "living-belongings", jpeg)).code, 410);
+});
+
 test("capability-authorized cleaner can hand off one saved DRAFT for manager review without changing Job work", async () => {
   await seedEligibleChecklistJob();
   const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await saveRequiredChecklistPhoto(issued.token);
   const save = await publicChecklistSave({
     token: issued.token, mutationId: "draft-mutation-ready-1", baseRevision: 0,
     changes: { checklistAnswers: { "bed-remake": "DONE" }, inventoryAnswers: { "hand-soap": "NEEDS_RESTOCK" }, generalNotes: "All saved" },
@@ -527,6 +624,19 @@ test("capability-authorized cleaner can hand off one saved DRAFT for manager rev
   await assertFails(account("manager").firestore().doc(runPath).update({ status: "DRAFT" }));
 });
 
+test("review handoff requires the frozen under-bed photo without changing the DRAFT", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const handoff = await publicChecklistSave({
+    token: issued.token,
+    action: "READY_FOR_REVIEW",
+    submissionId: "review-submission-missing-photo",
+    baseRevision: 0,
+  });
+  assert.equal(handoff.code, 410);
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data().status, "DRAFT");
+});
+
 test("review handoff rejects stale draft revisions and changed checklist context", async () => {
   await seedEligibleChecklistJob();
   const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
@@ -553,6 +663,7 @@ test("review handoff rejects a revoked capability", async () => {
 test("one concurrent review handoff wins and its identical peer observes the same Run", async () => {
   await seedEligibleChecklistJob();
   const concurrent = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await saveRequiredChecklistPhoto(concurrent.token);
   const requestBody = { token: concurrent.token, action: "READY_FOR_REVIEW", submissionId: "review-submission-0003", baseRevision: 0 };
   const [one, two] = await Promise.all([publicChecklistSave(requestBody), publicChecklistSave(requestBody)]);
   assert.equal([one, two].filter((result) => result.code === 200).length, 2);

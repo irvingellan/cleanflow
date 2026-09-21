@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
 import { checklistSaveStates, usePublicChecklistDraft } from "./usePublicChecklistDraft.js";
+import {
+  publicChecklistEvidenceUrl,
+  uploadPublicChecklistEvidence,
+} from "./checklistCapabilityService.js";
 
 const errorKeys = {
   checklist_not_found: "checklists.publicUnavailable",
@@ -21,12 +25,93 @@ const saveStateKeys = {
 };
 
 const inventoryAnswers = ["UNANSWERED", "LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"];
+// Phase 5D.1 intentionally supports one frozen pilot evidence requirement only.
+const pilotPhotoRequirementId = "living-belongings";
 
 function itemLabel(item, translate) {
   return item.label || translate(item.labelKey || item.id);
 }
 
-function ChecklistAnswer({ item, value, onChange, translate, disabled = false }) {
+function ChecklistPhoto({ item, token, evidence, disabled, translate }) {
+  const cameraInputRef = useRef(null);
+  const libraryInputRef = useRef(null);
+  const [state, setState] = useState(evidence ? "SAVED" : "IDLE");
+  const [retryFile, setRetryFile] = useState(null);
+  const [error, setError] = useState(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    if (evidence) {
+      setState("SAVED");
+      setError(null);
+    }
+  }, [evidence]);
+
+  useEffect(() => () => {
+    if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+  }, [localPreviewUrl]);
+
+  const upload = async (file) => {
+    if (!file || disabled || state === "UPLOADING") return;
+    setState("UPLOADING");
+    setError(null);
+    setRetryFile(file);
+    try {
+      await uploadPublicChecklistEvidence({ token, requirementId: item.id, file });
+      setLocalPreviewUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return URL.createObjectURL(file);
+      });
+      setState("SAVED");
+      setRetryFile(null);
+    } catch (uploadError) {
+      setState("FAILED");
+      setError(uploadError?.code || "checklist_photo_unavailable");
+    }
+  };
+
+  const sourceSelected = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    upload(file);
+  };
+  const isSaved = Boolean(evidence) || state === "SAVED";
+
+  return (
+    <div className="public-checklist__photo" aria-live="polite">
+      <span className="public-checklist__photo-required">{translate("checklists.photoRequired")}</span>
+      {isSaved && (
+        <img
+          className="public-checklist__photo-preview"
+          src={evidence ? publicChecklistEvidenceUrl(token, item.id) : localPreviewUrl}
+          alt={translate("checklists.savedPhoto")}
+        />
+      )}
+      {!disabled && !isSaved && state !== "UPLOADING" && (
+        <div className="public-checklist__photo-actions">
+          <input ref={cameraInputRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={sourceSelected} />
+          <input ref={libraryInputRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={sourceSelected} />
+          <button className="button button--small" type="button" onClick={() => cameraInputRef.current?.click()}>
+            {translate("checklists.takePhoto")}
+          </button>
+          <button className="button button--small button--secondary" type="button" onClick={() => libraryInputRef.current?.click()}>
+            {translate("checklists.choosePhoto")}
+          </button>
+        </div>
+      )}
+      {state === "UPLOADING" && <p className="public-checklist__photo-status">{translate("checklists.photoUploading")}</p>}
+      {state === "SAVED" && <p className="public-checklist__photo-status">{translate("checklists.photoSaved")}</p>}
+      {state === "FAILED" && (
+        <div className="public-checklist__photo-error" role="alert">
+          <p>{translate(error === "checklist_photo_too_large" ? "checklists.photoTooLarge" : "checklists.photoUploadFailed")}</p>
+          {retryFile && <button className="button button--small" type="button" onClick={() => upload(retryFile)}>{translate("checklists.retryPhoto")}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChecklistAnswer({ item, value, onChange, translate, token, evidence, disabled = false }) {
   const label = itemLabel(item, translate);
   const answerValues = ["UNANSWERED", "DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
 
@@ -48,6 +133,9 @@ function ChecklistAnswer({ item, value, onChange, translate, disabled = false })
           </label>
         ))}
       </div>
+      {item.requiresPhoto && item.id === pilotPhotoRequirementId && (
+        <ChecklistPhoto item={item} token={token} evidence={evidence} disabled={disabled} translate={translate} />
+      )}
     </fieldset>
   );
 }
@@ -172,6 +260,7 @@ export function PublicChecklistPage({ token }) {
   }
 
   const isReadOnly = saveState === checklistSaveStates.READY_FOR_REVIEW;
+  const evidenceByRequirement = new Map((checklist.evidence || []).map((evidence) => [evidence.requirementId, evidence]));
 
   return (
     <main className="public-offer-page checklist-public-page">
@@ -218,6 +307,8 @@ export function PublicChecklistPage({ token }) {
                 value={draft.checklistAnswers?.[item.id] || "UNANSWERED"}
                 onChange={(answer) => queueChanges({ checklistAnswers: { [item.id]: answer } })}
                 translate={translate}
+                token={token}
+                evidence={evidenceByRequirement.get(item.id)}
                 disabled={isReadOnly}
               />
             ))}

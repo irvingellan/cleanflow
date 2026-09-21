@@ -122,8 +122,16 @@ E2E tests passed; build and diff checks passed.
   Assignment lifecycle. The manager can refresh and view the same saved result.
   This is a manager-review handoff, not final evidence-complete submission; it
   is not deployed yet.
-- Photo upload, manager approval, final submission, email, and Job completion
-  do not exist yet.
+- Phase 5D.1 locally adds one real, capability-authorized evidence photo for
+  the frozen `living-belongings` requirement. While a Run is `DRAFT`, the
+  cleaner can take or select one JPEG, PNG, or WebP image (up to 5 MB). The
+  server derives the Storage path, persists only safe metadata, and rechecks
+  the capability/Job/Run context; direct browser Firestore and Storage access
+  remains denied. The photo is read-only after `READY_FOR_REVIEW` and is
+  retrievable only through the cleaner capability or active-manager callable.
+  It is not deployed yet. HEIC/HEIF conversion is intentionally unsupported.
+- Manager approval, final submission, email, and Job completion do not exist
+  yet.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
   CleanFlow; the manager views or receives its report; and an optional email
@@ -182,9 +190,9 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Review and deploy **Issue #42 Phases 5B–5C.4** when approved; then implement
-   only the next bounded cleaner workflow slice without photos, email, or Job
-   completion unless explicitly scoped.
+1. Review and deploy **Issue #42 Phases 5B–5D.1** when approved; then validate
+   this single-photo pilot flow on a real phone before adding any broader
+   evidence requirements.
 2. Wait for further design-partner feedback on Issue #42.
 3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
 4. Finish remaining Astra security/reliability audits if useful.

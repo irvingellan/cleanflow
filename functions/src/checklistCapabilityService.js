@@ -10,6 +10,10 @@ import {
   normalizeChecklistDraftMutation,
   projectChecklistDraftForRead,
 } from "./checklistDraftService.js";
+import {
+  isPilotChecklistPhotoRequirement,
+  pilotChecklistPhotoRequirementId,
+} from "./checklistEvidenceDefinition.js";
 
 export const initialChecklistCapabilityId = "active";
 export const checklistCapabilityLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
@@ -305,12 +309,13 @@ export async function readyPublicChecklistForReview(database, {
   const runRef = runReference(database, organizationId, location.jobId, location.runId);
   const jobRef = jobReference(database, organizationId, location.jobId);
   const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
+  const evidenceRef = runRef.collection("evidence").doc(pilotChecklistPhotoRequirementId);
   const submission = normalizeChecklistReadyForReviewRequest(request);
   const requestHash = checklistReadyForReviewRequestHash(submission);
 
   return database.runTransaction(async (transaction) => {
-    const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot] = await Promise.all([
-      transaction.get(capabilityRef), transaction.get(jobRef), transaction.get(runRef), transaction.get(draftRef),
+    const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot, evidenceSnapshot] = await Promise.all([
+      transaction.get(capabilityRef), transaction.get(jobRef), transaction.get(runRef), transaction.get(draftRef), transaction.get(evidenceRef),
     ]);
     if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) {
       throw new HttpsError("not-found", "Checklist capability not found.");
@@ -344,6 +349,10 @@ export async function readyPublicChecklistForReview(database, {
     const validatedDraft = assertChecklistDraftReadyForReview(run, currentDraft);
     if (submission.baseRevision !== validatedDraft.revision) {
       throw new HttpsError("aborted", "Checklist draft revision conflict.");
+    }
+    if (isPilotChecklistPhotoRequirement(run, pilotChecklistPhotoRequirementId)
+      && evidenceSnapshot.data()?.status !== "SAVED") {
+      throw new HttpsError("failed-precondition", "A required checklist photo is missing.");
     }
     transaction.update(runRef, {
       status: "READY_FOR_REVIEW",

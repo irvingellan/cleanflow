@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
+import { getChecklistEvidence } from "./checklistRunService.js";
 
 function formatRunCreatedAt(value, language) {
   if (!value) return null;
@@ -14,8 +16,39 @@ function formatRunCreatedAt(value, language) {
   ).format(date);
 }
 
+function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
+  const [url, setUrl] = useState(null);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl = null;
+    setUrl(null);
+    setHasError(false);
+    loadEvidence(jobId, evidence.requirementId)
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        if (active) setUrl(objectUrl);
+      })
+      .catch(() => {
+        if (active) setHasError(true);
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [evidence.requirementId, jobId, loadEvidence]);
+
+  if (hasError) return <p className="checklist-run__evidence-error">{translate("checklists.photoUnavailable")}</p>;
+  if (!url) return <p className="checklist-run__evidence-loading">{translate("checklists.photoLoading")}</p>;
+  return <img className="checklist-run__evidence-photo" src={url} alt={translate("checklists.savedPhoto")} />;
+}
+
 /** Displays the server-projected manager summary, never a raw Property or Run. */
-export function ChecklistRunDetail({ job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack }) {
+export function ChecklistRunDetail({
+  job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
+  loadEvidence = getChecklistEvidence,
+}) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
@@ -23,6 +56,7 @@ export function ChecklistRunDetail({ job, checklistRun, isRefreshing = false, ha
   const lastSavedAt = formatRunCreatedAt(draft?.lastSavedAt, language);
   const readyForReviewAt = formatRunCreatedAt(checklistRun.readyForReviewAt, language);
   const isReadyForReview = checklistRun.status === "READY_FOR_REVIEW";
+  const evidence = checklistRun.evidence || [];
 
   return (
     <section className="panel checklist-run" aria-labelledby="checklist-run-title">
@@ -121,6 +155,22 @@ export function ChecklistRunDetail({ job, checklistRun, isRefreshing = false, ha
               {draft.generalNotes && <p><strong>{translate("checklists.generalNotes")}:</strong> {draft.generalNotes}</p>}
             </div>
           )}
+        </section>
+      )}
+
+      {evidence.length > 0 && (
+        <section className="checklist-run__section" aria-labelledby="checklist-evidence-title">
+          <h3 id="checklist-evidence-title">{translate("checklists.savedEvidence")}</h3>
+          {evidence.map((item) => (
+            <div className="checklist-run__evidence" key={item.requirementId}>
+              <p>{translate("checklists.photoForRequirement", {
+                requirement: item.requirementId === "living-belongings"
+                  ? translate("checklistPreview.livingBelongings")
+                  : item.requirementId,
+              })}</p>
+              <ChecklistEvidencePhoto jobId={job.id} evidence={item} translate={translate} loadEvidence={loadEvidence} />
+            </div>
+          ))}
         </section>
       )}
 

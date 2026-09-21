@@ -6,6 +6,8 @@ const issueChecklistCapabilityCall = httpsCallable(functions, "issueChecklistCap
 const revokeChecklistCapabilityCall = httpsCallable(functions, "revokeChecklistCapability");
 const publicChecklistApiPath = "/api/public-checklist";
 export const publicChecklistRequestTimeoutMilliseconds = 15_000;
+export const maximumChecklistEvidenceSizeBytes = 5 * 1024 * 1024;
+export const acceptedChecklistEvidenceContentTypes = ["image/jpeg", "image/png", "image/webp"];
 
 export class PublicChecklistRequestError extends Error {
   constructor(code, status) {
@@ -66,6 +68,38 @@ async function requestPublicChecklist(token) {
 }
 
 export { requestPublicChecklist as getPublicChecklist };
+
+export function publicChecklistEvidenceUrl(token, requirementId) {
+  return `${publicChecklistApiPath}?${new URLSearchParams({ token, evidenceItem: requirementId })}`;
+}
+
+export function validateChecklistEvidenceFile(file) {
+  if (!file || !acceptedChecklistEvidenceContentTypes.includes(file.type)) {
+    throw new PublicChecklistRequestError("checklist_photo_invalid_type");
+  }
+  if (file.size <= 0 || file.size > maximumChecklistEvidenceSizeBytes) {
+    throw new PublicChecklistRequestError("checklist_photo_too_large");
+  }
+}
+
+export async function uploadPublicChecklistEvidence({ token, requirementId, file }) {
+  validateChecklistEvidenceFile(file);
+  const response = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type,
+      "X-CleanFlow-Checklist-Item": requirementId,
+      Accept: "application/json",
+    },
+    credentials: "omit",
+    body: file,
+  });
+  let body = {};
+  try { body = await response.json(); } catch { /* response status maps to a safe generic error */ }
+  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_photo_unavailable", response.status);
+  if (!Array.isArray(body.evidence)) throw new PublicChecklistRequestError("checklist_photo_unavailable");
+  return body;
+}
 
 export async function savePublicChecklistDraft({ token, mutationId, baseRevision, changes }) {
   const response = await fetchPublicChecklist(publicChecklistApiPath, {
