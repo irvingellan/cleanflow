@@ -40,6 +40,7 @@ function emptyDetailData() {
     hasIssuesError: false,
     checklistRun: null,
     isLoadingChecklistRun: false,
+    isRefreshingChecklistRun: false,
     hasChecklistRunError: false,
     isCreatingChecklistRun: false,
     hasCreateChecklistRunError: false,
@@ -66,6 +67,8 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const [offersSentCount, setOffersSentCount] = useState(null);
   const checklistRunCreateInFlight = useRef(false);
   const checklistCapabilityInFlight = useRef(false);
+  const checklistRunRequestId = useRef(0);
+  const selectedJobIdRef = useRef(null);
 
   async function refreshOffers() {
     if (!selectedJob) {
@@ -131,24 +134,35 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }
   }
 
-  async function refreshChecklistRun(job = selectedJob) {
+  async function refreshChecklistRun(job = selectedJob, { manual = false } = {}) {
     if (!job) {
       return;
     }
 
+    const requestId = ++checklistRunRequestId.current;
+
     setDetailData((currentData) => ({
       ...currentData,
-      isLoadingChecklistRun: true,
+      ...(manual ? { isRefreshingChecklistRun: true } : { isLoadingChecklistRun: true }),
       hasChecklistRunError: false,
     }));
 
     try {
       const checklistRun = await getChecklistRun(job.id);
-      setDetailData((currentData) => ({ ...currentData, checklistRun }));
+      if (requestId === checklistRunRequestId.current && selectedJobIdRef.current === job.id) {
+        setDetailData((currentData) => ({ ...currentData, checklistRun }));
+      }
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasChecklistRunError: true }));
+      if (requestId === checklistRunRequestId.current && selectedJobIdRef.current === job.id) {
+        setDetailData((currentData) => ({ ...currentData, hasChecklistRunError: true }));
+      }
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingChecklistRun: false }));
+      if (requestId === checklistRunRequestId.current && selectedJobIdRef.current === job.id) {
+        setDetailData((currentData) => ({
+          ...currentData,
+          ...(manual ? { isRefreshingChecklistRun: false } : { isLoadingChecklistRun: false }),
+        }));
+      }
     }
   }
 
@@ -212,11 +226,13 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }, [view]);
 
   function updateSelectedJob(updatedJob) {
+    selectedJobIdRef.current = updatedJob?.id || null;
     setSelectedJob(updatedJob);
     onJobUpdated(updatedJob);
   }
 
   function openJob(job) {
+    selectedJobIdRef.current = job.id;
     setSelectedJob(job);
     setDetailData({
       ...emptyDetailData(),
@@ -231,6 +247,8 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   function closeJob() {
     checklistRunCreateInFlight.current = false;
     checklistCapabilityInFlight.current = false;
+    selectedJobIdRef.current = null;
+    checklistRunRequestId.current += 1;
     setSelectedJob(null);
     setDetailData(emptyDetailData());
   }
@@ -465,6 +483,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       refreshIssues,
       checklistRun: detailData.checklistRun,
       isLoadingChecklistRun: detailData.isLoadingChecklistRun,
+      isRefreshingChecklistRun: detailData.isRefreshingChecklistRun,
       hasChecklistRunError: detailData.hasChecklistRunError,
       isCreatingChecklistRun: detailData.isCreatingChecklistRun,
       hasCreateChecklistRunError: detailData.hasCreateChecklistRunError,

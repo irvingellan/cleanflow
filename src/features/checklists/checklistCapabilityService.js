@@ -5,6 +5,7 @@ const getChecklistCapabilityCall = httpsCallable(functions, "getChecklistCapabil
 const issueChecklistCapabilityCall = httpsCallable(functions, "issueChecklistCapability");
 const revokeChecklistCapabilityCall = httpsCallable(functions, "revokeChecklistCapability");
 const publicChecklistApiPath = "/api/public-checklist";
+export const publicChecklistRequestTimeoutMilliseconds = 15_000;
 
 export class PublicChecklistRequestError extends Error {
   constructor(code, status) {
@@ -35,8 +36,23 @@ export async function revokeChecklistCapability(jobId) {
   return result.data?.capability || { state: "REVOKED" };
 }
 
+async function fetchPublicChecklist(input, init = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), publicChecklistRequestTimeoutMilliseconds);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new PublicChecklistRequestError("checklist_request_timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function requestPublicChecklist(token) {
-  const response = await fetch(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
+  const response = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
     headers: { Accept: "application/json" },
     credentials: "omit",
   });
@@ -52,7 +68,7 @@ async function requestPublicChecklist(token) {
 export { requestPublicChecklist as getPublicChecklist };
 
 export async function savePublicChecklistDraft({ token, mutationId, baseRevision, changes }) {
-  const response = await fetch(publicChecklistApiPath, {
+  const response = await fetchPublicChecklist(publicChecklistApiPath, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     credentials: "omit",

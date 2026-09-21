@@ -15,7 +15,7 @@ function formatRunCreatedAt(value, language) {
 }
 
 /** Displays the server-projected manager summary, never a raw Property or Run. */
-export function ChecklistRunDetail({ job, checklistRun, onBack }) {
+export function ChecklistRunDetail({ job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack }) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
@@ -29,6 +29,12 @@ export function ChecklistRunDetail({ job, checklistRun, onBack }) {
       <h2 id="checklist-run-title" className="panel__title">
         {translate("checklists.runTitle")}
       </h2>
+      {onRefresh && (
+        <button className="button button--small" type="button" disabled={isRefreshing} onClick={onRefresh}>
+          {isRefreshing ? translate("checklists.refreshingSavedProgress") : translate("checklists.refreshSavedProgress")}
+        </button>
+      )}
+      {hasRefreshError && <StateCard message={translate("checklists.loadError")} status="alert" isError />}
 
       <StateCard
         message={translate("checklists.draftDescription")}

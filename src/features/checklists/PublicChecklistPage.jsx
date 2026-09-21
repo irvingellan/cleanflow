@@ -49,7 +49,7 @@ function ChecklistAnswer({ item, value, onChange, translate }) {
   );
 }
 
-function SaveStatus({ saveState, onSaveNow, onDiscard, translate }) {
+function SaveStatus({ saveState, hasRecoveryWarning, isResolvingConflict, onSaveNow, onDiscard, onReapply, translate }) {
   const isUnavailable = saveState === checklistSaveStates.UNAVAILABLE;
   const isConflict = saveState === checklistSaveStates.CONFLICT;
   const needsRetry = saveState === checklistSaveStates.OFFLINE_PENDING || saveState === checklistSaveStates.RETRY;
@@ -60,6 +60,7 @@ function SaveStatus({ saveState, onSaveNow, onDiscard, translate }) {
       <p role={isUnavailable || isConflict ? "alert" : "status"}>
         {translate(saveStateKeys[saveState] || "checklists.saveStateSaving")}
       </p>
+      {isConflict && <p className="public-checklist__conflict-help">{translate("checklists.conflictLocalPreserved")}</p>}
       <div className="public-checklist__save-actions">
         {!isUnavailable && !isConflict && canSaveNow && (
           <button className="button button--small" type="button" onClick={onSaveNow}>
@@ -67,11 +68,17 @@ function SaveStatus({ saveState, onSaveNow, onDiscard, translate }) {
           </button>
         )}
         {isConflict && (
-          <button className="button button--small" type="button" onClick={onDiscard}>
-            {translate("checklists.reloadSavedDraft")}
-          </button>
+          <>
+            <button className="button button--small" type="button" disabled={isResolvingConflict} onClick={onReapply}>
+              {translate("checklists.reapplyLocalChanges")}
+            </button>
+            <button className="button button--small button--secondary" type="button" disabled={isResolvingConflict} onClick={onDiscard}>
+              {translate("checklists.reloadSavedDraft")}
+            </button>
+          </>
         )}
       </div>
+      {hasRecoveryWarning && <p className="public-checklist__recovery-warning" role="status">{translate("checklists.recoveryWarning")}</p>}
     </aside>
   );
 }
@@ -85,9 +92,12 @@ export function PublicChecklistPage({ token }) {
     isLoading,
     loadError,
     saveState,
+    hasRecoveryWarning,
+    isResolvingConflict,
     queueChanges,
     saveNow,
     discardLocalChanges,
+    reapplyLocalChanges,
   } = usePublicChecklistDraft(token);
 
   if (isLoading) {
@@ -118,8 +128,11 @@ export function PublicChecklistPage({ token }) {
 
         <SaveStatus
           saveState={saveState}
+          hasRecoveryWarning={hasRecoveryWarning}
+          isResolvingConflict={isResolvingConflict}
           onSaveNow={saveNow}
           onDiscard={discardLocalChanges}
+          onReapply={reapplyLocalChanges}
           translate={translate}
         />
 

@@ -111,6 +111,11 @@ E2E tests passed; build and diff checks passed.
   A small bounded local recovery record uses a capability hash rather than the
   bearer token and retries the same mutation ID after an uncertain response.
   It is not deployed yet.
+- Phase 5C.3 locally hardens that pilot autosave path with bounded public
+  requests, terminal explicit conflict choices, and a non-blocking local
+  recovery-storage warning. Managers can manually refresh only the latest
+  acknowledged draft progress; no polling, realtime sync, submission, or
+  evidence upload is added. It is not deployed yet.
 - Photo upload, final submission, email, and Job completion do not exist yet.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
@@ -170,9 +175,9 @@ E2E tests passed; build and diff checks passed.
 
 ## Next actions
 
-1. Review and deploy **Issue #42 Phases 5B–5C.2** when approved; then implement
-   the next bounded cleaner workflow slice without photos, final submission,
-   email, or Job completion unless explicitly scoped.
+1. Review and deploy **Issue #42 Phases 5B–5C.3** when approved; then implement
+   only the next bounded cleaner workflow slice without photos, final
+   submission, email, or Job completion unless explicitly scoped.
 2. Wait for further design-partner feedback on Issue #42.
 3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
 4. Finish remaining Astra security/reliability audits if useful.

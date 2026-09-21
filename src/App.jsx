@@ -404,6 +404,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       refreshIssues: refreshJobIssues,
       checklistRun,
       isLoadingChecklistRun,
+      isRefreshingChecklistRun,
       hasChecklistRunError,
       isCreatingChecklistRun,
       hasCreateChecklistRunError,
@@ -1166,6 +1167,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
           <ChecklistRunDetail
             job={selectedJob}
             checklistRun={checklistRun}
+            isRefreshing={isRefreshingChecklistRun}
+            hasRefreshError={hasChecklistRunError}
+            onRefresh={() => refreshChecklistRun(selectedJob, { manual: true })}
             onBack={() => setView("job-detail")}
           />
         )}

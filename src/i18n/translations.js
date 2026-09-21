@@ -888,6 +888,9 @@ Object.assign(messages.en, {
   "checklists.photosLater": "Photo upload will be available in a later update.",
   "checklists.saveNow": "Save now",
   "checklists.reloadSavedDraft": "Reload saved version",
+  "checklists.reapplyLocalChanges": "Keep and reapply my changes",
+  "checklists.conflictLocalPreserved": "Your local changes are still on this phone. Choose which version to keep.",
+  "checklists.recoveryWarning": "Local recovery is unavailable. Unsaved edits may be lost if this page closes.",
   "checklists.saveStateSaved": "Saved",
   "checklists.saveStateSaving": "Saving…",
   "checklists.saveStateOfflinePending": "Changes waiting for connection",
@@ -907,6 +910,8 @@ Object.assign(messages.en, {
   "checklists.draftInventoryProgress": "Inventory: {answered} checked, {restock} need restock",
   "checklists.draftRevision": "Draft revision",
   "checklists.lastSavedAt": "Last saved",
+  "checklists.refreshSavedProgress": "Refresh saved progress",
+  "checklists.refreshingSavedProgress": "Refreshing saved progress…",
 });
 
 Object.assign(messages.pt, {
@@ -916,6 +921,9 @@ Object.assign(messages.pt, {
   "checklists.photosLater": "O envio de fotos estará disponível em uma atualização futura.",
   "checklists.saveNow": "Salvar agora",
   "checklists.reloadSavedDraft": "Recarregar versão salva",
+  "checklists.reapplyLocalChanges": "Manter e reaplicar minhas alterações",
+  "checklists.conflictLocalPreserved": "Suas alterações locais continuam neste celular. Escolha qual versão manter.",
+  "checklists.recoveryWarning": "A recuperação local não está disponível. Alterações não salvas podem se perder se esta página fechar.",
   "checklists.saveStateSaved": "Salvo",
   "checklists.saveStateSaving": "Salvando…",
   "checklists.saveStateOfflinePending": "Alterações aguardando conexão",
@@ -935,6 +943,8 @@ Object.assign(messages.pt, {
   "checklists.draftInventoryProgress": "Estoque: {answered} verificados, {restock} precisam repor",
   "checklists.draftRevision": "Revisão do rascunho",
   "checklists.lastSavedAt": "Último salvamento",
+  "checklists.refreshSavedProgress": "Atualizar progresso salvo",
+  "checklists.refreshingSavedProgress": "Atualizando progresso salvo…",
 });
 
 Object.assign(messages.es, {
@@ -944,6 +954,9 @@ Object.assign(messages.es, {
   "checklists.photosLater": "La carga de fotos estará disponible en una actualización posterior.",
   "checklists.saveNow": "Guardar ahora",
   "checklists.reloadSavedDraft": "Recargar versión guardada",
+  "checklists.reapplyLocalChanges": "Conservar y reaplicar mis cambios",
+  "checklists.conflictLocalPreserved": "Tus cambios locales siguen en este teléfono. Elige qué versión conservar.",
+  "checklists.recoveryWarning": "La recuperación local no está disponible. Los cambios no guardados podrían perderse al cerrar esta página.",
   "checklists.saveStateSaved": "Guardado",
   "checklists.saveStateSaving": "Guardando…",
   "checklists.saveStateOfflinePending": "Cambios esperando conexión",
@@ -963,6 +976,8 @@ Object.assign(messages.es, {
   "checklists.draftInventoryProgress": "Inventario: {answered} revisados, {restock} necesitan reposición",
   "checklists.draftRevision": "Revisión del borrador",
   "checklists.lastSavedAt": "Último guardado",
+  "checklists.refreshSavedProgress": "Actualizar progreso guardado",
+  "checklists.refreshingSavedProgress": "Actualizando progreso guardado…",
 });
 
 function getInitialLanguage() {

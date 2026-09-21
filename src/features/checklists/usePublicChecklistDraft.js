@@ -86,6 +86,8 @@ export function usePublicChecklistDraft(token) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [saveState, setSaveState] = useState(checklistSaveStates.LOADING);
+  const [hasRecoveryWarning, setHasRecoveryWarning] = useState(false);
+  const [isResolvingConflict, setIsResolvingConflict] = useState(false);
   const scopeRef = useRef(null);
   const pendingMutationRef = useRef(null);
   const queuedChangesRef = useRef({});
@@ -94,17 +96,25 @@ export function usePublicChecklistDraft(token) {
   const isMountedRef = useRef(false);
   const noteDebounceRef = useRef(null);
   const flushRef = useRef(null);
+  const saveStateRef = useRef(checklistSaveStates.LOADING);
+
+  const setCurrentSaveState = useCallback((nextState) => {
+    saveStateRef.current = nextState;
+    if (isMountedRef.current) setSaveState(nextState);
+  }, []);
 
   const persistRecovery = useCallback(() => {
     if (!scopeRef.current) return;
     if (!pendingMutationRef.current && !hasChanges(queuedChangesRef.current)) {
       clearChecklistDraftRecovery(scopeRef.current);
+      if (isMountedRef.current) setHasRecoveryWarning(false);
       return;
     }
-    saveChecklistDraftRecovery(scopeRef.current, {
+    const saved = saveChecklistDraftRecovery(scopeRef.current, {
       pendingMutation: pendingMutationRef.current,
       queuedChanges: queuedChangesRef.current,
     });
+    if (isMountedRef.current) setHasRecoveryWarning(!saved);
   }, []);
 
   const setVisibleDraft = useCallback((nextDraft) => {
@@ -112,17 +122,28 @@ export function usePublicChecklistDraft(token) {
     if (isMountedRef.current) setDraft(nextDraft);
   }, []);
 
+  const pendingLocalChanges = useCallback(() => mergeSparseChecklistChanges(
+    pendingMutationRef.current?.changes || {},
+    queuedChangesRef.current,
+  ), []);
+
+  const enterConflict = useCallback(() => {
+    clearTimeout(noteDebounceRef.current);
+    persistRecovery();
+    setCurrentSaveState(checklistSaveStates.CONFLICT);
+  }, [persistRecovery, setCurrentSaveState]);
+
   const flush = useCallback(async () => {
     const pending = pendingMutationRef.current;
     if (!pending || isSavingRef.current) return;
     if (!isOnline()) {
-      if (isMountedRef.current) setSaveState(checklistSaveStates.OFFLINE_PENDING);
+      setCurrentSaveState(checklistSaveStates.OFFLINE_PENDING);
       persistRecovery();
       return;
     }
 
     isSavingRef.current = true;
-    if (isMountedRef.current) setSaveState(checklistSaveStates.SAVING);
+    setCurrentSaveState(checklistSaveStates.SAVING);
     try {
       const result = await savePublicChecklistDraft({ token, ...pending });
       if (!validDraft(result?.draft)) throw new Error("Checklist save response was invalid.");
@@ -132,6 +153,14 @@ export function usePublicChecklistDraft(token) {
       const queued = queuedChangesRef.current;
       queuedChangesRef.current = {};
       if (hasChanges(queued)) {
+        // A duplicate receipt can legitimately return a newer authoritative draft.
+        // Never replay sparse edits from an older base revision without the cleaner's choice.
+        if (result.draft.revision !== result.revision) {
+          queuedChangesRef.current = queued;
+          setVisibleDraft(result.draft);
+          enterConflict();
+          return;
+        }
         const nextMutation = {
           mutationId: createMutationId(),
           baseRevision: result.draft.revision,
@@ -140,26 +169,26 @@ export function usePublicChecklistDraft(token) {
         pendingMutationRef.current = nextMutation;
         setVisibleDraft(mergeChecklistChanges(result.draft, queued));
         persistRecovery();
-        if (isMountedRef.current) setSaveState(checklistSaveStates.SAVING);
+        setCurrentSaveState(checklistSaveStates.SAVING);
         queueMicrotask(() => flushRef.current?.());
       } else {
         setVisibleDraft(result.draft);
         persistRecovery();
-        if (isMountedRef.current) setSaveState(checklistSaveStates.SAVED);
+        setCurrentSaveState(checklistSaveStates.SAVED);
       }
     } catch (error) {
       if (isRevisionConflict(error)) {
-        if (isMountedRef.current) setSaveState(checklistSaveStates.CONFLICT);
+        enterConflict();
       } else if (isUnavailable(error)) {
-        if (isMountedRef.current) setSaveState(checklistSaveStates.UNAVAILABLE);
-      } else if (isMountedRef.current) {
-        setSaveState(isOnline() ? checklistSaveStates.RETRY : checklistSaveStates.OFFLINE_PENDING);
+        setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
+      } else {
+        setCurrentSaveState(isOnline() ? checklistSaveStates.RETRY : checklistSaveStates.OFFLINE_PENDING);
       }
       persistRecovery();
     } finally {
       isSavingRef.current = false;
     }
-  }, [persistRecovery, setVisibleDraft, token]);
+  }, [enterConflict, persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
 
   flushRef.current = flush;
 
@@ -167,7 +196,7 @@ export function usePublicChecklistDraft(token) {
     if (isMountedRef.current) {
       setIsLoading(true);
       setLoadError(null);
-      setSaveState(checklistSaveStates.LOADING);
+      setCurrentSaveState(checklistSaveStates.LOADING);
     }
     try {
       const [scope, result] = await Promise.all([checklistDraftRecoveryScope(token), getPublicChecklist(token)]);
@@ -189,6 +218,12 @@ export function usePublicChecklistDraft(token) {
       setIsLoading(false);
 
       if (pending || hasChanges(queuedChangesRef.current)) {
+        if (pending && !compatiblePending) {
+          // Recovery from a different server revision is preserved but never replayed automatically.
+          persistRecovery();
+          setCurrentSaveState(checklistSaveStates.CONFLICT);
+          return;
+        }
         if (!pending && hasChanges(queuedChangesRef.current)) {
           pendingMutationRef.current = {
             mutationId: createMutationId(),
@@ -199,23 +234,25 @@ export function usePublicChecklistDraft(token) {
           setVisibleDraft(mergeChecklistChanges(result.draft, pendingMutationRef.current.changes));
         }
         persistRecovery();
-        setSaveState(checklistSaveStates.OFFLINE_PENDING);
+        setCurrentSaveState(checklistSaveStates.OFFLINE_PENDING);
         if (isOnline()) queueMicrotask(() => flushRef.current?.());
       } else {
-        setSaveState(checklistSaveStates.SAVED);
+        setCurrentSaveState(checklistSaveStates.SAVED);
       }
     } catch (error) {
       if (!isMountedRef.current) return;
       setIsLoading(false);
       setLoadError(error?.code || "checklist_unavailable");
-      setSaveState(checklistSaveStates.UNAVAILABLE);
+      setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
     }
-  }, [persistRecovery, setVisibleDraft, token]);
+  }, [persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
 
   useEffect(() => {
     isMountedRef.current = true;
     load();
-    const retryOnOnline = () => flushRef.current?.();
+    const retryOnOnline = () => {
+      if (saveStateRef.current !== checklistSaveStates.CONFLICT) flushRef.current?.();
+    };
     window.addEventListener("online", retryOnOnline);
     return () => {
       isMountedRef.current = false;
@@ -225,7 +262,9 @@ export function usePublicChecklistDraft(token) {
   }, [load]);
 
   const queueChanges = useCallback((changes, { debounce = false } = {}) => {
-    if (!hasChanges(changes) || saveState === checklistSaveStates.UNAVAILABLE) return;
+    if (!hasChanges(changes)
+      || saveStateRef.current === checklistSaveStates.UNAVAILABLE
+      || saveStateRef.current === checklistSaveStates.CONFLICT) return;
     setVisibleDraft(mergeChecklistChanges(draftRef.current, changes));
     if (pendingMutationRef.current) {
       queuedChangesRef.current = mergeSparseChecklistChanges(queuedChangesRef.current, changes);
@@ -237,22 +276,20 @@ export function usePublicChecklistDraft(token) {
       };
     }
     persistRecovery();
-    if (isMountedRef.current && saveState !== checklistSaveStates.CONFLICT) {
-      setSaveState(checklistSaveStates.SAVING);
-    }
+    setCurrentSaveState(checklistSaveStates.SAVING);
     clearTimeout(noteDebounceRef.current);
     if (debounce) {
       noteDebounceRef.current = setTimeout(() => flushRef.current?.(), 650);
-    } else if (saveState !== checklistSaveStates.CONFLICT) {
+    } else {
       flushRef.current?.();
     }
-  }, [persistRecovery, saveState, setVisibleDraft]);
+  }, [persistRecovery, setCurrentSaveState, setVisibleDraft]);
 
   const retrySave = useCallback(() => {
-    if (saveState === checklistSaveStates.CONFLICT || saveState === checklistSaveStates.UNAVAILABLE) return;
+    if (saveStateRef.current === checklistSaveStates.CONFLICT || saveStateRef.current === checklistSaveStates.UNAVAILABLE) return;
     clearTimeout(noteDebounceRef.current);
     flushRef.current?.();
-  }, [saveState]);
+  }, []);
 
   const discardLocalChanges = useCallback(() => {
     pendingMutationRef.current = null;
@@ -261,15 +298,53 @@ export function usePublicChecklistDraft(token) {
     load({ discardRecovery: true });
   }, [load]);
 
+  const reapplyLocalChanges = useCallback(async () => {
+    if (saveStateRef.current !== checklistSaveStates.CONFLICT || isResolvingConflict) return;
+    const changes = pendingLocalChanges();
+    setIsResolvingConflict(true);
+    try {
+      const result = await getPublicChecklist(token);
+      if (!result?.checklist || !validDraft(result?.draft)) throw new Error("Checklist response was invalid.");
+      setChecklist(result.checklist);
+      if (!hasChanges(changes)) {
+        pendingMutationRef.current = null;
+        queuedChangesRef.current = {};
+        setVisibleDraft(result.draft);
+        persistRecovery();
+        setCurrentSaveState(checklistSaveStates.SAVED);
+        return;
+      }
+      pendingMutationRef.current = {
+        mutationId: createMutationId(),
+        baseRevision: result.draft.revision,
+        changes,
+      };
+      queuedChangesRef.current = {};
+      setVisibleDraft(mergeChecklistChanges(result.draft, changes));
+      persistRecovery();
+      setCurrentSaveState(checklistSaveStates.SAVING);
+      await flushRef.current?.();
+    } catch (error) {
+      if (isUnavailable(error)) setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
+      else setCurrentSaveState(checklistSaveStates.CONFLICT);
+      persistRecovery();
+    } finally {
+      if (isMountedRef.current) setIsResolvingConflict(false);
+    }
+  }, [isResolvingConflict, pendingLocalChanges, persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
+
   return {
     checklist,
     draft,
     isLoading,
     loadError,
     saveState,
+    hasRecoveryWarning,
+    isResolvingConflict,
     queueChanges,
     retrySave,
     saveNow: retrySave,
     discardLocalChanges,
+    reapplyLocalChanges,
   };
 }

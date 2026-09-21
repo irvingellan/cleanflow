@@ -64,4 +64,22 @@ describe("ChecklistRunDetail", () => {
     expect(screen.getByText("Everything else looks good.")).toBeVisible();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
+
+  it("lets the manager explicitly refresh only the server-acknowledged progress", () => {
+    const onRefresh = vi.fn();
+    render(
+      <TranslationProvider>
+        <ChecklistRunDetail
+          job={{ id: "job-1", propertyName: "Job Property", scheduledDate: "2026-09-20" }}
+          checklistRun={{ id: "initial", status: "DRAFT", property: { name: "Snapshot Property" }, checklistItemCount: 28, inventoryItemCount: 13 }}
+          isRefreshing={false}
+          onRefresh={onRefresh}
+          onBack={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    screen.getByRole("button", { name: "Refresh saved progress" }).click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
 });

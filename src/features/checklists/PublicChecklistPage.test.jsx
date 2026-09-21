@@ -57,6 +57,16 @@ function itemFieldset(label) {
   return screen.getByText(label).closest("fieldset");
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   getPublicChecklist.mockReset();
@@ -76,6 +86,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("PublicChecklistPage", () => {
@@ -142,6 +153,26 @@ describe("PublicChecklistPage", () => {
     expect(screen.getByText("Saved")).toBeVisible();
   });
 
+  it("keeps the exact mutation for a timed-out save before an explicit retry", async () => {
+    savePublicChecklistDraft
+      .mockRejectedValueOnce({ code: "checklist_request_timeout" })
+      .mockResolvedValueOnce({
+        duplicate: true,
+        revision: 1,
+        draft: createDraft({ revision: 1, checklistAnswers: { bed: "DONE", pool: "UNANSWERED" } }),
+      });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    expect(await screen.findByText("Changes could not be saved yet")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenCalledTimes(2));
+    expect(savePublicChecklistDraft.mock.calls[1][0].mutationId)
+      .toBe(savePublicChecklistDraft.mock.calls[0][0].mutationId);
+  });
+
   it("shows a conflict without silently overwriting local or server state", async () => {
     savePublicChecklistDraft.mockRejectedValueOnce({ code: "checklist_conflict", status: 409 });
     renderPage();
@@ -149,8 +180,89 @@ describe("PublicChecklistPage", () => {
 
     fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
     expect(await screen.findByText("Conflict — review changes")).toBeVisible();
+    expect(screen.getByText("Your local changes are still on this phone. Choose which version to keep.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Keep and reapply my changes" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reload saved version" })).toBeVisible();
     expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeChecked();
+    expect(savePublicChecklistDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replay queued local edits when the acknowledged response contains a newer server revision", async () => {
+    const firstSave = deferred();
+    savePublicChecklistDraft.mockReturnValueOnce(firstSave.promise);
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    fireEvent.change(screen.getByLabelText("Hand soap"), { target: { value: "LOW" } });
+    expect(savePublicChecklistDraft).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      firstSave.resolve({
+        duplicate: true,
+        revision: 1,
+        draft: createDraft({ revision: 2, checklistAnswers: { bed: "DONE", pool: "UNANSWERED" } }),
+      });
+    });
+
+    expect(await screen.findByText("Conflict — review changes")).toBeVisible();
+    expect(savePublicChecklistDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the cleaner explicitly reload or reapply preserved changes after a conflict", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    savePublicChecklistDraft.mockRejectedValueOnce({ code: "checklist_conflict", status: 409 });
+    getPublicChecklist.mockResolvedValueOnce({
+      checklist: frozenChecklist,
+      draft: createDraft({ revision: 1, checklistAnswers: { bed: "UNANSWERED", pool: "UNANSWERED" } }),
+    });
+    savePublicChecklistDraft.mockResolvedValueOnce({
+      duplicate: false,
+      revision: 2,
+      draft: createDraft({ revision: 2, checklistAnswers: { bed: "DONE", pool: "UNANSWERED" } }),
+    });
+
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    await screen.findByText("Conflict — review changes");
+    fireEvent.click(screen.getByRole("button", { name: "Keep and reapply my changes" }));
+
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenCalledTimes(2));
+    expect(savePublicChecklistDraft.mock.calls[1][0]).toMatchObject({
+      baseRevision: 1,
+      changes: { checklistAnswers: { bed: "DONE" } },
+    });
+    expect(screen.getByText("Saved")).toBeVisible();
+
+    savePublicChecklistDraft.mockRejectedValueOnce({ code: "checklist_conflict", status: 409 });
+    getPublicChecklist.mockResolvedValueOnce({
+      checklist: frozenChecklist,
+      draft: createDraft({ revision: 3, checklistAnswers: { bed: "UNANSWERED", pool: "UNANSWERED" } }),
+    });
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Not answered"));
+    await screen.findByText("Conflict — review changes");
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved version" }));
+    await waitFor(() => expect(within(itemFieldset("Make the bed")).getByLabelText("Not answered")).toBeChecked());
+  });
+
+  it("warns when local recovery cannot be saved while an online save remains pending", async () => {
+    const pendingSave = deferred();
+    savePublicChecklistDraft.mockReturnValueOnce(pendingSave.promise);
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function setItem(key, value) {
+      if (String(key).startsWith(checklistDraftRecoveryStoragePrefix)) throw new Error("storage unavailable");
+      return originalSetItem.call(this, key, value);
+    });
+    vi.stubGlobal("crypto", {
+      subtle: { digest: vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]).buffer) },
+      randomUUID: () => "11111111-1111-4111-8111-111111111111",
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    expect(await screen.findByText("Local recovery is unavailable. Unsaved edits may be lost if this page closes.")).toBeVisible();
     expect(savePublicChecklistDraft).toHaveBeenCalledTimes(1);
   });
 
@@ -162,6 +274,22 @@ describe("PublicChecklistPage", () => {
     fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
     expect(await screen.findByText("Link unavailable")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Save now" })).not.toBeInTheDocument();
+  });
+
+  it("does not keep retrying when a capability is revoked after an uncertain save", async () => {
+    savePublicChecklistDraft
+      .mockRejectedValueOnce({ code: "checklist_request_timeout" })
+      .mockRejectedValueOnce({ code: "checklist_unavailable", status: 410 });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    await screen.findByText("Changes could not be saved yet");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("Link unavailable")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(savePublicChecklistDraft).toHaveBeenCalledTimes(2);
   });
 
   it("reconciles a pending local edit only after the same capability resolves", async () => {

@@ -2593,6 +2593,15 @@ button.summary-card {
   gap: 8px;
 }
 
+.public-checklist__conflict-help,
+.public-checklist__recovery-warning {
+  width: 100%;
+  color: var(--color-text-secondary) !important;
+  font-weight: 600 !important;
+}
+
+.public-checklist__recovery-warning { color: var(--color-warning-text) !important; }
+
 .public-checklist__instructions,
 .public-checklist__future-note {
   display: grid;

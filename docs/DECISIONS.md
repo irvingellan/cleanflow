@@ -611,3 +611,8 @@ Function-mediated, revalidate the immutable Run, Job archive/eligibility,
 assignment scope, expiry, and revision on every request, and expose only the
 allowlisted frozen cleaner snapshot. Submission, evidence, and delivery remain
 separate later phases.
+
+Cleaner draft edits remain server-owned and receipt-idempotent. The browser may
+retain a small local recovery record, but a newer server revision enters an
+explicit conflict state rather than silently replaying stale edits. This is a
+pilot reliability boundary, not offline sync or multi-device collaboration.
