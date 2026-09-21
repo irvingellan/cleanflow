@@ -131,8 +131,11 @@ export function buildChecklistRunSnapshot({ job, property }) {
 
 export function projectChecklistRunForCleaner(checklistRun) {
   const snapshot = checklistRun?.resolvedDefinition || {};
+  const readyForReviewAt = checklistRun?.readyForReviewAt?.toDate?.()?.toISOString() || null;
 
   return {
+    status: checklistRun?.status === "READY_FOR_REVIEW" ? "READY_FOR_REVIEW" : "DRAFT",
+    readyForReviewAt,
     definitionVersion: checklistRun?.definitionVersion || null,
     propertyName: checklistRun?.propertySnapshot?.propertyName || null,
     scheduledDate: checklistRun?.jobSnapshot?.scheduledDate || null,

@@ -2603,7 +2603,9 @@ button.summary-card {
 .public-checklist__recovery-warning { color: var(--color-warning-text) !important; }
 
 .public-checklist__instructions,
-.public-checklist__future-note {
+.public-checklist__future-note,
+.public-checklist__review-handoff,
+.public-checklist__review-state {
   display: grid;
   gap: 8px;
   border: 1px solid var(--color-divider);
@@ -2613,10 +2615,32 @@ button.summary-card {
 }
 
 .public-checklist__instructions p,
-.public-checklist__future-note p {
+.public-checklist__future-note p,
+.public-checklist__review-handoff p,
+.public-checklist__review-state p {
   margin: 0;
   color: var(--color-text-secondary);
   white-space: pre-wrap;
+}
+
+.public-checklist__review-handoff,
+.public-checklist__review-state {
+  border-color: var(--color-selected-border);
+}
+
+.public-checklist__review-handoff h2,
+.public-checklist__review-state h2,
+.public-checklist__review-confirmation h3 {
+  margin: 0;
+  color: var(--color-heading);
+}
+
+.public-checklist__review-help { color: var(--color-text-secondary); }
+
+.public-checklist__review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .public-checklist__section {
@@ -2733,6 +2757,7 @@ button.summary-card {
   .public-checklist__language { max-width: 170px; }
   .public-checklist__inventory { grid-template-columns: 1fr; }
   .public-checklist__save-actions .button { width: 100%; }
+  .public-checklist__review-actions .button { width: 100%; }
   .public-checklist select,
   .public-checklist textarea { font-size: 16px; }
 }

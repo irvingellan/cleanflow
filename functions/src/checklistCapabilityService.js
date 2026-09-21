@@ -3,7 +3,10 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { projectChecklistRunForCleaner } from "./checklistRunDefinition.js";
 import {
   applyChecklistDraftMutation,
+  assertChecklistDraftReadyForReview,
   checklistDraftMutationHash,
+  checklistReadyForReviewRequestHash,
+  normalizeChecklistReadyForReviewRequest,
   normalizeChecklistDraftMutation,
   projectChecklistDraftForRead,
 } from "./checklistDraftService.js";
@@ -36,7 +39,9 @@ export function checklistCapabilityState(capability, job, run, now = new Date())
   if (capability.status === "REVOKED") return "REVOKED";
   if (capability.status !== "ACTIVE") return "UNAVAILABLE";
   if (!capability.expiresAt?.toMillis || capability.expiresAt.toMillis() <= now.getTime()) return "EXPIRED";
-  if (!job || job.archivedAt || run?.status !== "DRAFT") return "STALE";
+  // A valid capability remains read-only after handoff so a lost response can
+  // be recovered by reopening the same link. Mutations still require DRAFT.
+  if (!job || job.archivedAt || !["DRAFT", "READY_FOR_REVIEW"].includes(run?.status)) return "STALE";
   if (capability.contextRevision !== currentRevision(job)) return "STALE";
   if (!assignedCleanerIds(job).has(capability.cleanerId)) return "STALE";
   if (!["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus)) return "STALE";
@@ -236,6 +241,9 @@ export async function savePublicChecklistDraft(database, {
     if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, jobSnapshot.data(), runSnapshot.data(), now) !== "ACTIVE") {
       throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
     }
+    if (runSnapshot.data().status !== "DRAFT") {
+      throw new HttpsError("failed-precondition", "Checklist Run is no longer editable.");
+    }
     const mutation = normalizeChecklistDraftMutation(runSnapshot.data(), request);
     const mutationHash = checklistDraftMutationHash(mutation);
     const receiptRef = mutationReference(database, organizationId, location.jobId, location.runId, mutation.mutationId);
@@ -275,5 +283,82 @@ export async function savePublicChecklistDraft(database, {
       createdAt: FieldValue.serverTimestamp(),
     });
     return { duplicate: false, revision: draft.revision, draft: projectChecklistDraftForRead(runSnapshot.data(), draft) };
+  });
+}
+
+/**
+ * The Run itself is the durable review receipt. It permits an exact retry after
+ * a lost response while refusing a different handoff or any post-review edit.
+ */
+export async function readyPublicChecklistForReview(database, {
+  organizationId,
+  tokenHash,
+  request,
+  now = new Date(),
+}) {
+  const matches = await database.collectionGroup("checklistCapabilities")
+    .where("tokenHash", "==", tokenHash).limit(2).get();
+  if (matches.size !== 1) throw new HttpsError("not-found", "Checklist capability not found.");
+  const capabilityRef = matches.docs[0].ref;
+  const location = capabilityDocumentFromPath(capabilityRef, organizationId);
+  if (!location) throw new HttpsError("not-found", "Checklist capability not found.");
+  const runRef = runReference(database, organizationId, location.jobId, location.runId);
+  const jobRef = jobReference(database, organizationId, location.jobId);
+  const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
+  const submission = normalizeChecklistReadyForReviewRequest(request);
+  const requestHash = checklistReadyForReviewRequestHash(submission);
+
+  return database.runTransaction(async (transaction) => {
+    const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot] = await Promise.all([
+      transaction.get(capabilityRef), transaction.get(jobRef), transaction.get(runRef), transaction.get(draftRef),
+    ]);
+    if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) {
+      throw new HttpsError("not-found", "Checklist capability not found.");
+    }
+    const capability = capabilitySnapshot.data();
+    const run = runSnapshot.data();
+    if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, jobSnapshot.data(), run, now) !== "ACTIVE") {
+      throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
+    }
+    const identity = {
+      cleanerId: capability.cleanerId,
+      contextRevision: capability.contextRevision,
+      capabilityRotation: capability.rotation || 0,
+    };
+    if (run.status === "READY_FOR_REVIEW") {
+      if (run.readyForReviewSubmissionId !== submission.submissionId
+        || run.readyForReviewRequestHash !== requestHash
+        || run.readyForReviewCleanerId !== identity.cleanerId
+        || run.readyForReviewContextRevision !== identity.contextRevision
+        || run.readyForReviewCapabilityRotation !== identity.capabilityRotation) {
+        throw new HttpsError("already-exists", "Checklist Run was already sent for review.");
+      }
+      return {
+        duplicate: true,
+        checklist: projectChecklistRunForCleaner(run),
+        draft: projectChecklistDraftForRead(run, draftSnapshot.exists ? draftSnapshot.data() : null),
+      };
+    }
+    if (run.status !== "DRAFT") throw new HttpsError("failed-precondition", "Checklist Run is not editable.");
+    const currentDraft = draftSnapshot.exists ? draftSnapshot.data() : null;
+    const validatedDraft = assertChecklistDraftReadyForReview(run, currentDraft);
+    if (submission.baseRevision !== validatedDraft.revision) {
+      throw new HttpsError("aborted", "Checklist draft revision conflict.");
+    }
+    transaction.update(runRef, {
+      status: "READY_FOR_REVIEW",
+      readyForReviewAt: FieldValue.serverTimestamp(),
+      readyForReviewCleanerId: identity.cleanerId,
+      readyForReviewContextRevision: identity.contextRevision,
+      readyForReviewCapabilityRotation: identity.capabilityRotation,
+      readyForReviewDraftRevision: validatedDraft.revision,
+      readyForReviewSubmissionId: submission.submissionId,
+      readyForReviewRequestHash: requestHash,
+    });
+    return {
+      duplicate: false,
+      checklist: projectChecklistRunForCleaner({ ...run, status: "READY_FOR_REVIEW" }),
+      draft: projectChecklistDraftForRead(run, currentDraft),
+    };
   });
 }

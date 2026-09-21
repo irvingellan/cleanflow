@@ -82,4 +82,24 @@ describe("ChecklistRunDetail", () => {
     screen.getByRole("button", { name: "Refresh saved progress" }).click();
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
+
+  it("shows a cleaner-ready Run and its acknowledged draft without manager editing controls", () => {
+    renderChecklistRun({
+      status: "READY_FOR_REVIEW",
+      readyForReviewAt: "2026-09-20T18:30:00.000Z",
+      draft: {
+        revision: 4,
+        progress: {
+          checklist: { done: 5, unanswered: 23 },
+          inventory: { answered: 1, needsRestock: 1 },
+        },
+        issueNotes: "Manager should check the lamp.",
+      },
+    });
+
+    expect(screen.getAllByText("Ready for manager review").length).toBeGreaterThan(0);
+    expect(screen.getByText("The cleaner sent this saved checklist for manager review. This does not complete the job.")).toBeVisible();
+    expect(screen.getByText("Manager should check the lamp.")).toBeVisible();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
 });

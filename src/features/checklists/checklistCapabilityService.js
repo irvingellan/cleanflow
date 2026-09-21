@@ -79,3 +79,19 @@ export async function savePublicChecklistDraft({ token, mutationId, baseRevision
   if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status);
   return body;
 }
+
+export async function readyPublicChecklistForReview({ token, submissionId, baseRevision }) {
+  const response = await fetchPublicChecklist(publicChecklistApiPath, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "omit",
+    body: JSON.stringify({ token, action: "READY_FOR_REVIEW", submissionId, baseRevision }),
+  });
+  let body = {};
+  try { body = await response.json(); } catch { /* status maps to a safe generic error */ }
+  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status);
+  if (!body.checklist || typeof body.checklist !== "object" || !body.draft || typeof body.draft !== "object") {
+    throw new PublicChecklistRequestError("checklist_unavailable");
+  }
+  return body;
+}

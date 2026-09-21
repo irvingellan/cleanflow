@@ -912,6 +912,18 @@ Object.assign(messages.en, {
   "checklists.lastSavedAt": "Last saved",
   "checklists.refreshSavedProgress": "Refresh saved progress",
   "checklists.refreshingSavedProgress": "Refreshing saved progress…",
+  "checklists.readyForReview": "Ready for manager review",
+  "checklists.readyForReviewPrompt": "When your saved checklist is ready, send it to your manager for review.",
+  "checklists.readyForReviewSaveFirst": "Save your changes before sending for review.",
+  "checklists.readyForReviewConfirmTitle": "Send for manager review?",
+  "checklists.readyForReviewConfirmBody": "Saved answers and notes will become read-only. This does not mark the job completed. Your manager will review the saved checklist.",
+  "checklists.readyForReviewConfirm": "Yes, send for review",
+  "checklists.readyForReviewSending": "Sending for review…",
+  "checklists.readyForReviewReadOnly": "This checklist is read-only. Your manager can now review the saved checklist.",
+  "checklists.readyForReviewAt": "Sent for review: {time}",
+  "checklists.readyForReviewError": "Could not send for review. Try again.",
+  "checklists.readyForReviewConflict": "The saved checklist changed. Please review the latest saved version before sending it.",
+  "checklists.readyForReviewDescription": "The cleaner sent this saved checklist for manager review. This does not complete the job.",
 });
 
 Object.assign(messages.pt, {
@@ -945,6 +957,18 @@ Object.assign(messages.pt, {
   "checklists.lastSavedAt": "Último salvamento",
   "checklists.refreshSavedProgress": "Atualizar progresso salvo",
   "checklists.refreshingSavedProgress": "Atualizando progresso salvo…",
+  "checklists.readyForReview": "Pronto para revisão da gerente",
+  "checklists.readyForReviewPrompt": "Quando o checklist salvo estiver pronto, envie para a gerente revisar.",
+  "checklists.readyForReviewSaveFirst": "Salve as alterações antes de enviar para revisão.",
+  "checklists.readyForReviewConfirmTitle": "Enviar para revisão da gerente?",
+  "checklists.readyForReviewConfirmBody": "As respostas e notas salvas ficarão somente para leitura. Isto não marca o serviço como concluído. A gerente revisará o checklist salvo.",
+  "checklists.readyForReviewConfirm": "Sim, enviar para revisão",
+  "checklists.readyForReviewSending": "Enviando para revisão…",
+  "checklists.readyForReviewReadOnly": "Este checklist é somente para leitura. A gerente já pode revisar o checklist salvo.",
+  "checklists.readyForReviewAt": "Enviado para revisão: {time}",
+  "checklists.readyForReviewError": "Não foi possível enviar para revisão. Tente novamente.",
+  "checklists.readyForReviewConflict": "O checklist salvo mudou. Revise a versão salva mais recente antes de enviar.",
+  "checklists.readyForReviewDescription": "A cleaner enviou este checklist salvo para revisão da gerente. Isto não conclui o serviço.",
 });
 
 Object.assign(messages.es, {
@@ -978,6 +1002,18 @@ Object.assign(messages.es, {
   "checklists.lastSavedAt": "Último guardado",
   "checklists.refreshSavedProgress": "Actualizar progreso guardado",
   "checklists.refreshingSavedProgress": "Actualizando progreso guardado…",
+  "checklists.readyForReview": "Listo para revisión de la gerente",
+  "checklists.readyForReviewPrompt": "Cuando el checklist guardado esté listo, envíalo a tu gerente para revisión.",
+  "checklists.readyForReviewSaveFirst": "Guarda los cambios antes de enviar para revisión.",
+  "checklists.readyForReviewConfirmTitle": "¿Enviar para revisión de la gerente?",
+  "checklists.readyForReviewConfirmBody": "Las respuestas y notas guardadas quedarán solo para lectura. Esto no marca el servicio como completado. La gerente revisará el checklist guardado.",
+  "checklists.readyForReviewConfirm": "Sí, enviar para revisión",
+  "checklists.readyForReviewSending": "Enviando para revisión…",
+  "checklists.readyForReviewReadOnly": "Este checklist es solo de lectura. Tu gerente ya puede revisar el checklist guardado.",
+  "checklists.readyForReviewAt": "Enviado para revisión: {time}",
+  "checklists.readyForReviewError": "No se pudo enviar para revisión. Inténtalo de nuevo.",
+  "checklists.readyForReviewConflict": "El checklist guardado cambió. Revisa la versión guardada más reciente antes de enviarlo.",
+  "checklists.readyForReviewDescription": "La cleaner envió este checklist guardado para revisión de la gerente. Esto no completa el servicio.",
 });
 
 function getInitialLanguage() {

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getPublicChecklist, savePublicChecklistDraft } from "./checklistCapabilityService.js";
+import {
+  getPublicChecklist,
+  readyPublicChecklistForReview,
+  savePublicChecklistDraft,
+} from "./checklistCapabilityService.js";
 import {
   checklistDraftRecoveryScope,
   clearChecklistDraftRecovery,
@@ -15,6 +19,7 @@ export const checklistSaveStates = {
   CONFLICT: "CONFLICT",
   UNAVAILABLE: "UNAVAILABLE",
   RETRY: "RETRY",
+  READY_FOR_REVIEW: "READY_FOR_REVIEW",
 };
 
 function isPlainObject(value) {
@@ -75,6 +80,10 @@ function validDraft(value) {
   return isPlainObject(value) && Number.isInteger(value.revision) && value.revision >= 0;
 }
 
+function checklistIsReadyForReview(checklist) {
+  return checklist?.status === checklistSaveStates.READY_FOR_REVIEW;
+}
+
 /**
  * Serializes one cleaner editor's sparse mutations. A recovery record retains
  * the original mutation ID before dispatch, allowing an uncertain response to
@@ -88,11 +97,15 @@ export function usePublicChecklistDraft(token) {
   const [saveState, setSaveState] = useState(checklistSaveStates.LOADING);
   const [hasRecoveryWarning, setHasRecoveryWarning] = useState(false);
   const [isResolvingConflict, setIsResolvingConflict] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState(null);
   const scopeRef = useRef(null);
   const pendingMutationRef = useRef(null);
   const queuedChangesRef = useRef({});
   const draftRef = useRef(null);
   const isSavingRef = useRef(false);
+  const isSubmittingReviewRef = useRef(false);
+  const reviewSubmissionRef = useRef(null);
   const isMountedRef = useRef(false);
   const noteDebounceRef = useRef(null);
   const flushRef = useRef(null);
@@ -135,7 +148,8 @@ export function usePublicChecklistDraft(token) {
 
   const flush = useCallback(async () => {
     const pending = pendingMutationRef.current;
-    if (!pending || isSavingRef.current) return;
+    if (!pending || isSavingRef.current || isSubmittingReviewRef.current
+      || saveStateRef.current === checklistSaveStates.READY_FOR_REVIEW) return;
     if (!isOnline()) {
       setCurrentSaveState(checklistSaveStates.OFFLINE_PENDING);
       persistRecovery();
@@ -205,6 +219,19 @@ export function usePublicChecklistDraft(token) {
       if (!result?.checklist || !validDraft(result?.draft)) throw new Error("Checklist response was invalid.");
       if (discardRecovery && scope) clearChecklistDraftRecovery(scope);
 
+      if (checklistIsReadyForReview(result.checklist)) {
+        clearTimeout(noteDebounceRef.current);
+        pendingMutationRef.current = null;
+        queuedChangesRef.current = {};
+        if (scope) clearChecklistDraftRecovery(scope);
+        setChecklist(result.checklist);
+        setVisibleDraft(result.draft);
+        setHasRecoveryWarning(false);
+        setIsLoading(false);
+        setCurrentSaveState(checklistSaveStates.READY_FOR_REVIEW);
+        return;
+      }
+
       const recovery = discardRecovery || !scope ? null : loadChecklistDraftRecovery(scope);
       setChecklist(result.checklist);
       pendingMutationRef.current = recovery?.pendingMutation || null;
@@ -251,7 +278,9 @@ export function usePublicChecklistDraft(token) {
     isMountedRef.current = true;
     load();
     const retryOnOnline = () => {
-      if (saveStateRef.current !== checklistSaveStates.CONFLICT) flushRef.current?.();
+      if (![checklistSaveStates.CONFLICT, checklistSaveStates.READY_FOR_REVIEW].includes(saveStateRef.current)) {
+        flushRef.current?.();
+      }
     };
     window.addEventListener("online", retryOnOnline);
     return () => {
@@ -264,7 +293,9 @@ export function usePublicChecklistDraft(token) {
   const queueChanges = useCallback((changes, { debounce = false } = {}) => {
     if (!hasChanges(changes)
       || saveStateRef.current === checklistSaveStates.UNAVAILABLE
-      || saveStateRef.current === checklistSaveStates.CONFLICT) return;
+      || saveStateRef.current === checklistSaveStates.CONFLICT
+      || saveStateRef.current === checklistSaveStates.READY_FOR_REVIEW
+      || isSubmittingReviewRef.current) return;
     setVisibleDraft(mergeChecklistChanges(draftRef.current, changes));
     if (pendingMutationRef.current) {
       queuedChangesRef.current = mergeSparseChecklistChanges(queuedChangesRef.current, changes);
@@ -286,7 +317,7 @@ export function usePublicChecklistDraft(token) {
   }, [persistRecovery, setCurrentSaveState, setVisibleDraft]);
 
   const retrySave = useCallback(() => {
-    if (saveStateRef.current === checklistSaveStates.CONFLICT || saveStateRef.current === checklistSaveStates.UNAVAILABLE) return;
+    if ([checklistSaveStates.CONFLICT, checklistSaveStates.UNAVAILABLE, checklistSaveStates.READY_FOR_REVIEW].includes(saveStateRef.current)) return;
     clearTimeout(noteDebounceRef.current);
     flushRef.current?.();
   }, []);
@@ -333,6 +364,52 @@ export function usePublicChecklistDraft(token) {
     }
   }, [isResolvingConflict, pendingLocalChanges, persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
 
+  const submitForManagerReview = useCallback(async () => {
+    if (isSubmittingReviewRef.current || saveStateRef.current !== checklistSaveStates.SAVED
+      || pendingMutationRef.current || hasChanges(queuedChangesRef.current) || !validDraft(draftRef.current)) return;
+    clearTimeout(noteDebounceRef.current);
+    isSubmittingReviewRef.current = true;
+    if (isMountedRef.current) {
+      setIsSubmittingReview(true);
+      setReviewError(null);
+    }
+    const submission = reviewSubmissionRef.current || {
+      submissionId: createMutationId(),
+      baseRevision: draftRef.current.revision,
+    };
+    reviewSubmissionRef.current = submission;
+    try {
+      const result = await readyPublicChecklistForReview({ token, ...submission });
+      if (!result?.checklist || !validDraft(result?.draft) || !checklistIsReadyForReview(result.checklist)) {
+        throw new Error("Checklist review response was invalid.");
+      }
+      pendingMutationRef.current = null;
+      queuedChangesRef.current = {};
+      reviewSubmissionRef.current = null;
+      if (scopeRef.current) clearChecklistDraftRecovery(scopeRef.current);
+      setChecklist(result.checklist);
+      setVisibleDraft(result.draft);
+      setHasRecoveryWarning(false);
+      setCurrentSaveState(checklistSaveStates.READY_FOR_REVIEW);
+    } catch (error) {
+      if (isUnavailable(error)) {
+        setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
+      } else if (isRevisionConflict(error)) {
+        // The authoritative draft changed before handoff. Refresh rather than
+        // guessing how to reconcile a terminal review transition.
+        reviewSubmissionRef.current = null;
+        if (isMountedRef.current) setReviewError("checklist_conflict");
+        await load();
+      } else if (isMountedRef.current) {
+        // Keep the same submission ID for a deliberate retry after an uncertain response.
+        setReviewError("checklist_review_failed");
+      }
+    } finally {
+      isSubmittingReviewRef.current = false;
+      if (isMountedRef.current) setIsSubmittingReview(false);
+    }
+  }, [load, setCurrentSaveState, setVisibleDraft, token]);
+
   return {
     checklist,
     draft,
@@ -341,10 +418,13 @@ export function usePublicChecklistDraft(token) {
     saveState,
     hasRecoveryWarning,
     isResolvingConflict,
+    isSubmittingReview,
+    reviewError,
     queueChanges,
     retrySave,
     saveNow: retrySave,
     discardLocalChanges,
     reapplyLocalChanges,
+    submitForManagerReview,
   };
 }

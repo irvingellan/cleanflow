@@ -478,6 +478,88 @@ test("capability-authorized cleaner drafts validate frozen fields, revisions, an
   await assertFails(account("manager").firestore().doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get());
 });
 
+test("capability-authorized cleaner can hand off one saved DRAFT for manager review without changing Job work", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const save = await publicChecklistSave({
+    token: issued.token, mutationId: "draft-mutation-ready-1", baseRevision: 0,
+    changes: { checklistAnswers: { "bed-remake": "DONE" }, inventoryAnswers: { "hand-soap": "NEEDS_RESTOCK" }, generalNotes: "All saved" },
+  });
+  assert.equal(save.code, 200);
+  const beforeJob = (await admin.doc(`${root}/jobs/job`).get()).data();
+  const beforeAssignment = (await admin.doc(`${root}/${assignmentPath}`).get()).data();
+  const handoff = {
+    token: issued.token,
+    action: "READY_FOR_REVIEW",
+    submissionId: "review-submission-0001",
+    baseRevision: 1,
+  };
+  const first = await publicChecklistSave(handoff);
+  assert.equal(first.code, 200);
+  assert.equal(first.body.duplicate, false);
+  assert.equal(first.body.checklist.status, "READY_FOR_REVIEW");
+  assert.equal(first.body.draft.generalNotes, "All saved");
+  const runPath = `${root}/jobs/job/checklistRuns/initial`;
+  const persisted = (await admin.doc(runPath).get()).data();
+  assert.equal(persisted.status, "READY_FOR_REVIEW");
+  assert.equal(persisted.readyForReviewCleanerId, "cleaner-a");
+  assert.equal(persisted.readyForReviewDraftRevision, 1);
+  assert.ok(persisted.readyForReviewAt?.toDate);
+
+  const retry = await publicChecklistSave(handoff);
+  assert.equal(retry.code, 200);
+  assert.equal(retry.body.duplicate, true);
+  assert.equal((await publicChecklistSave({ ...handoff, baseRevision: 0 })).code, 409);
+  assert.equal((await publicChecklistSave({
+    token: issued.token, mutationId: "draft-mutation-after-review", baseRevision: 1,
+    changes: { generalNotes: "Must not overwrite" },
+  })).code, 410);
+  const loaded = await publicChecklistGet(issued.token);
+  assert.equal(loaded.code, 200);
+  assert.equal(loaded.body.checklist.status, "READY_FOR_REVIEW");
+  assert.equal(loaded.body.draft.checklistAnswers["bed-remake"], "DONE");
+  assert.equal(loaded.body.checklist.readyForReviewCleanerId, undefined);
+  const managerRun = await getChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(managerRun.run.status, "READY_FOR_REVIEW");
+  assert.equal(managerRun.run.draft.progress.checklist.done, 1);
+  assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), beforeJob);
+  assert.deepEqual((await admin.doc(`${root}/${assignmentPath}`).get()).data(), beforeAssignment);
+  await assertFails(account("manager").firestore().doc(runPath).update({ status: "DRAFT" }));
+});
+
+test("review handoff rejects stale draft revisions and changed checklist context", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const base = { token: issued.token, action: "READY_FOR_REVIEW", submissionId: "review-submission-0002", baseRevision: 0 };
+  assert.equal((await publicChecklistSave({ ...base, baseRevision: 1 })).code, 409);
+  await admin.doc(`${root}/jobs/job`).update({ checklistContextRevision: 2 });
+  assert.equal((await publicChecklistSave(base)).code, 410);
+});
+
+test("review handoff rejects an expired or revoked capability", async () => {
+  await seedEligibleChecklistJob();
+  const expired = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await admin.doc(`${root}/jobs/job/checklistRuns/initial/checklistCapabilities/active`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+  assert.equal((await publicChecklistSave({ token: expired.token, action: "READY_FOR_REVIEW", submissionId: "review-submission-0002", baseRevision: 0 })).code, 410);
+});
+
+test("review handoff rejects a revoked capability", async () => {
+  await seedEligibleChecklistJob();
+  const revoked = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await revokeChecklistCapability.run(request("manager", { jobId: "job" }));
+  assert.equal((await publicChecklistSave({ token: revoked.token, action: "READY_FOR_REVIEW", submissionId: "review-submission-0002", baseRevision: 0 })).code, 410);
+});
+
+test("one concurrent review handoff wins and its identical peer observes the same Run", async () => {
+  await seedEligibleChecklistJob();
+  const concurrent = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const requestBody = { token: concurrent.token, action: "READY_FOR_REVIEW", submissionId: "review-submission-0003", baseRevision: 0 };
+  const [one, two] = await Promise.all([publicChecklistSave(requestBody), publicChecklistSave(requestBody)]);
+  assert.equal([one, two].filter((result) => result.code === 200).length, 2);
+  assert.equal([one.body.duplicate, two.body.duplicate].filter(Boolean).length, 1);
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data().status, "READY_FOR_REVIEW");
+});
+
 test("revoked or stale capability cannot replay a saved draft receipt", async () => {
   await seedEligibleChecklistJob();
   const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));

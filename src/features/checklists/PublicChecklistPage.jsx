@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
@@ -16,6 +17,7 @@ const saveStateKeys = {
   [checklistSaveStates.CONFLICT]: "checklists.saveStateConflict",
   [checklistSaveStates.UNAVAILABLE]: "checklists.saveStateUnavailable",
   [checklistSaveStates.RETRY]: "checklists.saveStateRetry",
+  [checklistSaveStates.READY_FOR_REVIEW]: "checklists.readyForReview",
 };
 
 const inventoryAnswers = ["UNANSWERED", "LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"];
@@ -24,7 +26,7 @@ function itemLabel(item, translate) {
   return item.label || translate(item.labelKey || item.id);
 }
 
-function ChecklistAnswer({ item, value, onChange, translate }) {
+function ChecklistAnswer({ item, value, onChange, translate, disabled = false }) {
   const label = itemLabel(item, translate);
   const answerValues = ["UNANSWERED", "DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
 
@@ -39,6 +41,7 @@ function ChecklistAnswer({ item, value, onChange, translate }) {
               name={`checklist-${item.id}`}
               value={answer}
               checked={value === answer}
+              disabled={disabled}
               onChange={() => onChange(answer)}
             />
             {translate(`checklists.answer${answer}`)}
@@ -46,6 +49,63 @@ function ChecklistAnswer({ item, value, onChange, translate }) {
         ))}
       </div>
     </fieldset>
+  );
+}
+
+function formatReadyForReviewAt(value, language) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(
+    { en: "en-US", pt: "pt-BR", es: "es-ES" }[language] || "en-US",
+    { dateStyle: "medium", timeStyle: "short" },
+  ).format(date);
+}
+
+function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onSubmit, language, translate }) {
+  const [isConfirming, setIsConfirming] = useState(false);
+  const isReady = saveState === checklistSaveStates.READY_FOR_REVIEW;
+  const canSubmit = saveState === checklistSaveStates.SAVED && !isSubmittingReview;
+  const readyAt = formatReadyForReviewAt(checklist.readyForReviewAt, language);
+
+  if (isReady) {
+    return (
+      <section className="public-checklist__review-state" aria-live="polite">
+        <h2>{translate("checklists.readyForReview")}</h2>
+        <p>{translate("checklists.readyForReviewReadOnly")}</p>
+        {readyAt && <p>{translate("checklists.readyForReviewAt", { time: readyAt })}</p>}
+      </section>
+    );
+  }
+
+  return (
+    <section className="public-checklist__review-handoff" aria-labelledby="checklist-review-handoff-title">
+      <h2 id="checklist-review-handoff-title">{translate("checklists.readyForReview")}</h2>
+      {!isConfirming ? (
+        <>
+          <p>{translate("checklists.readyForReviewPrompt")}</p>
+          {!canSubmit && <p className="public-checklist__review-help">{translate("checklists.readyForReviewSaveFirst")}</p>}
+          {reviewError && <p className="form-error" role="alert">{translate(reviewError === "checklist_conflict" ? "checklists.readyForReviewConflict" : "checklists.readyForReviewError")}</p>}
+          <button className="button" type="button" disabled={!canSubmit} onClick={() => setIsConfirming(true)}>
+            {translate("checklists.readyForReview")}
+          </button>
+        </>
+      ) : (
+        <div className="public-checklist__review-confirmation" role="dialog" aria-labelledby="checklist-review-confirm-title">
+          <h3 id="checklist-review-confirm-title">{translate("checklists.readyForReviewConfirmTitle")}</h3>
+          <p>{translate("checklists.readyForReviewConfirmBody")}</p>
+          {reviewError && <p className="form-error" role="alert">{translate(reviewError === "checklist_conflict" ? "checklists.readyForReviewConflict" : "checklists.readyForReviewError")}</p>}
+          <div className="public-checklist__review-actions">
+            <button className="button" type="button" disabled={isSubmittingReview} onClick={onSubmit}>
+              {isSubmittingReview ? translate("checklists.readyForReviewSending") : translate("checklists.readyForReviewConfirm")}
+            </button>
+            <button className="button button--secondary" type="button" disabled={isSubmittingReview} onClick={() => setIsConfirming(false)}>
+              {translate("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -94,10 +154,13 @@ export function PublicChecklistPage({ token }) {
     saveState,
     hasRecoveryWarning,
     isResolvingConflict,
+    isSubmittingReview,
+    reviewError,
     queueChanges,
     saveNow,
     discardLocalChanges,
     reapplyLocalChanges,
+    submitForManagerReview,
   } = usePublicChecklistDraft(token);
 
   if (isLoading) {
@@ -107,6 +170,8 @@ export function PublicChecklistPage({ token }) {
   if (loadError || !checklist || !draft) {
     return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate(errorKeys[loadError] || "checklists.publicUnavailable")} status="alert" isError /></section></main>;
   }
+
+  const isReadOnly = saveState === checklistSaveStates.READY_FOR_REVIEW;
 
   return (
     <main className="public-offer-page checklist-public-page">
@@ -153,6 +218,7 @@ export function PublicChecklistPage({ token }) {
                 value={draft.checklistAnswers?.[item.id] || "UNANSWERED"}
                 onChange={(answer) => queueChanges({ checklistAnswers: { [item.id]: answer } })}
                 translate={translate}
+                disabled={isReadOnly}
               />
             ))}
           </section>
@@ -167,6 +233,7 @@ export function PublicChecklistPage({ token }) {
                   <span>{itemLabel(item, translate)}</span>
                   <select
                     value={draft.inventoryAnswers?.[item.id] || "UNANSWERED"}
+                    disabled={isReadOnly}
                     onChange={(event) => queueChanges({ inventoryAnswers: { [item.id]: event.target.value } })}
                   >
                     {inventoryAnswers.map((answer) => <option key={answer} value={answer}>{translate(`checklists.inventory${answer}`)}</option>)}
@@ -185,6 +252,7 @@ export function PublicChecklistPage({ token }) {
               rows="4"
               maxLength="2000"
               value={draft.issueNotes || ""}
+              disabled={isReadOnly}
               onChange={(event) => queueChanges({ issueNotes: event.target.value }, { debounce: true })}
             />
           </label>
@@ -194,6 +262,7 @@ export function PublicChecklistPage({ token }) {
               rows="3"
               maxLength="2000"
               value={draft.generalNotes || ""}
+              disabled={isReadOnly}
               onChange={(event) => queueChanges({ generalNotes: event.target.value }, { debounce: true })}
             />
           </label>
@@ -205,6 +274,16 @@ export function PublicChecklistPage({ token }) {
             <p>{translate("checklists.photosLater")}</p>
           </section>
         )}
+
+        <ReviewHandoff
+          checklist={checklist}
+          saveState={saveState}
+          isSubmittingReview={isSubmittingReview}
+          reviewError={reviewError}
+          onSubmit={submitForManagerReview}
+          language={language}
+          translate={translate}
+        />
       </section>
       <ScrollToTopButton />
     </main>

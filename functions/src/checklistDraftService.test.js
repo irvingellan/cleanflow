@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applyChecklistDraftMutation,
+  assertChecklistDraftReadyForReview,
+  checklistReadyForReviewRequestHash,
   normalizeChecklistDraftMutation,
+  normalizeChecklistReadyForReviewRequest,
   projectChecklistDraftForRead,
   virtualChecklistDraft,
 } from "./checklistDraftService.js";
@@ -82,5 +85,24 @@ describe("Checklist draft definition boundary", () => {
     });
     expect(projected.checklistAnswers).toEqual({ normal: "UNANSWERED", optional: "NOT_APPLICABLE" });
     expect(projected.updatedAt).toBeUndefined();
+  });
+
+  it("validates a frozen persisted draft before review and hashes an exact idempotency request", () => {
+    const draft = applyChecklistDraftMutation(run, null, mutation({
+      checklistAnswers: { normal: "DONE", optional: "NOT_APPLICABLE" },
+      inventoryAnswers: { soap: "LOW" },
+      issueNotes: "A saved note",
+    }));
+    expect(assertChecklistDraftReadyForReview(run, draft)).toMatchObject({ revision: 1 });
+    const request = normalizeChecklistReadyForReviewRequest({
+      submissionId: "review-submission-0001", baseRevision: 1,
+    });
+    expect(checklistReadyForReviewRequestHash(request)).toMatch(/^[a-f0-9]{64}$/);
+    expect(() => assertChecklistDraftReadyForReview(run, {
+      ...draft, checklistAnswers: { ...draft.checklistAnswers, unknown: "DONE" },
+    })).toThrow();
+    expect(() => normalizeChecklistReadyForReviewRequest({
+      submissionId: "short", baseRevision: 1,
+    })).toThrow();
   });
 });

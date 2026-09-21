@@ -58,6 +58,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
       ? definition.cleanerInstructions
       : "",
     createdAt: toIsoTimestamp(run?.createdAt),
+    readyForReviewAt: toIsoTimestamp(run?.readyForReviewAt),
     draft: projectChecklistDraftForRead(run, draft),
   };
 }

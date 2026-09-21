@@ -30,6 +30,7 @@ import {
   getChecklistCapabilityForManager,
   issueChecklistCapabilityForManager,
   loadPublicChecklistCapability,
+  readyPublicChecklistForReview,
   revokeChecklistCapabilityForManager,
   savePublicChecklistDraft,
   validChecklistCleanerId,
@@ -1084,14 +1085,24 @@ export const publicChecklist = onRequest(
         return;
       }
       if (request.method === "POST") {
-        const result = await savePublicChecklistDraft(db, {
+        const action = request.body?.action;
+        if (action && action !== "READY_FOR_REVIEW") {
+          sendPublicError(response, 400, "checklist_unavailable");
+          return;
+        }
+        const operation = action === "READY_FOR_REVIEW"
+          ? readyPublicChecklistForReview
+          : savePublicChecklistDraft;
+        const result = await operation(db, {
           organizationId,
           tokenHash: hashToken(token),
-          request: {
-            mutationId: request.body?.mutationId,
-            baseRevision: request.body?.baseRevision,
-            changes: request.body?.changes,
-          },
+          request: action === "READY_FOR_REVIEW"
+            ? { submissionId: request.body?.submissionId, baseRevision: request.body?.baseRevision }
+            : {
+              mutationId: request.body?.mutationId,
+              baseRevision: request.body?.baseRevision,
+              changes: request.body?.changes,
+            },
         });
         configureResponse(response);
         response.status(200).json(result);

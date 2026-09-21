@@ -21,6 +21,8 @@ export function ChecklistRunDetail({ job, checklistRun, isRefreshing = false, ha
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
   const draft = checklistRun.draft;
   const lastSavedAt = formatRunCreatedAt(draft?.lastSavedAt, language);
+  const readyForReviewAt = formatRunCreatedAt(checklistRun.readyForReviewAt, language);
+  const isReadyForReview = checklistRun.status === "READY_FOR_REVIEW";
 
   return (
     <section className="panel checklist-run" aria-labelledby="checklist-run-title">
@@ -37,7 +39,7 @@ export function ChecklistRunDetail({ job, checklistRun, isRefreshing = false, ha
       {hasRefreshError && <StateCard message={translate("checklists.loadError")} status="alert" isError />}
 
       <StateCard
-        message={translate("checklists.draftDescription")}
+        message={translate(isReadyForReview ? "checklists.readyForReviewDescription" : "checklists.draftDescription")}
         status="status"
       />
 
@@ -52,8 +54,9 @@ export function ChecklistRunDetail({ job, checklistRun, isRefreshing = false, ha
         />
         <DetailItem
           label={translate("checklists.runState")}
-          value={translate("checklists.draft")}
+          value={translate(isReadyForReview ? "checklists.readyForReview" : "checklists.draft")}
         />
+        {readyForReviewAt && <DetailItem label={translate("checklists.readyForReview")} value={readyForReviewAt} />}
         <DetailItem
           label={translate("checklists.itemCount")}
           value={translate("checklists.itemCountValue", { count: checklistRun.checklistItemCount })}

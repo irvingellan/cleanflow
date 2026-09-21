@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getPublicChecklist,
   publicChecklistRequestTimeoutMilliseconds,
+  readyPublicChecklistForReview,
   savePublicChecklistDraft,
 } from "./checklistCapabilityService.js";
 
@@ -45,6 +46,25 @@ describe("public checklist requests", () => {
     await timeoutExpectation;
     expect(fetchMock).toHaveBeenCalledWith("/api/public-checklist", expect.objectContaining({
       body: expect.stringContaining("same-mutation-after-timeout"),
+    }));
+  });
+
+  it("uses the same bounded public boundary for an idempotent review handoff", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_input, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = readyPublicChecklistForReview({
+      token: "opaque-token", submissionId: "review-submission-0001", baseRevision: 3,
+    });
+    const timeoutExpectation = expect(request).rejects.toMatchObject({ code: "checklist_request_timeout" });
+    await vi.advanceTimersByTimeAsync(publicChecklistRequestTimeoutMilliseconds);
+
+    await timeoutExpectation;
+    expect(fetchMock).toHaveBeenCalledWith("/api/public-checklist", expect.objectContaining({
+      body: expect.stringContaining("READY_FOR_REVIEW"),
     }));
   });
 });

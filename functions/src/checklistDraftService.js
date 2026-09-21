@@ -124,6 +124,50 @@ export function checklistDraftMutationHash(mutation) {
   return createHash("sha256").update(JSON.stringify(stable(mutation))).digest("hex");
 }
 
+/**
+ * The review handoff only accepts an exact, already-saved draft revision. This
+ * is deliberately smaller than a second submission payload: draft content has
+ * already crossed the frozen-definition validation boundary during autosave.
+ */
+export function normalizeChecklistReadyForReviewRequest(request) {
+  if (!mutationIdPattern.test(request?.submissionId || "")) fail("Checklist review submission ID is invalid.");
+  if (!Number.isInteger(request?.baseRevision) || request.baseRevision < 0) {
+    fail("Checklist review revision is invalid.");
+  }
+  return { submissionId: request.submissionId, baseRevision: request.baseRevision };
+}
+
+export function checklistReadyForReviewRequestHash(request) {
+  return createHash("sha256").update(JSON.stringify(stable(request))).digest("hex");
+}
+
+/** Validates the persisted sparse draft again before it becomes read-only. */
+export function assertChecklistDraftReadyForReview(run, draft) {
+  const current = normalizedChecklistDraft(run, draft);
+  if (!draft) return current;
+  if (!Number.isInteger(draft.revision) || draft.revision < 0) fail("Checklist draft is invalid.");
+  if (!plainObject(draft.checklistAnswers) || !plainObject(draft.inventoryAnswers)) {
+    fail("Checklist draft is invalid.");
+  }
+  const checklistItemsById = new Map(frozenItems(run).map((item) => [item.id, item]));
+  for (const [id, answer] of Object.entries(draft.checklistAnswers)) {
+    if (!checklistItemsById.has(id) || !checklistAnswerValues.has(answer)
+      || (answer === "NOT_APPLICABLE" && checklistItemsById.get(id).canBeNotApplicable !== true)) {
+      fail("Checklist draft is invalid.");
+    }
+  }
+  const inventoryItemsById = new Map(frozenInventory(run).map((item) => [item.id, item]));
+  for (const [id, answer] of Object.entries(draft.inventoryAnswers)) {
+    if (!inventoryItemsById.has(id) || !inventoryAnswerValues.has(answer)) fail("Checklist draft is invalid.");
+  }
+  for (const field of ["issueNotes", "generalNotes"]) {
+    if (typeof draft[field] !== "string" || draft[field].length > checklistDraftNoteLimit) {
+      fail("Checklist draft is invalid.");
+    }
+  }
+  return current;
+}
+
 export function applyChecklistDraftMutation(run, draft, mutation) {
   const current = normalizedChecklistDraft(run, draft);
   return {

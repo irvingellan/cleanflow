@@ -16,6 +16,7 @@ const run = { status: "DRAFT" };
 describe("Checklist capability state", () => {
   it("treats a matching eligible DRAFT context as active", () => {
     expect(checklistCapabilityState(activeCapability, job, run, now)).toBe("ACTIVE");
+    expect(checklistCapabilityState(activeCapability, job, { status: "READY_FOR_REVIEW" }, now)).toBe("ACTIVE");
   });
 
   it("invalidates expiry, revision, archive, cleaner and Run state without revealing a token", () => {

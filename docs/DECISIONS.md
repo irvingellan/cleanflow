@@ -616,3 +616,9 @@ Cleaner draft edits remain server-owned and receipt-idempotent. The browser may
 retain a small local recovery record, but a newer server revision enters an
 explicit conflict state rather than silently replaying stale edits. This is a
 pilot reliability boundary, not offline sync or multi-device collaboration.
+
+Phase 5C.4 adds `READY_FOR_REVIEW` only to the Checklist Run lifecycle. A
+capability-authorized cleaner may atomically hand off the exact saved draft
+revision once; the Run retains the request hash as its idempotency receipt and
+becomes read-only. This is deliberately not Job completion, Assignment
+completion, manager approval, or evidence-complete certification.

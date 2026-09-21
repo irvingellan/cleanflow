@@ -5,13 +5,15 @@ import { checklistDraftRecoveryStoragePrefix } from "./checklistDraftRecovery.js
 
 const mocks = vi.hoisted(() => ({
   getPublicChecklist: vi.fn(),
+  readyPublicChecklistForReview: vi.fn(),
   savePublicChecklistDraft: vi.fn(),
 }));
-const { getPublicChecklist, savePublicChecklistDraft } = mocks;
+const { getPublicChecklist, readyPublicChecklistForReview, savePublicChecklistDraft } = mocks;
 
 vi.mock("./checklistCapabilityService.js", async (importOriginal) => ({
   ...(await importOriginal()),
   getPublicChecklist: mocks.getPublicChecklist,
+  readyPublicChecklistForReview: mocks.readyPublicChecklistForReview,
   savePublicChecklistDraft: mocks.savePublicChecklistDraft,
 }));
 
@@ -70,6 +72,7 @@ function deferred() {
 beforeEach(() => {
   window.localStorage.clear();
   getPublicChecklist.mockReset();
+  readyPublicChecklistForReview.mockReset();
   savePublicChecklistDraft.mockReset();
   getPublicChecklist.mockResolvedValue({ checklist: frozenChecklist, draft: createDraft() });
   savePublicChecklistDraft.mockImplementation(async ({ baseRevision, changes }) => ({
@@ -80,6 +83,11 @@ beforeEach(() => {
       issueNotes: Object.hasOwn(changes, "issueNotes") ? changes.issueNotes : "",
       generalNotes: Object.hasOwn(changes, "generalNotes") ? changes.generalNotes : "",
     }),
+  }));
+  readyPublicChecklistForReview.mockImplementation(async ({ baseRevision }) => ({
+    duplicate: false,
+    checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW", readyForReviewAt: "2026-09-22T18:00:00.000Z" },
+    draft: createDraft({ revision: baseRevision }),
   }));
 });
 
@@ -328,5 +336,66 @@ describe("PublicChecklistPage", () => {
     expect(screen.getByRole("button", { name: "Salvar agora" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "es" } });
     expect(screen.getByRole("button", { name: "Guardar ahora" })).toBeVisible();
+  });
+
+  it("sends the saved frozen draft for manager review and makes the cleaner view read-only", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Ready for manager review" }));
+    expect(screen.getByText("Saved answers and notes will become read-only. This does not mark the job completed. Your manager will review the saved checklist.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, send for review" }));
+
+    await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledWith(expect.objectContaining({
+      token: "opaque-capability-token", baseRevision: 0,
+    })));
+    expect(await screen.findByText("This checklist is read-only. Your manager can now review the saved checklist.")).toBeVisible();
+    expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeDisabled();
+    expect(screen.getByLabelText("Hand soap")).toBeDisabled();
+    expect(screen.getByLabelText("Other notes")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Yes, send for review" })).not.toBeInTheDocument();
+  });
+
+  it("reuses the exact review submission after a lost response", async () => {
+    readyPublicChecklistForReview
+      .mockRejectedValueOnce({ code: "checklist_request_timeout" })
+      .mockResolvedValueOnce({
+        duplicate: true,
+        checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW" },
+        draft: createDraft(),
+      });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Ready for manager review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, send for review" }));
+    expect(await screen.findByText("Could not send for review. Try again.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, send for review" }));
+
+    await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(2));
+    expect(readyPublicChecklistForReview.mock.calls[1][0].submissionId)
+      .toBe(readyPublicChecklistForReview.mock.calls[0][0].submissionId);
+    expect(await screen.findByText("This checklist is read-only. Your manager can now review the saved checklist.")).toBeVisible();
+  });
+
+  it("loads a submitted Run as read-only and discards stale local recovery instead of saving it", async () => {
+    getPublicChecklist.mockResolvedValue({
+      checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW", readyForReviewAt: "2026-09-22T18:00:00.000Z" },
+      draft: createDraft({ revision: 2, generalNotes: "Server saved" }),
+    });
+    vi.stubGlobal("crypto", {
+      subtle: { digest: vi.fn().mockResolvedValue(Uint8Array.from([1, 2, 3]).buffer) },
+      randomUUID: () => "11111111-1111-4111-8111-111111111111",
+    });
+    window.localStorage.setItem(`${checklistDraftRecoveryStoragePrefix}AQID`, JSON.stringify({
+      pendingMutation: { mutationId: "recovery-mutation-1", baseRevision: 1, changes: { generalNotes: "Stale local" } },
+      queuedChanges: {}, updatedAt: Date.now(),
+    }));
+    renderPage();
+
+    expect(await screen.findByText("This checklist is read-only. Your manager can now review the saved checklist.")).toBeVisible();
+    expect(screen.getByLabelText("Other notes")).toHaveValue("Server saved");
+    expect(savePublicChecklistDraft).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(`${checklistDraftRecoveryStoragePrefix}AQID`)).toBeNull();
   });
 });
