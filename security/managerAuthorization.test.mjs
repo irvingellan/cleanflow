@@ -383,6 +383,7 @@ test("only an active manager can load the safe Checklist Run summary", async () 
   assert.equal(response.run.status, "DRAFT");
   assert.equal(response.run.checklistItemCount, 28);
   assert.deepEqual(response.run.requiredPhotoTypes, [{ id: "balcony", label: "Balcony", maximum: 2 }]);
+  assert.equal(response.run.requiredPhotoCount, 2);
   assert.equal(response.run.cleanerInstructions, "Check the balcony.");
   assert.equal(Object.hasOwn(response.run, "propertyChecklistSettingsSnapshot"), false);
   assert.equal(JSON.stringify(response.run).includes("private-code"), false);

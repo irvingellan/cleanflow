@@ -18,6 +18,7 @@ function renderChecklistRun(runOverrides = {}) {
           checklistItemCount: 28,
           inventoryItemCount: 13,
           requiredPhotoTypes: [{ id: "balcony", label: "Balcony", maximum: 2 }],
+          requiredPhotoCount: 2,
           cleanerInstructions: "Check the balcony.",
           createdAt: "2026-09-20T17:00:00.000Z",
           // Deliberately unrendered server-only data must not appear in the manager summary.
@@ -38,6 +39,7 @@ describe("ChecklistRunDetail", () => {
     expect(screen.getByText("Snapshot Property")).toBeVisible();
     expect(screen.getByText("28 items")).toBeVisible();
     expect(screen.getByText("13 items")).toBeVisible();
+    expect(screen.getByText("2 types")).toBeVisible();
     expect(screen.getByText("Balcony · up to 2")).toBeVisible();
     expect(screen.getByText("Check the balcony.")).toBeVisible();
     expect(screen.getByText("Draft")).toBeVisible();

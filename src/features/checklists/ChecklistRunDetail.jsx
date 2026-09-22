@@ -52,6 +52,9 @@ export function ChecklistRunDetail({
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
+  const requiredPhotoCount = Number.isInteger(checklistRun.requiredPhotoCount)
+    ? checklistRun.requiredPhotoCount
+    : requiredPhotoTypes.length;
   const draft = checklistRun.draft;
   const lastSavedAt = formatRunCreatedAt(draft?.lastSavedAt, language);
   const readyForReviewAt = formatRunCreatedAt(checklistRun.readyForReviewAt, language);
@@ -102,7 +105,7 @@ export function ChecklistRunDetail({
         <DetailItem
           label={translate("checklists.requiredPhotos")}
           value={translate("checklists.requiredPhotosValue", {
-            count: requiredPhotoTypes.length,
+            count: requiredPhotoCount,
           })}
         />
       </dl>

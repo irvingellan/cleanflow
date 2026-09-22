@@ -35,6 +35,12 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
         ...(Number.isInteger(maximum) && maximum > 0 ? { maximum } : {}),
       }))
     : [];
+  const requiredChecklistPhotoCount = sections.reduce(
+    (count, section) => count + (Array.isArray(section?.items)
+      ? section.items.filter((item) => item?.requiresPhoto === true).length
+      : 0),
+    0,
+  );
 
   return {
     id: runId,
@@ -55,6 +61,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
     ),
     inventoryItemCount: Array.isArray(definition.inventoryItems) ? definition.inventoryItems.length : 0,
     requiredPhotoTypes,
+    requiredPhotoCount: requiredChecklistPhotoCount + requiredPhotoTypes.length,
     cleanerInstructions: typeof definition.cleanerInstructions === "string"
       ? definition.cleanerInstructions
       : "",
