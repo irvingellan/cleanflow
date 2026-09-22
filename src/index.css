@@ -2826,7 +2826,10 @@ button.summary-card {
   .public-checklist__inventory { grid-template-columns: 1fr; }
   .public-checklist__save-actions .button { width: 100%; }
   .public-checklist__review-actions .button { width: 100%; }
-  .public-checklist__photo-actions .button { width: 100%; }
+  .public-checklist__photo-actions .button {
+    width: 100%;
+    min-height: 44px;
+  }
   .public-checklist select,
   .public-checklist textarea { font-size: 16px; }
 }
