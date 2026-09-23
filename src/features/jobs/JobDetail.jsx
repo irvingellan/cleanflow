@@ -22,8 +22,10 @@ import { useTranslation } from "../../i18n/translations.js";
 import { ChecklistCapabilityControls } from "../checklists/ChecklistCapabilityControls.jsx";
 import {
   canManageAssignmentAwareOffers,
+  getJobGrossMargin,
   getAssignedCleanerIds,
   isAssignmentAwareJob,
+  optionalJobPrice,
 } from "./jobCompatibility.js";
 import {
   buildCleanerReminderMessage,
@@ -70,6 +72,7 @@ export function JobDetail({
   onReplaceAssignment,
   onStartCleaning,
   onCompleteCleaning,
+  onUpdatePrices,
   onSimulateAssignedCleaner,
   onResolveIssue,
   onSaveDataProvenance,
@@ -97,6 +100,14 @@ export function JobDetail({
   const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
   const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
   const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
+  const [isEditingPrices, setIsEditingPrices] = useState(false);
+  const [priceValues, setPriceValues] = useState(() => ({
+    clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
+    cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
+  }));
+  const [isSavingPrices, setIsSavingPrices] = useState(false);
+  const [priceSaveError, setPriceSaveError] = useState("");
+  const [hasSavedPrices, setHasSavedPrices] = useState(false);
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const createdAt = formatCreatedAt(job.createdAt, language);
@@ -121,6 +132,7 @@ export function JobDetail({
   ].includes(job.operationalStatus);
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
   const isCompleted = job.operationalStatus === "COMPLETED";
+  const grossMargin = getJobGrossMargin(job);
   const canEditRoster =
     isAssignmentAware &&
     ["OFFERED", "ASSIGNED"].includes(job.operationalStatus);
@@ -199,6 +211,52 @@ export function JobDetail({
       isCurrent = false;
     };
   }, [cleanerLookupKey]);
+
+  useEffect(() => {
+    setPriceValues({
+      clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
+      cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
+    });
+    setIsEditingPrices(false);
+    setIsSavingPrices(false);
+    setPriceSaveError("");
+    setHasSavedPrices(false);
+  }, [job.id]);
+
+  function startPriceEdit() {
+    setPriceValues({
+      clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
+      cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
+    });
+    setPriceSaveError("");
+    setHasSavedPrices(false);
+    setIsEditingPrices(true);
+  }
+
+  async function savePrices(event) {
+    event.preventDefault();
+    const clientPrice = optionalJobPrice(priceValues.clientPrice);
+    const cleanerPayout = optionalJobPrice(priceValues.cleanerPayout);
+
+    if (clientPrice === null || cleanerPayout === null) {
+      setPriceSaveError(translate("jobs.priceInvalid"));
+      return;
+    }
+
+    setIsSavingPrices(true);
+    setPriceSaveError("");
+    setHasSavedPrices(false);
+
+    try {
+      await onUpdatePrices({ clientPrice, cleanerPayout });
+      setIsEditingPrices(false);
+      setHasSavedPrices(true);
+    } catch {
+      setPriceSaveError(translate("jobs.priceUpdateError"));
+    } finally {
+      setIsSavingPrices(false);
+    }
+  }
 
   async function assignCleaner(offer) {
     setAssigningCleanerId(offer.cleanerId);
@@ -384,11 +442,21 @@ export function JobDetail({
         />
         <DetailItem
           label={translate("jobs.clientPrice")}
-          value={formatPrice(job.clientPrice, translate, language)}
+          value={hasValue(job.clientPrice)
+            ? formatPrice(job.clientPrice, translate, language)
+            : translate("jobs.notSet")}
         />
         <DetailItem
           label={translate("jobs.cleanerPayout")}
-          value={formatPrice(job.cleanerPayout, translate, language)}
+          value={hasValue(job.cleanerPayout)
+            ? formatPrice(job.cleanerPayout, translate, language)
+            : translate("jobs.notSet")}
+        />
+        <DetailItem
+          label={translate("jobs.grossMargin")}
+          value={grossMargin === null
+            ? translate("jobs.notSet")
+            : formatPrice(grossMargin, translate, language)}
         />
         {!isAssignmentAware && isAssigned && (
           <DetailItem
@@ -418,6 +486,70 @@ export function JobDetail({
           <DetailItem label={translate("jobs.createdTime")} value={createdAt} />
         )}
       </dl>
+
+      <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
+        {!isEditingPrices && (
+          <button className="button" type="button" onClick={startPriceEdit}>
+            {translate("jobs.editPrices")}
+          </button>
+        )}
+        {hasSavedPrices && !isEditingPrices && (
+          <p className="form-success" role="status">{translate("jobs.pricesSaved")}</p>
+        )}
+        {isEditingPrices && (
+          <form className="cleaning-form" noValidate onSubmit={savePrices}>
+            <div className="form-row">
+              <label>
+                {translate("jobs.clientPrice")}
+                <input
+                  type="number"
+                  name="clientPrice"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={priceValues.clientPrice}
+                  onChange={(event) => setPriceValues((current) => ({
+                    ...current,
+                    clientPrice: event.target.value,
+                  }))}
+                />
+              </label>
+              <label>
+                {translate("jobs.cleanerPayout")}
+                <input
+                  type="number"
+                  name="cleanerPayout"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={priceValues.cleanerPayout}
+                  onChange={(event) => setPriceValues((current) => ({
+                    ...current,
+                    cleanerPayout: event.target.value,
+                  }))}
+                />
+              </label>
+            </div>
+            {priceSaveError && <p className="form-error" role="alert">{priceSaveError}</p>}
+            <div className="button-row">
+              <button
+                className="button"
+                type="button"
+                disabled={isSavingPrices}
+                onClick={() => {
+                  setIsEditingPrices(false);
+                  setPriceSaveError("");
+                }}
+              >
+                {translate("common.cancel")}
+              </button>
+              <button className="button button--primary" type="submit" disabled={isSavingPrices}>
+                {isSavingPrices ? translate("jobs.savingPrices") : translate("jobs.savePrices")}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
 
       <section className="job-checklist" aria-labelledby="job-checklist-title">
         <div className="issues-section__header">

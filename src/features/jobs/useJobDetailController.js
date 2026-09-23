@@ -22,6 +22,7 @@ import {
   assignCleanerToJob,
   completeInProgressJob,
   startAssignedJob,
+  updateJobPrices,
   updateJobDataProvenance,
   archiveJob,
   restoreJob,
@@ -332,6 +333,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return updatedJob;
   }
 
+  async function saveJobPrices(prices) {
+    return updateJob((job) => updateJobPrices(job.id, prices));
+  }
+
   async function saveDataProvenance(dataProvenance) {
     return updateJob(async (job) => {
       await updateJobDataProvenance(job.id, dataProvenance, actorUid);
@@ -512,6 +517,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       replaceCleanerAssignment,
       startCleaning,
       completeCleaning,
+      saveJobPrices,
       saveDataProvenance,
       archive,
       restore,

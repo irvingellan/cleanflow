@@ -101,6 +101,38 @@ describe("CreateCleaningForm", () => {
     expect(onCreated).toHaveBeenCalledWith(savedJob);
   });
 
+  it("allows a manager to override Property price defaults for one new Job", async () => {
+    createJob.mockResolvedValue({ id: "job-override", scheduledDate: "2026-09-01" });
+
+    render(
+      <TranslationProvider>
+        <CreateCleaningForm
+          property={{
+            id: "property-1",
+            name: "Pacific Beach Condo",
+            clientName: "Carl",
+            defaultClientPrice: 350,
+            defaultCleanerPrice: 200,
+          }}
+          onBack={vi.fn()}
+          onCreated={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-01" } });
+    fireEvent.change(screen.getByLabelText("Client price"), { target: { value: "375" } });
+    fireEvent.change(screen.getByLabelText("Cleaner payout"), { target: { value: "210" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+
+    await waitFor(() => {
+      expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
+        clientPrice: 375,
+        cleanerPayout: 210,
+      }));
+    });
+  });
+
   it("does not infer a client ID from a legacy Property client name", () => {
     render(
       <TranslationProvider>
@@ -124,6 +156,32 @@ describe("CreateCleaningForm", () => {
     expect(createJob).toHaveBeenCalledWith(
       expect.not.objectContaining({ clientId: expect.anything() }),
     );
+  });
+
+  it("keeps blank price defaults absent instead of converting them to zero", async () => {
+    createJob.mockResolvedValue({ id: "job-blank", scheduledDate: "2026-09-01" });
+
+    render(
+      <TranslationProvider>
+        <CreateCleaningForm
+          property={{ id: "property-blank", name: "No-price Property", clientName: "Carl" }}
+          onBack={vi.fn()}
+          onCreated={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Date"), {
+      target: { value: "2026-09-01" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+
+    await waitFor(() => {
+      expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
+        clientPrice: undefined,
+        cleanerPayout: undefined,
+      }));
+    });
   });
 
   it("shows the feature-local success confirmation only after the write succeeds", async () => {

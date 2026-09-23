@@ -1302,6 +1302,14 @@ Object.assign(messages.es, {
 });
 
 Object.assign(messages.en, {
+  "jobs.grossMargin": "Gross margin",
+  "jobs.notSet": "Not set",
+  "jobs.editPrices": "Edit prices",
+  "jobs.savePrices": "Save prices",
+  "jobs.savingPrices": "Saving prices…",
+  "jobs.pricesSaved": "Job prices updated.",
+  "jobs.priceInvalid": "Enter a valid non-negative price.",
+  "jobs.priceUpdateError": "Unable to update job prices. Try again.",
   "clientReport.managerTitle": "Client report",
   "clientReport.managerDescription": "Create a read-only report link from the saved checklist for the client.",
   "clientReport.create": "Create client report",
@@ -1334,6 +1342,14 @@ Object.assign(messages.en, {
 });
 
 Object.assign(messages.pt, {
+  "jobs.grossMargin": "Margem bruta",
+  "jobs.notSet": "Não definido",
+  "jobs.editPrices": "Editar preços",
+  "jobs.savePrices": "Salvar preços",
+  "jobs.savingPrices": "Salvando preços…",
+  "jobs.pricesSaved": "Preços do serviço atualizados.",
+  "jobs.priceInvalid": "Informe um preço válido, igual ou maior que zero.",
+  "jobs.priceUpdateError": "Não foi possível atualizar os preços do serviço. Tente novamente.",
   "clientReport.managerTitle": "Relatório para o cliente",
   "clientReport.managerDescription": "Crie um link somente para leitura com base no checklist salvo.",
   "clientReport.create": "Criar relatório para o cliente",
@@ -1366,6 +1382,14 @@ Object.assign(messages.pt, {
 });
 
 Object.assign(messages.es, {
+  "jobs.grossMargin": "Margen bruta",
+  "jobs.notSet": "No definido",
+  "jobs.editPrices": "Editar precios",
+  "jobs.savePrices": "Guardar precios",
+  "jobs.savingPrices": "Guardando precios…",
+  "jobs.pricesSaved": "Precios del servicio actualizados.",
+  "jobs.priceInvalid": "Ingresa un precio válido que no sea negativo.",
+  "jobs.priceUpdateError": "No se pudieron actualizar los precios del servicio. Inténtalo de nuevo.",
   "clientReport.managerTitle": "Informe para el cliente",
   "clientReport.managerDescription": "Crea un enlace de solo lectura basado en el checklist guardado.",
   "clientReport.create": "Crear informe para el cliente",

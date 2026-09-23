@@ -7,9 +7,11 @@ import {
   buildCurrentJobCreateData,
   canManageAssignmentAwareOffers,
   getAssignedCleanerIds,
+  getJobGrossMargin,
   getJobSchemaVersion,
   isLegacyJob,
   normalizeJobRecord,
+  optionalJobPrice,
 } from "./jobCompatibility.js";
 
 describe("Job compatibility", () => {
@@ -108,6 +110,35 @@ describe("Job compatibility", () => {
       clientName: "Client Snapshot",
       guestName: "Guest Name",
     });
+    expect(job).not.toHaveProperty("clientPrice");
+    expect(job).not.toHaveProperty("cleanerPayout");
+  });
+
+  it("keeps optional Job prices absent and derives a margin only when both snapshots exist", () => {
+    expect(optionalJobPrice("")).toBeUndefined();
+    expect(optionalJobPrice(null)).toBeUndefined();
+    expect(optionalJobPrice("250.50")).toBe(250.5);
+    expect(optionalJobPrice("-1")).toBeNull();
+    expect(getJobGrossMargin({ clientPrice: 350, cleanerPayout: 200 })).toBe(150);
+    expect(getJobGrossMargin({ clientPrice: 350 })).toBeNull();
+  });
+
+  it("keeps a created Job price snapshot independent of later Property defaults", () => {
+    const job = buildCurrentJobCreateData({
+      organizationId: "cleanflow-demo",
+      propertyId: "property-1",
+      propertyName: "Linked Property",
+      clientName: "Client Snapshot",
+      scheduledDate: "2026-09-01",
+      clientPrice: 350,
+      cleanerPayout: 200,
+      notes: "",
+    });
+    const laterPropertyDefaults = { defaultClientPrice: 400, defaultCleanerPrice: 250 };
+
+    expect(job.clientPrice).toBe(350);
+    expect(job.cleanerPayout).toBe(200);
+    expect(laterPropertyDefaults).toEqual({ defaultClientPrice: 400, defaultCleanerPrice: 250 });
   });
 
   it("keeps a v2 roster projection normalized without fabricating assignments", () => {

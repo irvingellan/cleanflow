@@ -15,6 +15,29 @@ function optionalText(value) {
   return value.trim();
 }
 
+// Job prices are optional snapshots. They deliberately do not fall back to a
+// Property after creation, so a later Property default change cannot rewrite
+// a historical Job.
+export function optionalJobPrice(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return undefined;
+  }
+
+  const price = Number(value);
+  return Number.isFinite(price) && price >= 0 ? price : null;
+}
+
+export function getJobGrossMargin(job) {
+  const clientPrice = optionalJobPrice(job?.clientPrice);
+  const cleanerPayout = optionalJobPrice(job?.cleanerPayout);
+
+  if (clientPrice === undefined || cleanerPayout === undefined) {
+    return null;
+  }
+
+  return clientPrice - cleanerPayout;
+}
+
 export function getJobSchemaVersion(job) {
   return Number.isInteger(job?.schemaVersion) && job.schemaVersion > 0
     ? job.schemaVersion
@@ -95,9 +118,15 @@ export function buildCurrentJobCreateData({
 }) {
   const normalizedGuestName = optionalText(guestName);
   const normalizedScheduledStart = optionalText(scheduledStart);
+  const normalizedClientPrice = optionalJobPrice(clientPrice);
+  const normalizedCleanerPayout = optionalJobPrice(cleanerPayout);
 
   if (normalizedGuestName.length > maximumGuestNameLength) {
     throw new Error("Guest name is too long.");
+  }
+
+  if (normalizedClientPrice === null || normalizedCleanerPayout === null) {
+    throw new Error("Job prices must be non-negative numbers.");
   }
 
   const job = {
@@ -106,8 +135,6 @@ export function buildCurrentJobCreateData({
     propertyName,
     clientName,
     scheduledDate,
-    clientPrice,
-    cleanerPayout,
     notes,
     operationalStatus: "UNASSIGNED",
     schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
@@ -115,6 +142,14 @@ export function buildCurrentJobCreateData({
     assignedCleanerIds: [],
     dataProvenance: "REAL",
   };
+
+  if (normalizedClientPrice !== undefined) {
+    job.clientPrice = normalizedClientPrice;
+  }
+
+  if (normalizedCleanerPayout !== undefined) {
+    job.cleanerPayout = normalizedCleanerPayout;
+  }
   const normalizedClientId = optionalText(clientId);
 
   if (normalizedClientId) {

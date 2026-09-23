@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -21,6 +22,7 @@ import {
   buildCurrentJobCreateData,
   isAssignmentAwareJob,
   normalizeJobRecord,
+  optionalJobPrice,
 } from "./jobCompatibility.js";
 import { buildChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
 
@@ -586,6 +588,25 @@ export async function createJob({
   );
 
   return normalizeJobRecord(job, jobDocument.id);
+}
+
+export async function updateJobPrices(jobId, { clientPrice, cleanerPayout }) {
+  const normalizedClientPrice = optionalJobPrice(clientPrice);
+  const normalizedCleanerPayout = optionalJobPrice(cleanerPayout);
+
+  if (normalizedClientPrice === null || normalizedCleanerPayout === null) {
+    const error = new Error("Job prices must be non-negative numbers.");
+    error.code = "invalid-job-price";
+    throw error;
+  }
+
+  const reference = jobDocument(jobId);
+  await updateDoc(reference, {
+    clientPrice: normalizedClientPrice === undefined ? deleteField() : normalizedClientPrice,
+    cleanerPayout: normalizedCleanerPayout === undefined ? deleteField() : normalizedCleanerPayout,
+  });
+
+  return jobFromSnapshot(await getDoc(reference));
 }
 
 export async function updateJobDataProvenance(jobId, dataProvenance, actorUid) {

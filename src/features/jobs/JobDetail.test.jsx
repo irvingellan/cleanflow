@@ -54,6 +54,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {})
         onReplaceAssignment={noOp}
         onStartCleaning={noOp}
         onCompleteCleaning={noOp}
+        onUpdatePrices={callbacks.onUpdatePrices || noOp}
         onSimulateAssignedCleaner={noOp}
         onResolveIssue={noOp}
       />
@@ -62,6 +63,60 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {})
 }
 
 describe("JobDetail lifecycle actions", () => {
+  it("shows derived gross margin only with both Job price snapshots and lets a manager edit only those prices", async () => {
+    const onUpdatePrices = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = renderJobDetail("UNASSIGNED", {
+      clientPrice: 350,
+      cleanerPayout: 200,
+    }, { onUpdatePrices });
+
+    expect(screen.getByText("Gross margin")).toBeVisible();
+    expect(screen.getByText("$150.00")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Edit prices" }));
+    const clientPriceInputs = screen.getAllByLabelText("Client price");
+    const cleanerPayoutInputs = screen.getAllByLabelText("Cleaner payout");
+    fireEvent.change(clientPriceInputs.at(-1), { target: { value: "375" } });
+    fireEvent.change(cleanerPayoutInputs.at(-1), { target: { value: "210" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
+
+    await waitFor(() => {
+      expect(onUpdatePrices).toHaveBeenCalledWith({ clientPrice: 375, cleanerPayout: 210 });
+    });
+
+    rerender(
+      <TranslationProvider>
+        <JobDetail
+          job={{ id: "job-1", propertyName: "Pacific Beach Condo", operationalStatus: "UNASSIGNED" }}
+          knownCleaners={[]}
+          offers={[]}
+          isLoadingOffers={false}
+          hasOffersError={false}
+          assignments={[]}
+          isLoadingAssignments={false}
+          hasAssignmentsError={false}
+          issues={[]}
+          isLoadingIssues={false}
+          hasIssuesError={false}
+          onBack={vi.fn()}
+          onOfferToCleaners={vi.fn()}
+          onRefreshOffers={vi.fn()}
+          onRefreshIssues={vi.fn()}
+          onCreatePublicOfferLink={vi.fn()}
+          onAssignCleaner={vi.fn()}
+          onRemoveAssignment={vi.fn()}
+          onReplaceAssignment={vi.fn()}
+          onStartCleaning={vi.fn()}
+          onCompleteCleaning={vi.fn()}
+          onUpdatePrices={vi.fn()}
+          onSimulateAssignedCleaner={vi.fn()}
+          onResolveIssue={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getAllByText("Not set")).toHaveLength(3);
+  });
+
   it("copies a cleaner-specific reminder for an assigned legacy Job", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = navigator.clipboard;

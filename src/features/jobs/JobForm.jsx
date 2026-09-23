@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BackButton } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
-import { maximumGuestNameLength } from "./jobCompatibility.js";
+import { maximumGuestNameLength, optionalJobPrice } from "./jobCompatibility.js";
 import { createJob } from "./jobService.js";
 
 export function CreateCleaningForm({ property, onBack, onCreated }) {
@@ -20,7 +20,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
     notes: "",
   });
   const [isSaving, setIsSaving] = useState(false);
-  const [hasSaveError, setHasSaveError] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -34,15 +34,17 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setIsSaving(true);
-    setHasSaveError(false);
+    setSaveError("");
 
-    const clientPrice =
-      formValues.clientPrice === "" ? null : Number(formValues.clientPrice);
-    const cleanerPayout =
-      formValues.cleanerPayout === ""
-        ? null
-        : Number(formValues.cleanerPayout);
+    const clientPrice = optionalJobPrice(formValues.clientPrice);
+    const cleanerPayout = optionalJobPrice(formValues.cleanerPayout);
     const notes = formValues.notes.trim();
+
+    if (clientPrice === null || cleanerPayout === null) {
+      setSaveError(translate("jobs.priceInvalid"));
+      setIsSaving(false);
+      return;
+    }
 
     try {
       const job = await createJob({
@@ -60,7 +62,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
 
       onCreated(job);
     } catch {
-      setHasSaveError(true);
+      setSaveError(translate("jobs.createError"));
       setIsSaving(false);
     }
   }
@@ -74,7 +76,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
         {translate("jobs.create")}
       </h2>
 
-      <form className="cleaning-form" onSubmit={handleSubmit}>
+      <form className="cleaning-form" noValidate onSubmit={handleSubmit}>
         <label>
           {translate("common.property")}
           <input type="text" value={displayPropertyName} readOnly />
@@ -114,6 +116,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
               name="clientPrice"
               min="0"
               step="0.01"
+              inputMode="decimal"
               value={formValues.clientPrice}
               onChange={updateField}
             />
@@ -126,6 +129,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
               name="cleanerPayout"
               min="0"
               step="0.01"
+              inputMode="decimal"
               value={formValues.cleanerPayout}
               onChange={updateField}
             />
@@ -158,9 +162,9 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
           <input type="text" value={translate("status.unassigned")} readOnly />
         </label>
 
-        {hasSaveError && (
+        {saveError && (
           <p className="form-error" role="alert">
-            {translate("jobs.createError")}
+            {saveError}
           </p>
         )}
 

@@ -94,6 +94,14 @@ test("active manager can read/query/create/update/delete only supported operatio
   }
 });
 
+test("only an active manager can update Job price snapshots without changing checklist context", async () => {
+  const managerJob = account("manager").firestore().doc(`${root}/jobs/job`);
+  const cleanerJob = account("cleaner").firestore().doc(`${root}/jobs/job`);
+
+  await assertSucceeds(managerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
+  await assertFails(cleanerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
+});
+
 test("manager browsers cannot directly read or mutate server-only client report capabilities", async () => {
   const db = account("manager").firestore();
   const pathsToProtect = [
