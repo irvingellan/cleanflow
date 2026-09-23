@@ -10,7 +10,7 @@ const upcomingJobs = [
   { id: "job-4", propertyName: "Hidden Fourth Property", scheduledDate: "2026-09-03", scheduledStart: "09:00", operationalStatus: "UNASSIGNED", clientPrice: 260 },
 ];
 
-function renderDetail(history, onViewAllUpcoming = vi.fn()) {
+function renderDetail(history, onViewAllUpcoming = vi.fn(), onEdit = vi.fn()) {
   return render(
     <TranslationProvider>
       <ClientDetail
@@ -23,6 +23,7 @@ function renderDetail(history, onViewAllUpcoming = vi.fn()) {
         onBack={vi.fn()}
         onOpenProperty={vi.fn()}
         onCreateProperty={vi.fn()}
+        onEdit={onEdit}
         onOpenJob={vi.fn()}
         onViewAllUpcoming={onViewAllUpcoming}
       />
@@ -31,6 +32,14 @@ function renderDetail(history, onViewAllUpcoming = vi.fn()) {
 }
 
 describe("ClientDetail upcoming services", () => {
+  it("opens the basic Client edit flow", () => {
+    const onEdit = vi.fn();
+    renderDetail({ upcomingJobs: [], hasMoreUpcoming: false, recentJobs: [] }, vi.fn(), onEdit);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Client One" }));
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the next three chronological Jobs and provides View all only when more exist", () => {
     const onViewAllUpcoming = vi.fn();
     renderDetail({ upcomingJobs, hasMoreUpcoming: true, recentJobs: [] }, onViewAllUpcoming);

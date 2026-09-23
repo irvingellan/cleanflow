@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteField,
   doc,
   getDocs,
   query,
@@ -88,6 +89,25 @@ export async function updatePropertyChecklistSettings(propertyId, checklistSetti
   const normalizedSettings = normalizePropertyChecklistSettings(checklistSettings);
   await updateDoc(propertyDocument(propertyId), { checklistSettings: normalizedSettings });
   return { id: propertyId, checklistSettings: normalizedSettings };
+}
+
+export async function updateProperty(propertyId, {
+  name,
+  defaultClientPrice,
+  defaultCleanerPrice,
+}) {
+  await updateDoc(propertyDocument(propertyId), {
+    name,
+    defaultClientPrice: defaultClientPrice === undefined ? deleteField() : defaultClientPrice,
+    defaultCleanerPrice: defaultCleanerPrice === undefined ? deleteField() : defaultCleanerPrice,
+  });
+
+  return {
+    id: propertyId,
+    name,
+    defaultClientPrice,
+    defaultCleanerPrice,
+  };
 }
 
 export async function linkPropertyToClient(propertyId, client) {

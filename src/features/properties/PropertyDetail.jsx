@@ -16,6 +16,7 @@ export function PropertyDetail({
   property,
   onBack,
   onCreateCleaning,
+  onEdit,
   onOpenJob,
   onLinkClient,
   onSaveDataProvenance,
@@ -66,11 +67,12 @@ export function PropertyDetail({
       </dl>
 
       <div className="button-row">
-        {!property.clientId && (
-          <button className="button" type="button" onClick={onLinkClient}>
-            {translate("properties.linkClient")}
-          </button>
-        )}
+        <button className="button" type="button" onClick={onEdit}>
+          {translate("properties.edit", { property: propertyName })}
+        </button>
+        <button className="button" type="button" onClick={onLinkClient}>
+          {translate(property.clientId ? "properties.changeClient" : "properties.linkClient")}
+        </button>
         <button
           className="button button--primary"
           type="button"

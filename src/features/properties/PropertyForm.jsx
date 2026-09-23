@@ -152,6 +152,92 @@ export function PropertyForm({ properties, preselectedClient, onBack, onSaved })
   );
 }
 
+export function PropertyEditForm({ property, onBack, onSaved }) {
+  const { translate } = useTranslation();
+  const [formValues, setFormValues] = useState(() => propertyToEditForm(property));
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    setFormValues(propertyToEditForm(property));
+    setFormError("");
+    setIsSaved(false);
+    setIsSaving(false);
+  }, [property]);
+
+  function updateField(event) {
+    const { name, value } = event.target;
+    setIsSaved(false);
+    setFormValues((currentValues) => ({ ...currentValues, [name]: value }));
+  }
+
+  async function saveProperty(event) {
+    event.preventDefault();
+    const name = formValues.name.trim();
+    const defaultClientPrice = optionalPrice(formValues.defaultClientPrice);
+    const defaultCleanerPrice = optionalPrice(formValues.defaultCleanerPrice);
+
+    if (!name) {
+      setFormError(translate("properties.nameRequired"));
+      return;
+    }
+
+    if (defaultClientPrice === null || defaultCleanerPrice === null) {
+      setFormError(translate("properties.priceInvalid"));
+      return;
+    }
+
+    setIsSaving(true);
+    setFormError("");
+    setIsSaved(false);
+
+    try {
+      await onSaved({ name, defaultClientPrice, defaultCleanerPrice });
+      setIsSaved(true);
+    } catch {
+      setFormError(translate("properties.updateError"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel" aria-labelledby="property-edit-title">
+      <BackButton onClick={onBack} />
+      <p className="eyebrow">{translate("properties.details")}</p>
+      <h2 id="property-edit-title" className="panel__title">{translate("properties.editTitle")}</h2>
+
+      <form className="cleaning-form" noValidate onSubmit={saveProperty}>
+        <label>
+          {translate("properties.name")}
+          <input name="name" value={formValues.name} onChange={updateField} required />
+        </label>
+
+        <label>
+          {translate("properties.defaultClientPrice")}
+          <input type="number" name="defaultClientPrice" value={formValues.defaultClientPrice} min="0" step="0.01" inputMode="decimal" onChange={updateField} />
+        </label>
+
+        <label>
+          {translate("properties.defaultCleanerPrice")}
+          <input type="number" name="defaultCleanerPrice" value={formValues.defaultCleanerPrice} min="0" step="0.01" inputMode="decimal" onChange={updateField} />
+        </label>
+
+        {formError && <p className="form-error" role="alert">{formError}</p>}
+        {isSaved && <p className="form-success" role="status">{translate("properties.updated")}</p>}
+
+        <div className="button-row">
+          <button className="button button--primary" type="submit" disabled={isSaving}>
+            {isSaving ? translate("properties.saving") : translate("properties.save")}
+          </button>
+          <button className="button" type="button" onClick={onBack}>{translate("common.cancel")}</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 export function PropertyClientLinkForm({ property, onBack, onLinked }) {
   const { translate } = useTranslation();
   const [clients, setClients] = useState([]);
@@ -273,4 +359,12 @@ export function PropertyClientLinkForm({ property, onBack, onLinked }) {
       )}
     </section>
   );
+}
+
+function propertyToEditForm(property) {
+  return {
+    name: property?.name || "",
+    defaultClientPrice: property?.defaultClientPrice === undefined ? "" : String(property.defaultClientPrice),
+    defaultCleanerPrice: property?.defaultCleanerPrice === undefined ? "" : String(property.defaultCleanerPrice),
+  };
 }

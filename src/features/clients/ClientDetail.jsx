@@ -20,6 +20,7 @@ export function ClientDetail({
   onBack,
   onOpenProperty,
   onCreateProperty,
+  onEdit,
   onOpenJob,
   onViewAllUpcoming,
   onSaveDataProvenance,
@@ -52,6 +53,9 @@ export function ClientDetail({
       </dl>
 
       <div className="button-row">
+        <button className="button" type="button" onClick={onEdit}>
+          {translate("clients.edit", { client: clientName })}
+        </button>
         <button className="button button--primary" type="button" onClick={onCreateProperty}>
           {translate("properties.new")}
         </button>

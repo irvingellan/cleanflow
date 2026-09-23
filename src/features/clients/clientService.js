@@ -58,6 +58,15 @@ export async function createClient({ name, active }) {
   return { id: reference.id, name, active, organizationId, dataProvenance: "REAL" };
 }
 
+export async function updateClient(clientId, { name }) {
+  await updateDoc(clientDocument(clientId), {
+    name,
+    updatedAt: serverTimestamp(),
+  });
+
+  return { id: clientId, name };
+}
+
 export async function updateClientDataProvenance(clientId, dataProvenance, actorUid) {
   await updateDoc(
     clientDocument(clientId),

@@ -117,6 +117,48 @@ const messages = {
 };
 
 Object.assign(messages.en, {
+  "properties.editTitle": "Edit property",
+  "properties.edit": "Edit {property}",
+  "properties.changeClient": "Change client",
+  "properties.saving": "Saving…",
+  "properties.updated": "Property updated.",
+  "properties.updateError": "Unable to update property.",
+  "clients.editTitle": "Edit client",
+  "clients.edit": "Edit {client}",
+  "clients.saving": "Saving…",
+  "clients.updated": "Client updated.",
+  "clients.updateError": "Unable to update client.",
+});
+
+Object.assign(messages.pt, {
+  "properties.editTitle": "Editar propriedade",
+  "properties.edit": "Editar {property}",
+  "properties.changeClient": "Alterar cliente",
+  "properties.saving": "Salvando…",
+  "properties.updated": "Propriedade atualizada.",
+  "properties.updateError": "Não foi possível atualizar a propriedade.",
+  "clients.editTitle": "Editar cliente",
+  "clients.edit": "Editar {client}",
+  "clients.saving": "Salvando…",
+  "clients.updated": "Cliente atualizado.",
+  "clients.updateError": "Não foi possível atualizar o cliente.",
+});
+
+Object.assign(messages.es, {
+  "properties.editTitle": "Editar propiedad",
+  "properties.edit": "Editar {property}",
+  "properties.changeClient": "Cambiar cliente",
+  "properties.saving": "Guardando…",
+  "properties.updated": "Propiedad actualizada.",
+  "properties.updateError": "No se pudo actualizar la propiedad.",
+  "clients.editTitle": "Editar cliente",
+  "clients.edit": "Editar {client}",
+  "clients.saving": "Guardando…",
+  "clients.updated": "Cliente actualizado.",
+  "clients.updateError": "No se pudo actualizar el cliente.",
+});
+
+Object.assign(messages.en, {
   "checklists.savedEvidence": "Saved evidence",
   "checklists.photoForRequirement": "Photo for {requirement}",
   "checklists.photoLoading": "Loading saved photo…",

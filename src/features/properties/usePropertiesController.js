@@ -4,6 +4,7 @@ import {
   archiveProperty,
   getProperties,
   linkPropertyToClient,
+  updateProperty,
   updatePropertyDataProvenance,
   restoreProperty,
 } from "./propertyService.js";
@@ -71,6 +72,18 @@ export function usePropertiesController({ actorUid, includeArchived = false }) {
     return linkedProperty;
   }
 
+  async function savePropertyEdit(property, values) {
+    const propertyUpdate = await updateProperty(property.id, values);
+    const updatedProperty = { ...property, ...propertyUpdate };
+
+    setSelectedProperty(updatedProperty);
+    setProperties((currentProperties) => currentProperties.map((currentProperty) =>
+      currentProperty.id === updatedProperty.id ? updatedProperty : currentProperty,
+    ));
+
+    return updatedProperty;
+  }
+
   async function saveDataProvenance(property, dataProvenance) {
     const propertyUpdate = await updatePropertyDataProvenance(
       property.id,
@@ -106,6 +119,7 @@ export function usePropertiesController({ actorUid, includeArchived = false }) {
     directory: { properties, isLoading, hasError },
     selection: { selectedProperty, clearProperty, openProperty },
     saveProperty,
+    savePropertyEdit,
     linkClient,
     saveDataProvenance,
     archive,

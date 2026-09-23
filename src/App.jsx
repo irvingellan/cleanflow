@@ -70,6 +70,7 @@ import { PropertyDetail } from "./features/properties/PropertyDetail.jsx";
 import { PropertyDirectory } from "./features/properties/PropertyDirectory.jsx";
 import {
   PropertyClientLinkForm,
+  PropertyEditForm,
   PropertyForm,
 } from "./features/properties/PropertyForm.jsx";
 import { usePropertiesController } from "./features/properties/usePropertiesController.js";
@@ -481,6 +482,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       openClient: selectClient,
     },
     saveClient,
+    saveClientEdit,
     saveDataProvenance: saveClientDataProvenance,
     archive: archiveClientRecord,
     restore: restoreClientRecord,
@@ -518,6 +520,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       openProperty: selectProperty,
     },
     saveProperty,
+    savePropertyEdit,
     linkClient,
     saveDataProvenance: savePropertyDataProvenance,
     archive: archivePropertyRecord,
@@ -557,6 +560,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   function showPropertyClientLink() {
     setView("property-link-client");
+  }
+
+  function showEditProperty() {
+    setView("property-edit");
   }
 
   function showDashboard() {
@@ -676,6 +683,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function showNewClient() {
     clearClient();
     setView("client-create");
+  }
+
+  function showEditClient() {
+    setView("client-edit");
   }
 
   function openClient(client) {
@@ -915,6 +926,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
               propertyDetailOrigin === "client" ? returnToClientDetail : showProperties
             }
             onCreateCleaning={() => setView("create-cleaning")}
+            onEdit={showEditProperty}
             onOpenJob={openPropertyJob}
             onLinkClient={showPropertyClientLink}
             onSaveDataProvenance={(dataProvenance) =>
@@ -924,6 +936,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onArchive={async () => { await archivePropertyRecord(selectedProperty); showProperties(); }}
             onRestore={() => restorePropertyRecord(selectedProperty)}
             onViewAllUpcoming={() => showJobsForProperty(selectedProperty)}
+          />
+        )}
+
+        {view === "property-edit" && selectedProperty && (
+          <PropertyEditForm
+            property={selectedProperty}
+            onBack={() => setView("property-detail")}
+            onSaved={(values) => savePropertyEdit(selectedProperty, values)}
           />
         )}
 
@@ -1096,6 +1116,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onBack={showClients}
             onOpenProperty={openClientProperty}
             onCreateProperty={showNewPropertyForClient}
+            onEdit={showEditClient}
             onOpenJob={openClientJob}
             onSaveDataProvenance={(dataProvenance) =>
               saveClientDataProvenance(selectedClient, dataProvenance)
@@ -1104,6 +1125,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onArchive={async () => { await archiveClientRecord(selectedClient); showClients(); }}
             onRestore={() => restoreClientRecord(selectedClient)}
             onViewAllUpcoming={() => showJobsForClient(selectedClient)}
+          />
+        )}
+
+        {view === "client-edit" && selectedClient && (
+          <ClientForm
+            client={selectedClient}
+            onBack={() => setView("client-detail")}
+            onSaved={(values) => saveClientEdit(selectedClient, values)}
           />
         )}
 

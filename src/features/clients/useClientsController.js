@@ -5,6 +5,7 @@ import {
   createClient,
   archiveClient,
   getClients,
+  updateClient,
   updateClientDataProvenance,
   restoreClient,
 } from "./clientService.js";
@@ -132,6 +133,18 @@ export function useClientsController({ view, actorUid, includeArchived = false }
     return client;
   }
 
+  async function saveClientEdit(client, values) {
+    const clientUpdate = await updateClient(client.id, values);
+    const updatedClient = { ...client, ...clientUpdate };
+
+    setSelectedClient(updatedClient);
+    setClients((currentClients) => currentClients.map((currentClient) =>
+      currentClient.id === updatedClient.id ? updatedClient : currentClient,
+    ));
+
+    return updatedClient;
+  }
+
   async function saveDataProvenance(client, dataProvenance) {
     const clientUpdate = await updateClientDataProvenance(
       client.id,
@@ -176,6 +189,7 @@ export function useClientsController({ view, actorUid, includeArchived = false }
       openClient,
     },
     saveClient,
+    saveClientEdit,
     saveDataProvenance,
     archive,
     restore,
