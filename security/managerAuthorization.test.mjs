@@ -15,6 +15,7 @@ for (const [variable, expected] of Object.entries({
 const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow", storageBucket: "demo-cleanflow.appspot.com" });
 const { FieldValue, getFirestore, Timestamp } = await import("firebase-admin/firestore");
+const { serverTimestamp } = await import("firebase/firestore");
 const {
   createChecklistRun,
   getChecklistRun,
@@ -164,6 +165,38 @@ test("membership is own-get only; neither manager nor outsider can self-escalate
     batch.set(db.doc(`${root}/jobs/escalated`), { organizationId: org });
     await assertFails(batch.commit());
   }
+});
+
+function managerPageLoadEvent(uid = "manager") {
+  return {
+    page: "dashboard",
+    durationMs: 120,
+    dataDurationMs: 100,
+    result: "success",
+    uid,
+    sessionId: "session-identifier-1",
+    deviceId: "device-identifier-1",
+    deviceClass: "mobile",
+    browser: "safari",
+    platform: "ios",
+    standalone: true,
+    connection: { effectiveType: "4g", rtt: 75, downlink: 10, saveData: false },
+    viewport: { width: 390, height: 844 },
+    appVersion: "v0.9.3",
+    createdAt: serverTimestamp(),
+  };
+}
+
+test("manager page-load telemetry is self-attributed append-only diagnostics", async () => {
+  const managerDb = account("manager").firestore();
+  const event = managerDb.doc(`${root}/managerPageLoadEvents/event-1`);
+  await assertSucceeds(event.set(managerPageLoadEvent()));
+  await assertFails(event.get());
+  await assertFails(event.update({ durationMs: 1 }));
+  await assertFails(event.delete());
+  await assertFails(managerDb.doc(`${root}/managerPageLoadEvents/spoofed`).set(managerPageLoadEvent("outsider")));
+  await assertFails(account("outsider").firestore()
+    .doc(`${root}/managerPageLoadEvents/outsider-event`).set(managerPageLoadEvent("outsider")));
 });
 
 test("server metadata, unknown subcollections and future checklist namespaces are default denied", async () => {

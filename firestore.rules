@@ -76,10 +76,59 @@ service cloud.firestore {
         .hasAny(['cleanerId', 'isActive']);
     }
 
+    function validManagerPageLoadConnection(data) {
+      return !('connection' in data)
+        || (data.connection is map
+          && data.connection.keys().hasOnly(['effectiveType', 'rtt', 'downlink', 'saveData'])
+          && (!('effectiveType' in data.connection)
+            || (data.connection.effectiveType is string && data.connection.effectiveType.size() <= 16))
+          && (!('rtt' in data.connection)
+            || (data.connection.rtt is number && data.connection.rtt >= 0 && data.connection.rtt <= 100000))
+          && (!('downlink' in data.connection)
+            || (data.connection.downlink is number && data.connection.downlink >= 0 && data.connection.downlink <= 100000))
+          && (!('saveData' in data.connection) || data.connection.saveData is bool));
+    }
+
+    function validManagerPageLoadEvent(data) {
+      return data.keys().hasOnly([
+          'page', 'durationMs', 'dataDurationMs', 'result', 'uid', 'sessionId', 'deviceId',
+          'deviceClass', 'browser', 'platform', 'standalone', 'connection', 'viewport',
+          'appVersion', 'createdAt',
+        ])
+        && data.keys().hasAll([
+          'page', 'durationMs', 'dataDurationMs', 'result', 'uid', 'sessionId', 'deviceId',
+          'deviceClass', 'browser', 'platform', 'standalone', 'viewport', 'appVersion', 'createdAt',
+        ])
+        && data.page in ['dashboard', 'jobs', 'properties', 'clients', 'cleaners', 'payouts']
+        && data.durationMs is int && data.durationMs >= 0 && data.durationMs <= 600000
+        && data.dataDurationMs is int && data.dataDurationMs >= 0 && data.dataDurationMs <= 600000
+        && data.result in ['success', 'error']
+        && data.uid == request.auth.uid
+        && data.sessionId is string && data.sessionId.size() > 0 && data.sessionId.size() <= 128
+        && data.deviceId is string && data.deviceId.size() > 0 && data.deviceId.size() <= 128
+        && data.deviceClass in ['mobile', 'desktop']
+        && data.browser in ['chrome', 'safari', 'firefox', 'edge', 'other']
+        && data.platform in ['ios', 'android', 'macos', 'windows', 'linux', 'other']
+        && data.standalone is bool
+        && data.viewport is map
+        && data.viewport.keys().hasOnly(['width', 'height'])
+        && data.viewport.keys().hasAll(['width', 'height'])
+        && data.viewport.width is int && data.viewport.width >= 0 && data.viewport.width <= 10000
+        && data.viewport.height is int && data.viewport.height >= 0 && data.viewport.height <= 10000
+        && data.appVersion is string && data.appVersion.size() > 0 && data.appVersion.size() <= 50
+        && data.createdAt == request.time
+        && validManagerPageLoadConnection(data);
+    }
+
     match /organizations/{orgId} {
       // Membership is provisioned by trusted administrators, never by browser clients.
       match /members/{uid} {
         allow get: if signedInAccount() && request.auth.uid == uid;
+      }
+
+      // Client diagnostics are append-only, self-attributed, and never browser-readable.
+      match /managerPageLoadEvents/{eventId} {
+        allow create: if activeManager(orgId) && validManagerPageLoadEvent(request.resource.data);
       }
 
       // Exact document depths are intentional: new subcollections do not inherit access.

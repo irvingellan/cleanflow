@@ -58,6 +58,7 @@ import {
 } from "./features/public-offers/publicOfferService.js";
 import { languageOptions, useTranslation } from "./i18n/translations.js";
 import { ThemeProvider, useTheme } from "./theme/theme.js";
+import { useManagerPageLoadTelemetry } from "./features/telemetry/useManagerPageLoadTelemetry.js";
 import {
   formatCreatedAt,
   formatDate,
@@ -522,6 +523,19 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     archive: archivePropertyRecord,
     restore: restorePropertyRecord,
   } = propertiesController;
+
+  useManagerPageLoadTelemetry({
+    user: authUser,
+    view,
+    pageStates: {
+      dashboard: { isLoading: isLoadingDashboard, hasError: hasDashboardError },
+      jobs: { isLoading: isLoadingJobs, hasError: hasJobError },
+      properties: { isLoading: isLoadingProperties, hasError: hasPropertyError },
+      clients: { isLoading: isLoadingClients, hasError: hasClientsError },
+      cleaners: { isLoading: isLoadingDirectoryCleaners, hasError: hasDirectoryCleanersError },
+      payouts: { isLoading: isLoadingPayouts, hasError: hasPayoutsError },
+    },
+  });
 
   function showProperties() {
     setActiveSection("properties");
