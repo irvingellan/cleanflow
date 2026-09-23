@@ -10,7 +10,7 @@ import {
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { createJobListFilters } from "./jobListFilters.js";
-import { getAssignedCleanerIds } from "./jobCompatibility.js";
+import { getAssignedCleanerIds, getJobGrossMargin } from "./jobCompatibility.js";
 import { assignedCleanerSummary } from "./assignmentPresentation.js";
 
 export { createJobListFilters, dashboardJobListFilters } from "./jobListFilters.js";
@@ -63,6 +63,10 @@ export function JobsPage({
   const propertiesById = useMemo(
     () => Object.fromEntries(properties.map((property) => [property.id, property])),
     [properties],
+  );
+  const cleanerNamesById = useMemo(
+    () => Object.fromEntries(cleaners.map((cleaner) => [cleaner.id, cleaner.name])),
+    [cleaners],
   );
   const normalizedSearch = filters.search.trim().toLocaleLowerCase(language);
   const sortedJobs = useMemo(
@@ -398,8 +402,11 @@ export function JobsPage({
                   })
                 }
               >
-                <span className="job-card__date">
-                  {formatDate(job.scheduledDate, translate, language)}
+                <span className="job-card__schedule">
+                  <strong>{formatDate(job.scheduledDate, translate, language)}</strong>
+                  <span>
+                    {translate("jobs.scheduledTime")}: {job.scheduledStart || translate("jobs.notSet")}
+                  </span>
                 </span>
                 <span className="job-card__summary">
                   <strong>
@@ -411,7 +418,7 @@ export function JobsPage({
                   <span>
                     {assignedCleanerSummary(
                       job,
-                      {},
+                      cleanerNamesById,
                       translate,
                       translate("dashboard.notAssigned"),
                     )}
@@ -420,20 +427,26 @@ export function JobsPage({
                 <span className="status-badge">
                   {formatOperationalStatus(job.operationalStatus, translate)}
                 </span>
-                <DataProvenanceBadge record={job} />
+                <span className="job-card__provenance"><DataProvenanceBadge record={job} /></span>
                 {job.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
                 {(hasValue(job.clientPrice) || hasValue(job.cleanerPayout)) && (
                   <span className="job-card__prices">
                     {hasValue(job.clientPrice) && (
                       <span>
-                        {translate("common.client")}{" "}
+                        {translate("jobs.clientPrice")}{" "}
                         {formatPrice(job.clientPrice, translate, language)}
                       </span>
                     )}
                     {hasValue(job.cleanerPayout) && (
                       <span>
-                        {translate("common.cleaner")}{" "}
+                        {translate("jobs.cleanerPayout")}{" "}
                         {formatPrice(job.cleanerPayout, translate, language)}
+                      </span>
+                    )}
+                    {getJobGrossMargin(job) !== null && (
+                      <span>
+                        {translate("jobs.grossMargin")}{" "}
+                        {formatPrice(getJobGrossMargin(job), translate, language)}
                       </span>
                     )}
                   </span>

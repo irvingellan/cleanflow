@@ -17,15 +17,15 @@ describe("assignedCleanerSummary", () => {
     ).toBe(fallback);
   });
 
-  it("summarizes one assigned cleaner for a v2 Job", () => {
+  it("prefers the current cleaner display name for a v2 Job", () => {
     expect(
       assignedCleanerSummary(
         { schemaVersion: 2, assignedCleanerIds: ["cleaner-1"] },
-        {},
+        { "cleaner-1": "Current Cleaner" },
         translate,
         fallback,
       ),
-    ).toBe("jobs.cleanerAssignedOne:1");
+    ).toBe("Current Cleaner");
   });
 
   it("summarizes multiple assigned cleaners for a v2 Job", () => {
@@ -40,6 +40,17 @@ describe("assignedCleanerSummary", () => {
         fallback,
       ),
     ).toBe("jobs.cleanersAssignedMany:2");
+  });
+
+  it("keeps the count fallback when v2 cleaner names are unavailable", () => {
+    expect(
+      assignedCleanerSummary(
+        { schemaVersion: 2, assignedCleanerIds: ["cleaner-1"] },
+        {},
+        translate,
+        fallback,
+      ),
+    ).toBe("jobs.cleanerAssignedOne:1");
   });
 
   it("keeps the legacy cleaner-name fallback behavior", () => {

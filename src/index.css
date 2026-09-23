@@ -1899,10 +1899,18 @@ button.summary-card {
   border-color: var(--color-border-strong);
 }
 
-.job-card__date {
+.job-card__schedule {
+  display: grid;
+  gap: 3px;
   color: var(--color-brand-muted);
   font-size: 0.875rem;
   font-weight: 700;
+}
+
+.job-card__schedule span {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .job-card__summary {
@@ -2047,6 +2055,11 @@ button.summary-card {
   gap: 3px;
   justify-items: end;
   font-weight: 700;
+}
+
+.job-card__provenance {
+  align-self: start;
+  justify-self: start;
 }
 
 .state-card {
@@ -3641,7 +3654,7 @@ button.summary-card {
     grid-row: 1;
   }
 
-  .job-card__date {
+  .job-card__schedule {
     grid-column: 1;
     grid-row: 2;
   }
@@ -3655,6 +3668,11 @@ button.summary-card {
     grid-column: 1 / -1;
     grid-row: 3;
     justify-items: start;
+  }
+
+  .job-card__provenance {
+    grid-column: 1;
+    grid-row: 4;
   }
 
   .property-history-job {

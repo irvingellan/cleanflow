@@ -107,6 +107,44 @@ describe("sortJobWorklist", () => {
 });
 
 describe("JobsPage filters", () => {
+  it("shows the operational schedule, assigned cleaner name, and available job financials", () => {
+    render(
+      <TranslationProvider>
+        <JobsPage
+          jobs={[{
+            id: "job-financials",
+            propertyName: "Pacific Beach Condo",
+            clientName: "Carl",
+            scheduledDate: "2026-09-23",
+            scheduledStart: "11:00",
+            operationalStatus: "ASSIGNED",
+            schemaVersion: 2,
+            assignedCleanerIds: ["cleaner-1"],
+            clientPrice: 200,
+            cleanerPayout: 100,
+          }]}
+          isLoading={false}
+          hasError={false}
+          onSelect={vi.fn()}
+          filters={createJobListFilters()}
+          cleaners={[{ id: "cleaner-1", name: "Ana" }]}
+          properties={[]}
+          onFiltersChange={vi.fn()}
+          onClearFilters={vi.fn()}
+          hasMore={false}
+          isLoadingMore={false}
+          onLoadMore={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getByText("Scheduled time: 11:00")).toBeVisible();
+    expect(screen.getByText("Ana")).toBeVisible();
+    expect(screen.getByText(/Client price.*\$200\.00/)).toBeVisible();
+    expect(screen.getByText(/Cleaner payout.*\$100\.00/)).toBeVisible();
+    expect(screen.getByText(/Gross margin.*\$100\.00/)).toBeVisible();
+  });
+
   it("waits for asynchronous Jobs content, then restores the originating row", () => {
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     const onScrollRestored = vi.fn();
