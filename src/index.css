@@ -2675,6 +2675,77 @@ button.summary-card {
   color: var(--color-text-secondary);
 }
 
+.checklist-run__answers,
+.client-report__section ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist-run__answers li,
+.client-report__section li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--color-divider);
+  padding: 8px 0;
+}
+
+.checklist-run__answers li span,
+.client-report__section li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checklist-run__answers li strong,
+.client-report__section li strong {
+  flex: 0 0 auto;
+  color: var(--color-heading);
+  text-align: right;
+}
+
+.client-report-page > .panel {
+  width: min(100%, 760px);
+}
+
+.client-report__section {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 18px;
+}
+
+.client-report__section h2 {
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 1rem;
+}
+
+.client-report__section p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.client-report__photo {
+  width: min(100%, 560px);
+  max-height: 520px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  object-fit: contain;
+  background: var(--color-surface-muted);
+}
+
+.client-report__photo-error {
+  color: var(--color-error-text);
+}
+
+.client-report-controls > p {
+  margin: 0;
+}
+
 .checklist-public-page {
   display: grid;
   justify-items: center;
@@ -2988,6 +3059,17 @@ button.summary-card {
 }
 
 @media (max-width: 640px) {
+  .checklist-run__answers li,
+  .client-report__section li {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .checklist-run__answers li strong,
+  .client-report__section li strong {
+    text-align: left;
+  }
+
   .public-checklist__header,
   .public-checklist__save-status {
     align-items: stretch;

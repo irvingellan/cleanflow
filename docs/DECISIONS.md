@@ -634,3 +634,34 @@ uncertain retry idempotent, while the evidence document remains the source of
 truth. The ready-for-review handoff requires this frozen photo, but does not
 become Job completion or manager approval. HEIC/HEIF conversion and additional
 photo requirements remain deferred.
+
+---
+
+## DEC-038 — Client reports are read-only views of a locked Checklist Run
+
+Date: 2026-09-23
+Status: Accepted; local implementation pending release review
+
+A manager may create a client-facing report only after its Checklist Run reaches
+`READY_FOR_REVIEW`. The report must be derived from the Run's immutable
+`propertySnapshot`, `jobSnapshot`, and `resolvedDefinition`, the exact saved
+draft revision locked by the Run, and server-owned saved evidence. It must not
+re-read current Property defaults or mutable Job fields to reconstruct the
+historical report.
+
+The report uses one server-issued, unguessable bearer capability per Run. Only
+its SHA-256 hash is persisted; the plaintext is returned only when issued so
+the manager can copy/open the link. The capability expires after seven days
+and can be replaced or revoked by an active organization manager. Public reads
+are GET-only, no-store, no-referrer, and do not mutate domain data. The public
+projection is limited to Property name, service date, frozen checklist labels
+and answers, inventory labels and answers, cleaner-entered issue/general notes,
+and saved required evidence.
+
+The report must not expose access information, manager/internal notes,
+client/cleaner private contact data, prices, payouts, Firebase IDs, storage
+paths, or capability metadata. Link possession grants read access only to this
+report; it does not create a client account or authorize checklist edits.
+Managers share links manually. Email/WhatsApp integration, PDF generation,
+client portals, Job completion, and payment changes remain separate and are not
+implemented by this decision.

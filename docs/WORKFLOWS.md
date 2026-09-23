@@ -106,6 +106,36 @@ DRAFT + active capability
 This is evidence collection only, not Job completion, Assignment completion,
 manager approval, email delivery, or a generic photo system.
 
+## Client cleaning report
+
+**CURRENT local implementation:** once the Checklist Run is
+`READY_FOR_REVIEW`, an active manager can create a client report link, copy/open
+the newly issued link, replace it, or revoke it. The single report capability
+expires after seven days. The client opens a mobile-friendly, read-only page
+without an account; the manager manually shares the link through their existing
+communication channel.
+
+The report is projected only from the Run's frozen Property/Job snapshots,
+`resolvedDefinition`, the exact saved draft revision locked by
+`READY_FOR_REVIEW`, and its saved required photo. It includes checklist labels
+and answers, inventory answers, cleaner-entered issue/general notes, Property
+name, service date, and saved evidence. It excludes access instructions/codes,
+manager notes, client/cleaner private data, prices, payout, IDs, and capability
+metadata. Public reads do not mutate the Job, Run, draft, evidence, or
+capability. The report does not complete the Job or change payment state.
+
+```text
+Cleaner saves checklist, inventory, notes, and required photo
+→ cleaner marks Run READY_FOR_REVIEW
+→ manager reviews saved Run content
+→ manager creates/copies a seven-day client report link
+→ client opens a read-only report without an account
+```
+
+Automatic email/WhatsApp delivery, a client account/portal, PDF generation,
+manager approval, and Job completion remain out of scope. The report-link
+implementation is local until its release is separately approved and deployed.
+
 **PLANNED:** future aggregate execution derivation must retain the distinction
 between Job and Assignment state. Any `WAITING_FOR_QA` state is optional and
 requires a focused validated workflow.

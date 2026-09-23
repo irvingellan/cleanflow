@@ -26,6 +26,7 @@ function toIsoTimestamp(value) {
 export function projectChecklistRunForManager(run, runId = initialChecklistRunId, draft = null, evidence = null) {
   const definition = run?.resolvedDefinition || {};
   const sections = Array.isArray(definition.sections) ? definition.sections : [];
+  const draftProjection = projectChecklistDraftForRead(run, draft);
   const requiredPhotoTypes = Array.isArray(definition.requiredPhotoTypes)
     ? definition.requiredPhotoTypes
       .filter((photoType) => typeof photoType?.id === "string" && typeof photoType?.label === "string")
@@ -55,6 +56,24 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
         ? run.propertySnapshot.propertyName
         : null,
     },
+    serviceDate: typeof run?.jobSnapshot?.scheduledDate === "string" ? run.jobSnapshot.scheduledDate : null,
+    sections: sections.map((section) => ({
+      id: typeof section?.id === "string" ? section.id : "",
+      titleKey: typeof section?.titleKey === "string" ? section.titleKey : null,
+      title: typeof section?.title === "string" ? section.title : null,
+      items: (Array.isArray(section?.items) ? section.items : []).map((item) => ({
+        id: typeof item?.id === "string" ? item.id : "",
+        labelKey: typeof item?.labelKey === "string" ? item.labelKey : null,
+        label: typeof item?.label === "string" ? item.label : null,
+        answer: draftProjection.checklistAnswers?.[item?.id] || "UNANSWERED",
+      })),
+    })),
+    inventoryItems: (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => ({
+      id: typeof item?.id === "string" ? item.id : "",
+      labelKey: typeof item?.labelKey === "string" ? item.labelKey : null,
+      label: typeof item?.label === "string" ? item.label : null,
+      answer: draftProjection.inventoryAnswers?.[item?.id] || "UNANSWERED",
+    })),
     checklistItemCount: sections.reduce(
       (count, section) => count + (Array.isArray(section?.items) ? section.items.length : 0),
       0,
@@ -67,7 +86,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
       : "",
     createdAt: toIsoTimestamp(run?.createdAt),
     readyForReviewAt: toIsoTimestamp(run?.readyForReviewAt),
-    draft: projectChecklistDraftForRead(run, draft),
+    draft: draftProjection,
     evidence: projectChecklistEvidence(evidence),
   };
 }

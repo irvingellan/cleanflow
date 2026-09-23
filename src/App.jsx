@@ -32,6 +32,7 @@ import { useClientsController } from "./features/clients/useClientsController.js
 import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningChecklistPreview.jsx";
 import { ChecklistRunDetail } from "./features/checklists/ChecklistRunDetail.jsx";
 import { PublicChecklistPage } from "./features/checklists/PublicChecklistPage.jsx";
+import { PublicClientReportPage } from "./features/checklists/PublicClientReportPage.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
@@ -115,23 +116,33 @@ function publicChecklistTokenFromSearch(
   return new URLSearchParams(search).get("t") || "";
 }
 
+function publicClientReportTokenFromSearch(
+  pathname = window.location.pathname,
+  search = window.location.search,
+) {
+  if (pathname.replace(/\/+$/, "") !== "/client-report") return null;
+  return new URLSearchParams(search).get("t") || "";
+}
+
 function App() {
   const publicOfferToken = publicOfferTokenFromPathname();
   const isPublicOfferRoute = publicOfferToken !== null;
   const publicChecklistToken = publicChecklistTokenFromSearch();
   const isPublicChecklistRoute = publicChecklistToken !== null;
+  const publicClientReportToken = publicClientReportTokenFromSearch();
+  const isPublicClientReportRoute = publicClientReportToken !== null;
   const isChecklistPreviewRoute = isChecklistPreviewPath();
   const [authUser, setAuthUser] = useState(undefined);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
   useEffect(() => {
-    if (isPublicOfferRoute || isPublicChecklistRoute || isChecklistPreviewRoute) {
+    if (isPublicOfferRoute || isPublicChecklistRoute || isPublicClientReportRoute || isChecklistPreviewRoute) {
       return undefined;
     }
 
     return subscribeToAuthState(setAuthUser);
-  }, [isChecklistPreviewRoute, isPublicChecklistRoute, isPublicOfferRoute]);
+  }, [isChecklistPreviewRoute, isPublicChecklistRoute, isPublicClientReportRoute, isPublicOfferRoute]);
 
   if (isPublicOfferRoute) {
     return <PublicOfferPage token={publicOfferToken} />;
@@ -139,6 +150,10 @@ function App() {
 
   if (isPublicChecklistRoute) {
     return <PublicChecklistPage token={publicChecklistToken} />;
+  }
+
+  if (isPublicClientReportRoute) {
+    return <PublicClientReportPage token={publicClientReportToken} />;
   }
 
   if (isChecklistPreviewRoute) {

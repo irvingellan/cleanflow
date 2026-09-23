@@ -65,6 +65,13 @@
             "value": "no-cache, no-store, must-revalidate"
           }
         ]
+      },
+      {
+        "source": "/client-report",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, private" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
+        ]
       }
     ],
     "rewrites": [
@@ -79,6 +86,13 @@
         "source": "/api/public-checklist",
         "function": {
           "functionId": "publicChecklist",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/client-report",
+        "function": {
+          "functionId": "publicClientReport",
           "region": "us-central1"
         }
       },

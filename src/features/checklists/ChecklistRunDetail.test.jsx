@@ -1,9 +1,21 @@
-import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { ChecklistRunDetail } from "./ChecklistRunDetail.jsx";
 
+const { getClientReportCapability, createClientReport } = vi.hoisted(() => ({
+  getClientReportCapability: vi.fn(),
+  createClientReport: vi.fn(),
+}));
+vi.mock("./clientReportService.js", () => ({
+  getClientReportCapability,
+  createClientReport,
+  revokeClientReport: vi.fn(),
+}));
+
 afterEach(() => vi.unstubAllGlobals());
+
+beforeEach(() => getClientReportCapability.mockResolvedValue({ state: "NONE" }));
 
 function renderChecklistRun(runOverrides = {}) {
   return render(
@@ -125,5 +137,34 @@ describe("ChecklistRunDetail", () => {
     expect(await screen.findByText("Saved evidence")).toBeVisible();
     expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
     expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:manager-photo");
+  });
+
+  it("shows saved answer details and allows a manager to create a client report when ready", async () => {
+    getClientReportCapability.mockResolvedValue({ state: "NONE" });
+    createClientReport.mockResolvedValue({
+      created: true,
+      capability: { state: "ACTIVE" },
+      url: "https://cleanflow.example/client-report?t=one-time-token",
+    });
+    renderChecklistRun({
+      status: "READY_FOR_REVIEW",
+      serviceDate: "2026-09-20",
+      sections: [{
+        id: "bathrooms",
+        titleKey: "checklistPreview.bathrooms",
+        items: [{ id: "bathroom-sanitize", labelKey: "checklistPreview.bathroomSanitize", answer: "DONE" }],
+      }],
+      inventoryItems: [{ id: "hand-soap", labelKey: "checklistPreview.handSoap", answer: "NEEDS_RESTOCK" }],
+    });
+
+    expect(await screen.findByText("Sanitize toilet, sink, and shower")).toBeVisible();
+    expect(screen.getByText("Done")).toBeVisible();
+    expect(screen.getByText("Hand soap")).toBeVisible();
+    expect(screen.getByText("Needs restock")).toBeVisible();
+    fireEvent.click(await screen.findByRole("button", { name: "Create client report" }));
+    await waitFor(() => expect(createClientReport).toHaveBeenCalledWith("job-1", { replaceExisting: false }));
+    expect(await screen.findByRole("link", { name: "Open report" })).toHaveAttribute(
+      "href", "https://cleanflow.example/client-report?t=one-time-token",
+    );
   });
 });

@@ -4,6 +4,11 @@ import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { getChecklistEvidence } from "./checklistRunService.js";
+import { ClientReportControls } from "./ClientReportControls.jsx";
+
+function checklistLabel(item, translate) {
+  return item?.label || translate(item?.labelKey || item?.id || "checklists.itemCount");
+}
 
 function formatRunCreatedAt(value, language) {
   if (!value) return null;
@@ -88,7 +93,7 @@ export function ChecklistRunDetail({
         />
         <DetailItem
           label={translate("jobs.scheduledDate")}
-          value={formatDate(job.scheduledDate, translate, language)}
+          value={formatDate(checklistRun.serviceDate || job.scheduledDate, translate, language)}
         />
         <DetailItem
           label={translate("checklists.runState")}
@@ -162,6 +167,34 @@ export function ChecklistRunDetail({
         </section>
       )}
 
+      {checklistRun.sections?.map((section) => (
+        <section className="checklist-run__section" aria-labelledby={`run-section-${section.id}`} key={section.id}>
+          <h3 id={`run-section-${section.id}`}>{section.title || translate(section.titleKey || section.id)}</h3>
+          <ul className="checklist-run__answers">
+            {section.items?.map((item) => (
+              <li key={item.id}>
+                <span>{checklistLabel(item, translate)}</span>
+                <strong>{translate(`checklists.answer${item.answer || "UNANSWERED"}`)}</strong>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+
+      {checklistRun.inventoryItems?.length > 0 && (
+        <section className="checklist-run__section" aria-labelledby="checklist-saved-inventory-title">
+          <h3 id="checklist-saved-inventory-title">{translate("checklists.inventoryCount")}</h3>
+          <ul className="checklist-run__answers">
+            {checklistRun.inventoryItems.map((item) => (
+              <li key={item.id}>
+                <span>{checklistLabel(item, translate)}</span>
+                <strong>{translate(`checklists.inventory${item.answer || "UNANSWERED"}`)}</strong>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {evidence.length > 0 && (
         <section className="checklist-run__section" aria-labelledby="checklist-evidence-title">
           <h3 id="checklist-evidence-title">{translate("checklists.savedEvidence")}</h3>
@@ -177,6 +210,8 @@ export function ChecklistRunDetail({
           ))}
         </section>
       )}
+
+      {isReadyForReview && <ClientReportControls jobId={job.id} />}
 
       <section className="checklist-run__section" aria-labelledby="checklist-context-title">
         <h3 id="checklist-context-title">{translate("checklists.context")}</h3>

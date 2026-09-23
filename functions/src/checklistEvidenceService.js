@@ -231,13 +231,19 @@ function assertStoredEvidence(run, evidence, requirementId) {
   }
 }
 
+/** Downloads bytes only after a server-side caller has resolved the exact saved evidence record. */
+export async function downloadSavedChecklistEvidence(run, evidence, { storage = getStorage() } = {}) {
+  assertStoredEvidence(run, evidence, pilotChecklistPhotoRequirementId);
+  const [bytes] = await storage.bucket().file(evidence.storagePath).download();
+  return { bytes, contentType: evidence.contentType };
+}
+
 export async function downloadPublicChecklistEvidence(database, {
   organizationId, tokenHash, requirementId, now = new Date(), storage = getStorage(),
 }) {
   const resolved = await resolveActiveCapability(database, { organizationId, tokenHash, now });
   assertStoredEvidence(resolved.run, resolved.evidence, requirementId);
-  const [bytes] = await storage.bucket().file(resolved.evidence.storagePath).download();
-  return { bytes, contentType: resolved.evidence.contentType };
+  return downloadSavedChecklistEvidence(resolved.run, resolved.evidence, { storage });
 }
 
 export async function downloadManagerChecklistEvidence(database, {
@@ -250,6 +256,5 @@ export async function downloadManagerChecklistEvidence(database, {
   const run = runSnapshot.data();
   const evidence = evidenceSnapshot.data();
   assertStoredEvidence(run, evidence, requirementId);
-  const [bytes] = await storage.bucket().file(evidence.storagePath).download();
-  return { bytes, contentType: evidence.contentType };
+  return downloadSavedChecklistEvidence(run, evidence, { storage });
 }

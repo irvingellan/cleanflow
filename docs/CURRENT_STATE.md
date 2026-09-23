@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- **Last updated:** 2026-09-20
+- **Last updated:** 2026-09-23
 - **Repository:** `irvingellan/cleanflow` (`main`)
 - **Active product phase:** Gabi Pilot — controlled design-partner learning and
   validation alongside the manager's existing spreadsheet.
@@ -130,8 +130,16 @@ E2E tests passed; build and diff checks passed.
   remains denied. The photo is read-only after `READY_FOR_REVIEW` and is
   retrievable only through the cleaner capability or active-manager callable.
   It is not deployed yet. HEIC/HEIF conversion is intentionally unsupported.
-- Manager approval, final submission, email, and Job completion do not exist
-  yet.
+- This change locally adds a manager-created client report capability for a
+  `READY_FOR_REVIEW` Run. The manager can create, copy/open, replace, or revoke
+  one seven-day link per Run. The public page is read-only and uses only the
+  frozen Run snapshots/definition, the locked saved draft revision, and saved
+  required photo; no live Property defaults are used. It excludes prices,
+  payouts, access data, internal notes, private contact data, IDs, and token
+  metadata. Links are manually shared; this report feature is not deployed by
+  this change.
+- Manager approval, final submission, email/WhatsApp delivery, and Job
+  completion do not exist yet.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
   CleanFlow; the manager views or receives its report; and an optional email

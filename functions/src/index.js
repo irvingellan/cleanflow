@@ -43,6 +43,13 @@ import {
 } from "./checklistEvidenceService.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import {
+  downloadPublicClientReportPhoto,
+  getClientReportCapabilityForManager,
+  issueClientReportForManager,
+  loadPublicClientReport,
+  revokeClientReportForManager,
+} from "./clientReportService.js";
+import {
   calculateManagerReminder,
   claimReminderDelivery,
   managerReminderPayload,
@@ -689,6 +696,53 @@ export const getChecklistEvidence = onCall(
   },
 );
 
+export const getClientReportCapability = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
+    return {
+      capability: await getClientReportCapabilityForManager(db, {
+        organizationId, jobId, runId: initialChecklistRunId,
+      }),
+    };
+  },
+);
+
+export const createClientReport = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
+    const token = newChecklistCapabilityToken();
+    return issueClientReportForManager(db, {
+      organizationId,
+      jobId,
+      runId: initialChecklistRunId,
+      actorUid: request.auth.uid,
+      token,
+      tokenHash: hashToken(token),
+      replaceExisting: request.data?.replaceExisting === true,
+    });
+  },
+);
+
+export const revokeClientReport = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
+    return {
+      capability: await revokeClientReportForManager(db, {
+        organizationId, jobId, runId: initialChecklistRunId,
+      }),
+    };
+  },
+);
+
 async function activeManagerPushDevices() {
   const deviceSnapshots = await db
     .collection("managerPushDevices")
@@ -1187,6 +1241,42 @@ export const publicChecklist = onRequest(
               : error?.code === "failed-precondition" ? 410
                 : 500;
       sendPublicError(response, status, status === 404 ? "checklist_not_found" : "checklist_unavailable");
+    }
+  },
+);
+
+/** Public client reports are read-only bearer links scoped by their hashed lookup. */
+export const publicClientReport = onRequest(
+  { region: "us-central1", invoker: "public" },
+  async (request, response) => {
+    if (request.method !== "GET") {
+      sendPublicError(response, 405, "client_report_unavailable");
+      return;
+    }
+    const token = request.query.token;
+    if (!validToken(token)) {
+      sendPublicError(response, 404, "client_report_unavailable");
+      return;
+    }
+    try {
+      const tokenHash = hashToken(token);
+      if (request.query.photo === "1") {
+        const photo = await downloadPublicClientReportPhoto(db, { organizationId, tokenHash });
+        configureResponse(response);
+        response.set("Content-Type", photo.contentType);
+        response.set("Content-Disposition", "inline");
+        response.status(200).send(photo.bytes);
+        return;
+      }
+      const report = await loadPublicClientReport(db, { organizationId, tokenHash });
+      configureResponse(response);
+      response.status(200).json({ report });
+    } catch (error) {
+      const status = error?.code === "not-found" ? 404
+        : error?.code === "failed-precondition" ? 410
+          : 500;
+      if (status === 500) logger.error("Unable to load public client report.", { code: error?.code || "unknown" });
+      sendPublicError(response, status, "client_report_unavailable");
     }
   },
 );

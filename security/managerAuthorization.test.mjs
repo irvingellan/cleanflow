@@ -21,12 +21,16 @@ const {
   getChecklistRun,
   getChecklistCapability,
   getChecklistEvidence,
+  getClientReportCapability,
+  createClientReport,
+  revokeClientReport,
   issueChecklistCapability,
   revokeChecklistCapability,
   registerManagerPushDevice,
   submitFeedback,
   publicOffer,
   publicChecklist,
+  publicClientReport,
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
 const { createHash } = await import("node:crypto");
@@ -87,6 +91,19 @@ test("active manager can read/query/create/update/delete only supported operatio
     const added = collection.doc("new-record");
     await assertSucceeds(added.set({ organizationId: org }));
     await assertSucceeds(added.delete());
+  }
+});
+
+test("manager browsers cannot directly read or mutate server-only client report capabilities", async () => {
+  const db = account("manager").firestore();
+  const pathsToProtect = [
+    "clientReportTokenLookups/" + "a".repeat(64),
+    root + "/jobs/job/checklistRuns/initial/clientReportCapabilities/active",
+  ];
+  for (const path of pathsToProtect) {
+    await assertFails(db.doc(path).get());
+    await assertFails(db.doc(path).set({ status: "ACTIVE" }));
+    await assertFails(db.doc(path).delete());
   }
 });
 
@@ -311,6 +328,12 @@ async function publicChecklistGet(token, extraQuery = {}) {
   return response;
 }
 
+async function publicClientReportGet(token, extraQuery = {}) {
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
+  await publicClientReport({ method: "GET", query: { token, ...extraQuery } }, response);
+  return response;
+}
+
 async function publicChecklistSave(body) {
   const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
   await publicChecklist({ method: "POST", query: {}, body }, response);
@@ -336,6 +359,47 @@ async function saveRequiredChecklistPhoto(token) {
   const result = await publicChecklistUpload(token, "living-belongings", Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   assert.equal(result.code, 200);
   return result;
+}
+
+async function prepareReadyClientReportRun() {
+  await seedEligibleChecklistJob({
+    checklistSettings: {
+      additionalChecklistItems: [{ id: "client-window-check", sectionId: "living-general", label: "Check windows" }],
+      inventoryItems: [{ id: "client-tea", label: "Tea" }],
+      cleanerInstructions: "Cleaner-facing instruction.",
+    },
+  });
+  const cleanerCapability = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await saveRequiredChecklistPhoto(cleanerCapability.token);
+  const saved = await publicChecklistSave({
+    token: cleanerCapability.token,
+    mutationId: "client-report-draft-0001",
+    baseRevision: 0,
+    changes: {
+      checklistAnswers: { "bed-remake": "DONE", "client-window-check": "DONE" },
+      inventoryAnswers: { "hand-soap": "NEEDS_RESTOCK", "client-tea": "LOW" },
+      issueNotes: "A lamp bulb needs replacement.",
+      generalNotes: "Cleaning notes for the client.",
+    },
+  });
+  assert.equal(saved.code, 200);
+  const ready = await publicChecklistSave({
+    token: cleanerCapability.token,
+    action: "READY_FOR_REVIEW",
+    submissionId: "client-report-review-0001",
+    baseRevision: 1,
+  });
+  assert.equal(ready.code, 200);
+  const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
+  await runRef.update({
+    "propertySnapshot.accessInstructions": "private access instructions",
+    "propertySnapshot.propertyId": "private-property-id",
+    "propertyChecklistSettingsSnapshot.keyCodeInfo": "private code",
+    "jobSnapshot.managerNotes": "internal manager note",
+    "jobSnapshot.clientPrice": 500,
+    "jobSnapshot.guestName": "private guest",
+  });
+  return { cleanerCapability, runRef };
 }
 
 test("active manager creates one default DRAFT Checklist Run and a retry returns it", async () => {
@@ -789,6 +853,124 @@ test("Checklist capability rejects malformed, expired, stale, archived, unauthor
   assert.equal((await publicChecklistGet(refreshed.token)).code, 410);
   await admin.doc(`${root}/members/manager`).delete();
   await assert.rejects(getChecklistCapability.run(request("manager", { jobId: "job" })), { code: "permission-denied" });
+});
+
+test("client report links expose only saved Run content and support replace, photo read, and revocation", async () => {
+  const { runRef } = await prepareReadyClientReportRun();
+  for (const [uid, anonymous, code] of [
+    [null, false, "unauthenticated"],
+    ["outsider", false, "permission-denied"],
+    ["other-manager", false, "permission-denied"],
+    ["cleaner", false, "permission-denied"],
+    ["anonymous-member", true, "unauthenticated"],
+  ]) {
+    await assert.rejects(createClientReport.run(request(uid, { jobId: "job" }, anonymous)), { code });
+  }
+
+  const [firstIssue, secondIssue] = await Promise.all([
+    createClientReport.run(request("manager", { jobId: "job" })),
+    createClientReport.run(request("manager", { jobId: "job" })),
+  ]);
+  assert.deepEqual([firstIssue.created, secondIssue.created].sort(), [false, true]);
+  const issued = firstIssue.created ? firstIssue : secondIssue;
+  assert.equal(issued.created, true);
+  assert.match(issued.token, /^[A-Za-z0-9_-]{43}$/);
+  const tokenHash = createHash("sha256").update(issued.token).digest("hex");
+  const capabilityRef = runRef.collection("clientReportCapabilities").doc("active");
+  const lookupRef = admin.doc("clientReportTokenLookups/" + tokenHash);
+  const capability = (await capabilityRef.get()).data();
+  const lookup = (await lookupRef.get()).data();
+  assert.equal(capability.tokenHash, tokenHash);
+  assert.equal(capability.status, "ACTIVE");
+  assert.equal(JSON.stringify(capability).includes(issued.token), false);
+  assert.equal(JSON.stringify(lookup).includes(issued.token), false);
+  assert.equal(lookup.organizationId, org);
+  assert.equal(lookup.jobId, "job");
+
+  const jobRef = admin.doc(root + "/jobs/job");
+  const [jobBefore, runBefore, draftBefore, evidenceBefore, capabilityBefore, lookupBefore] = await Promise.all([
+    jobRef.get(),
+    runRef.get(),
+    runRef.collection("drafts").doc("current").get(),
+    runRef.collection("evidence").doc("living-belongings").get(),
+    capabilityRef.get(),
+    lookupRef.get(),
+  ]);
+  const writeAttempt = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+  await publicClientReport({ method: "POST", query: { token: issued.token }, body: { issueNotes: "attempted edit" } }, writeAttempt);
+  assert.equal(writeAttempt.code, 405);
+
+  const loaded = await publicClientReportGet(issued.token, {
+    organizationId: "injected-org", jobId: "injected-job", runId: "injected-run",
+  });
+  assert.equal(loaded.code, 200);
+  assert.equal(loaded.headers["Cache-Control"], "no-store, private");
+  assert.equal(loaded.headers["Referrer-Policy"], "no-referrer");
+  assert.equal(loaded.body.report.propertyName, "Fixture Property");
+  assert.equal(loaded.body.report.serviceDate, null);
+  assert.equal(loaded.body.report.sections.flatMap((section) => section.items)
+    .find((item) => item.label === "Check windows").answer, "DONE");
+  assert.equal(loaded.body.report.inventoryItems.find((item) => item.label === "Tea").answer, "LOW");
+  assert.equal(loaded.body.report.issueNotes, "A lamp bulb needs replacement.");
+  assert.equal(loaded.body.report.hasPhoto, true);
+  const publicBody = JSON.stringify(loaded.body.report);
+  for (const forbidden of [
+    "private-property-id", "private access instructions", "private code", "manager-only",
+    "internal manager note", "clientPrice", "500", "private guest", "cleaner-a", "jobId",
+    "runId", "organizationId", "storagePath", "contentHash", tokenHash,
+  ]) assert.equal(publicBody.includes(forbidden), false);
+
+  const photo = await publicClientReportGet(issued.token, { photo: "1" });
+  assert.equal(photo.code, 200);
+  assert.equal(photo.headers["Content-Type"], "image/jpeg");
+  assert.deepEqual(photo.body, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  assert.deepEqual((await publicClientReportGet(issued.token)).body, loaded.body);
+  const [jobAfter, runAfter, draftAfter, evidenceAfter, capabilityAfter, lookupAfter] = await Promise.all([
+    jobRef.get(),
+    runRef.get(),
+    runRef.collection("drafts").doc("current").get(),
+    runRef.collection("evidence").doc("living-belongings").get(),
+    capabilityRef.get(),
+    lookupRef.get(),
+  ]);
+  assert.deepEqual(jobAfter.data(), jobBefore.data());
+  assert.deepEqual(runAfter.data(), runBefore.data());
+  assert.deepEqual(draftAfter.data(), draftBefore.data());
+  assert.deepEqual(evidenceAfter.data(), evidenceBefore.data());
+  assert.deepEqual(capabilityAfter.data(), capabilityBefore.data());
+  assert.deepEqual(lookupAfter.data(), lookupBefore.data());
+
+  const replacement = await createClientReport.run(request("manager", { jobId: "job", replaceExisting: true }));
+  assert.equal(replacement.created, true);
+  assert.notEqual(replacement.token, issued.token);
+  assert.equal((await lookupRef.get()).data().status, "REPLACED");
+  assert.equal((await publicClientReportGet(issued.token)).code, 410);
+  assert.equal((await publicClientReportGet(replacement.token)).code, 200);
+  const revoked = await revokeClientReport.run(request("manager", { jobId: "job" }));
+  assert.equal(revoked.capability.state, "REVOKED");
+  assert.equal((await publicClientReportGet(replacement.token)).code, 410);
+});
+
+test("client report creation requires a READY_FOR_REVIEW Run", async () => {
+  await seedEligibleChecklistJob();
+  await assert.rejects(createClientReport.run(request("manager", { jobId: "job" })), { code: "failed-precondition" });
+});
+
+test("client report denies expired, unknown, malformed, and unauthorized manager access", async () => {
+  assert.equal((await publicClientReportGet("malformed")).code, 404);
+  assert.equal((await publicClientReportGet(Buffer.alloc(32, 5).toString("base64url"))).code, 404);
+
+  const { runRef } = await prepareReadyClientReportRun();
+  const issued = await createClientReport.run(request("manager", { jobId: "job" }));
+  const tokenHash = createHash("sha256").update(issued.token).digest("hex");
+  await runRef.collection("clientReportCapabilities").doc("active")
+    .update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+  await admin.doc("clientReportTokenLookups/" + tokenHash)
+    .update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+  assert.equal((await publicClientReportGet(issued.token)).code, 410);
+  await admin.doc(root + "/members/manager").delete();
+  await assert.rejects(getClientReportCapability.run(request("manager", { jobId: "job" })), { code: "permission-denied" });
+  await assert.rejects(revokeClientReport.run(request("manager", { jobId: "job" })), { code: "permission-denied" });
 });
 
 test("public capability GET/response remains independent of auth and only updates its resolved offer", async () => {
