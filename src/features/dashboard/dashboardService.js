@@ -1,8 +1,6 @@
 import {
   collection,
-  getCountFromServer,
   getDocs,
-  limit,
   orderBy,
   query,
   Timestamp,
@@ -16,7 +14,6 @@ import {
   getPendingJobOffers,
 } from "../jobs/jobOfferService.js";
 import { normalizeJobRecord } from "../jobs/jobCompatibility.js";
-import { filterArchivedRecords } from "../../lib/archiveState.js";
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = [
@@ -32,6 +29,10 @@ const recentlyCompletedJobLimit = 5;
 
 function jobsCollection() {
   return collection(db, "organizations", organizationId, "jobs");
+}
+
+function propertiesCollection() {
+  return collection(db, "organizations", organizationId, "properties");
 }
 
 function jobFromSnapshot(snapshot) {
@@ -85,6 +86,23 @@ function uniqueJobs(jobs) {
   return [...new Map(jobs.map((job) => [job.id, job])).values()];
 }
 
+/** Dashboard operational views never include archived Jobs or orphaned/archived Properties. */
+export function filterVisibleActiveJobs(jobs, propertiesById) {
+  return jobs.filter((job) => {
+    const property = propertiesById[job.propertyId];
+    return !job.archivedAt && Boolean(property) && !property.archivedAt;
+  });
+}
+
+export function visibleDashboardCounts({ todayJobs, openJobs, inProgressJobs, completedTodayJobs }) {
+  return {
+    today: todayJobs.length,
+    needsAssignment: openJobs.length,
+    inProgress: inProgressJobs.length,
+    completedToday: completedTodayJobs.length,
+  };
+}
+
 export function composeAttentionJobCandidates(attentionJobs, next48HoursJobs) {
   // The stale-status query intentionally retains older open work, while the bounded
   // next-48-hours query guarantees current assignment gaps are available to rank.
@@ -116,48 +134,25 @@ export async function getOperationalDashboard() {
   );
   const jobs = jobsCollection();
   const [
-    todayJobsCount,
-    needsAssignmentCount,
-    inProgressCount,
-    completedTodayCount,
-    attentionSnapshot,
+    propertiesSnapshot,
+    openJobsSnapshot,
     inProgressSnapshot,
     next48HoursSnapshot,
     recentlyCompletedSnapshot,
-    weeklyScheduledCount,
-    weeklyAssignedCount,
-    weeklyNeedsAssignmentCount,
-    weeklyCompletedCount,
-    dailyLoadCounts,
+    weeklyScheduledSnapshot,
+    weeklyCompletedSnapshot,
   ] = await Promise.all([
-    getCountFromServer(query(jobs, where("scheduledDate", "==", today))),
-    getCountFromServer(
-      query(jobs, where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"])),
-    ),
-    getCountFromServer(query(jobs, where("operationalStatus", "==", "IN_PROGRESS"))),
-    getCountFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "COMPLETED"),
-        where("completedAt", ">=", Timestamp.fromDate(todayStart)),
-        where("completedAt", "<", Timestamp.fromDate(tomorrowStart)),
-        orderBy("completedAt", "desc"),
-      ),
-    ),
+    getDocs(propertiesCollection()),
     getDocs(
       query(
         jobs,
         where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
-        orderBy("scheduledDate", "asc"),
-        limit(attentionJobLimit),
       ),
     ),
     getDocs(
       query(
         jobs,
         where("operationalStatus", "==", "IN_PROGRESS"),
-        orderBy("scheduledDate", "asc"),
-        limit(issueCandidateJobLimit),
       ),
     ),
     getDocs(
@@ -167,7 +162,6 @@ export async function getOperationalDashboard() {
         where("scheduledDate", ">=", today),
         where("scheduledDate", "<=", endDate),
         orderBy("scheduledDate", "asc"),
-        limit(next48HoursJobLimit),
       ),
     ),
     getDocs(
@@ -175,10 +169,9 @@ export async function getOperationalDashboard() {
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
         orderBy("completedAt", "desc"),
-        limit(recentlyCompletedJobLimit),
       ),
     ),
-    getCountFromServer(
+    getDocs(
       query(
         jobs,
         where("scheduledDate", ">=", weekStartDate),
@@ -186,25 +179,7 @@ export async function getOperationalDashboard() {
         orderBy("scheduledDate", "asc"),
       ),
     ),
-    getCountFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "ASSIGNED"),
-        where("scheduledDate", ">=", weekStartDate),
-        where("scheduledDate", "<=", weekEndDate),
-        orderBy("scheduledDate", "asc"),
-      ),
-    ),
-    getCountFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
-        where("scheduledDate", ">=", weekStartDate),
-        where("scheduledDate", "<=", weekEndDate),
-        orderBy("scheduledDate", "asc"),
-      ),
-    ),
-    getCountFromServer(
+    getDocs(
       query(
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
@@ -213,26 +188,39 @@ export async function getOperationalDashboard() {
         orderBy("completedAt", "desc"),
       ),
     ),
-    Promise.all(
-      weekDays.map((date) =>
-        getCountFromServer(query(jobs, where("scheduledDate", "==", date))),
-      ),
-    ),
   ]);
-  const staleAttentionJobs = filterArchivedRecords(attentionSnapshot.docs.map(jobFromSnapshot));
-  const inProgressJobs = filterArchivedRecords(inProgressSnapshot.docs.map(jobFromSnapshot));
-  const recentlyCompletedJobs = filterArchivedRecords(recentlyCompletedSnapshot.docs.map(jobFromSnapshot));
-  const next48HoursJobs = next48HoursSnapshot.docs
-    .map(jobFromSnapshot)
-    .filter((job) => !job.archivedAt)
+  const propertiesById = Object.fromEntries(propertiesSnapshot.docs.map((property) => [
+    property.id,
+    property.data(),
+  ]));
+  const visibleJobs = (snapshot) => filterVisibleActiveJobs(
+    snapshot.docs.map(jobFromSnapshot),
+    propertiesById,
+  );
+  const openJobs = visibleJobs(openJobsSnapshot).sort(sortByScheduledDateTime);
+  const inProgressJobs = visibleJobs(inProgressSnapshot).sort(sortByScheduledDateTime);
+  const recentlyCompletedJobs = visibleJobs(recentlyCompletedSnapshot)
+    .slice(0, recentlyCompletedJobLimit);
+  const next48HoursJobs = visibleJobs(next48HoursSnapshot)
     .filter((job) => isWithinNext48Hours(job, now, windowEnd))
-    .sort(sortByScheduledDateTime);
-  const attentionJobs = composeAttentionJobCandidates(staleAttentionJobs, next48HoursJobs);
+    .sort(sortByScheduledDateTime)
+    .slice(0, next48HoursJobLimit);
+  const weeklyScheduledJobs = visibleJobs(weeklyScheduledSnapshot);
+  const weeklyCompletedJobs = visibleJobs(weeklyCompletedSnapshot);
+  const todayJobs = weeklyScheduledJobs.filter((job) => job.scheduledDate === today);
+  const completedTodayJobs = weeklyCompletedJobs.filter((job) => {
+    const completedAt = job.completedAt?.toDate?.();
+    return completedAt && completedAt >= todayStart && completedAt < tomorrowStart;
+  });
+  const attentionJobs = composeAttentionJobCandidates(
+    openJobs.slice(0, attentionJobLimit),
+    next48HoursJobs,
+  );
   const offeredAttentionJobs = attentionJobs.filter(
     (job) => job.operationalStatus === "OFFERED",
   );
   const issueCandidateJobs = uniqueJobs([
-    ...inProgressJobs,
+    ...inProgressJobs.slice(0, issueCandidateJobLimit),
     ...recentlyCompletedJobs,
   ]);
   const [offeredJobOffers, issueGroups] = await Promise.all([
@@ -267,10 +255,12 @@ export async function getOperationalDashboard() {
 
   return {
     counts: {
-      today: todayJobsCount.data().count,
-      needsAssignment: needsAssignmentCount.data().count,
-      inProgress: inProgressCount.data().count,
-      completedToday: completedTodayCount.data().count,
+      ...visibleDashboardCounts({
+        todayJobs,
+        openJobs,
+        inProgressJobs,
+        completedTodayJobs,
+      }),
       openIssues: issueGroups.flatMap(({ issues }) => issues).length,
     },
     attentionJobs,
@@ -287,13 +277,15 @@ export async function getOperationalDashboard() {
     next48HoursJobs,
     recentlyCompletedJobs,
     weeklySummary: {
-      scheduled: weeklyScheduledCount.data().count,
-      assigned: weeklyAssignedCount.data().count,
-      needsAssignment: weeklyNeedsAssignmentCount.data().count,
-      completed: weeklyCompletedCount.data().count,
-      dailyLoad: weekDays.map((date, index) => ({
+      scheduled: weeklyScheduledJobs.length,
+      assigned: weeklyScheduledJobs.filter((job) => job.operationalStatus === "ASSIGNED").length,
+      needsAssignment: weeklyScheduledJobs.filter((job) =>
+        ["UNASSIGNED", "OFFERED"].includes(job.operationalStatus),
+      ).length,
+      completed: weeklyCompletedJobs.length,
+      dailyLoad: weekDays.map((date) => ({
         date,
-        count: dailyLoadCounts[index].data().count,
+        count: weeklyScheduledJobs.filter((job) => job.scheduledDate === date).length,
       })),
     },
   };

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { composeAttentionJobCandidates } from "./dashboardService.js";
+import { filterArchivedRecords } from "../../lib/archiveState.js";
+import {
+  composeAttentionJobCandidates,
+  filterVisibleActiveJobs,
+  visibleDashboardCounts,
+} from "./dashboardService.js";
 
 describe("composeAttentionJobCandidates", () => {
   it("keeps bounded stale attention work while adding current assignment candidates", () => {
@@ -38,5 +43,30 @@ describe("composeAttentionJobCandidates", () => {
     expect(candidates).not.toContainEqual(
       expect.objectContaining({ id: "today-assigned" }),
     );
+  });
+
+  it("uses one active-Job boundary for Dashboard rows and counts", () => {
+    const activeJob = { id: "active", propertyId: "active-property", operationalStatus: "UNASSIGNED" };
+    const archivedJob = { id: "archived-job", propertyId: "active-property", archivedAt: {}, operationalStatus: "UNASSIGNED" };
+    const archivedPropertyJob = { id: "archived-property-job", propertyId: "archived-property", operationalStatus: "UNASSIGNED" };
+    const orphanedJob = { id: "orphaned-job", propertyId: "missing-property", operationalStatus: "UNASSIGNED" };
+    const propertiesById = {
+      "active-property": { id: "active-property" },
+      "archived-property": { id: "archived-property", archivedAt: {} },
+    };
+
+    const visibleJobs = filterVisibleActiveJobs(
+      [activeJob, archivedJob, archivedPropertyJob, orphanedJob],
+      propertiesById,
+    );
+
+    expect(visibleJobs).toEqual([activeJob]);
+    expect(visibleDashboardCounts({
+      todayJobs: visibleJobs,
+      openJobs: visibleJobs,
+      inProgressJobs: [],
+      completedTodayJobs: [],
+    })).toMatchObject({ today: 1, needsAssignment: 1, inProgress: 0, completedToday: 0 });
+    expect(filterArchivedRecords([archivedJob], true)).toEqual([archivedJob]);
   });
 });
