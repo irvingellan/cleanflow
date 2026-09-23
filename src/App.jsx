@@ -465,6 +465,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       replaceCleanerAssignment,
       startCleaning,
       completeCleaning,
+      approveChecklistRun,
       saveJobPrices,
       resolveJobIssue,
       saveDataProvenance: saveJobDataProvenance,
@@ -1267,6 +1268,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasRefreshError={hasChecklistRunError}
             assignments={jobAssignments}
             onRefresh={() => refreshChecklistRun(selectedJob, { manual: true })}
+            onApproveAndComplete={approveChecklistRun}
             onBack={() => setView("job-detail")}
           />
         )}

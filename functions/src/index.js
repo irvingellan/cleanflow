@@ -22,6 +22,7 @@ import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import { authorizedManagerDevices, requireOrganizationManager } from "./managerAuthorization.js";
 import {
   createChecklistRunForManager,
+  approveChecklistRunForManager,
   getChecklistRunForManager,
   initialChecklistRunId,
   validChecklistRunJobId,
@@ -615,6 +616,20 @@ export const getChecklistRun = onCall(
     return {
       run: await getChecklistRunForManager(db, { organizationId, jobId }),
     };
+  },
+);
+
+export const approveChecklistRun = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) {
+      throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
+    }
+
+    return approveChecklistRunForManager(db, { organizationId, jobId });
   },
 );
 

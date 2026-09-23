@@ -3,6 +3,7 @@ import { functions } from "../../services/firebase/client.js";
 
 const createChecklistRunCall = httpsCallable(functions, "createChecklistRun");
 const getChecklistRunCall = httpsCallable(functions, "getChecklistRun");
+const approveChecklistRunCall = httpsCallable(functions, "approveChecklistRun");
 const getChecklistEvidenceCall = httpsCallable(functions, "getChecklistEvidence");
 
 export async function getChecklistRun(jobId) {
@@ -13,6 +14,11 @@ export async function getChecklistRun(jobId) {
 export async function createChecklistRun(jobId) {
   const result = await createChecklistRunCall({ jobId });
   return result.data?.run || null;
+}
+
+export async function approveChecklistRun(jobId) {
+  const result = await approveChecklistRunCall({ jobId });
+  return result.data;
 }
 
 /** The manager receives image bytes only through the authorized server callable. */

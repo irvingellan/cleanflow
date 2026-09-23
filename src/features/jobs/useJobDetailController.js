@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createChecklistRun as createChecklistRunRequest,
+  approveChecklistRun as approveChecklistRunRequest,
   getChecklistRun,
 } from "../checklists/checklistRunService.js";
 import {
@@ -333,6 +334,13 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return updatedJob;
   }
 
+  async function approveChecklistRun() {
+    return updateJob(async (job) => {
+      const result = await approveChecklistRunRequest(job.id);
+      return { ...job, operationalStatus: result.operationalStatus };
+    });
+  }
+
   async function saveJobPrices(prices) {
     return updateJob((job) => updateJobPrices(job.id, prices));
   }
@@ -517,6 +525,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       replaceCleanerAssignment,
       startCleaning,
       completeCleaning,
+      approveChecklistRun,
       saveJobPrices,
       saveDataProvenance,
       archive,

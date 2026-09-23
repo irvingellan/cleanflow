@@ -147,6 +147,30 @@ describe("ChecklistRunDetail", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  it("lets the manager confirm completion only after a Run is ready for review", async () => {
+    const onApproveAndComplete = vi.fn().mockResolvedValue(undefined);
+    render(
+      <TranslationProvider>
+        <ChecklistRunDetail
+          job={{ id: "job-1", operationalStatus: "ASSIGNED" }}
+          checklistRun={{ id: "initial", status: "READY_FOR_REVIEW", property: { name: "Snapshot Property" }, checklistItemCount: 28, inventoryItemCount: 13 }}
+          onApproveAndComplete={onApproveAndComplete}
+          onBack={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve and complete service" }));
+    expect(screen.getByText("This marks the service completed. It does not mark any payment as paid.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Approve and complete service" }));
+    await waitFor(() => expect(onApproveAndComplete).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not expose manager completion for a Draft Run", () => {
+    renderChecklistRun();
+    expect(screen.queryByRole("button", { name: "Approve and complete service" })).not.toBeInTheDocument();
+  });
+
   it("shows only a server-retrieved saved photo for the frozen requirement", async () => {
     const loadEvidence = vi.fn().mockResolvedValue(new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }));
     const createObjectUrl = vi.fn(() => "blob:manager-photo");

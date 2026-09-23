@@ -158,3 +158,52 @@ export async function createChecklistRunForManager(database, { organizationId, j
     return { runId: run.id, created: true, status: run.status, run };
   });
 }
+
+/**
+ * A manager may close the operational Job only after the cleaner has locked
+ * the frozen Run for review. This is intentionally a Job transition, not a
+ * payout or Assignment transition.
+ */
+export async function approveChecklistRunForManager(database, { organizationId, jobId }) {
+  const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
+  const runReference = jobReference.collection("checklistRuns").doc(initialChecklistRunId);
+
+  return database.runTransaction(async (transaction) => {
+    const [jobSnapshot, runSnapshot] = await Promise.all([
+      transaction.get(jobReference),
+      transaction.get(runReference),
+    ]);
+
+    if (!jobSnapshot.exists) {
+      throw new HttpsError("not-found", "Job not found.");
+    }
+
+    if (!runSnapshot.exists || runSnapshot.data().status !== "READY_FOR_REVIEW") {
+      throw new HttpsError("failed-precondition", "Checklist Run is not ready for manager review.");
+    }
+
+    const job = jobSnapshot.data();
+    if (job.archivedAt) {
+      throw new HttpsError("failed-precondition", "Archived Job cannot be completed.");
+    }
+
+    if (job.operationalStatus === "COMPLETED") {
+      return { completed: false, operationalStatus: "COMPLETED" };
+    }
+
+    if (!["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus)) {
+      throw new HttpsError("failed-precondition", "Job is not eligible for checklist approval.");
+    }
+
+    const revision = Number.isInteger(job.checklistContextRevision) && job.checklistContextRevision >= 0
+      ? job.checklistContextRevision
+      : 0;
+    transaction.update(jobReference, {
+      operationalStatus: "COMPLETED",
+      completedAt: FieldValue.serverTimestamp(),
+      checklistContextRevision: revision + 1,
+    });
+
+    return { completed: true, operationalStatus: "COMPLETED" };
+  });
+}

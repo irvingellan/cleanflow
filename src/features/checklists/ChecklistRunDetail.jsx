@@ -66,7 +66,7 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
 /** Displays the server-projected manager summary, never a raw Property or Run. */
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
-  loadEvidence = getChecklistEvidence, assignments = [],
+  loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete,
 }) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
@@ -78,12 +78,31 @@ export function ChecklistRunDetail({
   const lastSavedAt = formatRunCreatedAt(draft?.lastSavedAt, language);
   const readyForReviewAt = formatRunCreatedAt(checklistRun.readyForReviewAt, language);
   const isReadyForReview = checklistRun.status === "READY_FOR_REVIEW";
+  const canApproveAndComplete = isReadyForReview
+    && job.operationalStatus !== "COMPLETED"
+    && typeof onApproveAndComplete === "function";
+  const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [hasCompletionError, setHasCompletionError] = useState(false);
   const evidence = checklistRun.evidence || [];
   const assignedCleanerName = assignedCleanerDisplayName(
     job,
     assignments,
     translate("dashboard.notAssigned"),
   );
+
+  async function approveAndComplete() {
+    setIsCompleting(true);
+    setHasCompletionError(false);
+    try {
+      await onApproveAndComplete();
+      setIsCompletionConfirmationVisible(false);
+    } catch {
+      setHasCompletionError(true);
+    } finally {
+      setIsCompleting(false);
+    }
+  }
 
   return (
     <section className="panel checklist-run" aria-labelledby="checklist-run-title">
@@ -231,6 +250,31 @@ export function ChecklistRunDetail({
       )}
 
       {isReadyForReview && <ClientReportControls jobId={job.id} />}
+
+      {canApproveAndComplete && (
+        <section className="checklist-run__section" aria-labelledby="checklist-approval-title">
+          <h3 id="checklist-approval-title">{translate("checklists.managerApproval")}</h3>
+          {!isCompletionConfirmationVisible && (
+            <button className="button button--primary" type="button" onClick={() => setIsCompletionConfirmationVisible(true)}>
+              {translate("checklists.approveAndComplete")}
+            </button>
+          )}
+          {isCompletionConfirmationVisible && (
+            <div className="completion-confirmation">
+              <p>{translate("checklists.approveAndCompleteConfirmation")}</p>
+              <div className="button-row">
+                <button className="button" type="button" disabled={isCompleting} onClick={() => setIsCompletionConfirmationVisible(false)}>
+                  {translate("common.cancel")}
+                </button>
+                <button className="button button--primary" type="button" disabled={isCompleting} onClick={approveAndComplete}>
+                  {isCompleting ? translate("checklists.approvingAndCompleting") : translate("checklists.approveAndComplete")}
+                </button>
+              </div>
+            </div>
+          )}
+          {hasCompletionError && <p className="form-error" role="alert">{translate("checklists.approveAndCompleteError")}</p>}
+        </section>
+      )}
 
       <section className="checklist-run__section" aria-labelledby="checklist-context-title">
         <h3 id="checklist-context-title">{translate("checklists.context")}</h3>

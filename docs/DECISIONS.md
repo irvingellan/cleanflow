@@ -620,8 +620,9 @@ pilot reliability boundary, not offline sync or multi-device collaboration.
 Phase 5C.4 adds `READY_FOR_REVIEW` only to the Checklist Run lifecycle. A
 capability-authorized cleaner may atomically hand off the exact saved draft
 revision once; the Run retains the request hash as its idempotency receipt and
-becomes read-only. This is deliberately not Job completion, Assignment
-completion, manager approval, or evidence-complete certification.
+becomes read-only. An active manager may explicitly approve that reviewed Run
+to complete an eligible Job once. This is not Assignment completion or payment
+completion: it preserves payouts and payment records unchanged.
 
 Phase 5D.1 adds one deliberately narrow evidence boundary for the validated
 frozen `living-belongings` requirement: one JPEG, PNG, or WebP image up to
@@ -631,9 +632,10 @@ path, validates image signatures, stores the private object, and writes the
 server-owned evidence metadata. Public and manager projections never include a
 Storage path or download URL. A content-addressed object path makes an
 uncertain retry idempotent, while the evidence document remains the source of
-truth. The ready-for-review handoff requires this frozen photo, but does not
-become Job completion or manager approval. HEIC/HEIF conversion and additional
-photo requirements remain deferred.
+truth. The ready-for-review handoff requires this frozen photo. A separate
+active-manager approval may then complete the eligible Job without completing
+payment or payout. HEIC/HEIF conversion and additional photo requirements
+remain deferred.
 
 ---
 

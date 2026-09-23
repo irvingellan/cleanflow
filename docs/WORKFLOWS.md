@@ -103,8 +103,10 @@ DRAFT + active capability
 → READY_FOR_REVIEW requires that evidence and becomes read-only
 ```
 
-This is evidence collection only, not Job completion, Assignment completion,
-manager approval, email delivery, or a generic photo system.
+This is evidence collection only, not Assignment completion, email delivery,
+or a generic photo system. After `READY_FOR_REVIEW`, an active manager may
+explicitly approve the reviewed Run to complete its eligible Job; that manager
+action does not mark payment or payout as paid.
 
 ## Client cleaning report
 

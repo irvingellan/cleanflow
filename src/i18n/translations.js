@@ -1209,6 +1209,11 @@ Object.assign(messages.en, {
   "checklists.readyForReviewError": "Could not send for review. Try again.",
   "checklists.readyForReviewConflict": "The saved checklist changed. Please review the latest saved version before sending it.",
   "checklists.readyForReviewDescription": "The cleaner sent this saved checklist for manager review. This does not complete the job.",
+  "checklists.managerApproval": "Manager approval",
+  "checklists.approveAndComplete": "Approve and complete service",
+  "checklists.approveAndCompleteConfirmation": "This marks the service completed. It does not mark any payment as paid.",
+  "checklists.approvingAndCompleting": "Approving and completing…",
+  "checklists.approveAndCompleteError": "Unable to complete this service. Try again.",
 });
 
 Object.assign(messages.pt, {
@@ -1254,6 +1259,11 @@ Object.assign(messages.pt, {
   "checklists.readyForReviewError": "Não foi possível enviar para revisão. Tente novamente.",
   "checklists.readyForReviewConflict": "O checklist salvo mudou. Revise a versão salva mais recente antes de enviar.",
   "checklists.readyForReviewDescription": "A cleaner enviou este checklist salvo para revisão da gerente. Isto não conclui o serviço.",
+  "checklists.managerApproval": "Aprovação da gerente",
+  "checklists.approveAndComplete": "Aprovar e concluir serviço",
+  "checklists.approveAndCompleteConfirmation": "Isto marca o serviço como concluído. Nenhum pagamento será marcado como pago.",
+  "checklists.approvingAndCompleting": "Aprovando e concluindo…",
+  "checklists.approveAndCompleteError": "Não foi possível concluir este serviço. Tente novamente.",
 });
 
 Object.assign(messages.es, {
@@ -1299,6 +1309,11 @@ Object.assign(messages.es, {
   "checklists.readyForReviewError": "No se pudo enviar para revisión. Inténtalo de nuevo.",
   "checklists.readyForReviewConflict": "El checklist guardado cambió. Revisa la versión guardada más reciente antes de enviarlo.",
   "checklists.readyForReviewDescription": "La cleaner envió este checklist guardado para revisión de la gerente. Esto no completa el servicio.",
+  "checklists.managerApproval": "Aprobación de la gerente",
+  "checklists.approveAndComplete": "Aprobar y completar servicio",
+  "checklists.approveAndCompleteConfirmation": "Esto marca el servicio como completado. No marca ningún pago como pagado.",
+  "checklists.approvingAndCompleting": "Aprobando y completando…",
+  "checklists.approveAndCompleteError": "No se pudo completar este servicio. Inténtalo de nuevo.",
 });
 
 Object.assign(messages.en, {

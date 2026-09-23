@@ -118,10 +118,10 @@ E2E tests passed; build and diff checks passed.
   evidence upload is added. It is not deployed yet.
 - Phase 5C.4 locally adds one capability-authorized `READY_FOR_REVIEW` handoff
   for the existing Run. It freezes the latest acknowledged draft as read-only
-  through an idempotent Run-state transition, without changing Job or
-  Assignment lifecycle. The manager can refresh and view the same saved result.
-  This is a manager-review handoff, not final evidence-complete submission; it
-  is not deployed yet.
+  through an idempotent Run-state transition. An active manager may then
+  explicitly approve the reviewed Run to complete an eligible Job exactly once;
+  this writes only the existing Job completion timestamp/status and context
+  revision, never payment or payout state. It is not deployed yet.
 - Phase 5D.1 locally adds one real, capability-authorized evidence photo for
   the frozen `living-belongings` requirement. While a Run is `DRAFT`, the
   cleaner can take or select one JPEG, PNG, or WebP image (up to 5 MB). The

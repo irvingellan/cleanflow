@@ -18,6 +18,7 @@ const { FieldValue, getFirestore, Timestamp } = await import("firebase-admin/fir
 const { serverTimestamp } = await import("firebase/firestore");
 const {
   createChecklistRun,
+  approveChecklistRun,
   getChecklistRun,
   getChecklistCapability,
   getChecklistEvidence,
@@ -409,6 +410,30 @@ async function prepareReadyClientReportRun() {
   });
   return { cleanerCapability, runRef };
 }
+
+test("only an active manager can approve a ready Checklist Run and complete its eligible Job once", async () => {
+  await prepareReadyClientReportRun();
+  await admin.doc(`${root}/jobs/job`).update({ cleanerPayout: 250 });
+
+  await assert.rejects(
+    approveChecklistRun.run(request("cleaner", { jobId: "job" })),
+    { code: "permission-denied" },
+  );
+  assert.equal((await admin.doc(`${root}/jobs/job`).get()).data().operationalStatus, "ASSIGNED");
+
+  const first = await approveChecklistRun.run(request("manager", { jobId: "job" }));
+  const completedJob = (await admin.doc(`${root}/jobs/job`).get()).data();
+  assert.deepEqual(first, { completed: true, operationalStatus: "COMPLETED" });
+  assert.equal(completedJob.operationalStatus, "COMPLETED");
+  assert.equal(completedJob.checklistContextRevision, 2);
+  assert.equal(completedJob.cleanerPayout, 250);
+  assert.ok(completedJob.completedAt);
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data().status, "READY_FOR_REVIEW");
+
+  const retry = await approveChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.deepEqual(retry, { completed: false, operationalStatus: "COMPLETED" });
+  assert.equal((await admin.doc(`${root}/jobs/job`).get()).data().checklistContextRevision, 2);
+});
 
 test("active manager creates one default DRAFT Checklist Run and a retry returns it", async () => {
   await seedChecklistJob();
