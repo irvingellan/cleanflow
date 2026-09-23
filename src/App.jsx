@@ -899,7 +899,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
         {view === "property-create" && (
           <PropertyForm
-            properties={properties}
             preselectedClient={
               propertyDetailOrigin === "client" ? selectedClient : null
             }

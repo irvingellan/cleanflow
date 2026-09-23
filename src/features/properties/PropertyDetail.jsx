@@ -51,6 +51,7 @@ export function PropertyDetail({
 
       <dl className="detail-list">
         <DetailItem label={translate("common.client")} value={clientName} />
+        {property.address && <DetailItem label={translate("properties.address")} value={property.address} />}
         {property.defaultClientPrice !== undefined && (
           <DetailItem
             label={translate("properties.defaultClientPrice")}
@@ -62,6 +63,15 @@ export function PropertyDetail({
             label={translate("properties.defaultCleanerPrice")}
             value={formatPrice(property.defaultCleanerPrice, translate, language)}
           />
+        )}
+        {property.garageParking && (
+          <DetailItem label={translate("properties.garageParking")} value={property.garageParking} />
+        )}
+        {property.cleanerInstructions && (
+          <DetailItem label={translate("properties.cleanerInstructions")} value={property.cleanerInstructions} />
+        )}
+        {property.additionalNotes && (
+          <DetailItem label={translate("properties.additionalNotes")} value={property.additionalNotes} />
         )}
         <DetailItem label={translate("common.status")} value={activeStatus} />
       </dl>

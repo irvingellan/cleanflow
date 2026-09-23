@@ -2310,6 +2310,22 @@ button.summary-card {
   font-weight: 700;
 }
 
+.cleaning-form__group {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--color-input-border);
+  border-radius: 10px;
+}
+
+.cleaning-form__group legend {
+  padding: 0 4px;
+  color: var(--color-brand-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
 .cleaning-form input,
 .cleaning-form textarea,
 .cleaning-form select {

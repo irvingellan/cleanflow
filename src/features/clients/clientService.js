@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteField,
   doc,
   getDocs,
   query,
@@ -45,26 +46,71 @@ export async function getActiveClients() {
   })));
 }
 
-export async function createClient({ name, active }) {
-  const reference = await addDoc(clientsCollection(), {
+export async function createClient({
+  name,
+  email,
+  phone,
+  whatsapp,
+  preferredCommunicationChannel,
+  notes,
+  active,
+}) {
+  const client = {
     organizationId,
     name,
     active,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     dataProvenance: "REAL",
+  };
+
+  addOptionalClientFields(client, {
+    email,
+    phone,
+    whatsapp,
+    preferredCommunicationChannel,
+    notes,
   });
 
-  return { id: reference.id, name, active, organizationId, dataProvenance: "REAL" };
+  const reference = await addDoc(clientsCollection(), client);
+
+  return { id: reference.id, ...client };
 }
 
-export async function updateClient(clientId, { name }) {
-  await updateDoc(clientDocument(clientId), {
+export async function updateClient(clientId, {
+  name,
+  email,
+  phone,
+  whatsapp,
+  preferredCommunicationChannel,
+  notes,
+}) {
+  const update = {
     name,
     updatedAt: serverTimestamp(),
-  });
+  };
 
-  return { id: clientId, name };
+  for (const [field, value] of Object.entries({
+    email,
+    phone,
+    whatsapp,
+    preferredCommunicationChannel,
+    notes,
+  })) {
+    update[field] = value === undefined ? deleteField() : value;
+  }
+
+  await updateDoc(clientDocument(clientId), update);
+
+  return {
+    id: clientId,
+    name,
+    email,
+    phone,
+    whatsapp,
+    preferredCommunicationChannel,
+    notes,
+  };
 }
 
 export async function updateClientDataProvenance(clientId, dataProvenance, actorUid) {
@@ -84,4 +130,12 @@ export async function archiveClient(clientId, actorUid) {
 export async function restoreClient(clientId, actorUid) {
   await updateDoc(clientDocument(clientId), buildRestoreUpdate(actorUid, serverTimestamp()));
   return { id: clientId, archivedAt: null };
+}
+
+function addOptionalClientFields(client, fields) {
+  for (const [field, value] of Object.entries(fields)) {
+    if (value !== undefined) {
+      client[field] = value;
+    }
+  }
 }

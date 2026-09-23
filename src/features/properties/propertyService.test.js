@@ -27,24 +27,41 @@ describe("updateProperty", () => {
     firebase.deleteField.mockReturnValue("delete-price");
   });
 
-  it("updates only the approved Property fields and removes blank optional prices", async () => {
+  it("updates approved Property fields and removes blank optional values", async () => {
     const { updateProperty } = await import("./propertyService.js");
 
     await expect(updateProperty("property-1", {
       name: "Updated Property",
+      client: { id: "client-2", name: "Sara" },
       defaultClientPrice: undefined,
       defaultCleanerPrice: 125,
+      address: "123 Main St",
+      garageParking: undefined,
+      cleanerInstructions: "Use side entrance",
+      additionalNotes: undefined,
     })).resolves.toEqual({
       id: "property-1",
       name: "Updated Property",
+      clientId: "client-2",
+      clientName: "Sara",
       defaultClientPrice: undefined,
       defaultCleanerPrice: 125,
+      address: "123 Main St",
+      garageParking: undefined,
+      cleanerInstructions: "Use side entrance",
+      additionalNotes: undefined,
     });
 
     expect(firebase.updateDoc).toHaveBeenCalledWith("property-reference", {
       name: "Updated Property",
       defaultClientPrice: "delete-price",
       defaultCleanerPrice: 125,
+      address: "123 Main St",
+      garageParking: "delete-price",
+      cleanerInstructions: "Use side entrance",
+      additionalNotes: "delete-price",
+      clientId: "client-2",
+      clientName: "Sara",
     });
   });
 });

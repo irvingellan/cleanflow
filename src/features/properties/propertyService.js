@@ -53,6 +53,10 @@ export async function createProperty({
   clientName,
   defaultClientPrice,
   defaultCleanerPrice,
+  address,
+  garageParking,
+  cleanerInstructions,
+  additionalNotes,
   checklistSettings,
   active,
 }) {
@@ -76,6 +80,13 @@ export async function createProperty({
     property.defaultCleanerPrice = defaultCleanerPrice;
   }
 
+  addOptionalPropertyFields(property, {
+    address,
+    garageParking,
+    cleanerInstructions,
+    additionalNotes,
+  });
+
   if (checklistSettings) {
     property.checklistSettings = normalizePropertyChecklistSettings(checklistSettings);
   }
@@ -93,20 +104,41 @@ export async function updatePropertyChecklistSettings(propertyId, checklistSetti
 
 export async function updateProperty(propertyId, {
   name,
+  client,
   defaultClientPrice,
   defaultCleanerPrice,
+  address,
+  garageParking,
+  cleanerInstructions,
+  additionalNotes,
 }) {
-  await updateDoc(propertyDocument(propertyId), {
+  const update = {
     name,
     defaultClientPrice: defaultClientPrice === undefined ? deleteField() : defaultClientPrice,
     defaultCleanerPrice: defaultCleanerPrice === undefined ? deleteField() : defaultCleanerPrice,
-  });
+    address: address === undefined ? deleteField() : address,
+    garageParking: garageParking === undefined ? deleteField() : garageParking,
+    cleanerInstructions: cleanerInstructions === undefined ? deleteField() : cleanerInstructions,
+    additionalNotes: additionalNotes === undefined ? deleteField() : additionalNotes,
+  };
+
+  if (client) {
+    update.clientId = client.id;
+    update.clientName = client.name;
+  }
+
+  await updateDoc(propertyDocument(propertyId), update);
 
   return {
     id: propertyId,
     name,
+    ...(client ? { clientId: client.id, clientName: client.name } : {}),
     defaultClientPrice,
     defaultCleanerPrice,
+    address,
+    garageParking,
+    cleanerInstructions,
+    additionalNotes,
   };
 }
 
@@ -140,4 +172,12 @@ export async function archiveProperty(propertyId, actorUid) {
 export async function restoreProperty(propertyId, actorUid) {
   await updateDoc(propertyDocument(propertyId), buildRestoreUpdate(actorUid, serverTimestamp()));
   return { id: propertyId, archivedAt: null };
+}
+
+function addOptionalPropertyFields(property, fields) {
+  for (const [field, value] of Object.entries(fields)) {
+    if (value !== undefined) {
+      property[field] = value;
+    }
+  }
 }

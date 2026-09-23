@@ -6,6 +6,13 @@ export function ClientForm({ client, onBack, onSaved }) {
   const { translate } = useTranslation();
   const isEditing = Boolean(client);
   const [name, setName] = useState(client?.name || "");
+  const [email, setEmail] = useState(client?.email || "");
+  const [phone, setPhone] = useState(client?.phone || "");
+  const [whatsapp, setWhatsapp] = useState(client?.whatsapp || "");
+  const [preferredCommunicationChannel, setPreferredCommunicationChannel] = useState(
+    client?.preferredCommunicationChannel || "",
+  );
+  const [notes, setNotes] = useState(client?.notes || "");
   const [active, setActive] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -13,6 +20,11 @@ export function ClientForm({ client, onBack, onSaved }) {
 
   useEffect(() => {
     setName(client?.name || "");
+    setEmail(client?.email || "");
+    setPhone(client?.phone || "");
+    setWhatsapp(client?.whatsapp || "");
+    setPreferredCommunicationChannel(client?.preferredCommunicationChannel || "");
+    setNotes(client?.notes || "");
     setFormError("");
     setIsSaved(false);
     setIsSaving(false);
@@ -31,7 +43,16 @@ export function ClientForm({ client, onBack, onSaved }) {
     setFormError("");
 
     try {
-      await onSaved(isEditing ? { name: clientName } : { name: clientName, active });
+      const values = {
+        name: clientName,
+        email: optionalText(email),
+        phone: optionalText(phone),
+        whatsapp: optionalText(whatsapp),
+        preferredCommunicationChannel: preferredCommunicationChannel || undefined,
+        notes: optionalText(notes),
+      };
+
+      await onSaved(isEditing ? values : { ...values, active });
       setIsSaved(true);
     } catch {
       setFormError(translate(isEditing ? "clients.updateError" : "clients.createError"));
@@ -52,6 +73,36 @@ export function ClientForm({ client, onBack, onSaved }) {
         <label>
           {translate("clients.name")}
           <input value={name} onChange={(event) => { setName(event.target.value); setIsSaved(false); }} required />
+        </label>
+
+        <label>
+          {translate("clients.email")}
+          <input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setIsSaved(false); }} />
+        </label>
+
+        <label>
+          {translate("clients.phone")}
+          <input type="tel" value={phone} onChange={(event) => { setPhone(event.target.value); setIsSaved(false); }} />
+        </label>
+
+        <label>
+          {translate("clients.whatsapp")}
+          <input type="tel" value={whatsapp} onChange={(event) => { setWhatsapp(event.target.value); setIsSaved(false); }} />
+        </label>
+
+        <label>
+          {translate("clients.preferredCommunicationChannel")}
+          <select value={preferredCommunicationChannel} onChange={(event) => { setPreferredCommunicationChannel(event.target.value); setIsSaved(false); }}>
+            <option value="">{translate("common.notProvided")}</option>
+            <option value="WHATSAPP">{translate("clients.communicationWhatsapp")}</option>
+            <option value="EMAIL">{translate("clients.communicationEmail")}</option>
+            <option value="PHONE">{translate("clients.communicationPhone")}</option>
+          </select>
+        </label>
+
+        <label>
+          {translate("clients.notes")}
+          <textarea value={notes} onChange={(event) => { setNotes(event.target.value); setIsSaved(false); }} rows="3" />
         </label>
 
         {!isEditing && (
@@ -82,4 +133,9 @@ export function ClientForm({ client, onBack, onSaved }) {
       </form>
     </section>
   );
+}
+
+function optionalText(value) {
+  const trimmedValue = value.trim();
+  return trimmedValue === "" ? undefined : trimmedValue;
 }

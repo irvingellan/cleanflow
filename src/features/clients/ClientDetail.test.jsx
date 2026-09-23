@@ -32,6 +32,40 @@ function renderDetail(history, onViewAllUpcoming = vi.fn(), onEdit = vi.fn()) {
 }
 
 describe("ClientDetail upcoming services", () => {
+  it("shows saved contact details without changing archive controls", () => {
+    render(
+      <TranslationProvider>
+        <ClientDetail
+          client={{
+            id: "client-1",
+            name: "Client One",
+            email: "client@example.com",
+            phone: "555-0100",
+            whatsapp: "+15551234567",
+            preferredCommunicationChannel: "WHATSAPP",
+            notes: "Send the report after cleaning.",
+            active: true,
+          }}
+          properties={[]}
+          isLoadingProperties={false}
+          hasPropertiesError={false}
+          jobHistory={{ upcomingJobs: [], hasMoreUpcoming: false, recentJobs: [] }}
+          hasJobHistoryError={false}
+          onBack={vi.fn()}
+          onOpenProperty={vi.fn()}
+          onCreateProperty={vi.fn()}
+          onEdit={vi.fn()}
+          onOpenJob={vi.fn()}
+          onViewAllUpcoming={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getByText("client@example.com")).toBeVisible();
+    expect(screen.getByText("+15551234567")).toBeVisible();
+    expect(screen.getByText("Send the report after cleaning.")).toBeVisible();
+  });
+
   it("opens the basic Client edit flow", () => {
     const onEdit = vi.fn();
     renderDetail({ upcomingJobs: [], hasMoreUpcoming: false, recentJobs: [] }, vi.fn(), onEdit);

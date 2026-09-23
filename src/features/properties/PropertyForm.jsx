@@ -2,18 +2,16 @@ import { useEffect, useState } from "react";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { getActiveClients } from "../clients/clientService.js";
 import { useTranslation } from "../../i18n/translations.js";
-import { createEmptyPropertyForm, optionalPrice } from "./propertyForm.js";
+import { createEmptyPropertyForm, optionalPrice, optionalText } from "./propertyForm.js";
 
-export function PropertyForm({ properties, preselectedClient, onBack, onSaved }) {
+export function PropertyForm({ preselectedClient, onBack, onSaved }) {
   const { translate } = useTranslation();
   const [formValues, setFormValues] = useState(() =>
     createEmptyPropertyForm(preselectedClient),
   );
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const clientNames = [...new Set(
-    properties.map((property) => property.clientName).filter(Boolean),
-  )].sort((firstClient, secondClient) => firstClient.localeCompare(secondClient));
+  const { clients, isLoadingClients, hasClientsError } = useActiveClients();
 
   function updateField(event) {
     const { name, value, checked, type } = event.target;
@@ -27,7 +25,7 @@ export function PropertyForm({ properties, preselectedClient, onBack, onSaved })
   async function saveProperty(event) {
     event.preventDefault();
     const name = formValues.name.trim();
-    const clientName = formValues.clientName.trim();
+    const client = preselectedClient || clients.find((item) => item.id === formValues.clientId);
     const defaultClientPrice = optionalPrice(formValues.defaultClientPrice);
     const defaultCleanerPrice = optionalPrice(formValues.defaultCleanerPrice);
 
@@ -36,7 +34,7 @@ export function PropertyForm({ properties, preselectedClient, onBack, onSaved })
       return;
     }
 
-    if (!clientName) {
+    if (!client) {
       setFormError(translate("properties.clientRequired"));
       return;
     }
@@ -52,10 +50,14 @@ export function PropertyForm({ properties, preselectedClient, onBack, onSaved })
     try {
       await onSaved({
         name,
-        clientId: preselectedClient?.id,
-        clientName,
+        clientId: client.id,
+        clientName: client.name,
+        address: optionalText(formValues.address),
         defaultClientPrice,
         defaultCleanerPrice,
+        garageParking: optionalText(formValues.garageParking),
+        cleanerInstructions: optionalText(formValues.cleanerInstructions),
+        additionalNotes: optionalText(formValues.additionalNotes),
         active: formValues.active,
       });
     } catch {
@@ -78,53 +80,64 @@ export function PropertyForm({ properties, preselectedClient, onBack, onSaved })
           <input name="name" value={formValues.name} onChange={updateField} required />
         </label>
 
-        {preselectedClient ? (
+        <PropertyClientField
+          clients={clients}
+          isLoading={isLoadingClients}
+          hasError={hasClientsError}
+          preselectedClient={preselectedClient}
+          value={formValues.clientId}
+          onChange={updateField}
+          required
+        />
+
+        <label>
+          {translate("properties.address")}
+          <input name="address" value={formValues.address} onChange={updateField} />
+        </label>
+
+        <fieldset className="cleaning-form__group">
+          <legend>{translate("properties.defaultPricing")}</legend>
           <label>
-            {translate("properties.currentClient")}
-            <input value={preselectedClient.name || ""} readOnly />
-          </label>
-        ) : (
-          <label>
-            {translate("common.client")}
-            <select
-              name="clientName"
-              value={formValues.clientName}
+            {translate("properties.defaultClientPrice")}
+            <input
+              type="number"
+              name="defaultClientPrice"
+              value={formValues.defaultClientPrice}
+              min="0"
+              step="0.01"
+              inputMode="decimal"
               onChange={updateField}
-              required
-            >
-              <option value="">{translate("properties.selectClient")}</option>
-              {clientNames.map((clientName) => (
-                <option key={clientName} value={clientName}>{clientName}</option>
-              ))}
-            </select>
+            />
           </label>
-        )}
+          <label>
+            {translate("properties.defaultCleanerPrice")}
+            <input
+              type="number"
+              name="defaultCleanerPrice"
+              value={formValues.defaultCleanerPrice}
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              onChange={updateField}
+            />
+          </label>
+        </fieldset>
 
-        <label>
-          {translate("properties.defaultClientPrice")}
-          <input
-            type="number"
-            name="defaultClientPrice"
-            value={formValues.defaultClientPrice}
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            onChange={updateField}
-          />
-        </label>
-
-        <label>
-          {translate("properties.defaultCleanerPrice")}
-          <input
-            type="number"
-            name="defaultCleanerPrice"
-            value={formValues.defaultCleanerPrice}
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            onChange={updateField}
-          />
-        </label>
+        <fieldset className="cleaning-form__group">
+          <legend>{translate("properties.cleanerInformation")}</legend>
+          <label>
+            {translate("properties.garageParking")}
+            <input name="garageParking" value={formValues.garageParking} onChange={updateField} />
+          </label>
+          <label>
+            {translate("properties.cleanerInstructions")}
+            <textarea name="cleanerInstructions" value={formValues.cleanerInstructions} onChange={updateField} rows="3" />
+          </label>
+          <label>
+            {translate("properties.additionalNotes")}
+            <textarea name="additionalNotes" value={formValues.additionalNotes} onChange={updateField} rows="3" />
+          </label>
+        </fieldset>
 
         <label className="cleaner-active-field">
           <input
@@ -158,6 +171,7 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+  const { clients, isLoadingClients, hasClientsError } = useActiveClients();
 
   useEffect(() => {
     setFormValues(propertyToEditForm(property));
@@ -177,6 +191,7 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
     const name = formValues.name.trim();
     const defaultClientPrice = optionalPrice(formValues.defaultClientPrice);
     const defaultCleanerPrice = optionalPrice(formValues.defaultCleanerPrice);
+    const selectedClient = clients.find((client) => client.id === formValues.clientId);
 
     if (!name) {
       setFormError(translate("properties.nameRequired"));
@@ -193,7 +208,16 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
     setIsSaved(false);
 
     try {
-      await onSaved({ name, defaultClientPrice, defaultCleanerPrice });
+      await onSaved({
+        name,
+        client: selectedClient?.id !== property.clientId ? selectedClient : undefined,
+        address: optionalText(formValues.address),
+        defaultClientPrice,
+        defaultCleanerPrice,
+        garageParking: optionalText(formValues.garageParking),
+        cleanerInstructions: optionalText(formValues.cleanerInstructions),
+        additionalNotes: optionalText(formValues.additionalNotes),
+      });
       setIsSaved(true);
     } catch {
       setFormError(translate("properties.updateError"));
@@ -214,15 +238,47 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
           <input name="name" value={formValues.name} onChange={updateField} required />
         </label>
 
-        <label>
-          {translate("properties.defaultClientPrice")}
-          <input type="number" name="defaultClientPrice" value={formValues.defaultClientPrice} min="0" step="0.01" inputMode="decimal" onChange={updateField} />
-        </label>
+        <PropertyClientField
+          clients={clients}
+          isLoading={isLoadingClients}
+          hasError={hasClientsError}
+          value={formValues.clientId}
+          onChange={updateField}
+          currentClientName={property.clientName}
+        />
 
         <label>
-          {translate("properties.defaultCleanerPrice")}
-          <input type="number" name="defaultCleanerPrice" value={formValues.defaultCleanerPrice} min="0" step="0.01" inputMode="decimal" onChange={updateField} />
+          {translate("properties.address")}
+          <input name="address" value={formValues.address} onChange={updateField} />
         </label>
+
+        <fieldset className="cleaning-form__group">
+          <legend>{translate("properties.defaultPricing")}</legend>
+          <label>
+            {translate("properties.defaultClientPrice")}
+            <input type="number" name="defaultClientPrice" value={formValues.defaultClientPrice} min="0" step="0.01" inputMode="decimal" onChange={updateField} />
+          </label>
+          <label>
+            {translate("properties.defaultCleanerPrice")}
+            <input type="number" name="defaultCleanerPrice" value={formValues.defaultCleanerPrice} min="0" step="0.01" inputMode="decimal" onChange={updateField} />
+          </label>
+        </fieldset>
+
+        <fieldset className="cleaning-form__group">
+          <legend>{translate("properties.cleanerInformation")}</legend>
+          <label>
+            {translate("properties.garageParking")}
+            <input name="garageParking" value={formValues.garageParking} onChange={updateField} />
+          </label>
+          <label>
+            {translate("properties.cleanerInstructions")}
+            <textarea name="cleanerInstructions" value={formValues.cleanerInstructions} onChange={updateField} rows="3" />
+          </label>
+          <label>
+            {translate("properties.additionalNotes")}
+            <textarea name="additionalNotes" value={formValues.additionalNotes} onChange={updateField} rows="3" />
+          </label>
+        </fieldset>
 
         {formError && <p className="form-error" role="alert">{formError}</p>}
         {isSaved && <p className="form-success" role="status">{translate("properties.updated")}</p>}
@@ -236,6 +292,86 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
       </form>
     </section>
   );
+}
+
+function PropertyClientField({
+  clients,
+  isLoading,
+  hasError,
+  preselectedClient,
+  value,
+  onChange,
+  currentClientName,
+  required = false,
+}) {
+  const { translate } = useTranslation();
+
+  if (preselectedClient) {
+    return (
+      <label>
+        {translate("properties.currentClient")}
+        <input value={preselectedClient.name || ""} readOnly />
+      </label>
+    );
+  }
+
+  if (isLoading) {
+    return <StateCard message={translate("properties.loadingClients")} status="status" />;
+  }
+
+  if (hasError) {
+    return <StateCard message={translate("properties.clientsError")} status="alert" isError />;
+  }
+
+  return (
+    <label>
+      {translate("common.client")}
+      <select name="clientId" value={value} onChange={onChange} required={required}>
+        <option value="">
+          {currentClientName
+            ? translate("properties.keepCurrentClient", { client: currentClientName })
+            : translate("properties.selectClient")}
+        </option>
+        {clients.map((client) => (
+          <option key={client.id} value={client.id}>{client.name}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function useActiveClients() {
+  const [clients, setClients] = useState([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [hasClientsError, setHasClientsError] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadClients() {
+      try {
+        const loadedClients = await getActiveClients();
+        if (isCurrent) {
+          setClients([...loadedClients].sort((firstClient, secondClient) =>
+            (firstClient.name || "").localeCompare(secondClient.name || ""),
+          ));
+        }
+      } catch {
+        if (isCurrent) {
+          setHasClientsError(true);
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoadingClients(false);
+        }
+      }
+    }
+
+    loadClients();
+    return () => { isCurrent = false; };
+  }, []);
+
+  return { clients, isLoadingClients, hasClientsError };
 }
 
 export function PropertyClientLinkForm({ property, onBack, onLinked }) {
@@ -364,7 +500,12 @@ export function PropertyClientLinkForm({ property, onBack, onLinked }) {
 function propertyToEditForm(property) {
   return {
     name: property?.name || "",
+    clientId: property?.clientId || "",
+    address: property?.address || "",
     defaultClientPrice: property?.defaultClientPrice === undefined ? "" : String(property.defaultClientPrice),
     defaultCleanerPrice: property?.defaultCleanerPrice === undefined ? "" : String(property.defaultCleanerPrice),
+    garageParking: property?.garageParking || "",
+    cleanerInstructions: property?.cleanerInstructions || "",
+    additionalNotes: property?.additionalNotes || "",
   };
 }

@@ -16,6 +16,38 @@ const upcomingJobs = [
 ];
 
 describe("PropertyDetail upcoming services", () => {
+  it("shows saved operational Property details while keeping archive controls intact", async () => {
+    getPropertyJobHistory.mockResolvedValue({ upcomingJobs: [], recentJobs: [] });
+
+    render(
+      <TranslationProvider>
+        <PropertyDetail
+          property={{
+            id: "property-1",
+            name: "Pacific Beach Condo",
+            clientId: "client-1",
+            clientName: "Carl",
+            address: "123 Ocean Blvd",
+            garageParking: "Garage 4",
+            cleanerInstructions: "Use side entrance",
+            additionalNotes: "Gate is blue",
+            active: true,
+          }}
+          onBack={vi.fn()}
+          onCreateCleaning={vi.fn()}
+          onEdit={vi.fn()}
+          onOpenJob={vi.fn()}
+          onLinkClient={vi.fn()}
+          onViewAllUpcoming={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getByText("123 Ocean Blvd")).toBeVisible();
+    expect(screen.getByText("Use side entrance")).toBeVisible();
+    expect(screen.getByText("Gate is blue")).toBeVisible();
+  });
+
   it("exposes edit and safe client-reassociation actions", async () => {
     const onEdit = vi.fn();
     const onLinkClient = vi.fn();

@@ -49,6 +49,16 @@ export function ClientDetail({
       <RecordArchiveControl record={client} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
       <dl className="detail-list">
+        {client.email && <DetailItem label={translate("clients.email")} value={client.email} />}
+        {client.phone && <DetailItem label={translate("clients.phone")} value={client.phone} />}
+        {client.whatsapp && <DetailItem label={translate("clients.whatsapp")} value={client.whatsapp} />}
+        {client.preferredCommunicationChannel && (
+          <DetailItem
+            label={translate("clients.preferredCommunicationChannel")}
+            value={translate(`clients.communication${toTitleCase(client.preferredCommunicationChannel)}`)}
+          />
+        )}
+        {client.notes && <DetailItem label={translate("clients.notes")} value={client.notes} />}
         <DetailItem label={translate("common.status")} value={clientStatus} />
       </dl>
 
@@ -130,6 +140,10 @@ export function ClientDetail({
       />
     </section>
   );
+}
+
+function toTitleCase(value) {
+  return value.charAt(0) + value.slice(1).toLowerCase();
 }
 
 function ClientOperationalHistory({ history, hasError, onOpenJob, onViewAllUpcoming }) {
