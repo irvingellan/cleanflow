@@ -1,5 +1,6 @@
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { preferredLanguageLabel } from "./cleanerPresentation.js";
 
@@ -88,6 +89,7 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
           ))}
         </div>
       )}
+      <ScrollToTopButton />
     </section>
   );
 }

@@ -75,6 +75,8 @@ describe("PropertyDetail upcoming services", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Pacific Beach Condo" }));
     fireEvent.click(screen.getByRole("button", { name: "Change client" }));
+    expect(screen.getByRole("button", { name: "Edit Pacific Beach Condo" }).parentElement)
+      .toHaveClass("property-detail__actions");
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onLinkClient).toHaveBeenCalledTimes(1);
   });

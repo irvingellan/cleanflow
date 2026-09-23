@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
@@ -194,6 +195,7 @@ export function ChecklistRunDetail({
           )}
         </dl>
       </section>
+      <ScrollToTopButton />
     </section>
   );
 }

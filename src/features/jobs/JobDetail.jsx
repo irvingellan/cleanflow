@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
 import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import {
   BackButton,
   DetailItem,
@@ -989,6 +990,7 @@ export function JobDetail({
           </button>
         )}
       </div>
+      <ScrollToTopButton />
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
 export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect, canManageExcluded, showExcluded, onToggleExcluded }) {
@@ -60,6 +61,7 @@ export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSele
           })}
         </div>
       )}
+      <ScrollToTopButton />
     </section>
   );
 }

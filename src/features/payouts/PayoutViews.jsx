@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { validatePayoutProofFile } from "./payoutProofService.js";
 
@@ -139,6 +140,7 @@ export function PayoutDirectory({
           </div>
         </section>
       )}
+      <ScrollToTopButton />
     </section>
   );
 }
@@ -460,6 +462,7 @@ export function PayoutReview({
           </button>
         </div>
       </form>
+      <ScrollToTopButton />
     </section>
   );
 }

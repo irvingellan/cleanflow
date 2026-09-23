@@ -82,7 +82,7 @@ export function PropertyDetail({
         <DetailItem label={translate("common.status")} value={activeStatus} />
       </dl>
 
-      <div className="button-row">
+      <div className="button-row property-detail__actions">
         <button className="button" type="button" onClick={onEdit}>
           {translate("properties.edit", { property: propertyName })}
         </button>

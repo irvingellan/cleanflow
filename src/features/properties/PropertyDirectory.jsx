@@ -1,5 +1,6 @@
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
 export function PropertyDirectory({ properties, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded }) {
@@ -56,6 +57,7 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
           })}
         </div>
       )}
+      <ScrollToTopButton />
     </section>
   );
 }

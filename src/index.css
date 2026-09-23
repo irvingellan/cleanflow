@@ -3512,6 +3512,14 @@ button.summary-card {
     justify-self: start;
   }
 
+  .property-detail__actions {
+    flex-wrap: wrap;
+  }
+
+  .property-detail__actions .button {
+    flex: 1 1 145px;
+  }
+
   .cleaner-directory-card {
     grid-template-columns: 1fr auto;
     align-items: start;
