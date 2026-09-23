@@ -187,16 +187,30 @@ function managerPageLoadEvent(uid = "manager") {
   };
 }
 
-test("manager page-load telemetry is self-attributed append-only diagnostics", async () => {
+test("manager page-load telemetry is readable by active managers and remains append-only", async () => {
   const managerDb = account("manager").firestore();
   const event = managerDb.doc(`${root}/managerPageLoadEvents/event-1`);
   await assertSucceeds(event.set(managerPageLoadEvent()));
-  await assertFails(event.get());
+  await assertSucceeds(event.get());
+  await assertSucceeds(managerDb.collection(`${root}/managerPageLoadEvents`).get());
   await assertFails(event.update({ durationMs: 1 }));
   await assertFails(event.delete());
   await assertFails(managerDb.doc(`${root}/managerPageLoadEvents/spoofed`).set(managerPageLoadEvent("outsider")));
   await assertFails(account("outsider").firestore()
     .doc(`${root}/managerPageLoadEvents/outsider-event`).set(managerPageLoadEvent("outsider")));
+
+  const deniedReaders = [
+    account("outsider").firestore(),
+    environment.unauthenticatedContext().firestore(),
+    account("anonymous-member", true).firestore(),
+    account("other-manager").firestore(),
+    account("inactive").firestore(),
+    account("cleaner").firestore(),
+  ];
+  for (const db of deniedReaders) {
+    await assertFails(db.doc(`${root}/managerPageLoadEvents/event-1`).get());
+    await assertFails(db.collection(`${root}/managerPageLoadEvents`).get());
+  }
 });
 
 test("server metadata, unknown subcollections and future checklist namespaces are default denied", async () => {

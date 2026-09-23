@@ -59,6 +59,7 @@ import {
 import { languageOptions, useTranslation } from "./i18n/translations.js";
 import { ThemeProvider, useTheme } from "./theme/theme.js";
 import { useManagerPageLoadTelemetry } from "./features/telemetry/useManagerPageLoadTelemetry.js";
+import { ManagerPageLoadDiagnostics } from "./features/telemetry/ManagerPageLoadDiagnostics.jsx";
 import {
   formatCreatedAt,
   formatDate,
@@ -100,6 +101,10 @@ function publicOfferTokenFromPathname(pathname = window.location.pathname) {
 
 function isChecklistPreviewPath(pathname = window.location.pathname) {
   return pathname.replace(/\/+$/, "") === "/checklist-preview";
+}
+
+function isManagerLoadDiagnosticsPath(pathname = window.location.pathname) {
+  return pathname.replace(/\/+$/, "") === "/diagnostics/load-times";
 }
 
 function publicChecklistTokenFromSearch(
@@ -346,8 +351,12 @@ function PublicOfferPage({ token }) {
 function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
   useOneSignalIdentity(authUser?.uid);
-  const [activeSection, setActiveSection] = useState("dashboard");
-  const [view, setView] = useState("dashboard");
+  const [activeSection, setActiveSection] = useState(() => (
+    isManagerLoadDiagnosticsPath() ? "dev-center" : "dashboard"
+  ));
+  const [view, setView] = useState(() => (
+    isManagerLoadDiagnosticsPath() ? "load-time-diagnostics" : "dashboard"
+  ));
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
   const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
@@ -356,6 +365,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const devCenterController = useDevCenterController({ view });
   const canManageExcludedRecords = devCenterController.access.authorized;
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
+
+  useEffect(() => {
+    if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
+      window.history.replaceState(window.history.state, "", "/");
+    }
+  }, [view]);
   const jobWorklist = useJobsWorklist({
     view,
     preserveLoadedJobs: Boolean(jobsScrollRestore),
@@ -882,6 +897,28 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onRefreshDiagnostics={devCenterController.loadNotificationDiagnostics}
             notificationUserId={authUser.uid}
           />
+        )}
+
+        {view === "load-time-diagnostics" && devCenterController.access.isChecking && (
+          <StateCard message={translate("auth.managerAccessLoading")} status="status" />
+        )}
+
+        {view === "load-time-diagnostics" && !devCenterController.access.isChecking
+          && !devCenterController.access.authorized && (
+          <section className="panel">
+            <StateCard message={translate("loadDiagnostics.unauthorized")} status="alert" isError />
+            <button className="button" type="button" onClick={() => {
+              setActiveSection("dashboard");
+              setView("dashboard");
+            }}>{translate("navigation.dashboard")}</button>
+          </section>
+        )}
+
+        {view === "load-time-diagnostics" && devCenterController.access.authorized && (
+          <ManagerPageLoadDiagnostics onBack={() => {
+            setActiveSection("dev-center");
+            setView("dev-center");
+          }} />
         )}
 
         {view === "property-list" && (

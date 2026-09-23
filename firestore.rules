@@ -126,8 +126,9 @@ service cloud.firestore {
         allow get: if signedInAccount() && request.auth.uid == uid;
       }
 
-      // Client diagnostics are append-only, self-attributed, and never browser-readable.
+      // Authorized managers may inspect bounded page-load diagnostics; only validated client events can be appended.
       match /managerPageLoadEvents/{eventId} {
+        allow read: if activeManager(orgId);
         allow create: if activeManager(orgId) && validManagerPageLoadEvent(request.resource.data);
       }
 

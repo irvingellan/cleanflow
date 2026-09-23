@@ -21,6 +21,12 @@ function buildDevCenter({ environment = "emulator", pendingPreviewType = null, o
 }
 
 describe("DevCenter action states", () => {
+  it("keeps the internal page-load view linked from the developer-only Dev Center", () => {
+    render(buildDevCenter());
+    expect(screen.getByRole("link", { name: "Page-load timings" }))
+      .toHaveAttribute("href", "/diagnostics/load-times");
+  });
+
   it("starts with every allowed action idle and isolates preview loading to the selected preview", () => {
     const { rerender } = render(buildDevCenter());
 

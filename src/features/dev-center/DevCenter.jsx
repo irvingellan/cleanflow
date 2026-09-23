@@ -127,6 +127,11 @@ export function DevCenter({
         onRefresh={onRefreshDiagnostics}
       />
       <NotificationChannelDiagnostics userId={notificationUserId} />
+      <p className="dev-center__internal-link">
+        <a className="button button--small" href="/diagnostics/load-times">
+          {translate("loadDiagnostics.open")}
+        </a>
+      </p>
 
       {lastResult?.type === "generated" && (
         <StateCard
