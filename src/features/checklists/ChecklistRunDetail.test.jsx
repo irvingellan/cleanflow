@@ -44,6 +44,34 @@ function renderChecklistRun(runOverrides = {}) {
 }
 
 describe("ChecklistRunDetail", () => {
+  it("shows the cleaner from the existing Assignment snapshot, with a localized unassigned fallback", () => {
+    const { rerender } = render(
+      <TranslationProvider>
+        <ChecklistRunDetail
+          job={{ id: "job-1", propertyName: "Job Property", scheduledDate: "2026-09-20", schemaVersion: 2 }}
+          assignments={[{ id: "assignment-1", isActive: true, cleanerNameSnapshot: "Ana" }]}
+          checklistRun={{ id: "initial", status: "DRAFT", property: { name: "Snapshot Property" }, checklistItemCount: 28, inventoryItemCount: 13 }}
+          onBack={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getByText("Assigned cleaner")).toBeVisible();
+    expect(screen.getByText("Ana")).toBeVisible();
+
+    rerender(
+      <TranslationProvider>
+        <ChecklistRunDetail
+          job={{ id: "job-1", propertyName: "Job Property", scheduledDate: "2026-09-20" }}
+          checklistRun={{ id: "initial", status: "DRAFT", property: { name: "Snapshot Property" }, checklistItemCount: 28, inventoryItemCount: 13 }}
+          onBack={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getByText("Not assigned")).toBeVisible();
+  });
+
   it("renders the persisted manager snapshot summary without server-only configuration", () => {
     renderChecklistRun();
 

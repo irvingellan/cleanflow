@@ -1263,6 +1263,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             checklistRun={checklistRun}
             isRefreshing={isRefreshingChecklistRun}
             hasRefreshError={hasChecklistRunError}
+            assignments={jobAssignments}
             onRefresh={() => refreshChecklistRun(selectedJob, { manual: true })}
             onBack={() => setView("job-detail")}
           />

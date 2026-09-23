@@ -22,6 +22,19 @@ function formatRunCreatedAt(value, language) {
   ).format(date);
 }
 
+function assignedCleanerDisplayName(job, assignments, fallback) {
+  const assignmentNames = (assignments || [])
+    .filter((assignment) => assignment.isActive === true)
+    .map((assignment) => assignment.cleanerNameSnapshot?.trim())
+    .filter(Boolean);
+
+  if (assignmentNames.length > 0) {
+    return [...new Set(assignmentNames)].join(" · ");
+  }
+
+  return job.assignedCleanerName?.trim() || fallback;
+}
+
 function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
   const [url, setUrl] = useState(null);
   const [hasError, setHasError] = useState(false);
@@ -53,7 +66,7 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
 /** Displays the server-projected manager summary, never a raw Property or Run. */
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
-  loadEvidence = getChecklistEvidence,
+  loadEvidence = getChecklistEvidence, assignments = [],
 }) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
@@ -66,6 +79,11 @@ export function ChecklistRunDetail({
   const readyForReviewAt = formatRunCreatedAt(checklistRun.readyForReviewAt, language);
   const isReadyForReview = checklistRun.status === "READY_FOR_REVIEW";
   const evidence = checklistRun.evidence || [];
+  const assignedCleanerName = assignedCleanerDisplayName(
+    job,
+    assignments,
+    translate("dashboard.notAssigned"),
+  );
 
   return (
     <section className="panel checklist-run" aria-labelledby="checklist-run-title">
@@ -95,6 +113,7 @@ export function ChecklistRunDetail({
           label={translate("jobs.scheduledDate")}
           value={formatDate(checklistRun.serviceDate || job.scheduledDate, translate, language)}
         />
+        <DetailItem label={translate("jobs.assignedCleaner")} value={assignedCleanerName} />
         <DetailItem
           label={translate("checklists.runState")}
           value={translate(isReadyForReview ? "checklists.readyForReview" : "checklists.draft")}
