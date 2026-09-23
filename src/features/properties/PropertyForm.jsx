@@ -58,6 +58,8 @@ export function PropertyForm({ preselectedClient, onBack, onSaved }) {
         garageParking: optionalText(formValues.garageParking),
         cleanerInstructions: optionalText(formValues.cleanerInstructions),
         additionalNotes: optionalText(formValues.additionalNotes),
+        keyCodeInfo: optionalText(formValues.keyCodeInfo),
+        accessInstructions: optionalText(formValues.accessInstructions),
         active: formValues.active,
       });
     } catch {
@@ -139,6 +141,18 @@ export function PropertyForm({ preselectedClient, onBack, onSaved }) {
           </label>
         </fieldset>
 
+        <fieldset className="cleaning-form__group">
+          <legend>{translate("properties.accessInformation")}</legend>
+          <label>
+            {translate("properties.keyCodeInfo")}
+            <input name="keyCodeInfo" value={formValues.keyCodeInfo} onChange={updateField} />
+          </label>
+          <label>
+            {translate("properties.accessInstructions")}
+            <textarea name="accessInstructions" value={formValues.accessInstructions} onChange={updateField} rows="3" />
+          </label>
+        </fieldset>
+
         <label className="cleaner-active-field">
           <input
             type="checkbox"
@@ -217,6 +231,8 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
         garageParking: optionalText(formValues.garageParking),
         cleanerInstructions: optionalText(formValues.cleanerInstructions),
         additionalNotes: optionalText(formValues.additionalNotes),
+        keyCodeInfo: optionalText(formValues.keyCodeInfo),
+        accessInstructions: optionalText(formValues.accessInstructions),
       });
       setIsSaved(true);
     } catch {
@@ -277,6 +293,18 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
           <label>
             {translate("properties.additionalNotes")}
             <textarea name="additionalNotes" value={formValues.additionalNotes} onChange={updateField} rows="3" />
+          </label>
+        </fieldset>
+
+        <fieldset className="cleaning-form__group">
+          <legend>{translate("properties.accessInformation")}</legend>
+          <label>
+            {translate("properties.keyCodeInfo")}
+            <input name="keyCodeInfo" value={formValues.keyCodeInfo} onChange={updateField} />
+          </label>
+          <label>
+            {translate("properties.accessInstructions")}
+            <textarea name="accessInstructions" value={formValues.accessInstructions} onChange={updateField} rows="3" />
           </label>
         </fieldset>
 
@@ -507,5 +535,7 @@ function propertyToEditForm(property) {
     garageParking: property?.garageParking || "",
     cleanerInstructions: property?.cleanerInstructions || "",
     additionalNotes: property?.additionalNotes || "",
+    keyCodeInfo: property?.keyCodeInfo || "",
+    accessInstructions: property?.accessInstructions || "",
   };
 }

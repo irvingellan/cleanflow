@@ -57,6 +57,8 @@ export async function createProperty({
   garageParking,
   cleanerInstructions,
   additionalNotes,
+  keyCodeInfo,
+  accessInstructions,
   checklistSettings,
   active,
 }) {
@@ -85,6 +87,8 @@ export async function createProperty({
     garageParking,
     cleanerInstructions,
     additionalNotes,
+    keyCodeInfo,
+    accessInstructions,
   });
 
   if (checklistSettings) {
@@ -111,6 +115,8 @@ export async function updateProperty(propertyId, {
   garageParking,
   cleanerInstructions,
   additionalNotes,
+  keyCodeInfo,
+  accessInstructions,
 }) {
   const update = {
     name,
@@ -120,6 +126,8 @@ export async function updateProperty(propertyId, {
     garageParking: garageParking === undefined ? deleteField() : garageParking,
     cleanerInstructions: cleanerInstructions === undefined ? deleteField() : cleanerInstructions,
     additionalNotes: additionalNotes === undefined ? deleteField() : additionalNotes,
+    keyCodeInfo: keyCodeInfo === undefined ? deleteField() : keyCodeInfo,
+    accessInstructions: accessInstructions === undefined ? deleteField() : accessInstructions,
   };
 
   if (client) {
@@ -139,6 +147,8 @@ export async function updateProperty(propertyId, {
     garageParking,
     cleanerInstructions,
     additionalNotes,
+    keyCodeInfo,
+    accessInstructions,
   };
 }
 

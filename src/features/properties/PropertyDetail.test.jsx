@@ -31,6 +31,8 @@ describe("PropertyDetail upcoming services", () => {
             garageParking: "Garage 4",
             cleanerInstructions: "Use side entrance",
             additionalNotes: "Gate is blue",
+            keyCodeInfo: "Lockbox at entry",
+            accessInstructions: "Enter via the side gate",
             active: true,
           }}
           onBack={vi.fn()}
@@ -46,6 +48,10 @@ describe("PropertyDetail upcoming services", () => {
     expect(screen.getByText("123 Ocean Blvd")).toBeVisible();
     expect(screen.getByText("Use side entrance")).toBeVisible();
     expect(screen.getByText("Gate is blue")).toBeVisible();
+    expect(screen.getByText("Key / Code Info")).toBeVisible();
+    expect(screen.getByText("Lockbox at entry")).toBeVisible();
+    expect(screen.getByText("Access instructions")).toBeVisible();
+    expect(screen.getByText("Enter via the side gate")).toBeVisible();
   });
 
   it("exposes edit and safe client-reassociation actions", async () => {

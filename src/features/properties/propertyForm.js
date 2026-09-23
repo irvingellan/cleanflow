@@ -9,6 +9,8 @@ export function createEmptyPropertyForm(preselectedClient = null) {
     garageParking: "",
     cleanerInstructions: "",
     additionalNotes: "",
+    keyCodeInfo: "",
+    accessInstructions: "",
     active: true,
   };
 }

@@ -16,7 +16,7 @@ describe("PropertyEditForm", () => {
     render(
       <TranslationProvider>
         <PropertyEditForm
-          property={{ id: "property-1", name: "Original Property", clientId: "client-1", clientName: "Carl", defaultClientPrice: 250 }}
+          property={{ id: "property-1", name: "Original Property", clientId: "client-1", clientName: "Carl", defaultClientPrice: 250, keyCodeInfo: "Lockbox at entry", accessInstructions: "Use the side door" }}
           onBack={vi.fn()}
           onSaved={onSaved}
         />
@@ -29,6 +29,10 @@ describe("PropertyEditForm", () => {
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Main St" } });
     fireEvent.change(screen.getByLabelText("Garage / parking"), { target: { value: "Garage 4" } });
     fireEvent.change(screen.getByLabelText("Cleaner instructions"), { target: { value: "Use side entrance" } });
+    expect(screen.getByLabelText("Key / Code Info")).toHaveValue("Lockbox at entry");
+    expect(screen.getByLabelText("Access instructions")).toHaveValue("Use the side door");
+    fireEvent.change(screen.getByLabelText("Key / Code Info"), { target: { value: "Updated lockbox details" } });
+    fireEvent.change(screen.getByLabelText("Access instructions"), { target: { value: "Enter via the side gate" } });
     fireEvent.click(screen.getByRole("button", { name: "Save property" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith({
@@ -40,6 +44,8 @@ describe("PropertyEditForm", () => {
       garageParking: "Garage 4",
       cleanerInstructions: "Use side entrance",
       additionalNotes: undefined,
+      keyCodeInfo: "Updated lockbox details",
+      accessInstructions: "Enter via the side gate",
     }));
     expect(screen.getByRole("status")).toHaveTextContent("Property updated.");
   });
@@ -63,6 +69,8 @@ describe("PropertyEditForm", () => {
     fireEvent.change(screen.getByLabelText("Garage / parking"), { target: { value: "Street parking" } });
     fireEvent.change(screen.getByLabelText("Cleaner instructions"), { target: { value: "Call before arrival" } });
     fireEvent.change(screen.getByLabelText("Additional notes"), { target: { value: "Gate is blue" } });
+    fireEvent.change(screen.getByLabelText("Key / Code Info"), { target: { value: "Key with host" } });
+    fireEvent.change(screen.getByLabelText("Access instructions"), { target: { value: "Enter at front" } });
     fireEvent.click(screen.getByRole("button", { name: "Save property" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith({
@@ -75,6 +83,8 @@ describe("PropertyEditForm", () => {
       garageParking: "Street parking",
       cleanerInstructions: "Call before arrival",
       additionalNotes: "Gate is blue",
+      keyCodeInfo: "Key with host",
+      accessInstructions: "Enter at front",
       active: true,
     }));
   });
@@ -97,6 +107,28 @@ describe("PropertyEditForm", () => {
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({
       client: { id: "client-2", name: "Sara" },
+    })));
+  });
+
+  it("omits blank access fields so optional values stay blank", async () => {
+    const onSaved = vi.fn().mockResolvedValue({});
+    render(
+      <TranslationProvider>
+        <PropertyEditForm
+          property={{ id: "property-1", name: "Original Property", clientId: "client-1", keyCodeInfo: "Old key details", accessInstructions: "Old instructions" }}
+          onBack={vi.fn()}
+          onSaved={onSaved}
+        />
+      </TranslationProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Key / Code Info"), { target: { value: "   " } });
+    fireEvent.change(screen.getByLabelText("Access instructions"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save property" }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({
+      keyCodeInfo: undefined,
+      accessInstructions: undefined,
     })));
   });
 });

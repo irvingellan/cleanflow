@@ -13,6 +13,8 @@ describe("Property form helpers", () => {
       garageParking: "",
       cleanerInstructions: "",
       additionalNotes: "",
+      keyCodeInfo: "",
+      accessInstructions: "",
       active: true,
     });
   });
@@ -28,6 +30,8 @@ describe("Property form helpers", () => {
       garageParking: "",
       cleanerInstructions: "",
       additionalNotes: "",
+      keyCodeInfo: "",
+      accessInstructions: "",
       active: true,
     });
   });

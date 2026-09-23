@@ -68,6 +68,10 @@ Property defaults populate a new Job but must not rewrite historical Job
 snapshots. Sensitive access information requires stronger authorization than
 ordinary operational data.
 
+**CURRENT pilot fields:** optional `keyCodeInfo` and `accessInstructions` are
+manager-only Property data. Do not copy them into cleaner-facing projections or
+checklist snapshots by default.
+
 **Phase 2 checklist foundation:** `checklistSettings` is optional. When absent,
 the current versioned global default definition applies. Its allowlisted
 cleaner-facing fields are additional checklist items, inventory item additions

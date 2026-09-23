@@ -73,6 +73,12 @@ export function PropertyDetail({
         {property.additionalNotes && (
           <DetailItem label={translate("properties.additionalNotes")} value={property.additionalNotes} />
         )}
+        {property.keyCodeInfo && (
+          <DetailItem label={translate("properties.keyCodeInfo")} value={property.keyCodeInfo} />
+        )}
+        {property.accessInstructions && (
+          <DetailItem label={translate("properties.accessInstructions")} value={property.accessInstructions} />
+        )}
         <DetailItem label={translate("common.status")} value={activeStatus} />
       </dl>
 

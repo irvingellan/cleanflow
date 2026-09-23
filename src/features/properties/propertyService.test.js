@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const firebase = vi.hoisted(() => ({
+  addDoc: vi.fn(),
   collection: vi.fn(),
   deleteField: vi.fn(),
   doc: vi.fn(),
@@ -8,7 +9,7 @@ const firebase = vi.hoisted(() => ({
 }));
 
 vi.mock("firebase/firestore", () => ({
-  addDoc: vi.fn(),
+  addDoc: firebase.addDoc,
   collection: firebase.collection,
   deleteField: firebase.deleteField,
   doc: firebase.doc,
@@ -24,6 +25,7 @@ describe("updateProperty", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     firebase.doc.mockReturnValue("property-reference");
+    firebase.collection.mockReturnValue("properties-collection");
     firebase.deleteField.mockReturnValue("delete-price");
   });
 
@@ -39,6 +41,8 @@ describe("updateProperty", () => {
       garageParking: undefined,
       cleanerInstructions: "Use side entrance",
       additionalNotes: undefined,
+      keyCodeInfo: "Updated lockbox details",
+      accessInstructions: undefined,
     })).resolves.toEqual({
       id: "property-1",
       name: "Updated Property",
@@ -50,6 +54,8 @@ describe("updateProperty", () => {
       garageParking: undefined,
       cleanerInstructions: "Use side entrance",
       additionalNotes: undefined,
+      keyCodeInfo: "Updated lockbox details",
+      accessInstructions: undefined,
     });
 
     expect(firebase.updateDoc).toHaveBeenCalledWith("property-reference", {
@@ -60,8 +66,34 @@ describe("updateProperty", () => {
       garageParking: "delete-price",
       cleanerInstructions: "Use side entrance",
       additionalNotes: "delete-price",
+      keyCodeInfo: "Updated lockbox details",
+      accessInstructions: "delete-price",
       clientId: "client-2",
       clientName: "Sara",
     });
+  });
+
+  it("creates a Property with optional access fields only when provided", async () => {
+    const { createProperty } = await import("./propertyService.js");
+    firebase.addDoc.mockResolvedValue({ id: "property-1" });
+
+    await createProperty({
+      name: "New Property",
+      clientId: "client-1",
+      clientName: "Carl",
+      defaultClientPrice: undefined,
+      defaultCleanerPrice: undefined,
+      keyCodeInfo: "Key at front desk",
+      accessInstructions: "Use entry keypad",
+      active: true,
+    });
+
+    const createdProperty = firebase.addDoc.mock.calls[0][1];
+    expect(createdProperty).toMatchObject({
+      name: "New Property",
+      keyCodeInfo: "Key at front desk",
+      accessInstructions: "Use entry keypad",
+    });
+    expect(createdProperty).not.toHaveProperty("address");
   });
 });
