@@ -31,7 +31,7 @@ describe("NotificationControl", () => {
     await user.click(button);
 
     expect(notificationService.enablePushNotifications).toHaveBeenCalledWith({ userId: "firebase-user-uid" });
-    expect(await screen.findByRole("button", { name: "Notifications enabled" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "FCM registered for manager reminders" })).toBeDisabled();
   });
 
   it("shows a retryable error when the explicit provider activation fails", async () => {
@@ -46,5 +46,18 @@ describe("NotificationControl", () => {
     await user.click(await screen.findByRole("button", { name: "Enable notifications" }));
 
     expect(await screen.findByRole("button", { name: "Unable to enable notifications. Try again." })).toBeEnabled();
+  });
+
+  it("does not present a OneSignal-only subscription as registered for FCM reminders", async () => {
+    notificationService.getPushChannelDiagnostics.mockResolvedValue({ state: "incomplete" });
+    render(
+      <TranslationProvider>
+        <NotificationControl userId="firebase-user-uid" />
+      </TranslationProvider>,
+    );
+
+    expect(await screen.findByRole("button", {
+      name: "Complete FCM setup for manager reminders",
+    })).toBeEnabled();
   });
 });

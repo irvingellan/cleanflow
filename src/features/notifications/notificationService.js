@@ -113,11 +113,13 @@ async function fcmDiagnosticState() {
 }
 
 function notificationState({ fcm, oneSignal }) {
-  if (oneSignal.initialized && !oneSignal.optedIn) return "incomplete";
-  if (fcm.state === "registered" || oneSignal.optedIn) return "enabled";
+  // Scheduled manager reminders currently use FCM; OneSignal opt-in alone does
+  // not make this browser eligible for that delivery path.
+  if (fcm.state === "registered") return "enabled";
   if (browserPermission() === "denied") return "denied";
-  if (oneSignal.state === "error" && fcm.state !== "registered") return "error";
-  if (fcm.state === "unavailable" && !oneSignal.configured) return "unavailable";
+  if (oneSignal.state === "error") return "error";
+  if (fcm.state === "unavailable") return "unavailable";
+  if (fcm.state === "error") return "error";
   if (browserPermission() === "granted") return "incomplete";
   return "ready";
 }

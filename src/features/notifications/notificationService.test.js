@@ -78,7 +78,7 @@ describe("notificationService channel coexistence", () => {
     expect(result).toMatchObject({ state: "enabled", fcm: { state: "registered" }, oneSignal: { optedIn: true } });
   });
 
-  it("does not describe browser permission or an FCM-only registration as a completed cross-browser setup", async () => {
+  it("reports FCM as ready for scheduled reminders even when OneSignal is not opted in", async () => {
     browserPermission("granted");
     firebase.isSupported.mockResolvedValue(true);
     oneSignal.associateOneSignalUser.mockResolvedValue({ configured: true, initialized: true, optedIn: false, state: "not-subscribed" });
@@ -86,7 +86,7 @@ describe("notificationService channel coexistence", () => {
 
     await expect(service.getPushChannelDiagnostics("firebase-user-uid")).resolves.toMatchObject({
       browserPermission: "granted",
-      state: "incomplete",
+      state: "enabled",
       fcm: { state: "registered" },
       oneSignal: { optedIn: false },
     });
@@ -132,7 +132,7 @@ describe("notificationService channel coexistence", () => {
     await expect(diagnostics).resolves.toMatchObject({
       fcm: { state: "unavailable" },
       oneSignal: { state: "active", optedIn: true },
-      state: "enabled",
+      state: "unavailable",
     });
   });
 });
