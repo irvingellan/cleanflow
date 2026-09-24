@@ -103,15 +103,17 @@ test("only an active manager can update Job price snapshots without changing che
   await assertFails(cleanerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
 });
 
-test("manager browsers cannot directly read or mutate server-only client report capabilities", async () => {
+test("manager browsers cannot directly read or mutate server-only checklist notification and client report records", async () => {
   const db = account("manager").firestore();
   const pathsToProtect = [
     "clientReportTokenLookups/" + "a".repeat(64),
     root + "/jobs/job/checklistRuns/initial/clientReportCapabilities/active",
+    root + "/jobs/job/checklistRuns/initial/managerNotificationDeliveries/" + "b".repeat(64),
   ];
   for (const path of pathsToProtect) {
     await assertFails(db.doc(path).get());
     await assertFails(db.doc(path).set({ status: "ACTIVE" }));
+    await assertFails(db.doc(path).update({ status: "ACTIVE" }));
     await assertFails(db.doc(path).delete());
   }
 });

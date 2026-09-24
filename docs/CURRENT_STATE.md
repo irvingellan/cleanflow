@@ -151,7 +151,15 @@ E2E tests passed; build and diff checks passed.
   Run detail now summarizes answers, restock, unanswered items, and notes before
   the full results; it keeps save/review times visible and puts IDs/revisions in
   closed-by-default Technical details. DRAFT explains that report/approval
-  actions await cleaner submission. This visibility pass is not deployed.
+  actions await cleaner submission. This visibility pass is included in the
+  published `c3536e6` baseline.
+- The current implementation adds a post-commit FCM manager notification for
+  the first successful DRAFT-to-READY_FOR_REVIEW handoff. The Run transaction
+  creates one stable, hash-identified delivery record; a separate Firestore
+  trigger claims it once, rechecks active manager membership for eligible
+  devices, and sends generic EN/PT/ES copy to the authenticated app home. FCM
+  acceptance does not prove display on a device. This notification change is
+  not deployed yet.
 - Cleaner review submission and explicit manager approval/Job completion exist
   in the current implementation. Automatic email/WhatsApp delivery does not.
 - The preferred future workflow is: a manager manually shares a secure

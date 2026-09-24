@@ -1,5 +1,10 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import {
+  checklistReviewNotificationCollection,
+  checklistReviewNotificationEventId,
+  checklistReviewNotificationType,
+} from "./checklistReviewNotifications.js";
 import { projectChecklistRunForCleaner } from "./checklistRunDefinition.js";
 import {
   applyChecklistDraftMutation,
@@ -363,6 +368,8 @@ export async function readyPublicChecklistForReview(database, {
   const jobRef = jobReference(database, organizationId, location.jobId);
   const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
   const evidenceRef = runRef.collection("evidence").doc(pilotChecklistPhotoRequirementId);
+  const notificationEventId = checklistReviewNotificationEventId(organizationId, location.jobId, location.runId);
+  const notificationRef = runRef.collection(checklistReviewNotificationCollection).doc(notificationEventId);
   const submission = normalizeChecklistReadyForReviewRequest(request);
   const requestHash = checklistReadyForReviewRequestHash(submission);
 
@@ -423,6 +430,13 @@ export async function readyPublicChecklistForReview(database, {
       readyForReviewDraftRevision: validatedDraft.revision,
       readyForReviewSubmissionId: submission.submissionId,
       readyForReviewRequestHash: requestHash,
+    });
+    transaction.create(notificationRef, {
+      eventId: notificationEventId,
+      eventType: checklistReviewNotificationType,
+      deliveryProvider: "fcm",
+      deliveryStatus: "PENDING",
+      createdAt: FieldValue.serverTimestamp(),
     });
     return {
       duplicate: false,

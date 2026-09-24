@@ -5,6 +5,7 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { defineSecret, defineString, projectID } from "firebase-functions/params";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
@@ -20,6 +21,7 @@ import {
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import { normalizePublicChecklistLoadDiagnostic } from "./publicChecklistDiagnostics.js";
+import { processChecklistReviewNotification } from "./checklistReviewNotifications.js";
 import { authorizedManagerDevices, requireOrganizationManager } from "./managerAuthorization.js";
 import {
   createChecklistRunForManager,
@@ -763,18 +765,43 @@ export const revokeClientReport = onCall(
   },
 );
 
-async function activeManagerPushDevices() {
+async function activeManagerPushDevices(targetOrganizationId = organizationId) {
   const deviceSnapshots = await db
     .collection("managerPushDevices")
-    .where("organizationId", "==", organizationId)
+    .where("organizationId", "==", targetOrganizationId)
     .get();
 
   const activeDevices = deviceSnapshots.docs.filter((snapshot) => {
     const device = snapshot.data();
     return device.active === true && validPushToken(device.token);
   });
-  return authorizedManagerDevices(db, organizationId, activeDevices);
+  return authorizedManagerDevices(db, targetOrganizationId, activeDevices);
 }
+
+export const notifyManagersChecklistReadyForReview = onDocumentCreated(
+  {
+    document: "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}/managerNotificationDeliveries/{eventId}",
+    region: "us-central1",
+    retry: false,
+    timeoutSeconds: 60,
+  },
+  async (event) => {
+    if (!event.data) return;
+    const { orgId, jobId, runId, eventId } = event.params;
+    await processChecklistReviewNotification({
+      database: db,
+      deliveryReference: event.data.ref,
+      deliveryData: event.data.data(),
+      organizationId: orgId,
+      jobId,
+      runId,
+      eventId,
+      loadManagerDevices: activeManagerPushDevices,
+      sendFcm: (messages) => getMessaging().sendEach(messages),
+      logger,
+    });
+  },
+);
 
 function invalidPushTokenError(error) {
   return [
