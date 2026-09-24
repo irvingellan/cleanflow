@@ -20,11 +20,34 @@ describe("public checklist requests", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const request = getPublicChecklist("opaque-token");
-    const timeoutExpectation = expect(request).rejects.toMatchObject({ code: "checklist_request_timeout" });
+    const timeoutExpectation = expect(request).rejects.toMatchObject({ code: "checklist_request_timeout", stage: "request" });
     await vi.advanceTimersByTimeAsync(publicChecklistRequestTimeoutMilliseconds);
 
     await timeoutExpectation;
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("token=opaque-token"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it("keeps the request deadline active while reading a response body", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => new Promise(() => {}),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = getPublicChecklist("opaque-token");
+    const timeoutExpectation = expect(request).rejects.toMatchObject({ code: "checklist_request_timeout", stage: "response-parse" });
+    await vi.advanceTimersByTimeAsync(publicChecklistRequestTimeoutMilliseconds);
+    await timeoutExpectation;
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("token=opaque-token"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it("classifies an unreadable successful response as a response parsing error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => { throw new Error("bad JSON"); } }));
+    await expect(getPublicChecklist("opaque-token")).rejects.toMatchObject({
+      code: "checklist_response_invalid",
+      stage: "response-parse",
+    });
   });
 
   it("uses the same deadline for a draft mutation without changing its caller-supplied mutation ID", async () => {

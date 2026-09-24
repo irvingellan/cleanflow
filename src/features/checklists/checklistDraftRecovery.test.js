@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checklistDraftRecoveryScope,
+  checklistDraftRecoveryScopeBounded,
   checklistDraftRecoveryStoragePrefix,
   clearChecklistDraftRecovery,
   loadChecklistDraftRecovery,
@@ -62,5 +63,14 @@ describe("checklist draft local recovery", () => {
     expect(second).toBe("BAUG");
     expect(first).not.toContain("capability-one");
     expect(second).not.toContain("capability-two");
+  });
+
+  it("bounds a browser digest that never settles so the server checklist can still render", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("crypto", { subtle: { digest: vi.fn(() => new Promise(() => {})) } });
+    const scope = checklistDraftRecoveryScopeBounded("opaque-token", { timeoutMs: 250 });
+    const result = expect(scope).resolves.toBeNull();
+    await vi.advanceTimersByTimeAsync(250);
+    await result;
   });
 });

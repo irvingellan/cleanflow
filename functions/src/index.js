@@ -19,6 +19,7 @@ import {
 } from "./devCenterAuthorization.js";
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
+import { normalizePublicChecklistLoadDiagnostic } from "./publicChecklistDiagnostics.js";
 import { authorizedManagerDevices, requireOrganizationManager } from "./managerAuthorization.js";
 import {
   createChecklistRunForManager,
@@ -320,9 +321,9 @@ function configureResponse(response) {
   response.set("X-Content-Type-Options", "nosniff");
 }
 
-function sendPublicError(response, status, error) {
+function sendPublicError(response, status, error, diagnostics = null) {
   configureResponse(response);
-  response.status(status).json({ error });
+  response.status(status).json({ error, ...(diagnostics ? { diagnostics } : {}) });
 }
 
 function isAssignmentAwareJobData(jobData) {
@@ -1173,7 +1174,25 @@ export const publicChecklist = onRequest(
       sendPublicError(response, 405, "method_not_allowed");
       return;
     }
+    let requestStage = "capability-resolution";
+    let capabilityStartedAt = null;
+    let capabilityDiagnostics = null;
     try {
+      if (request.method === "POST" && request.body?.action === "LOAD_DIAGNOSTIC") {
+        const diagnostic = normalizePublicChecklistLoadDiagnostic(
+          request.body?.diagnostic,
+          request.get("user-agent") || "",
+        );
+        if (!diagnostic) {
+          sendPublicError(response, 400, "invalid_diagnostic");
+          return;
+        }
+        logger.info("Public checklist load diagnostic.", diagnostic);
+        configureResponse(response);
+        response.status(204).end();
+        return;
+      }
+
       const token = ["GET", "PUT"].includes(request.method) ? request.query.token : request.body?.token;
       if (!validToken(token)) {
         sendPublicError(response, 404, "checklist_not_found");
@@ -1227,27 +1246,66 @@ export const publicChecklist = onRequest(
         response.status(200).send(evidence.bytes);
         return;
       }
+      capabilityStartedAt = Date.now();
       const result = await loadPublicChecklistCapability(db, {
         organizationId,
         tokenHash: hashToken(token),
       });
+      capabilityDiagnostics = result.diagnostics || null;
       if (result.state === "active") {
+        requestStage = "evidence-load";
+        const evidenceStartedAt = Date.now();
         const evidence = await loadPublicChecklistEvidence(db, {
           organizationId,
           tokenHash: hashToken(token),
         });
+        const diagnostics = {
+          ...result.diagnostics,
+          evidenceLoadMs: Date.now() - evidenceStartedAt,
+          evidenceResult: "loaded",
+        };
+        const sessionId = request.get("X-CleanFlow-Checklist-Session");
+        logger.info("Public checklist backend load completed.", {
+          sessionId: /^[A-Fa-f0-9]{36}$/.test(sessionId || "") ? sessionId : null,
+          result: "success",
+          ...diagnostics,
+        });
         configureResponse(response);
-        response.status(200).json({ checklist: { ...result.checklist, evidence }, draft: result.draft });
+        response.status(200).json({ checklist: { ...result.checklist, evidence }, draft: result.draft, diagnostics });
         return;
       }
+      const diagnostics = {
+        ...result.diagnostics,
+        errorStage: requestStage,
+        errorCode: result.state === "not-found" ? "checklist_not_found" : "checklist_unavailable",
+      };
+      const sessionId = request.get("X-CleanFlow-Checklist-Session");
+      logger.info("Public checklist backend load completed.", {
+        sessionId: /^[A-Fa-f0-9]{36}$/.test(sessionId || "") ? sessionId : null,
+        result: "error",
+        ...diagnostics,
+      });
       const status = result.state === "expired" || result.state === "revoked" || result.state === "stale"
         ? 410
         : 404;
-      sendPublicError(response, status, status === 410 ? "checklist_unavailable" : "checklist_not_found");
+      sendPublicError(response, status, status === 410 ? "checklist_unavailable" : "checklist_not_found", diagnostics);
     } catch (error) {
+      const sessionId = request.get("X-CleanFlow-Checklist-Session");
+      const errorCode = ["invalid-argument", "not-found", "failed-precondition", "already-exists", "aborted", "unavailable", "deadline-exceeded"].includes(error?.code)
+        ? error.code : "internal";
+      const diagnostics = {
+        capabilityResolutionMs: capabilityDiagnostics?.capabilityResolutionMs
+          ?? (requestStage === "capability-resolution" && capabilityStartedAt !== null ? Date.now() - capabilityStartedAt : null),
+        capabilityResult: capabilityDiagnostics?.capabilityResult || (requestStage === "capability-resolution" ? "error" : "active"),
+        draftLoadMs: capabilityDiagnostics?.draftLoadMs ?? null,
+        draftResult: capabilityDiagnostics?.draftResult || "unknown",
+        errorStage: requestStage,
+        errorCode,
+      };
       logger.error("Unable to process public checklist request.", {
-        code: error?.code,
-        message: error?.message,
+        sessionId: /^[A-Fa-f0-9]{36}$/.test(sessionId || "") ? sessionId : null,
+        stage: requestStage,
+        code: errorCode,
       });
       const status = error?.code === "invalid-argument" ? 400
         : error?.code === "not-found" ? 404
@@ -1255,7 +1313,7 @@ export const publicChecklist = onRequest(
             : error?.code === "aborted" ? 409
               : error?.code === "failed-precondition" ? 410
                 : 500;
-      sendPublicError(response, status, status === 404 ? "checklist_not_found" : "checklist_unavailable");
+      sendPublicError(response, status, status === 404 ? "checklist_not_found" : "checklist_unavailable", diagnostics);
     }
   },
 );

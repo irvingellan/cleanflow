@@ -1,6 +1,7 @@
 const recoveryStoragePrefix = "cleanflow-checklist-draft-v1:";
 const recoveryMaximumAgeMilliseconds = 7 * 24 * 60 * 60 * 1000;
 const recoveryMaximumBytes = 32_000;
+export const checklistDraftRecoveryScopeTimeoutMilliseconds = 2_000;
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -26,6 +27,21 @@ export async function checklistDraftRecoveryScope(token) {
   if (typeof token !== "string" || !token || !globalThis.crypto?.subtle) return null;
   const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return base64Url(new Uint8Array(digest));
+}
+
+/** A stalled browser crypto implementation must not keep the checklist loader pending. */
+export async function checklistDraftRecoveryScopeBounded(token, { timeoutMs = checklistDraftRecoveryScopeTimeoutMilliseconds } = {}) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      checklistDraftRecoveryScope(token),
+      new Promise((resolve) => { timeoutId = setTimeout(() => resolve(null), timeoutMs); }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function recoveryKey(scope) {

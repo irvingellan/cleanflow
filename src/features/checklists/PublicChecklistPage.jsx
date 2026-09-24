@@ -8,6 +8,12 @@ import {
   publicChecklistEvidenceUrl,
   uploadPublicChecklistEvidence,
 } from "./checklistCapabilityService.js";
+import {
+  buildPublicChecklistLoadDiagnostic,
+  getPublicChecklistSessionId,
+  publicChecklistClientClass,
+  recordPublicChecklistLoadDiagnostic,
+} from "./publicChecklistLoadDiagnostics.js";
 
 const errorKeys = {
   checklist_not_found: "checklists.publicUnavailable",
@@ -234,9 +240,13 @@ function SaveStatus({ saveState, hasRecoveryWarning, isResolvingConflict, onSave
 /** The only public editing surface; all mutations remain capability-gated HTTP calls. */
 export function PublicChecklistPage({ token }) {
   const { language, setLanguage, translate } = useTranslation();
+  const routeOpenedAtRef = useRef(globalThis.performance?.now?.() ?? Date.now());
+  const diagnosticSessionRef = useRef(getPublicChecklistSessionId());
+  const diagnosticRecordedRef = useRef(false);
   const {
     checklist,
     draft,
+    loadDiagnostics,
     isLoading,
     loadError,
     saveState,
@@ -250,6 +260,25 @@ export function PublicChecklistPage({ token }) {
     reapplyLocalChanges,
     submitForManagerReview,
   } = usePublicChecklistDraft(token);
+
+  useEffect(() => {
+    if (isLoading || diagnosticRecordedRef.current) return;
+    diagnosticRecordedRef.current = true;
+    const finishedAt = globalThis.performance?.now?.() ?? Date.now();
+    const diagnostic = buildPublicChecklistLoadDiagnostic({
+      sessionId: diagnosticSessionRef.current,
+      totalReadyMs: finishedAt - routeOpenedAtRef.current,
+      result: loadError ? "error" : "success",
+      capabilityResolutionMs: loadDiagnostics?.capabilityResolutionMs ?? null,
+      capabilityResult: loadDiagnostics?.capabilityResult || (loadError ? "error" : "unknown"),
+      draftLoadMs: loadDiagnostics?.draftLoadMs ?? null,
+      draftResult: loadDiagnostics?.draftResult || (loadError ? "error" : "loaded"),
+      errorStage: loadError ? loadDiagnostics?.errorStage || "request" : null,
+      errorCode: loadError || loadDiagnostics?.errorCode || null,
+      client: publicChecklistClientClass(),
+    });
+    recordPublicChecklistLoadDiagnostic(diagnostic);
+  }, [isLoading, loadDiagnostics, loadError]);
 
   if (isLoading) {
     return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate("checklists.publicLoading")} status="status" /></section></main>;

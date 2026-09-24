@@ -67,6 +67,13 @@
         ]
       },
       {
+        "source": "/checklist",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, private" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
+        ]
+      },
+      {
         "source": "/client-report",
         "headers": [
           { "key": "Cache-Control", "value": "no-store, private" },

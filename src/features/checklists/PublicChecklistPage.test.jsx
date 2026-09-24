@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   readyPublicChecklistForReview: vi.fn(),
   savePublicChecklistDraft: vi.fn(),
   uploadPublicChecklistEvidence: vi.fn(),
+  recordPublicChecklistLoadDiagnostic: vi.fn(),
 }));
 const {
   getPublicChecklist, readyPublicChecklistForReview, savePublicChecklistDraft, uploadPublicChecklistEvidence,
@@ -19,6 +20,11 @@ vi.mock("./checklistCapabilityService.js", async (importOriginal) => ({
   readyPublicChecklistForReview: mocks.readyPublicChecklistForReview,
   savePublicChecklistDraft: mocks.savePublicChecklistDraft,
   uploadPublicChecklistEvidence: mocks.uploadPublicChecklistEvidence,
+}));
+
+vi.mock("./publicChecklistLoadDiagnostics.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  recordPublicChecklistLoadDiagnostic: mocks.recordPublicChecklistLoadDiagnostic,
 }));
 
 const { PublicChecklistPage } = await import("./PublicChecklistPage.jsx");
@@ -80,6 +86,7 @@ beforeEach(() => {
   readyPublicChecklistForReview.mockReset();
   savePublicChecklistDraft.mockReset();
   uploadPublicChecklistEvidence.mockReset();
+  mocks.recordPublicChecklistLoadDiagnostic.mockReset();
   getPublicChecklist.mockResolvedValue({ checklist: frozenChecklist, draft: createDraft() });
   savePublicChecklistDraft.mockImplementation(async ({ baseRevision, changes }) => ({
     draft: createDraft({
@@ -105,6 +112,26 @@ afterEach(() => {
 });
 
 describe("PublicChecklistPage", () => {
+  it("records one token-free load diagnostic after the checklist is ready", async () => {
+    renderPage("secret-capability-token");
+    expect(await screen.findByRole("heading", { name: "Cleaning checklist" })).toBeVisible();
+    await waitFor(() => expect(mocks.recordPublicChecklistLoadDiagnostic).toHaveBeenCalledTimes(1));
+    const event = mocks.recordPublicChecklistLoadDiagnostic.mock.calls[0][0];
+    expect(event).toMatchObject({ routeOpened: true, result: "success", draftResult: "loaded" });
+    expect(JSON.stringify(event)).not.toContain("secret-capability-token");
+    expect(JSON.stringify(event)).not.toContain("checklistAnswers");
+  });
+
+  it("records a bounded error result when public loading fails", async () => {
+    getPublicChecklist.mockRejectedValue({ code: "checklist_request_timeout" });
+    renderPage();
+    expect(await screen.findByText("This checklist link is no longer available.")).toBeVisible();
+    await waitFor(() => expect(mocks.recordPublicChecklistLoadDiagnostic).toHaveBeenCalledTimes(1));
+    expect(mocks.recordPublicChecklistLoadDiagnostic.mock.calls[0][0]).toMatchObject({
+      routeOpened: true, result: "error", errorStage: "request", errorCode: "checklist_request_timeout",
+    });
+  });
+
   it("loads a virtual draft from the frozen projection and only offers N/A where allowed", async () => {
     renderPage();
 

@@ -5,7 +5,7 @@ import {
   savePublicChecklistDraft,
 } from "./checklistCapabilityService.js";
 import {
-  checklistDraftRecoveryScope,
+  checklistDraftRecoveryScopeBounded,
   clearChecklistDraftRecovery,
   loadChecklistDraftRecovery,
   saveChecklistDraftRecovery,
@@ -94,6 +94,7 @@ export function usePublicChecklistDraft(token) {
   const [draft, setDraft] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [loadDiagnostics, setLoadDiagnostics] = useState(null);
   const [saveState, setSaveState] = useState(checklistSaveStates.LOADING);
   const [hasRecoveryWarning, setHasRecoveryWarning] = useState(false);
   const [isResolvingConflict, setIsResolvingConflict] = useState(false);
@@ -117,7 +118,10 @@ export function usePublicChecklistDraft(token) {
   }, []);
 
   const persistRecovery = useCallback(() => {
-    if (!scopeRef.current) return;
+    if (!scopeRef.current) {
+      if (isMountedRef.current) setHasRecoveryWarning(true);
+      return;
+    }
     if (!pendingMutationRef.current && !hasChanges(queuedChangesRef.current)) {
       clearChecklistDraftRecovery(scopeRef.current);
       if (isMountedRef.current) setHasRecoveryWarning(false);
@@ -213,9 +217,11 @@ export function usePublicChecklistDraft(token) {
       setCurrentSaveState(checklistSaveStates.LOADING);
     }
     try {
-      const [scope, result] = await Promise.all([checklistDraftRecoveryScope(token), getPublicChecklist(token)]);
+      const [scope, result] = await Promise.all([checklistDraftRecoveryScopeBounded(token), getPublicChecklist(token)]);
       if (!isMountedRef.current) return;
       scopeRef.current = scope;
+      setHasRecoveryWarning(!scope);
+      setLoadDiagnostics(result?.diagnostics || null);
       if (!result?.checklist || !validDraft(result?.draft)) throw new Error("Checklist response was invalid.");
       if (discardRecovery && scope) clearChecklistDraftRecovery(scope);
 
@@ -270,6 +276,14 @@ export function usePublicChecklistDraft(token) {
       if (!isMountedRef.current) return;
       setIsLoading(false);
       setLoadError(error?.code || "checklist_unavailable");
+      setLoadDiagnostics(error?.diagnostics || {
+        capabilityResolutionMs: null,
+        capabilityResult: "error",
+        draftLoadMs: null,
+        draftResult: "unknown",
+        errorStage: error?.stage || "request",
+        errorCode: error?.code || "unknown",
+      });
       setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
     }
   }, [persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
@@ -413,6 +427,7 @@ export function usePublicChecklistDraft(token) {
   return {
     checklist,
     draft,
+    loadDiagnostics,
     isLoading,
     loadError,
     saveState,

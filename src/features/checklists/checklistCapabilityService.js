@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../services/firebase/client.js";
+import { getPublicChecklistSessionId } from "./publicChecklistLoadDiagnostics.js";
 
 const getChecklistCapabilityCall = httpsCallable(functions, "getChecklistCapability");
 const issueChecklistCapabilityCall = httpsCallable(functions, "issueChecklistCapability");
@@ -10,10 +11,12 @@ export const maximumChecklistEvidenceSizeBytes = 5 * 1024 * 1024;
 export const acceptedChecklistEvidenceContentTypes = ["image/jpeg", "image/png", "image/webp"];
 
 export class PublicChecklistRequestError extends Error {
-  constructor(code, status) {
+  constructor(code, status, diagnostics = null, stage = "request") {
     super(code);
     this.code = code;
     this.status = status;
+    this.diagnostics = diagnostics;
+    this.stage = stage;
   }
 }
 
@@ -38,14 +41,26 @@ export async function revokeChecklistCapability(jobId) {
   return result.data?.capability || { state: "REVOKED" };
 }
 
-async function fetchPublicChecklist(input, init = {}) {
+async function fetchPublicChecklist(input, init = {}, readResponse = async (response) => response) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), publicChecklistRequestTimeoutMilliseconds);
+  let timeoutId;
+  let requestStage = "request";
+  const deadline = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new PublicChecklistRequestError("checklist_request_timeout", undefined, null, requestStage));
+    }, publicChecklistRequestTimeoutMilliseconds);
+  });
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    const request = (async () => {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      requestStage = "response-parse";
+      return readResponse(response);
+    })();
+    return await Promise.race([request, deadline]);
   } catch (error) {
-    if (controller.signal.aborted) {
-      throw new PublicChecklistRequestError("checklist_request_timeout");
+    if (controller.signal.aborted && error?.code !== "checklist_request_timeout") {
+      throw new PublicChecklistRequestError("checklist_request_timeout", undefined, null, requestStage);
     }
     throw error;
   } finally {
@@ -53,16 +68,34 @@ async function fetchPublicChecklist(input, init = {}) {
   }
 }
 
-async function requestPublicChecklist(token) {
-  const response = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
-    headers: { Accept: "application/json" },
-    credentials: "omit",
-  });
+async function readJsonResponse(response) {
   let body = {};
-  try { body = await response.json(); } catch { /* response status is sufficient */ }
-  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status);
+  try {
+    body = await response.json();
+  } catch {
+    throw new PublicChecklistRequestError(
+      response.ok ? "checklist_response_invalid" : "checklist_unavailable",
+      response.status,
+      null,
+      "response-parse",
+    );
+  }
+  if (!response.ok) {
+    throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status, body.diagnostics);
+  }
+  return body;
+}
+
+async function requestPublicChecklist(token) {
+  const body = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
+    headers: {
+      Accept: "application/json",
+      "X-CleanFlow-Checklist-Session": getPublicChecklistSessionId(),
+    },
+    credentials: "omit",
+  }, readJsonResponse);
   if (!body.checklist || typeof body.checklist !== "object" || !body.draft || typeof body.draft !== "object") {
-    throw new PublicChecklistRequestError("checklist_unavailable");
+    throw new PublicChecklistRequestError("checklist_unavailable", undefined, body.diagnostics);
   }
   return body;
 }
@@ -84,7 +117,7 @@ export function validateChecklistEvidenceFile(file) {
 
 export async function uploadPublicChecklistEvidence({ token, requirementId, file }) {
   validateChecklistEvidenceFile(file);
-  const response = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
+  const body = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
     method: "PUT",
     headers: {
       "Content-Type": file.type,
@@ -93,37 +126,32 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
     },
     credentials: "omit",
     body: file,
+  }, async (response) => {
+    let result = {};
+    try { result = await response.json(); } catch { /* response status maps to a safe generic error */ }
+    if (!response.ok) throw new PublicChecklistRequestError(result.error || "checklist_photo_unavailable", response.status);
+    return result;
   });
-  let body = {};
-  try { body = await response.json(); } catch { /* response status maps to a safe generic error */ }
-  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_photo_unavailable", response.status);
   if (!Array.isArray(body.evidence)) throw new PublicChecklistRequestError("checklist_photo_unavailable");
   return body;
 }
 
 export async function savePublicChecklistDraft({ token, mutationId, baseRevision, changes }) {
-  const response = await fetchPublicChecklist(publicChecklistApiPath, {
+  return fetchPublicChecklist(publicChecklistApiPath, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     credentials: "omit",
     body: JSON.stringify({ token, mutationId, baseRevision, changes }),
-  });
-  let body = {};
-  try { body = await response.json(); } catch { /* status maps to a safe generic error */ }
-  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status);
-  return body;
+  }, readJsonResponse);
 }
 
 export async function readyPublicChecklistForReview({ token, submissionId, baseRevision }) {
-  const response = await fetchPublicChecklist(publicChecklistApiPath, {
+  const body = await fetchPublicChecklist(publicChecklistApiPath, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     credentials: "omit",
     body: JSON.stringify({ token, action: "READY_FOR_REVIEW", submissionId, baseRevision }),
-  });
-  let body = {};
-  try { body = await response.json(); } catch { /* status maps to a safe generic error */ }
-  if (!response.ok) throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status);
+  }, readJsonResponse);
   if (!body.checklist || typeof body.checklist !== "object" || !body.draft || typeof body.draft !== "object") {
     throw new PublicChecklistRequestError("checklist_unavailable");
   }

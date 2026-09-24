@@ -183,20 +183,47 @@ function capabilityDocumentFromPath(document, organizationId) {
 }
 
 export async function loadPublicChecklistCapability(database, { organizationId, tokenHash, now = new Date() }) {
+  const resolutionStartedAt = Date.now();
   const matches = await database.collectionGroup("checklistCapabilities")
     .where("tokenHash", "==", tokenHash).limit(2).get();
-  if (matches.size !== 1) return { state: "not-found" };
+  if (matches.size !== 1) {
+    return {
+      state: "not-found",
+      diagnostics: {
+        capabilityResolutionMs: Date.now() - resolutionStartedAt,
+        capabilityResult: "not-found",
+        draftLoadMs: null,
+        draftResult: "not-started",
+      },
+    };
+  }
   const capabilityRef = matches.docs[0].ref;
   const location = capabilityDocumentFromPath(capabilityRef, organizationId);
-  if (!location) return { state: "not-found" };
+  if (!location) {
+    return {
+      state: "not-found",
+      diagnostics: {
+        capabilityResolutionMs: Date.now() - resolutionStartedAt,
+        capabilityResult: "not-found",
+        draftLoadMs: null,
+        draftResult: "not-started",
+      },
+    };
+  }
 
-  return database.runTransaction(async (transaction) => {
+  let draftLoadMs = null;
+  const result = await database.runTransaction(async (transaction) => {
     const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
+    const draftStartedAt = Date.now();
+    const draftPromise = transaction.get(draftRef).then((snapshot) => {
+      draftLoadMs = Date.now() - draftStartedAt;
+      return snapshot;
+    });
     const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot] = await Promise.all([
       transaction.get(capabilityRef),
       transaction.get(jobReference(database, organizationId, location.jobId)),
       transaction.get(runReference(database, organizationId, location.jobId, location.runId)),
-      transaction.get(draftRef),
+      draftPromise,
     ]);
     if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) return { state: "not-found" };
     const capability = capabilitySnapshot.data();
@@ -211,6 +238,17 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
       ),
     };
   });
+
+  const capabilityResult = result.state === "active" ? "active" : result.state;
+  return {
+    ...result,
+    diagnostics: {
+      capabilityResolutionMs: Date.now() - resolutionStartedAt,
+      capabilityResult,
+      draftLoadMs,
+      draftResult: result.state === "active" ? "loaded" : draftLoadMs === null ? "not-started" : "unknown",
+    },
+  };
 }
 
 /**
