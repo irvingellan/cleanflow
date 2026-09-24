@@ -158,8 +158,22 @@ E2E tests passed; build and diff checks passed.
   creates one stable, hash-identified delivery record; a separate Firestore
   trigger claims it once, rechecks active manager membership for eligible
   devices, and sends generic EN/PT/ES copy to the authenticated app home. FCM
-  acceptance does not prove display on a device. This notification change is
-  not deployed yet.
+  acceptance does not prove display on a device. After an initial Eventarc
+  service-agent permission-propagation failure, the targeted deployment from
+  `9455ff9` succeeded: `notifyManagersChecklistReadyForReview` is ACTIVE with
+  the intended Firestore document-created filter on the Run's
+  `managerNotificationDeliveries` subcollection, `retry: false`, and a
+  60-second timeout. `publicChecklist` was then updated from the same commit.
+  Hosting, Rules, Storage, indexes, and scheduled reminders were not deployed.
+  App smoke returned HTTP 200 and a synthetic invalid checklist token returned
+  404. No real handoff or push was triggered, so phone delivery is unverified.
+- Public cleaner Offers now carry an optional manager-confirmed
+  `offeredCompensation` snapshot. The manager's copyable WhatsApp message and
+  `/offer/:token` show that same amount, or an explicit “Amount not set / To be
+  agreed” state. Only pre-snapshot legacy single-cleaner Offers may fall back
+  to Job `cleanerPayout`; schema-v2 Job totals are never treated as per-cleaner
+  compensation. Interest/decline and manager-controlled Assignment behavior are
+  unchanged. This change is committed but not deployed.
 - Cleaner review submission and explicit manager approval/Job completion exist
   in the current implementation. Automatic email/WhatsApp delivery does not.
 - The preferred future workflow is: a manager manually shares a secure

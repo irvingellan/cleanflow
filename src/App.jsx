@@ -33,6 +33,7 @@ import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningC
 import { ChecklistRunDetail } from "./features/checklists/ChecklistRunDetail.jsx";
 import { PublicChecklistPage } from "./features/checklists/PublicChecklistPage.jsx";
 import { PublicClientReportPage } from "./features/checklists/PublicClientReportPage.jsx";
+import { PublicOfferCompensation } from "./features/public-offers/PublicOfferCompensation.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
@@ -310,12 +311,11 @@ function PublicOfferPage({ token }) {
               {offer.scheduledStart && (
                 <DetailItem label={translate("publicOffer.startTime")} value={offer.scheduledStart} />
               )}
-              {offer.cleanerPayout !== null && offer.cleanerPayout !== undefined && (
-                <DetailItem
-                  label={translate("publicOffer.yourPayment")}
-                  value={formatPrice(offer.cleanerPayout, translate, language)}
-                />
-              )}
+              <PublicOfferCompensation
+                amount={offer.offeredCompensation !== undefined
+                  ? offer.offeredCompensation
+                  : offer.cleanerPayout}
+              />
               <DetailItem
                 label={translate("publicOffer.status")}
                 value={formatStatus(offer.status, translate)}

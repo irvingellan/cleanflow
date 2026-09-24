@@ -40,6 +40,15 @@ Interest never automatically assigns a Job. `accepted` is not an Offer status.
 Cleaners must not see competing Offers, responses, assignment count, or another
 cleaner's compensation.
 
+**CURRENT public Offer handoff:** before creating or replacing a pending
+cleaner's public link, the manager confirms that cleaner's offered amount. The
+amount is snapshotted on the Offer and is shown both on `/offer/:token` and in
+the copyable manual WhatsApp message. If it remains blank, both show an explicit
+“Amount not set / To be agreed” value. Only an older single-cleaner Offer with
+no amount snapshot may fall back to its legacy Job payout; Assignment-aware Job
+totals are not divided or treated as individual compensation. Interest/decline
+and manager-controlled Assignment behavior are unchanged.
+
 ## Normal and team Job execution
 
 **CURRENT:** most Jobs use one Cleaner. Legacy Jobs use one assigned-Cleaner

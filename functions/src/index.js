@@ -401,10 +401,28 @@ export function publicOfferResult(offerData, jobData) {
     status: offerData.status,
   };
 
-  // Legacy Job payouts remain part of the existing public offer contract; v2
-  // compensation belongs to Assignments and is intentionally not defined yet.
+  // The per-cleaner Offer snapshot is authoritative. Versionless/v1 Offers
+  // without a snapshot retain the old single-cleaner Job payout fallback; a v2
+  // Job-level amount is ambiguous and must never be presented as each cleaner's.
+  const hasOfferCompensation = Object.prototype.hasOwnProperty.call(
+    offerData,
+    "offeredCompensation",
+  );
+  const legacyFallback = !isAssignmentAwareJobData(jobData)
+    ? jobData.cleanerPayout
+    : null;
+  const offeredCompensation = hasOfferCompensation
+    ? offerData.offeredCompensation
+    : legacyFallback;
+  const safeOfferedCompensation = typeof offeredCompensation === "number" &&
+      Number.isFinite(offeredCompensation) && offeredCompensation >= 0
+    ? offeredCompensation
+    : null;
+
+  offer.offeredCompensation = safeOfferedCompensation;
+  // Keep the existing legacy wire field for old clients during rollout.
   if (!isAssignmentAwareJobData(jobData)) {
-    offer.cleanerPayout = jobData.cleanerPayout ?? null;
+    offer.cleanerPayout = safeOfferedCompensation;
   }
 
   return {

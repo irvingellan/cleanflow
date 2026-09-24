@@ -401,7 +401,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }
   }
 
-  async function createCleanerOfferLink(offer) {
+  async function createCleanerOfferLink(offer, offeredCompensation) {
     if (!selectedJob) {
       throw new Error("No job selected.");
     }
@@ -409,6 +409,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return createPublicOfferLink({
       jobId: selectedJob.id,
       cleanerId: offer.cleanerId,
+      offeredCompensation,
     });
   }
 

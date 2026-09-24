@@ -1119,9 +1119,10 @@ test("client report denies expired, unknown, malformed, and unauthorized manager
 test("public capability GET/response remains independent of auth and only updates its resolved offer", async () => {
   const token = Buffer.alloc(32, 7).toString("base64url");
   const job = admin.doc(`${root}/jobs/public-job`);
-  await job.set({ schemaVersion: 2, operationalStatus: "OFFERED", assignedCleanerIds: [], propertyName: "Fixture Property", clientPrice: 200 });
+  await job.set({ schemaVersion: 2, operationalStatus: "OFFERED", assignedCleanerIds: [], propertyName: "Fixture Property", clientPrice: 200, cleanerPayout: 500 });
   await job.collection("offers").doc("cleaner").set({
     status: "PENDING", cleanerId: "cleaner", publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+    offeredCompensation: 125,
     publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
   });
   async function http(method, query = {}, body = {}) {
@@ -1133,11 +1134,26 @@ test("public capability GET/response remains independent of auth and only update
   const loaded = await http("GET", { token });
   assert.equal(loaded.code, 200);
   assert.equal(loaded.body.offer.propertyName, "Fixture Property");
+  assert.equal(loaded.body.offer.offeredCompensation, 125);
+  assert.equal(loaded.body.offer.cleanerPayout, undefined);
   assert.equal(loaded.body.offer.clientPrice, undefined);
   assert.equal((await http("GET", { token: "invalid" })).code, 404);
   assert.equal((await http("POST", {}, { token, status: "INTERESTED" })).code, 200);
   assert.equal((await job.collection("offers").doc("cleaner").get()).data().status, "INTERESTED");
+  const declineToken = Buffer.alloc(32, 8).toString("base64url");
+  await job.collection("offers").doc("cleaner-decline").set({
+    status: "PENDING",
+    cleanerId: "cleaner-decline",
+    publicOfferTokenHash: createHash("sha256").update(declineToken).digest("hex"),
+    publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+  });
+  assert.equal((await http("POST", {}, { token: declineToken, status: "DECLINED" })).code, 200);
+  assert.equal((await job.collection("offers").doc("cleaner-decline").get()).data().status, "DECLINED");
   assert.deepEqual((await job.get()).data(), beforeJob);
   assert.equal((await job.collection("assignments").get()).size, 0);
   await assertFails(account("outsider").firestore().doc(`${root}/jobs/public-job/offers/cleaner`).get());
+  await assertSucceeds(account("manager").firestore()
+    .doc(`${root}/jobs/public-job/offers/cleaner`).update({ offeredCompensation: 125 }));
+  await assertFails(account("outsider").firestore()
+    .doc(`${root}/jobs/public-job/offers/cleaner`).update({ offeredCompensation: 1 }));
 });

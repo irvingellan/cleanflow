@@ -181,9 +181,19 @@ Conceptual statuses:
 `accepted` is intentionally not an Offer status. The Cleaner expresses
 interest; the manager creates one or more Assignments.
 
-For future individual compensation, an Offer may carry only the safe proposed
-compensation relevant to its recipient. It must not expose client charges,
-profit, other cleaner compensation, internal notes, or competing Offers.
+An Offer may carry only the safe proposed compensation relevant to its
+recipient. That proposed amount is not an Assignment payout or a record of
+payment. It must not expose client charges, profit, other cleaner compensation,
+internal notes, or competing Offers.
+
+**CURRENT offer-link behavior:** `offeredCompensation` is an optional per-Offer
+amount snapshot, confirmed by the manager when creating or replacing that
+cleaner's public link. Later Job or Property price edits do not rewrite it. A
+blank value stays unset and is shown as “Amount not set / To be agreed”; it is
+not zero and is not a record of payment. Versionless/schema-v1 legacy Offers
+without a snapshot may retain the existing single-cleaner Job `cleanerPayout`
+fallback. An Assignment-aware Job's Job-level payout is never inferred as each
+cleaner's offered amount.
 
 ## Pricing, hours, and compensation
 

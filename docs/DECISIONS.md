@@ -357,7 +357,14 @@ Cleaner offer links must not grant anonymous Firestore access. An authenticated 
 
 The public Function may update only its linked offer from `PENDING` to `INTERESTED` or `DECLINED`; this response never assigns a Job. The Function enforces a seven-day prototype expiry. A legacy Job must remain `OFFERED`; an Assignment-aware Job may remain available through `ASSIGNED` so the manager can build a pre-start team roster, but becomes unavailable at `IN_PROGRESS`. These checks are intentionally centralized so later lifecycle-based expiry rules can replace or extend the initial duration.
 
-The public projection excludes client price, generic manager notes, property access data, other cleaners and other offers. Firestore rules remain authenticated-manager-only until narrower role authorization is designed.
+The public projection may include only the snapshotted `offeredCompensation` for
+the linked Cleaner. A pre-snapshot legacy Offer may use its single-cleaner Job
+`cleanerPayout` fallback; Assignment-aware Job-level amounts are ambiguous and
+must not be exposed as each cleaner's compensation. This amount is an offer, not
+a paid-state record. The projection excludes client price, margin, generic
+manager notes, property access data, other cleaners and other Offers. Firestore
+rules remain authenticated-manager-only until narrower role authorization is
+designed.
 
 ---
 

@@ -3461,6 +3461,70 @@ button.summary-card {
   grid-column: 1 / -1;
 }
 
+.offer-compensation-form,
+.public-offer-link-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.offer-compensation-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.offer-compensation-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-brand-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.offer-compensation-form input {
+  width: min(100%, 240px);
+  border: 1px solid var(--color-input-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.offer-compensation-form__help,
+.offer-compensation-warning {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.offer-compensation-form__help {
+  color: var(--color-muted);
+}
+
+.offer-compensation-warning {
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--color-warning-text);
+  background: var(--color-status-warning-bg);
+}
+
+.public-offer-link-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.public-offer-link-actions .offer-compensation-warning,
+.public-offer-link-actions .form-error,
+.public-offer-link-actions .offer-compensation-summary {
+  grid-column: 1 / -1;
+}
+
+.offer-compensation-summary {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
 .public-offer-link {
   color: var(--color-brand);
   font-size: 0.8125rem;

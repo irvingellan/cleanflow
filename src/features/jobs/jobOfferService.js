@@ -164,7 +164,18 @@ export async function createJobOffers({ jobId, cleaners }) {
   return jobFromSnapshot(snapshot);
 }
 
-export async function createPublicOfferLink({ jobId, cleanerId }) {
+export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensation }) {
+  if (
+    offeredCompensation !== null &&
+    (typeof offeredCompensation !== "number" ||
+      !Number.isFinite(offeredCompensation) ||
+      offeredCompensation < 0)
+  ) {
+    const error = new Error("Offered compensation must be explicit and non-negative.");
+    error.code = "invalid-offered-compensation";
+    throw error;
+  }
+
   const token = createPublicOfferToken();
   const tokenHash = await hashPublicOfferToken(token);
   const expiresAt = Timestamp.fromMillis(Date.now() + publicOfferTokenLifetimeMilliseconds);
@@ -193,10 +204,12 @@ export async function createPublicOfferLink({ jobId, cleanerId }) {
     transaction.update(offerReference, {
       publicOfferTokenHash: tokenHash,
       publicOfferExpiresAt: expiresAt,
+      offeredCompensation,
     });
   });
 
   return {
     url: new URL(`/offer/${token}`, window.location.origin).toString(),
+    offeredCompensation,
   };
 }

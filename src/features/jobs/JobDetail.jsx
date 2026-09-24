@@ -31,6 +31,11 @@ import {
   buildCleanerReminderMessage,
   copyCleanerReminderMessage,
 } from "./cleanerReminderMessage.js";
+import {
+  buildCleanerOfferMessage,
+  getOfferCompensationSuggestion,
+  parseOfferCompensationInput,
+} from "./offerCompensation.js";
 
 export function JobDetail({
   job,
@@ -96,6 +101,11 @@ export function JobDetail({
   const [isCreatingPublicOfferLinkFor, setIsCreatingPublicOfferLinkFor] =
     useState(null);
   const [publicOfferLinkError, setPublicOfferLinkError] = useState(null);
+  const [editingOfferCompensationFor, setEditingOfferCompensationFor] = useState(null);
+  const [offerCompensationInput, setOfferCompensationInput] = useState("");
+  const [offerCompensationErrorFor, setOfferCompensationErrorFor] = useState(null);
+  const [copiedOfferMessageId, setCopiedOfferMessageId] = useState(null);
+  const [offerMessageCopyErrorId, setOfferMessageCopyErrorId] = useState(null);
   const [isStartingCleaning, setIsStartingCleaning] = useState(false);
   const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
   const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
@@ -223,6 +233,15 @@ export function JobDetail({
     setHasSavedPrices(false);
   }, [job.id]);
 
+  useEffect(() => {
+    setPublicOfferLink(null);
+    setPublicOfferLinkError(null);
+    setEditingOfferCompensationFor(null);
+    setOfferCompensationErrorFor(null);
+    setCopiedOfferMessageId(null);
+    setOfferMessageCopyErrorId(null);
+  }, [job.id]);
+
   function startPriceEdit() {
     setPriceValues({
       clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
@@ -307,17 +326,65 @@ export function JobDetail({
     }
   }
 
-  async function createOfferLink(offer) {
+  function openOfferLinkForm(offer) {
+    const offerWithRecentSnapshot = publicOfferLink?.offerId === offer.id
+      ? { ...offer, offeredCompensation: publicOfferLink.offeredCompensation ?? null }
+      : offer;
+    const suggestion = getOfferCompensationSuggestion(job, offerWithRecentSnapshot);
+    setOfferCompensationInput(suggestion.value);
+    setEditingOfferCompensationFor(offer.id);
+    setOfferCompensationErrorFor(null);
+    setPublicOfferLinkError(null);
+  }
+
+  async function createOfferLink(event, offer) {
+    event.preventDefault();
+
+    let offeredCompensation;
+    try {
+      offeredCompensation = parseOfferCompensationInput(offerCompensationInput);
+    } catch {
+      setOfferCompensationErrorFor(offer.id);
+      return;
+    }
+
     setIsCreatingPublicOfferLinkFor(offer.id);
     setPublicOfferLinkError(null);
+    setOfferCompensationErrorFor(null);
 
     try {
-      const link = await onCreatePublicOfferLink(offer);
+      const link = await onCreatePublicOfferLink(offer, offeredCompensation);
       setPublicOfferLink({ offerId: offer.id, ...link });
+      setEditingOfferCompensationFor(null);
     } catch {
       setPublicOfferLinkError(offer.id);
     } finally {
       setIsCreatingPublicOfferLinkFor(null);
+    }
+  }
+
+  async function copyOfferMessage(offer, cleanerName) {
+    if (!publicOfferLink?.url || publicOfferLink.offerId !== offer.id) {
+      return;
+    }
+
+    setOfferMessageCopyErrorId(null);
+    setCopiedOfferMessageId(null);
+
+    try {
+      await copyCleanerReminderMessage(buildCleanerOfferMessage({
+        cleanerName,
+        propertyName: job.propertyName || translate("properties.unnamed"),
+        scheduledDate: job.scheduledDate,
+        scheduledStart: job.scheduledStart,
+        offeredCompensation: publicOfferLink.offeredCompensation ?? null,
+        publicUrl: publicOfferLink.url,
+        language,
+        translate,
+      }));
+      setCopiedOfferMessageId(offer.id);
+    } catch {
+      setOfferMessageCopyErrorId(offer.id);
     }
   }
 
@@ -1032,6 +1099,8 @@ export function JobDetail({
                 (!isAssignmentAware
                   ? job.operationalStatus === "OFFERED"
                   : ["OFFERED", "ASSIGNED"].includes(job.operationalStatus));
+              const compensationSuggestion = getOfferCompensationSuggestion(job, offer);
+              const isEditingOfferCompensation = editingOfferCompensationFor === offer.id;
 
               return (
                 <article key={offer.id} className="offer-status-item">
@@ -1054,16 +1123,14 @@ export function JobDetail({
                   </span>
                   {canManageOffers && (
                     <div className="offer-status-actions">
-                      {canCreatePublicLink && (
+                      {canCreatePublicLink && !isEditingOfferCompensation && (
                         <button
                           className="button"
                           type="button"
                           disabled={isCreatingPublicOfferLinkFor !== null}
-                          onClick={() => createOfferLink(offer)}
+                          onClick={() => openOfferLinkForm(offer)}
                         >
-                          {isCreatingPublicOfferLinkFor === offer.id
-                            ? translate("offers.creatingPublicLink")
-                            : translate("offers.createPublicLink")}
+                          {translate("offers.createPublicLink")}
                         </button>
                       )}
                       {offer.status === "INTERESTED" &&
@@ -1083,15 +1150,97 @@ export function JobDetail({
                       )}
                     </div>
                   )}
-                  {publicOfferLink?.offerId === offer.id && (
-                    <a
-                      className="public-offer-link"
-                      href={publicOfferLink.url}
-                      target="_blank"
-                      rel="noreferrer"
+                  {canManageOffers && canCreatePublicLink && isEditingOfferCompensation && (
+                    <form
+                      className="offer-compensation-form"
+                      onSubmit={(event) => createOfferLink(event, offer)}
                     >
-                      {translate("offers.openPublicLink")}
-                    </a>
+                      <label>
+                        {translate("offers.offeredCompensation")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={offerCompensationInput}
+                          onChange={(event) => {
+                            setOfferCompensationInput(event.target.value);
+                            setOfferCompensationErrorFor(null);
+                          }}
+                        />
+                      </label>
+                      <p className="offer-compensation-form__help">
+                        {compensationSuggestion.source === "legacy-job"
+                          ? translate("offers.legacyAmountSuggestion")
+                          : translate("offers.amountHelper")}
+                      </p>
+                      {!offerCompensationInput.trim() && (
+                        <p className="offer-compensation-warning" role="status">
+                          {translate("offers.amountNotSetWarning")}
+                        </p>
+                      )}
+                      {offerCompensationErrorFor === offer.id && (
+                        <p className="form-error" role="alert">
+                          {translate("offers.amountInvalid")}
+                        </p>
+                      )}
+                      <div className="offer-compensation-form__actions">
+                        <button
+                          className="button button--primary"
+                          type="submit"
+                          disabled={isCreatingPublicOfferLinkFor !== null}
+                        >
+                          {isCreatingPublicOfferLinkFor === offer.id
+                            ? translate("offers.creatingPublicLink")
+                            : translate("offers.createPublicLink")}
+                        </button>
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={isCreatingPublicOfferLinkFor === offer.id}
+                          onClick={() => setEditingOfferCompensationFor(null)}
+                        >
+                          {translate("offers.cancel")}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                  {publicOfferLink?.offerId === offer.id && !isEditingOfferCompensation && (
+                    <div className="public-offer-link-actions">
+                      <a
+                        className="public-offer-link"
+                        href={publicOfferLink.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {translate("offers.openPublicLink")}
+                      </a>
+                      <p className="offer-compensation-summary">
+                        <strong>{translate("offers.offeredCompensation")}:</strong>{" "}
+                        {hasValue(publicOfferLink.offeredCompensation)
+                          ? formatPrice(publicOfferLink.offeredCompensation, translate, language)
+                          : translate("publicOffer.amountNotSet")}
+                      </p>
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => copyOfferMessage(offer, offerCleanerName)}
+                      >
+                        {copiedOfferMessageId === offer.id
+                          ? translate("offers.offerMessageCopied")
+                          : translate("offers.copyOfferMessage")}
+                      </button>
+                      {!hasValue(publicOfferLink.offeredCompensation) && (
+                        <p className="offer-compensation-warning" role="status">
+                          {translate("offers.amountNotSetWarning")}
+                        </p>
+                      )}
+                      {offerMessageCopyErrorId === offer.id && (
+                        <p className="form-error" role="alert">
+                          {translate("offers.offerMessageCopyError")}
+                        </p>
+                      )}
+                    </div>
                   )}
                   {publicOfferLinkError === offer.id && (
                     <p className="form-error" role="alert">
