@@ -68,8 +68,8 @@ function isOnline() {
 }
 
 function isUnavailable(error) {
-  return error?.status === 404 || error?.status === 410
-    || error?.code === "checklist_not_found" || error?.code === "checklist_unavailable";
+  if (Number.isInteger(error?.status)) return error.status === 404 || error.status === 410;
+  return error?.code === "checklist_not_found" || error?.code === "checklist_unavailable";
 }
 
 function isRevisionConflict(error) {
@@ -100,6 +100,7 @@ export function usePublicChecklistDraft(token) {
   const [isResolvingConflict, setIsResolvingConflict] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewError, setReviewError] = useState(null);
+  const [reviewRequirements, setReviewRequirements] = useState(null);
   const scopeRef = useRef(null);
   const pendingMutationRef = useRef(null);
   const queuedChangesRef = useRef({});
@@ -275,7 +276,8 @@ export function usePublicChecklistDraft(token) {
     } catch (error) {
       if (!isMountedRef.current) return;
       setIsLoading(false);
-      setLoadError(error?.code || "checklist_unavailable");
+      const terminalUnavailable = isUnavailable(error);
+      setLoadError(terminalUnavailable ? error?.code || "checklist_unavailable" : "checklist_request_failed");
       setLoadDiagnostics(error?.diagnostics || {
         capabilityResolutionMs: null,
         capabilityResult: "error",
@@ -284,7 +286,7 @@ export function usePublicChecklistDraft(token) {
         errorStage: error?.stage || "request",
         errorCode: error?.code || "unknown",
       });
-      setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
+      setCurrentSaveState(terminalUnavailable ? checklistSaveStates.UNAVAILABLE : checklistSaveStates.RETRY);
     }
   }, [persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
 
@@ -310,6 +312,8 @@ export function usePublicChecklistDraft(token) {
       || saveStateRef.current === checklistSaveStates.CONFLICT
       || saveStateRef.current === checklistSaveStates.READY_FOR_REVIEW
       || isSubmittingReviewRef.current) return;
+    setReviewError(null);
+    setReviewRequirements(null);
     setVisibleDraft(mergeChecklistChanges(draftRef.current, changes));
     if (pendingMutationRef.current) {
       queuedChangesRef.current = mergeSparseChecklistChanges(queuedChangesRef.current, changes);
@@ -328,7 +332,7 @@ export function usePublicChecklistDraft(token) {
     } else {
       flushRef.current?.();
     }
-  }, [persistRecovery, setCurrentSaveState, setVisibleDraft]);
+  }, [persistRecovery, setCurrentSaveState, setReviewError, setReviewRequirements, setVisibleDraft]);
 
   const retrySave = useCallback(() => {
     if ([checklistSaveStates.CONFLICT, checklistSaveStates.UNAVAILABLE, checklistSaveStates.READY_FOR_REVIEW].includes(saveStateRef.current)) return;
@@ -386,6 +390,7 @@ export function usePublicChecklistDraft(token) {
     if (isMountedRef.current) {
       setIsSubmittingReview(true);
       setReviewError(null);
+      setReviewRequirements(null);
     }
     const submission = reviewSubmissionRef.current || {
       submissionId: createMutationId(),
@@ -408,6 +413,14 @@ export function usePublicChecklistDraft(token) {
     } catch (error) {
       if (isUnavailable(error)) {
         setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
+      } else if (error?.status === 422 && error?.code === "checklist_requirements_missing") {
+        // The server confirms no transition was committed. A later edit uses
+        // a new submission ID/base revision; answers and the active link stay usable.
+        reviewSubmissionRef.current = null;
+        if (isMountedRef.current) {
+          setReviewError(error.code);
+          setReviewRequirements(error.requirements || null);
+        }
       } else if (isRevisionConflict(error)) {
         // The authoritative draft changed before handoff. Refresh rather than
         // guessing how to reconcile a terminal review transition.
@@ -435,11 +448,13 @@ export function usePublicChecklistDraft(token) {
     isResolvingConflict,
     isSubmittingReview,
     reviewError,
+    reviewRequirements,
     queueChanges,
     retrySave,
     saveNow: retrySave,
     discardLocalChanges,
     reapplyLocalChanges,
     submitForManagerReview,
+    retryLoad: load,
   };
 }

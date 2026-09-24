@@ -321,9 +321,13 @@ function configureResponse(response) {
   response.set("X-Content-Type-Options", "nosniff");
 }
 
-function sendPublicError(response, status, error, diagnostics = null) {
+function sendPublicError(response, status, error, diagnostics = null, requirements = null) {
   configureResponse(response);
-  response.status(status).json({ error, ...(diagnostics ? { diagnostics } : {}) });
+  response.status(status).json({
+    error,
+    ...(diagnostics ? { diagnostics } : {}),
+    ...(requirements ? { requirements } : {}),
+  });
 }
 
 function isAssignmentAwareJobData(jobData) {
@@ -1200,6 +1204,7 @@ export const publicChecklist = onRequest(
       }
       if (request.method === "POST") {
         const action = request.body?.action;
+        requestStage = action === "READY_FOR_REVIEW" ? "review-submission" : "draft-save";
         if (action && action !== "READY_FOR_REVIEW") {
           sendPublicError(response, 400, "checklist_unavailable");
           return;
@@ -1223,6 +1228,7 @@ export const publicChecklist = onRequest(
         return;
       }
       if (request.method === "PUT") {
+        requestStage = "evidence-upload";
         const result = await uploadPublicChecklistEvidence(db, {
           organizationId,
           tokenHash: hashToken(token),
@@ -1236,6 +1242,7 @@ export const publicChecklist = onRequest(
       }
       const evidenceItem = request.query.evidenceItem;
       if (typeof evidenceItem === "string" && evidenceItem) {
+        requestStage = "evidence-download";
         const evidence = await downloadPublicChecklistEvidence(db, {
           organizationId,
           tokenHash: hashToken(token),
@@ -1246,6 +1253,7 @@ export const publicChecklist = onRequest(
         response.status(200).send(evidence.bytes);
         return;
       }
+      requestStage = "capability-resolution";
       capabilityStartedAt = Date.now();
       const result = await loadPublicChecklistCapability(db, {
         organizationId,
@@ -1296,7 +1304,7 @@ export const publicChecklist = onRequest(
       const diagnostics = {
         capabilityResolutionMs: capabilityDiagnostics?.capabilityResolutionMs
           ?? (requestStage === "capability-resolution" && capabilityStartedAt !== null ? Date.now() - capabilityStartedAt : null),
-        capabilityResult: capabilityDiagnostics?.capabilityResult || (requestStage === "capability-resolution" ? "error" : "active"),
+        capabilityResult: capabilityDiagnostics?.capabilityResult || (requestStage === "capability-resolution" ? "error" : "unknown"),
         draftLoadMs: capabilityDiagnostics?.draftLoadMs ?? null,
         draftResult: capabilityDiagnostics?.draftResult || "unknown",
         errorStage: requestStage,
@@ -1307,13 +1315,26 @@ export const publicChecklist = onRequest(
         stage: requestStage,
         code: errorCode,
       });
-      const status = error?.code === "invalid-argument" ? 400
+      const hasRequirementGaps = error?.details?.reason === "checklist-requirements-missing";
+      const requirements = hasRequirementGaps ? {
+        missingChecklistCount: error.details.missingChecklistCount,
+        missingInventoryCount: error.details.missingInventoryCount,
+        missingPhotoCount: error.details.missingPhotoCount,
+      } : null;
+      const status = hasRequirementGaps ? 422
+        : error?.code === "invalid-argument" ? 400
         : error?.code === "not-found" ? 404
           : error?.code === "already-exists" ? 409
             : error?.code === "aborted" ? 409
               : error?.code === "failed-precondition" ? 410
                 : 500;
-      sendPublicError(response, status, status === 404 ? "checklist_not_found" : "checklist_unavailable", diagnostics);
+      const publicError = status === 404 ? "checklist_not_found"
+        : status === 410 ? "checklist_unavailable"
+          : status === 409 ? "checklist_conflict"
+            : status === 422 ? "checklist_requirements_missing"
+              : status >= 500 ? "checklist_request_failed"
+                : "checklist_request_invalid";
+      sendPublicError(response, status, publicError, diagnostics, requirements);
     }
   },
 );

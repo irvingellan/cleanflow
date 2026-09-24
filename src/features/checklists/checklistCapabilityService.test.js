@@ -90,4 +90,42 @@ describe("public checklist requests", () => {
       body: expect.stringContaining("READY_FOR_REVIEW"),
     }));
   });
+
+  it("preserves actionable 422 requirements instead of treating them as link failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        error: "checklist_requirements_missing",
+        requirements: { missingChecklistCount: 2, missingInventoryCount: 1, missingPhotoCount: 1 },
+      }),
+    }));
+    await expect(readyPublicChecklistForReview({
+      token: "opaque-token", submissionId: "review-submission-0001", baseRevision: 2,
+    })).rejects.toMatchObject({
+      code: "checklist_requirements_missing",
+      status: 422,
+      requirements: { missingChecklistCount: 2, missingInventoryCount: 1, missingPhotoCount: 1 },
+    });
+  });
+
+  it("keeps conflicts and uncertain server failures distinct from invalid capabilities", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 409, json: async () => { throw new Error("not JSON"); } })
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => { throw new Error("not JSON"); } });
+    vi.stubGlobal("fetch", fetchMock);
+    const request = { token: "opaque-token", submissionId: "review-submission-0001", baseRevision: 2 };
+    await expect(readyPublicChecklistForReview(request)).rejects.toMatchObject({ code: "checklist_conflict", status: 409 });
+    await expect(readyPublicChecklistForReview(request)).rejects.toMatchObject({ code: "checklist_request_failed", status: 503 });
+  });
+
+  it("keeps confirmed invalid capabilities distinct from unreadable validation responses", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 410, json: async () => { throw new Error("not JSON"); } })
+      .mockResolvedValueOnce({ ok: false, status: 422, json: async () => { throw new Error("not JSON"); } });
+    vi.stubGlobal("fetch", fetchMock);
+    const request = { token: "opaque-token", submissionId: "review-submission-0001", baseRevision: 2 };
+    await expect(readyPublicChecklistForReview(request)).rejects.toMatchObject({ code: "checklist_unavailable", status: 410 });
+    await expect(readyPublicChecklistForReview(request)).rejects.toMatchObject({ code: "checklist_response_invalid", status: 422 });
+  });
 });

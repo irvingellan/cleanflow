@@ -11,12 +11,13 @@ export const maximumChecklistEvidenceSizeBytes = 5 * 1024 * 1024;
 export const acceptedChecklistEvidenceContentTypes = ["image/jpeg", "image/png", "image/webp"];
 
 export class PublicChecklistRequestError extends Error {
-  constructor(code, status, diagnostics = null, stage = "request") {
+  constructor(code, status, diagnostics = null, stage = "request", requirements = null) {
     super(code);
     this.code = code;
     this.status = status;
     this.diagnostics = diagnostics;
     this.stage = stage;
+    this.requirements = requirements;
   }
 }
 
@@ -74,16 +75,29 @@ async function readJsonResponse(response) {
     body = await response.json();
   } catch {
     throw new PublicChecklistRequestError(
-      response.ok ? "checklist_response_invalid" : "checklist_unavailable",
+      response.ok || response.status === 422
+        ? "checklist_response_invalid"
+        : errorCodeForStatus(response.status),
       response.status,
       null,
       "response-parse",
     );
   }
   if (!response.ok) {
-    throw new PublicChecklistRequestError(body.error || "checklist_unavailable", response.status, body.diagnostics);
+    throw new PublicChecklistRequestError(
+      body.error || "checklist_unavailable", response.status, body.diagnostics, "request", body.requirements,
+    );
   }
   return body;
+}
+
+function errorCodeForStatus(status) {
+  if (status === 404) return "checklist_not_found";
+  if (status === 410) return "checklist_unavailable";
+  if (status === 409) return "checklist_conflict";
+  if (status === 422) return "checklist_requirements_missing";
+  if (status >= 500) return "checklist_request_failed";
+  return "checklist_request_invalid";
 }
 
 async function requestPublicChecklist(token) {
@@ -95,7 +109,7 @@ async function requestPublicChecklist(token) {
     credentials: "omit",
   }, readJsonResponse);
   if (!body.checklist || typeof body.checklist !== "object" || !body.draft || typeof body.draft !== "object") {
-    throw new PublicChecklistRequestError("checklist_unavailable", undefined, body.diagnostics);
+    throw new PublicChecklistRequestError("checklist_response_invalid", undefined, body.diagnostics);
   }
   return body;
 }
@@ -153,7 +167,7 @@ export async function readyPublicChecklistForReview({ token, submissionId, baseR
     body: JSON.stringify({ token, action: "READY_FOR_REVIEW", submissionId, baseRevision }),
   }, readJsonResponse);
   if (!body.checklist || typeof body.checklist !== "object" || !body.draft || typeof body.draft !== "object") {
-    throw new PublicChecklistRequestError("checklist_unavailable");
+    throw new PublicChecklistRequestError("checklist_response_invalid");
   }
   return body;
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyChecklistDraftMutation,
   assertChecklistDraftReadyForReview,
+  checklistDraftReviewRequirements,
   checklistReadyForReviewRequestHash,
   normalizeChecklistDraftMutation,
   normalizeChecklistReadyForReviewRequest,
@@ -104,5 +105,19 @@ describe("Checklist draft definition boundary", () => {
     expect(() => normalizeChecklistReadyForReviewRequest({
       submissionId: "short", baseRevision: 1,
     })).toThrow();
+  });
+
+  it("requires every frozen checklist and inventory answer while allowing configured N/A", () => {
+    const incomplete = checklistDraftReviewRequirements(run, applyChecklistDraftMutation(run, null, mutation({
+      checklistAnswers: { normal: "DONE", optional: "NOT_APPLICABLE" },
+      inventoryAnswers: { soap: "UNANSWERED" },
+    })));
+    expect(incomplete).toMatchObject({ missingChecklistCount: 0, missingInventoryCount: 1 });
+
+    const complete = checklistDraftReviewRequirements(run, applyChecklistDraftMutation(run, null, mutation({
+      checklistAnswers: { normal: "DONE", optional: "NOT_APPLICABLE" },
+      inventoryAnswers: { soap: "LOW" },
+    })));
+    expect(complete).toMatchObject({ missingChecklistCount: 0, missingInventoryCount: 0 });
   });
 });

@@ -138,6 +138,12 @@ E2E tests passed; build and diff checks passed.
   payouts, access data, internal notes, private contact data, IDs, and token
   metadata. Links are manually shared; this report feature is not deployed by
   this change.
+- A 2026-09-24 review-handoff correction distinguishes incomplete frozen
+  checklist/inventory/photo requirements from invalid capabilities. Validation
+  feedback preserves the editable draft; a valid handoff is shown only after
+  the server confirms the persisted `READY_FOR_REVIEW` state. This correction
+  is not deployed, so the Sep 23 production incident is not yet confirmed
+  resolved; the earlier photo-upload failure also remains unverified.
 - Manager approval, final submission, email/WhatsApp delivery, and Job
   completion do not exist yet.
 - The preferred future workflow is: a manager manually shares a secure

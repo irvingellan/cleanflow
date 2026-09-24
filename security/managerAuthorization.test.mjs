@@ -331,9 +331,18 @@ async function seedEligibleChecklistJob({ checklistSettings } = {}) {
   await createChecklistRun.run(request("manager", { jobId: "job" }));
 }
 
+async function completeChecklistAnswers(jobId = "job") {
+  const run = (await admin.doc(`${root}/jobs/${jobId}/checklistRuns/initial`).get()).data();
+  const checklistAnswers = Object.fromEntries(run.resolvedDefinition.sections
+    .flatMap((section) => section.items.map((item) => [item.id, "DONE"])));
+  const inventoryAnswers = Object.fromEntries(run.resolvedDefinition.inventoryItems
+    .map((item) => [item.id, "HIGH"]));
+  return { checklistAnswers, inventoryAnswers };
+}
+
 async function publicChecklistGet(token, extraQuery = {}) {
   const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
-  await publicChecklist({ method: "GET", query: { token, ...extraQuery } }, response);
+  await publicChecklist({ method: "GET", query: { token, ...extraQuery }, get() { return undefined; } }, response);
   return response;
 }
 
@@ -345,7 +354,7 @@ async function publicClientReportGet(token, extraQuery = {}) {
 
 async function publicChecklistSave(body) {
   const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
-  await publicChecklist({ method: "POST", query: {}, body }, response);
+  await publicChecklist({ method: "POST", query: {}, body, get() { return undefined; } }, response);
   return response;
 }
 
@@ -380,13 +389,15 @@ async function prepareReadyClientReportRun() {
   });
   const cleanerCapability = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
   await saveRequiredChecklistPhoto(cleanerCapability.token);
+  const completeAnswers = await completeChecklistAnswers();
   const saved = await publicChecklistSave({
     token: cleanerCapability.token,
     mutationId: "client-report-draft-0001",
     baseRevision: 0,
     changes: {
-      checklistAnswers: { "bed-remake": "DONE", "client-window-check": "DONE" },
-      inventoryAnswers: { "hand-soap": "NEEDS_RESTOCK", "client-tea": "LOW" },
+      ...completeAnswers,
+      checklistAnswers: { ...completeAnswers.checklistAnswers, "bed-remake": "DONE", "client-window-check": "DONE" },
+      inventoryAnswers: { ...completeAnswers.inventoryAnswers, "hand-soap": "NEEDS_RESTOCK", "client-tea": "LOW" },
       issueNotes: "A lamp bulb needs replacement.",
       generalNotes: "Cleaning notes for the client.",
     },
@@ -723,9 +734,14 @@ test("capability-authorized cleaner can hand off one saved DRAFT for manager rev
   await seedEligibleChecklistJob();
   const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
   await saveRequiredChecklistPhoto(issued.token);
+  const completeAnswers = await completeChecklistAnswers();
   const save = await publicChecklistSave({
     token: issued.token, mutationId: "draft-mutation-ready-1", baseRevision: 0,
-    changes: { checklistAnswers: { "bed-remake": "DONE" }, inventoryAnswers: { "hand-soap": "NEEDS_RESTOCK" }, generalNotes: "All saved" },
+    changes: {
+      ...completeAnswers,
+      inventoryAnswers: { ...completeAnswers.inventoryAnswers, "hand-soap": "NEEDS_RESTOCK" },
+      generalNotes: "All saved",
+    },
   });
   assert.equal(save.code, 200);
   const beforeJob = (await admin.doc(`${root}/jobs/job`).get()).data();
@@ -763,23 +779,91 @@ test("capability-authorized cleaner can hand off one saved DRAFT for manager rev
   assert.equal(loaded.body.checklist.readyForReviewCleanerId, undefined);
   const managerRun = await getChecklistRun.run(request("manager", { jobId: "job" }));
   assert.equal(managerRun.run.status, "READY_FOR_REVIEW");
-  assert.equal(managerRun.run.draft.progress.checklist.done, 1);
+  assert.equal(managerRun.run.draft.progress.checklist.done, managerRun.run.checklistItemCount);
+  assert.equal(managerRun.run.draft.progress.inventory.answered, managerRun.run.inventoryItemCount);
   assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), beforeJob);
   assert.deepEqual((await admin.doc(`${root}/${assignmentPath}`).get()).data(), beforeAssignment);
   await assertFails(account("manager").firestore().doc(runPath).update({ status: "DRAFT" }));
 });
 
-test("review handoff requires the frozen under-bed photo without changing the DRAFT", async () => {
+test("review handoff rejects unanswered frozen items and missing evidence without losing the saved draft", async () => {
   await seedEligibleChecklistJob();
   const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const incomplete = await publicChecklistSave({
+    token: issued.token,
+    mutationId: "review-incomplete-draft-1",
+    baseRevision: 0,
+    changes: {
+      checklistAnswers: { "bed-remake": "DONE", "outdoor-pool": "NOT_APPLICABLE" },
+      inventoryAnswers: { "hand-soap": "LOW" },
+      generalNotes: "Saved before validation.",
+    },
+  });
+  assert.equal(incomplete.code, 200);
   const handoff = await publicChecklistSave({
     token: issued.token,
     action: "READY_FOR_REVIEW",
     submissionId: "review-submission-missing-photo",
-    baseRevision: 0,
+    baseRevision: 1,
   });
-  assert.equal(handoff.code, 410);
+  assert.equal(handoff.code, 422);
+  assert.equal(handoff.body.error, "checklist_requirements_missing");
+  assert.deepEqual(handoff.body.requirements, {
+    missingChecklistCount: 26,
+    missingInventoryCount: 12,
+    missingPhotoCount: 1,
+  });
+  const run = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
+  const draft = (await admin.doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get()).data();
+  assert.equal(run.status, "DRAFT");
+  assert.equal(run.readyForReviewAt, undefined);
+  assert.equal(draft.revision, 1);
+  assert.equal(draft.checklistAnswers["bed-remake"], "DONE");
+  assert.equal(draft.checklistAnswers["outdoor-pool"], "NOT_APPLICABLE");
+  assert.equal(draft.generalNotes, "Saved before validation.");
+});
+
+test("a saved complete checklist without its frozen photo stays editable; adding evidence permits the same handoff", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const changes = await completeChecklistAnswers();
+  const saved = await publicChecklistSave({
+    token: issued.token,
+    mutationId: "review-complete-draft-1",
+    baseRevision: 0,
+    changes,
+  });
+  assert.equal(saved.code, 200);
+  const handoff = {
+    token: issued.token,
+    action: "READY_FOR_REVIEW",
+    submissionId: "review-submission-photo-required",
+    baseRevision: 1,
+  };
+  const missingPhoto = await publicChecklistSave(handoff);
+  assert.equal(missingPhoto.code, 422);
+  assert.deepEqual(missingPhoto.body.requirements, {
+    missingChecklistCount: 0,
+    missingInventoryCount: 0,
+    missingPhotoCount: 1,
+  });
   assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data().status, "DRAFT");
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial/drafts/current`).get()).data().revision, 1);
+
+  await saveRequiredChecklistPhoto(issued.token);
+  const submitted = await publicChecklistSave(handoff);
+  assert.equal(submitted.code, 200);
+  assert.equal(submitted.body.checklist.status, "READY_FOR_REVIEW");
+  const persisted = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
+  assert.equal(persisted.status, "READY_FOR_REVIEW");
+  const reloaded = await publicChecklistGet(issued.token);
+  assert.equal(reloaded.code, 200);
+  assert.equal(reloaded.body.checklist.status, "READY_FOR_REVIEW");
+  assert.equal(reloaded.body.draft.progress.checklist.unanswered, 0);
+  assert.equal(reloaded.body.draft.progress.inventory.answered, 13);
+  const manager = await getChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(manager.run.status, "READY_FOR_REVIEW");
+  assert.equal(manager.run.draft.progress.checklist.unanswered, 0);
 });
 
 test("review handoff rejects stale draft revisions and changed checklist context", async () => {
@@ -809,7 +893,14 @@ test("one concurrent review handoff wins and its identical peer observes the sam
   await seedEligibleChecklistJob();
   const concurrent = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
   await saveRequiredChecklistPhoto(concurrent.token);
-  const requestBody = { token: concurrent.token, action: "READY_FOR_REVIEW", submissionId: "review-submission-0003", baseRevision: 0 };
+  const saved = await publicChecklistSave({
+    token: concurrent.token,
+    mutationId: "review-concurrent-draft-1",
+    baseRevision: 0,
+    changes: await completeChecklistAnswers(),
+  });
+  assert.equal(saved.code, 200);
+  const requestBody = { token: concurrent.token, action: "READY_FOR_REVIEW", submissionId: "review-submission-0003", baseRevision: 1 };
   const [one, two] = await Promise.all([publicChecklistSave(requestBody), publicChecklistSave(requestBody)]);
   assert.equal([one, two].filter((result) => result.code === 200).length, 2);
   assert.equal([one.body.duplicate, two.body.duplicate].filter(Boolean).length, 1);

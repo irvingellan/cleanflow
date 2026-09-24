@@ -3,7 +3,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { projectChecklistRunForCleaner } from "./checklistRunDefinition.js";
 import {
   applyChecklistDraftMutation,
-  assertChecklistDraftReadyForReview,
+  checklistDraftReviewRequirements,
   checklistDraftMutationHash,
   checklistReadyForReviewRequestHash,
   normalizeChecklistReadyForReviewRequest,
@@ -384,13 +384,20 @@ export async function readyPublicChecklistForReview(database, {
     }
     if (run.status !== "DRAFT") throw new HttpsError("failed-precondition", "Checklist Run is not editable.");
     const currentDraft = draftSnapshot.exists ? draftSnapshot.data() : null;
-    const validatedDraft = assertChecklistDraftReadyForReview(run, currentDraft);
+    const { draft: validatedDraft, missingChecklistCount, missingInventoryCount } =
+      checklistDraftReviewRequirements(run, currentDraft);
     if (submission.baseRevision !== validatedDraft.revision) {
       throw new HttpsError("aborted", "Checklist draft revision conflict.");
     }
-    if (isPilotChecklistPhotoRequirement(run, pilotChecklistPhotoRequirementId)
-      && evidenceSnapshot.data()?.status !== "SAVED") {
-      throw new HttpsError("failed-precondition", "A required checklist photo is missing.");
+    const missingPhotoCount = isPilotChecklistPhotoRequirement(run, pilotChecklistPhotoRequirementId)
+      && evidenceSnapshot.data()?.status !== "SAVED" ? 1 : 0;
+    if (missingChecklistCount || missingInventoryCount || missingPhotoCount) {
+      throw new HttpsError("failed-precondition", "Checklist requirements are incomplete.", {
+        reason: "checklist-requirements-missing",
+        missingChecklistCount,
+        missingInventoryCount,
+        missingPhotoCount,
+      });
     }
     transaction.update(runRef, {
       status: "READY_FOR_REVIEW",

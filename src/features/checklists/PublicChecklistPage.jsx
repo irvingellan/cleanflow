@@ -18,6 +18,7 @@ import {
 const errorKeys = {
   checklist_not_found: "checklists.publicUnavailable",
   checklist_unavailable: "checklists.publicUnavailable",
+  checklist_request_failed: "checklists.publicLoadFailed",
 };
 
 const saveStateKeys = {
@@ -156,11 +157,27 @@ function formatReadyForReviewAt(value, language) {
   ).format(date);
 }
 
-function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onSubmit, language, translate }) {
+function reviewErrorMessage(reviewError, requirements, translate) {
+  if (reviewError === "checklist_conflict") return translate("checklists.readyForReviewConflict");
+  if (reviewError === "checklist_requirements_missing") {
+    return translate("checklists.readyForReviewRequirementsMissing", {
+      checklist: requirements?.missingChecklistCount ?? 0,
+      inventory: requirements?.missingInventoryCount ?? 0,
+      photos: requirements?.missingPhotoCount ?? 0,
+    });
+  }
+  return translate("checklists.readyForReviewError");
+}
+
+function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, reviewRequirements, onSubmit, language, translate }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const isReady = saveState === checklistSaveStates.READY_FOR_REVIEW;
   const canSubmit = saveState === checklistSaveStates.SAVED && !isSubmittingReview;
   const readyAt = formatReadyForReviewAt(checklist.readyForReviewAt, language);
+
+  useEffect(() => {
+    if (reviewError === "checklist_requirements_missing") setIsConfirming(false);
+  }, [reviewError]);
 
   if (isReady) {
     return (
@@ -179,19 +196,19 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
         <>
           <p>{translate("checklists.readyForReviewPrompt")}</p>
           {!canSubmit && <p className="public-checklist__review-help">{translate("checklists.readyForReviewSaveFirst")}</p>}
-          {reviewError && <p className="form-error" role="alert">{translate(reviewError === "checklist_conflict" ? "checklists.readyForReviewConflict" : "checklists.readyForReviewError")}</p>}
+          {reviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, reviewRequirements, translate)}</p>}
           <button className="button" type="button" disabled={!canSubmit} onClick={() => setIsConfirming(true)}>
-            {translate("checklists.readyForReview")}
+            {translate("checklists.sendForReview")}
           </button>
         </>
       ) : (
         <div className="public-checklist__review-confirmation" role="dialog" aria-labelledby="checklist-review-confirm-title">
-          <h3 id="checklist-review-confirm-title">{translate("checklists.readyForReviewConfirmTitle")}</h3>
+          <h3 id="checklist-review-confirm-title">{translate("checklists.sendForReviewConfirmTitle")}</h3>
           <p>{translate("checklists.readyForReviewConfirmBody")}</p>
-          {reviewError && <p className="form-error" role="alert">{translate(reviewError === "checklist_conflict" ? "checklists.readyForReviewConflict" : "checklists.readyForReviewError")}</p>}
+          {reviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, reviewRequirements, translate)}</p>}
           <div className="public-checklist__review-actions">
             <button className="button" type="button" disabled={isSubmittingReview} onClick={onSubmit}>
-              {isSubmittingReview ? translate("checklists.readyForReviewSending") : translate("checklists.readyForReviewConfirm")}
+              {isSubmittingReview ? translate("checklists.sendForReviewSending") : translate("checklists.sendForReview")}
             </button>
             <button className="button button--secondary" type="button" disabled={isSubmittingReview} onClick={() => setIsConfirming(false)}>
               {translate("common.cancel")}
@@ -254,11 +271,13 @@ export function PublicChecklistPage({ token }) {
     isResolvingConflict,
     isSubmittingReview,
     reviewError,
+    reviewRequirements,
     queueChanges,
     saveNow,
     discardLocalChanges,
     reapplyLocalChanges,
     submitForManagerReview,
+    retryLoad,
   } = usePublicChecklistDraft(token);
 
   useEffect(() => {
@@ -274,7 +293,7 @@ export function PublicChecklistPage({ token }) {
       draftLoadMs: loadDiagnostics?.draftLoadMs ?? null,
       draftResult: loadDiagnostics?.draftResult || (loadError ? "error" : "loaded"),
       errorStage: loadError ? loadDiagnostics?.errorStage || "request" : null,
-      errorCode: loadError || loadDiagnostics?.errorCode || null,
+      errorCode: loadDiagnostics?.errorCode || loadError || null,
       client: publicChecklistClientClass(),
     });
     recordPublicChecklistLoadDiagnostic(diagnostic);
@@ -285,7 +304,19 @@ export function PublicChecklistPage({ token }) {
   }
 
   if (loadError || !checklist || !draft) {
-    return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate(errorKeys[loadError] || "checklists.publicUnavailable")} status="alert" isError /></section></main>;
+    const terminalUnavailable = loadError === "checklist_not_found" || loadError === "checklist_unavailable";
+    return (
+      <main className="public-offer-page checklist-public-page">
+        <section className="panel">
+          <StateCard message={translate(errorKeys[loadError] || "checklists.publicLoadFailed")} status="alert" isError />
+          {!terminalUnavailable && (
+            <button className="button" type="button" onClick={retryLoad}>
+              {translate("checklists.retryPublicLoad")}
+            </button>
+          )}
+        </section>
+      </main>
+    );
   }
 
   const isReadOnly = saveState === checklistSaveStates.READY_FOR_REVIEW;
@@ -400,6 +431,7 @@ export function PublicChecklistPage({ token }) {
           saveState={saveState}
           isSubmittingReview={isSubmittingReview}
           reviewError={reviewError}
+          reviewRequirements={reviewRequirements}
           onSubmit={submitForManagerReview}
           language={language}
           translate={translate}

@@ -168,6 +168,21 @@ export function assertChecklistDraftReadyForReview(run, draft) {
   return current;
 }
 
+/** Returns requirement gaps from the immutable Run definition and saved draft. */
+export function checklistDraftReviewRequirements(run, draft) {
+  const current = assertChecklistDraftReadyForReview(run, draft);
+  const items = frozenItems(run);
+  const inventory = frozenInventory(run);
+  return {
+    draft: current,
+    missingChecklistCount: items.filter((item) => {
+      const answer = current.checklistAnswers[item.id];
+      return answer !== "DONE" && !(answer === "NOT_APPLICABLE" && item.canBeNotApplicable === true);
+    }).length,
+    missingInventoryCount: inventory.filter((item) => current.inventoryAnswers[item.id] === "UNANSWERED").length,
+  };
+}
+
 export function applyChecklistDraftMutation(run, draft, mutation) {
   const current = normalizedChecklistDraft(run, draft);
   return {

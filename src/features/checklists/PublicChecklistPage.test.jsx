@@ -125,7 +125,7 @@ describe("PublicChecklistPage", () => {
   it("records a bounded error result when public loading fails", async () => {
     getPublicChecklist.mockRejectedValue({ code: "checklist_request_timeout" });
     renderPage();
-    expect(await screen.findByText("This checklist link is no longer available.")).toBeVisible();
+    expect(await screen.findByText("Could not load the checklist right now. The link has not been confirmed invalid. Check your connection and try again.")).toBeVisible();
     await waitFor(() => expect(mocks.recordPublicChecklistLoadDiagnostic).toHaveBeenCalledTimes(1));
     expect(mocks.recordPublicChecklistLoadDiagnostic.mock.calls[0][0]).toMatchObject({
       routeOpened: true, result: "error", errorStage: "request", errorCode: "checklist_request_timeout",
@@ -444,13 +444,23 @@ describe("PublicChecklistPage", () => {
     expect(screen.getByRole("button", { name: "Guardar ahora" })).toBeVisible();
   });
 
+  it("localizes the cleaner review action in English, Portuguese, and Spanish", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    expect(screen.getByRole("button", { name: "Send checklist for review" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "pt" } });
+    expect(screen.getByRole("button", { name: "Enviar checklist para revisão" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "es" } });
+    expect(screen.getByRole("button", { name: "Enviar el checklist para revisión" })).toBeVisible();
+  });
+
   it("sends the saved frozen draft for manager review and makes the cleaner view read-only", async () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Ready for manager review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     expect(screen.getByText("Saved answers and notes will become read-only. This does not mark the job completed. Your manager will review the saved checklist.")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Yes, send for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledWith(expect.objectContaining({
       token: "opaque-capability-token", baseRevision: 0,
@@ -459,7 +469,7 @@ describe("PublicChecklistPage", () => {
     expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeDisabled();
     expect(screen.getByLabelText("Hand soap")).toBeDisabled();
     expect(screen.getByLabelText("Other notes")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Yes, send for review" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send checklist for review" })).not.toBeInTheDocument();
   });
 
   it("reuses the exact review submission after a lost response", async () => {
@@ -473,15 +483,84 @@ describe("PublicChecklistPage", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Ready for manager review" }));
-    fireEvent.click(screen.getByRole("button", { name: "Yes, send for review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     expect(await screen.findByText("Could not send for review. Try again.")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Yes, send for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(2));
     expect(readyPublicChecklistForReview.mock.calls[1][0].submissionId)
       .toBe(readyPublicChecklistForReview.mock.calls[0][0].submissionId);
     expect(await screen.findByText("This checklist is read-only. Your manager can now review the saved checklist.")).toBeVisible();
+  });
+
+  it("shows actionable missing-requirement feedback without disabling the valid cleaner link", async () => {
+    readyPublicChecklistForReview.mockRejectedValueOnce({
+      code: "checklist_requirements_missing",
+      status: 422,
+      requirements: { missingChecklistCount: 2, missingInventoryCount: 1, missingPhotoCount: 1 },
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+
+    const missingText = "Before sending, answer checklist items: 2; inventory items: 1; required photos missing: 1.";
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText(missingText)).toBeVisible();
+    expect(screen.queryByText("This checklist link is no longer available.")).not.toBeInTheDocument();
+    expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeEnabled();
+    expect(screen.getByLabelText("Other notes")).toBeEnabled();
+  });
+
+  it("lets a cleaner correct validation gaps and submit a fresh saved revision", async () => {
+    readyPublicChecklistForReview.mockRejectedValueOnce({
+      code: "checklist_requirements_missing",
+      status: 422,
+      requirements: { missingChecklistCount: 2, missingInventoryCount: 1, missingPhotoCount: 1 },
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByText("Before sending, answer checklist items: 2; inventory items: 1; required photos missing: 1.");
+
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+
+    await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(2));
+    expect(readyPublicChecklistForReview.mock.calls[1][0]).toMatchObject({ baseRevision: 1 });
+    expect(readyPublicChecklistForReview.mock.calls[1][0].submissionId)
+      .not.toBe(readyPublicChecklistForReview.mock.calls[0][0].submissionId);
+    expect(await screen.findByText("This checklist is read-only. Your manager can now review the saved checklist.")).toBeVisible();
+  });
+
+  it("refreshes on a revision conflict instead of classifying it as an unavailable link", async () => {
+    readyPublicChecklistForReview.mockRejectedValueOnce({ code: "checklist_conflict", status: 409 });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+
+    expect(await screen.findByText("The saved checklist changed. Please review the latest saved version before sending it.")).toBeVisible();
+    expect(getPublicChecklist).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("This checklist link is no longer available.")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry after a transient read failure instead of claiming the link is invalid", async () => {
+    getPublicChecklist.mockRejectedValueOnce({ code: "checklist_request_failed", status: 503 });
+    renderPage();
+
+    expect(await screen.findByText("Could not load the checklist right now. The link has not been confirmed invalid. Check your connection and try again.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry checklist loading" })).toBeVisible();
+    expect(screen.queryByText("This checklist link is no longer available.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry checklist loading" }));
+    expect(await screen.findByRole("heading", { name: "Cleaning checklist" })).toBeVisible();
   });
 
   it("loads a submitted Run as read-only and discards stale local recovery instead of saving it", async () => {
