@@ -129,9 +129,12 @@ export function buildChecklistRunSnapshot({ job, property }) {
   };
 }
 
-export function projectChecklistRunForCleaner(checklistRun) {
+export function projectChecklistRunForCleaner(checklistRun, { assignedCleanerName = null } = {}) {
   const snapshot = checklistRun?.resolvedDefinition || {};
   const readyForReviewAt = checklistRun?.readyForReviewAt?.toDate?.()?.toISOString() || null;
+  const safeAssignedCleanerName = typeof assignedCleanerName === "string"
+    ? assignedCleanerName.trim().slice(0, 120) || null
+    : null;
 
   return {
     status: checklistRun?.status === "READY_FOR_REVIEW" ? "READY_FOR_REVIEW" : "DRAFT",
@@ -140,6 +143,7 @@ export function projectChecklistRunForCleaner(checklistRun) {
     propertyName: checklistRun?.propertySnapshot?.propertyName || null,
     scheduledDate: checklistRun?.jobSnapshot?.scheduledDate || null,
     scheduledStart: checklistRun?.jobSnapshot?.scheduledStart || null,
+    assignedCleanerName: safeAssignedCleanerName,
     sections: clone(snapshot.sections || []),
     inventoryItems: clone(snapshot.inventoryItems || []),
     requiredPhotoTypes: clone(snapshot.requiredPhotoTypes || []),

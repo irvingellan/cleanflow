@@ -406,7 +406,12 @@ export function usePublicChecklistDraft(token) {
       queuedChangesRef.current = {};
       reviewSubmissionRef.current = null;
       if (scopeRef.current) clearChecklistDraftRecovery(scopeRef.current);
-      setChecklist(result.checklist);
+      setChecklist((current) => ({
+        ...result.checklist,
+        // The successful handoff response may omit this already-safe server
+        // projection field; retain it for the confirmation view.
+        assignedCleanerName: result.checklist.assignedCleanerName ?? current?.assignedCleanerName ?? null,
+      }));
       setVisibleDraft(result.draft);
       setHasRecoveryWarning(false);
       setCurrentSaveState(checklistSaveStates.READY_FOR_REVIEW);

@@ -328,6 +328,16 @@ async function seedEligibleChecklistJob({ checklistSettings } = {}) {
     notes: "manager-only",
     guestName: "private guest",
   });
+  await admin.doc(`${root}/jobs/job/assignments/assignment`).set({
+    organizationId: org,
+    jobId: "job",
+    cleanerId: "cleaner-a",
+    cleanerNameSnapshot: "Assigned Cleaner Example",
+    isActive: true,
+    email: "private-cleaner@example.test",
+    phone: "private-phone",
+    internalNotes: "private assignment details",
+  });
   await createChecklistRun.run(request("manager", { jobId: "job" }));
 }
 
@@ -684,9 +694,16 @@ test("capability-authorized DRAFT photo is server-scoped, idempotent, reloadable
 
   const loaded = await publicChecklistGet(issued.token);
   assert.equal(loaded.code, 200);
+  assert.equal(loaded.body.checklist.assignedCleanerName, "Assigned Cleaner Example");
   assert.deepEqual(loaded.body.checklist.evidence.map(({ requirementId, contentType, sizeBytes }) => ({ requirementId, contentType, sizeBytes })), [{
     requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 4,
   }]);
+  const publicProjection = JSON.stringify(loaded.body);
+  assert.equal(publicProjection.includes("private-cleaner@example.test"), false);
+  assert.equal(publicProjection.includes("private-phone"), false);
+  assert.equal(publicProjection.includes("private assignment details"), false);
+  assert.equal(publicProjection.includes("private guest"), false);
+  assert.equal(publicProjection.includes("manager-only"), false);
   assert.equal(JSON.stringify(loaded.body).includes(evidence.storagePath), false);
   const downloaded = await publicChecklistGet(issued.token, { evidenceItem: "living-belongings" });
   assert.equal(downloaded.code, 200);

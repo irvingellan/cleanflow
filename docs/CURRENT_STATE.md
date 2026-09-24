@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- **Last updated:** 2026-09-23
+- **Last updated:** 2026-09-24
 - **Repository:** `irvingellan/cleanflow` (`main`)
 - **Active product phase:** Gabi Pilot — controlled design-partner learning and
   validation alongside the manager's existing spreadsheet.
@@ -141,11 +141,19 @@ E2E tests passed; build and diff checks passed.
 - A 2026-09-24 review-handoff correction distinguishes incomplete frozen
   checklist/inventory/photo requirements from invalid capabilities. Validation
   feedback preserves the editable draft; a valid handoff is shown only after
-  the server confirms the persisted `READY_FOR_REVIEW` state. This correction
-  is not deployed, so the Sep 23 production incident is not yet confirmed
-  resolved; the earlier photo-upload failure also remains unverified.
-- Manager approval, final submission, email/WhatsApp delivery, and Job
-  completion do not exist yet.
+  the server confirms the persisted `READY_FOR_REVIEW` state. Commit `d4a98f6`
+  is deployed; the real incident still needs a successful real-user retest, and
+  the earlier photo-upload failure remains unverified.
+- A 2026-09-24 visibility pass locally adds a post-attempt missing-requirements
+  summary and field markers on the cleaner page; only server-confirmed evidence
+  satisfies the photo requirement. The public projection adds only the safe
+  assigned-cleaner display name and does not claim who holds the link. Manager
+  Run detail now summarizes answers, restock, unanswered items, and notes before
+  the full results; it keeps save/review times visible and puts IDs/revisions in
+  closed-by-default Technical details. DRAFT explains that report/approval
+  actions await cleaner submission. This visibility pass is not deployed.
+- Cleaner review submission and explicit manager approval/Job completion exist
+  in the current implementation. Automatic email/WhatsApp delivery does not.
 - The preferred future workflow is: a manager manually shares a secure
   checklist link; a cleaner completes it; the submission persists in
   CleanFlow; the manager views or receives its report; and an optional email

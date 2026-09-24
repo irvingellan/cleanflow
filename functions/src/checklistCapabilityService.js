@@ -212,6 +212,7 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
   }
 
   let draftLoadMs = null;
+  const jobRef = jobReference(database, organizationId, location.jobId);
   const result = await database.runTransaction(async (transaction) => {
     const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
     const draftStartedAt = Date.now();
@@ -221,18 +222,32 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
     });
     const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot] = await Promise.all([
       transaction.get(capabilityRef),
-      transaction.get(jobReference(database, organizationId, location.jobId)),
+      transaction.get(jobRef),
       transaction.get(runReference(database, organizationId, location.jobId, location.runId)),
       draftPromise,
     ]);
     if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) return { state: "not-found" };
     const capability = capabilitySnapshot.data();
     if (capability.tokenHash !== tokenHash) return { state: "not-found" };
-    const state = checklistCapabilityState(capability, jobSnapshot.data(), runSnapshot.data(), now);
+    const job = jobSnapshot.data();
+    const state = checklistCapabilityState(capability, job, runSnapshot.data(), now);
     if (state !== "ACTIVE") return { state: state.toLowerCase() };
+
+    let assignedCleanerName = null;
+    if (Array.isArray(job.assignedCleanerIds)) {
+      const assignmentSnapshots = await transaction.get(
+        jobRef.collection("assignments").where("cleanerId", "==", capability.cleanerId),
+      );
+      const assignment = assignmentSnapshots.docs.find((snapshot) => snapshot.data().isActive === true);
+      const name = assignment?.data().cleanerNameSnapshot;
+      assignedCleanerName = typeof name === "string" ? name.trim().slice(0, 120) || null : null;
+    } else if (job.assignedCleanerId === capability.cleanerId) {
+      const name = job.assignedCleanerName;
+      assignedCleanerName = typeof name === "string" ? name.trim().slice(0, 120) || null : null;
+    }
     return {
       state: "active",
-      checklist: projectChecklistRunForCleaner(runSnapshot.data()),
+      checklist: projectChecklistRunForCleaner(runSnapshot.data(), { assignedCleanerName }),
       draft: projectChecklistDraftForRead(
         runSnapshot.data(), draftSnapshot.exists ? draftSnapshot.data() : null,
       ),

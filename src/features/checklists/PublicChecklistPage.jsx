@@ -39,7 +39,7 @@ function itemLabel(item, translate) {
   return item.label || translate(item.labelKey || item.id);
 }
 
-function ChecklistPhoto({ item, token, evidence, disabled, translate }) {
+function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSaved, targetRef, translate }) {
   const cameraInputRef = useRef(null);
   const libraryInputRef = useRef(null);
   const [state, setState] = useState(evidence ? "SAVED" : "IDLE");
@@ -64,7 +64,10 @@ function ChecklistPhoto({ item, token, evidence, disabled, translate }) {
     setError(null);
     setRetryFile(file);
     try {
-      await uploadPublicChecklistEvidence({ token, requirementId: item.id, file });
+      const result = await uploadPublicChecklistEvidence({ token, requirementId: item.id, file });
+      const confirmed = result?.evidence?.some((saved) => saved.requirementId === item.id);
+      if (!confirmed) throw Object.assign(new Error("Saved evidence was not confirmed."), { code: "checklist_photo_unavailable" });
+      onEvidenceSaved?.(item.id);
       setLocalPreviewUrl((currentUrl) => {
         if (currentUrl) URL.revokeObjectURL(currentUrl);
         return URL.createObjectURL(file);
@@ -85,7 +88,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, translate }) {
   const isSaved = Boolean(evidence) || state === "SAVED";
 
   return (
-    <div className="public-checklist__photo" aria-live="polite">
+    <div className={`public-checklist__photo${missing ? " public-checklist__photo--missing" : ""}`} aria-live="polite" ref={targetRef} tabIndex={-1}>
       <span className="public-checklist__photo-required">{translate("checklists.photoRequired")}</span>
       {isSaved && (
         <img
@@ -108,6 +111,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, translate }) {
       )}
       {state === "UPLOADING" && <p className="public-checklist__photo-status">{translate("checklists.photoUploading")}</p>}
       {state === "SAVED" && <p className="public-checklist__photo-status">{translate("checklists.photoSaved")}</p>}
+      {missing && <p className="public-checklist__missing-marker">{translate("checklists.requiredPhotoNotSaved")}</p>}
       {state === "FAILED" && (
         <div className="public-checklist__photo-error" role="alert">
           <p>{translate(error === "checklist_photo_too_large" ? "checklists.photoTooLarge" : "checklists.photoUploadFailed")}</p>
@@ -118,12 +122,16 @@ function ChecklistPhoto({ item, token, evidence, disabled, translate }) {
   );
 }
 
-function ChecklistAnswer({ item, value, onChange, translate, token, evidence, disabled = false }) {
+function ChecklistAnswer({
+  item, value, onChange, translate, token, evidence, disabled = false,
+  missing = false, photoMissing = false, answerTargetRef, photoTargetRef, onEvidenceSaved,
+}) {
   const label = itemLabel(item, translate);
   const answerValues = ["UNANSWERED", "DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
+  const missingAnswerId = `checklist-missing-${item.id}`;
 
   return (
-    <fieldset className="public-checklist__item">
+    <fieldset className={`public-checklist__item${missing ? " public-checklist__item--missing" : ""}`} aria-describedby={missing ? missingAnswerId : undefined}>
       <legend>{label}</legend>
       <div className="public-checklist__answer-options">
         {answerValues.map((answer) => (
@@ -134,14 +142,25 @@ function ChecklistAnswer({ item, value, onChange, translate, token, evidence, di
               value={answer}
               checked={value === answer}
               disabled={disabled}
+              ref={answer === "DONE" ? answerTargetRef : undefined}
               onChange={() => onChange(answer)}
             />
             {translate(`checklists.answer${answer}`)}
           </label>
         ))}
       </div>
+      {missing && <p className="public-checklist__missing-marker" id={missingAnswerId}>{translate("checklists.answerRequiredBeforeReview")}</p>}
       {item.requiresPhoto && item.id === pilotPhotoRequirementId && (
-        <ChecklistPhoto item={item} token={token} evidence={evidence} disabled={disabled} translate={translate} />
+        <ChecklistPhoto
+          item={item}
+          token={token}
+          evidence={evidence}
+          disabled={disabled}
+          missing={photoMissing}
+          onEvidenceSaved={onEvidenceSaved}
+          targetRef={photoTargetRef}
+          translate={translate}
+        />
       )}
     </fieldset>
   );
@@ -157,22 +176,16 @@ function formatReadyForReviewAt(value, language) {
   ).format(date);
 }
 
-function reviewErrorMessage(reviewError, requirements, translate) {
+function reviewErrorMessage(reviewError, translate) {
   if (reviewError === "checklist_conflict") return translate("checklists.readyForReviewConflict");
-  if (reviewError === "checklist_requirements_missing") {
-    return translate("checklists.readyForReviewRequirementsMissing", {
-      checklist: requirements?.missingChecklistCount ?? 0,
-      inventory: requirements?.missingInventoryCount ?? 0,
-      photos: requirements?.missingPhotoCount ?? 0,
-    });
-  }
   return translate("checklists.readyForReviewError");
 }
 
-function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, reviewRequirements, onSubmit, language, translate }) {
+function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onSubmit, language, translate }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const isReady = saveState === checklistSaveStates.READY_FOR_REVIEW;
   const canSubmit = saveState === checklistSaveStates.SAVED && !isSubmittingReview;
+  const showReviewError = Boolean(reviewError && reviewError !== "checklist_requirements_missing");
   const readyAt = formatReadyForReviewAt(checklist.readyForReviewAt, language);
 
   useEffect(() => {
@@ -196,7 +209,7 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
         <>
           <p>{translate("checklists.readyForReviewPrompt")}</p>
           {!canSubmit && <p className="public-checklist__review-help">{translate("checklists.readyForReviewSaveFirst")}</p>}
-          {reviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, reviewRequirements, translate)}</p>}
+          {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
           <button className="button" type="button" disabled={!canSubmit} onClick={() => setIsConfirming(true)}>
             {translate("checklists.sendForReview")}
           </button>
@@ -205,7 +218,7 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
         <div className="public-checklist__review-confirmation" role="dialog" aria-labelledby="checklist-review-confirm-title">
           <h3 id="checklist-review-confirm-title">{translate("checklists.sendForReviewConfirmTitle")}</h3>
           <p>{translate("checklists.readyForReviewConfirmBody")}</p>
-          {reviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, reviewRequirements, translate)}</p>}
+          {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
           <div className="public-checklist__review-actions">
             <button className="button" type="button" disabled={isSubmittingReview} onClick={onSubmit}>
               {isSubmittingReview ? translate("checklists.sendForReviewSending") : translate("checklists.sendForReview")}
@@ -271,7 +284,6 @@ export function PublicChecklistPage({ token }) {
     isResolvingConflict,
     isSubmittingReview,
     reviewError,
-    reviewRequirements,
     queueChanges,
     saveNow,
     discardLocalChanges,
@@ -279,6 +291,30 @@ export function PublicChecklistPage({ token }) {
     submitForManagerReview,
     retryLoad,
   } = usePublicChecklistDraft(token);
+  const fieldTargetsRef = useRef(new Map());
+  const [hasAttemptedValidation, setHasAttemptedValidation] = useState(false);
+  const [confirmedEvidenceIds, setConfirmedEvidenceIds] = useState(() => new Set());
+
+  useEffect(() => {
+    setHasAttemptedValidation(false);
+    setConfirmedEvidenceIds(new Set());
+    fieldTargetsRef.current.clear();
+  }, [token]);
+
+  useEffect(() => {
+    if (reviewError === "checklist_requirements_missing") {
+      setHasAttemptedValidation(true);
+    }
+  }, [reviewError]);
+
+  useEffect(() => {
+    if (checklist?.evidence?.length) {
+      setConfirmedEvidenceIds((current) => new Set([
+        ...current,
+        ...checklist.evidence.map((item) => item.requirementId),
+      ]));
+    }
+  }, [checklist?.evidence]);
 
   useEffect(() => {
     if (isLoading || diagnosticRecordedRef.current) return;
@@ -321,6 +357,31 @@ export function PublicChecklistPage({ token }) {
 
   const isReadOnly = saveState === checklistSaveStates.READY_FOR_REVIEW;
   const evidenceByRequirement = new Map((checklist.evidence || []).map((evidence) => [evidence.requirementId, evidence]));
+  const missingItems = [];
+  for (const section of checklist.sections) {
+    for (const item of section.items) {
+      const answer = draft.checklistAnswers?.[item.id] || "UNANSWERED";
+      const answered = answer === "DONE" || (answer === "NOT_APPLICABLE" && item.canBeNotApplicable === true);
+      if (!answered) missingItems.push({ key: `checklist:${item.id}`, label: itemLabel(item, translate), kind: "checklist" });
+      if (item.requiresPhoto && item.id === pilotPhotoRequirementId
+        && !evidenceByRequirement.has(item.id) && !confirmedEvidenceIds.has(item.id)) {
+        missingItems.push({ key: `photo:${item.id}`, label: itemLabel(item, translate), kind: "photo" });
+      }
+    }
+  }
+  for (const item of checklist.inventoryItems || []) {
+    if ((draft.inventoryAnswers?.[item.id] || "UNANSWERED") === "UNANSWERED") {
+      missingItems.push({ key: `inventory:${item.id}`, label: itemLabel(item, translate), kind: "inventory" });
+    }
+  }
+  const missingChecklistCount = missingItems.filter((item) => item.kind === "checklist").length;
+  const missingInventoryCount = missingItems.filter((item) => item.kind === "inventory").length;
+  const missingPhotoCount = missingItems.filter((item) => item.kind === "photo").length;
+  const moveToFirstMissing = () => {
+    const target = fieldTargetsRef.current.get(missingItems[0]?.key);
+    target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    target?.focus?.({ preventScroll: true });
+  };
 
   return (
     <main className="public-offer-page checklist-public-page">
@@ -331,6 +392,7 @@ export function PublicChecklistPage({ token }) {
             <h1 id="public-checklist-title" className="panel__title">{translate("checklists.publicTitle")}</h1>
             {checklist.propertyName && <p className="public-checklist__context">{checklist.propertyName}</p>}
             {checklist.scheduledDate && <p className="public-checklist__context">{formatDate(checklist.scheduledDate, translate, language)}{checklist.scheduledStart ? ` · ${checklist.scheduledStart}` : ""}</p>}
+            {checklist.assignedCleanerName && <p className="public-checklist__context">{translate("jobs.assignedCleaner")}: {checklist.assignedCleanerName}</p>}
           </div>
           <label className="public-checklist__language">
             <span>{translate("common.language")}</span>
@@ -357,6 +419,33 @@ export function PublicChecklistPage({ token }) {
           </section>
         )}
 
+        {hasAttemptedValidation && (
+          <section className="public-checklist__validation-summary" aria-labelledby="public-checklist-validation-title" role="status">
+            <h2 id="public-checklist-validation-title">{translate("checklists.reviewValidationTitle")}</h2>
+            {missingItems.length > 0 ? (
+              <>
+                <p>{translate("checklists.reviewValidationSummary", {
+                  checklist: missingChecklistCount,
+                  inventory: missingInventoryCount,
+                  photos: missingPhotoCount,
+                })}</p>
+                <ul>
+                  {missingItems.map((item, index) => (
+                    <li key={`${item.key}-${index}`}>
+                      {translate(`checklists.reviewMissing${item.kind === "checklist" ? "Answer" : item.kind === "inventory" ? "Inventory" : "Photo"}`)}: {item.label}
+                    </li>
+                  ))}
+                </ul>
+                <button className="button button--secondary" type="button" onClick={moveToFirstMissing}>
+                  {translate("checklists.goToFirstMissingItem")}
+                </button>
+              </>
+            ) : (
+              <p>{translate("checklists.reviewValidationNowComplete")}</p>
+            )}
+          </section>
+        )}
+
         {checklist.sections.map((section) => (
           <section className="public-checklist__section" key={section.id} aria-labelledby={`public-section-${section.id}`}>
             <h2 id={`public-section-${section.id}`}>{section.title || section.label || translate(section.titleKey || section.id)}</h2>
@@ -370,6 +459,17 @@ export function PublicChecklistPage({ token }) {
                 token={token}
                 evidence={evidenceByRequirement.get(item.id)}
                 disabled={isReadOnly}
+                missing={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `checklist:${item.id}`)}
+                photoMissing={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `photo:${item.id}`)}
+                answerTargetRef={(node) => {
+                  if (node) fieldTargetsRef.current.set(`checklist:${item.id}`, node);
+                  else fieldTargetsRef.current.delete(`checklist:${item.id}`);
+                }}
+                photoTargetRef={(node) => {
+                  if (node) fieldTargetsRef.current.set(`photo:${item.id}`, node);
+                  else fieldTargetsRef.current.delete(`photo:${item.id}`);
+                }}
+                onEvidenceSaved={(requirementId) => setConfirmedEvidenceIds((current) => new Set([...current, requirementId]))}
               />
             ))}
           </section>
@@ -380,16 +480,26 @@ export function PublicChecklistPage({ token }) {
             <h2 id="public-checklist-inventory-title">{translate("checklists.inventoryCount")}</h2>
             <div className="public-checklist__inventory">
               {checklist.inventoryItems.map((item) => (
-                <label key={item.id}>
-                  <span>{itemLabel(item, translate)}</span>
+                <div className="public-checklist__inventory-item" key={item.id}>
+                  <label htmlFor={`inventory-answer-${item.id}`}>{itemLabel(item, translate)}</label>
                   <select
+                    id={`inventory-answer-${item.id}`}
                     value={draft.inventoryAnswers?.[item.id] || "UNANSWERED"}
                     disabled={isReadOnly}
+                    className={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? "public-checklist__control--missing" : undefined}
+                    ref={(node) => {
+                      if (node) fieldTargetsRef.current.set(`inventory:${item.id}`, node);
+                      else fieldTargetsRef.current.delete(`inventory:${item.id}`);
+                    }}
+                    aria-describedby={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? `inventory-missing-${item.id}` : undefined}
                     onChange={(event) => queueChanges({ inventoryAnswers: { [item.id]: event.target.value } })}
                   >
                     {inventoryAnswers.map((answer) => <option key={answer} value={answer}>{translate(`checklists.inventory${answer}`)}</option>)}
                   </select>
-                </label>
+                  {hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) && (
+                    <small className="public-checklist__missing-marker" id={`inventory-missing-${item.id}`}>{translate("checklists.inventoryRequiredBeforeReview")}</small>
+                  )}
+                </div>
               ))}
             </div>
           </section>
@@ -431,7 +541,6 @@ export function PublicChecklistPage({ token }) {
           saveState={saveState}
           isSubmittingReview={isSubmittingReview}
           reviewError={reviewError}
-          reviewRequirements={reviewRequirements}
           onSubmit={submitForManagerReview}
           language={language}
           translate={translate}

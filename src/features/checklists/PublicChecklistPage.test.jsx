@@ -28,6 +28,7 @@ vi.mock("./publicChecklistLoadDiagnostics.js", async (importOriginal) => ({
 }));
 
 const { PublicChecklistPage } = await import("./PublicChecklistPage.jsx");
+let acknowledgedDraft;
 
 const frozenChecklist = {
   propertyName: "Example Property",
@@ -82,21 +83,25 @@ function deferred() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  acknowledgedDraft = createDraft();
   getPublicChecklist.mockReset();
   readyPublicChecklistForReview.mockReset();
   savePublicChecklistDraft.mockReset();
   uploadPublicChecklistEvidence.mockReset();
   mocks.recordPublicChecklistLoadDiagnostic.mockReset();
   getPublicChecklist.mockResolvedValue({ checklist: frozenChecklist, draft: createDraft() });
-  savePublicChecklistDraft.mockImplementation(async ({ baseRevision, changes }) => ({
-    draft: createDraft({
-      revision: baseRevision + 1,
-      checklistAnswers: { bed: "UNANSWERED", pool: "UNANSWERED", "living-belongings": "UNANSWERED", ...(changes.checklistAnswers || {}) },
-      inventoryAnswers: { soap: "UNANSWERED", ...(changes.inventoryAnswers || {}) },
-      issueNotes: Object.hasOwn(changes, "issueNotes") ? changes.issueNotes : "",
-      generalNotes: Object.hasOwn(changes, "generalNotes") ? changes.generalNotes : "",
-    }),
-  }));
+  savePublicChecklistDraft.mockImplementation(async ({ baseRevision, changes }) => {
+    const revision = baseRevision + 1;
+    acknowledgedDraft = createDraft({
+      ...acknowledgedDraft,
+      revision,
+      checklistAnswers: { ...acknowledgedDraft.checklistAnswers, ...(changes.checklistAnswers || {}) },
+      inventoryAnswers: { ...acknowledgedDraft.inventoryAnswers, ...(changes.inventoryAnswers || {}) },
+      issueNotes: Object.hasOwn(changes, "issueNotes") ? changes.issueNotes : acknowledgedDraft.issueNotes,
+      generalNotes: Object.hasOwn(changes, "generalNotes") ? changes.generalNotes : acknowledgedDraft.generalNotes,
+    });
+    return { revision, draft: acknowledgedDraft };
+  });
   readyPublicChecklistForReview.mockImplementation(async ({ baseRevision }) => ({
     duplicate: false,
     checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW", readyForReviewAt: "2026-09-22T18:00:00.000Z" },
@@ -141,6 +146,20 @@ describe("PublicChecklistPage", () => {
     expect(screen.getByLabelText("Hand soap")).toHaveValue("UNANSWERED");
     expect(screen.getByText("Use the frozen instructions.")).toBeVisible();
     expect(savePublicChecklistDraft).not.toHaveBeenCalled();
+    expect(screen.queryByText("Answer this item before sending for review.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Required photo is not saved yet.")).not.toBeInTheDocument();
+  });
+
+  it("shows localized assigned cleaner context without claiming who holds the link", async () => {
+    getPublicChecklist.mockResolvedValue({ checklist: { ...frozenChecklist, assignedCleanerName: "Ana Example" }, draft: createDraft() });
+    renderPage();
+
+    expect(await screen.findByText("Assigned cleaner: Ana Example")).toBeVisible();
+    expect(screen.queryByText("You are Ana Example")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "pt" } });
+    expect(screen.getByText("Cleaner responsável: Ana Example")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "es" } });
+    expect(screen.getByText("Cleaner responsable: Ana Example")).toBeVisible();
   });
 
   it("shows one mobile-safe required-photo control", async () => {
@@ -455,6 +474,10 @@ describe("PublicChecklistPage", () => {
   });
 
   it("sends the saved frozen draft for manager review and makes the cleaner view read-only", async () => {
+    getPublicChecklist.mockResolvedValue({
+      checklist: { ...frozenChecklist, assignedCleanerName: "Assigned Cleaner Example" },
+      draft: createDraft(),
+    });
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
@@ -466,6 +489,7 @@ describe("PublicChecklistPage", () => {
       token: "opaque-capability-token", baseRevision: 0,
     })));
     expect(await screen.findByText("This checklist is read-only. Your manager can now review the saved checklist.")).toBeVisible();
+    expect(screen.getByText("Assigned cleaner: Assigned Cleaner Example")).toBeVisible();
     expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeDisabled();
     expect(screen.getByLabelText("Hand soap")).toBeDisabled();
     expect(screen.getByLabelText("Other notes")).toBeDisabled();
@@ -498,7 +522,7 @@ describe("PublicChecklistPage", () => {
     readyPublicChecklistForReview.mockRejectedValueOnce({
       code: "checklist_requirements_missing",
       status: 422,
-      requirements: { missingChecklistCount: 2, missingInventoryCount: 1, missingPhotoCount: 1 },
+      requirements: { missingChecklistCount: 3, missingInventoryCount: 1, missingPhotoCount: 1 },
     });
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
@@ -506,25 +530,88 @@ describe("PublicChecklistPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
-    const missingText = "Before sending, answer checklist items: 2; inventory items: 1; required photos missing: 1.";
+    const missingText = "Still needed — checklist answers: 3; inventory items: 1; required photos: 1.";
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByText(missingText)).toBeVisible();
     expect(screen.queryByText("This checklist link is no longer available.")).not.toBeInTheDocument();
     expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeEnabled();
     expect(screen.getByLabelText("Other notes")).toBeEnabled();
+    expect(screen.getByText("Checklist item: Make the bed")).toBeVisible();
+    expect(screen.getAllByText("Answer this item before sending for review.")).toHaveLength(3);
+    expect(screen.getByText("Required photo is not saved yet.")).toBeVisible();
+    expect(screen.getByText("Choose an inventory level before sending for review.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Go to first missing item" }));
+    expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toHaveFocus();
+  });
+
+  it("clears each missing marker as its requirement is satisfied", async () => {
+    readyPublicChecklistForReview.mockRejectedValueOnce({
+      code: "checklist_requirements_missing",
+      status: 422,
+      requirements: { missingChecklistCount: 3, missingInventoryCount: 1, missingPhotoCount: 1 },
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByText("Still needed — checklist answers: 3; inventory items: 1; required photos: 1.");
+
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+    expect(within(itemFieldset("Make the bed")).queryByText("Answer this item before sending for review.")).not.toBeInTheDocument();
+    expect(within(itemFieldset("Check under beds and furniture")).getByText("Required photo is not saved yet.")).toBeVisible();
+    expect(screen.getByText("Still needed — checklist answers: 2; inventory items: 1; required photos: 1.")).toBeVisible();
+
+    fireEvent.click(within(itemFieldset("Check under beds and furniture")).getByLabelText("Done"));
+    fireEvent.click(within(itemFieldset("Check the pool")).getByLabelText("Not applicable"));
+    fireEvent.change(screen.getByLabelText("Hand soap"), { target: { value: "HIGH" } });
+    await waitFor(() => expect(screen.queryByText("Choose an inventory level before sending for review.")).not.toBeInTheDocument());
+    expect(within(itemFieldset("Check under beds and furniture")).queryByText("Answer this item before sending for review.")).not.toBeInTheDocument();
+    await waitFor(() => expect(within(itemFieldset("Check the pool")).queryByText("Answer this item before sending for review.")).not.toBeInTheDocument());
+
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff])], "under-bed.jpg", { type: "image/jpeg" });
+    fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [photo] } });
+    await waitFor(() => expect(screen.queryByText("Required photo is not saved yet.")).not.toBeInTheDocument());
+    expect(screen.getByText("These requirements now appear complete. Send again so the server can check the saved version.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Go to first missing item" })).not.toBeInTheDocument();
+  });
+
+  it("does not treat an unconfirmed photo response as saved evidence", async () => {
+    readyPublicChecklistForReview.mockRejectedValueOnce({
+      code: "checklist_requirements_missing",
+      status: 422,
+      requirements: { missingChecklistCount: 3, missingInventoryCount: 1, missingPhotoCount: 1 },
+    });
+    const pendingUpload = deferred();
+    uploadPublicChecklistEvidence.mockReturnValueOnce(pendingUpload.promise);
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByText("Required photo is not saved yet.");
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff])], "under-bed.jpg", { type: "image/jpeg" });
+    fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [photo] } });
+
+    expect(await screen.findByText("Uploading photo…")).toBeVisible();
+    expect(screen.getByText("Required photo is not saved yet.")).toBeVisible();
+    await act(async () => pendingUpload.resolve({ evidence: [] }));
+    expect(await screen.findByText("Photo could not be saved. Try again.")).toBeVisible();
+    expect(within(itemFieldset("Check under beds and furniture")).getByText("Required photo is not saved yet.")).toBeVisible();
+    expect(within(itemFieldset("Check under beds and furniture")).queryByText("Photo saved")).not.toBeInTheDocument();
+    expect(within(itemFieldset("Check under beds and furniture")).getByRole("button", { name: "Take photo" })).toBeVisible();
   });
 
   it("lets a cleaner correct validation gaps and submit a fresh saved revision", async () => {
     readyPublicChecklistForReview.mockRejectedValueOnce({
       code: "checklist_requirements_missing",
       status: 422,
-      requirements: { missingChecklistCount: 2, missingInventoryCount: 1, missingPhotoCount: 1 },
+      requirements: { missingChecklistCount: 3, missingInventoryCount: 1, missingPhotoCount: 1 },
     });
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
-    await screen.findByText("Before sending, answer checklist items: 2; inventory items: 1; required photos missing: 1.");
+    await screen.findByText("Still needed — checklist answers: 3; inventory items: 1; required photos: 1.");
 
     fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
     await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());

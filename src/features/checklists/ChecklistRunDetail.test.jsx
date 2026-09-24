@@ -109,6 +109,46 @@ describe("ChecklistRunDetail", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  it("puts named restock, unanswered items, answer states, and cautious notes before the full answers", () => {
+    const { container } = renderChecklistRun({
+      sections: [{
+        id: "bathroom",
+        title: "Bathrooms",
+        items: [
+          { id: "done", label: "Sanitize sink", answer: "DONE" },
+          { id: "na", label: "Check hot tub", answer: "NOT_APPLICABLE" },
+          { id: "unanswered", label: "Check mirror", answer: "UNANSWERED" },
+        ],
+      }],
+      inventoryItems: [
+        { id: "soap", label: "Hand soap", answer: "NEEDS_RESTOCK" },
+        { id: "tissue", label: "Tissues", answer: "UNANSWERED" },
+      ],
+      draft: { issueNotes: "  ", generalNotes: "" },
+    });
+
+    expect(screen.getByText("Checklist: 1 done · 1 not applicable · 1 unanswered")).toBeVisible();
+    expect(screen.getAllByText("Hand soap").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Check mirror").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Tissues").length).toBeGreaterThan(1);
+    expect(screen.getByText("No observations recorded. This does not prove there were no problems.")).toBeVisible();
+    expect(container.querySelector("#checklist-attention-title").compareDocumentPosition(
+      container.querySelector("#run-section-bathroom"),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps draft actions unavailable and technical identifiers closed by default", () => {
+    const { container } = renderChecklistRun({ jobId: "job-technical", draft: { revision: 5, lastSavedAt: "2026-09-20T18:00:00.000Z" } });
+
+    expect(screen.getByText("This Checklist Run is a draft and has not been sent for manager review.")).toBeVisible();
+    expect(screen.getByText("Report and approval actions become available here after the cleaner sends this checklist for review.")).toBeVisible();
+    expect(screen.getByText("Last saved")).toBeVisible();
+    const technicalDetails = container.querySelector(".checklist-run__technical-details");
+    expect(technicalDetails.open).toBe(false);
+    expect(technicalDetails).toHaveTextContent("job-technical");
+    expect(technicalDetails).toHaveTextContent("5");
+  });
+
   it("lets the manager explicitly refresh only the server-acknowledged progress", () => {
     const onRefresh = vi.fn();
     render(
@@ -145,6 +185,7 @@ describe("ChecklistRunDetail", () => {
     expect(screen.getByText("The cleaner sent this saved checklist for manager review. This does not complete the job.")).toBeVisible();
     expect(screen.getByText("Manager should check the lamp.")).toBeVisible();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to report and approval actions" })).toHaveAttribute("href", "#checklist-manager-actions");
   });
 
   it("lets the manager confirm completion only after a Run is ready for review", async () => {
@@ -211,8 +252,8 @@ describe("ChecklistRunDetail", () => {
 
     expect(await screen.findByText("Sanitize toilet, sink, and shower")).toBeVisible();
     expect(screen.getByText("Done")).toBeVisible();
-    expect(screen.getByText("Hand soap")).toBeVisible();
-    expect(screen.getByText("Needs restock")).toBeVisible();
+    expect(screen.getAllByText("Hand soap").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Needs restock").length).toBeGreaterThan(1);
     fireEvent.click(await screen.findByRole("button", { name: "Create client report" }));
     await waitFor(() => expect(createClientReport).toHaveBeenCalledWith("job-1", { replaceExisting: false }));
     expect(await screen.findByRole("link", { name: "Open report" })).toHaveAttribute(

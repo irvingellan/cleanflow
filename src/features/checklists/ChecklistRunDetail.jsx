@@ -35,6 +35,49 @@ function assignedCleanerDisplayName(job, assignments, fallback) {
   return job.assignedCleanerName?.trim() || fallback;
 }
 
+function attentionSummary(checklistRun, translate) {
+  const checklistItems = (checklistRun.sections || []).flatMap((section) => section.items || []);
+  const inventoryItems = checklistRun.inventoryItems || [];
+  const done = checklistItems.filter((item) => item.answer === "DONE").length;
+  const notApplicable = checklistItems.filter((item) => item.answer === "NOT_APPLICABLE").length;
+  const unansweredChecklist = checklistItems
+    .filter((item) => !item.answer || item.answer === "UNANSWERED")
+    .map((item) => ({ id: `checklist-${item.id}`, label: checklistLabel(item, translate) }));
+  const unansweredInventory = inventoryItems
+    .filter((item) => !item.answer || item.answer === "UNANSWERED")
+    .map((item) => ({ id: `inventory-${item.id}`, label: checklistLabel(item, translate) }));
+  const restockItems = inventoryItems.filter((item) => item.answer === "NEEDS_RESTOCK");
+
+  return {
+    done,
+    notApplicable,
+    unanswered: unansweredChecklist.length,
+    unansweredItems: [...unansweredChecklist, ...unansweredInventory],
+    restockItems,
+  };
+}
+
+function AttentionNames({ title, items, emptyMessage, translate }) {
+  const visibleItems = items.slice(0, 3);
+  const remainingItems = items.slice(3);
+  return (
+    <div className="checklist-run__attention-group">
+      <h4>{title}</h4>
+      {items.length === 0 ? <p>{emptyMessage}</p> : (
+        <>
+          <ul>{visibleItems.map((item) => <li key={item.id}>{item.label}</li>)}</ul>
+          {remainingItems.length > 0 && (
+            <details>
+              <summary>{translate("checklists.showMoreAttentionItems", { count: remainingItems.length })}</summary>
+              <ul>{remainingItems.map((item) => <li key={item.id}>{item.label}</li>)}</ul>
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
   const [url, setUrl] = useState(null);
   const [hasError, setHasError] = useState(false);
@@ -90,6 +133,10 @@ export function ChecklistRunDetail({
     assignments,
     translate("dashboard.notAssigned"),
   );
+  const attention = attentionSummary(checklistRun, translate);
+  const issueNotes = draft?.issueNotes?.trim() || "";
+  const generalNotes = draft?.generalNotes?.trim() || "";
+  const hasCleanerNotes = Boolean(issueNotes || generalNotes);
 
   async function approveAndComplete() {
     setIsCompleting(true);
@@ -137,7 +184,7 @@ export function ChecklistRunDetail({
           label={translate("checklists.runState")}
           value={translate(isReadyForReview ? "checklists.readyForReview" : "checklists.draft")}
         />
-        {readyForReviewAt && <DetailItem label={translate("checklists.readyForReview")} value={readyForReviewAt} />}
+        {readyForReviewAt && <DetailItem label={translate("checklists.sentForReviewAt")} value={readyForReviewAt} />}
         <DetailItem
           label={translate("checklists.itemCount")}
           value={translate("checklists.itemCountValue", { count: checklistRun.checklistItemCount })}
@@ -153,6 +200,44 @@ export function ChecklistRunDetail({
           })}
         />
       </dl>
+
+      <section className="checklist-run__attention" aria-labelledby="checklist-attention-title">
+        <h3 id="checklist-attention-title">{translate("checklists.attentionSummary")}</h3>
+        <p className="checklist-run__answer-summary">
+          {translate("checklists.answerSummary", {
+            done: attention.done,
+            notApplicable: attention.notApplicable,
+            unanswered: attention.unanswered,
+          })}
+        </p>
+        <div className="checklist-run__attention-grid">
+          <AttentionNames
+            title={translate("checklists.restockItems")}
+            items={attention.restockItems.map((item) => ({ id: item.id, label: checklistLabel(item, translate) }))}
+            emptyMessage={translate("checklists.noRestockItems")}
+            translate={translate}
+          />
+          <AttentionNames
+            title={translate("checklists.unansweredItems")}
+            items={attention.unansweredItems}
+            emptyMessage={translate("checklists.noUnansweredItems")}
+            translate={translate}
+          />
+        </div>
+        <div className="checklist-run__attention-notes">
+          <h4>{translate("checklists.cleanerNotes")}</h4>
+          {issueNotes && <p><strong>{translate("checklists.issueNotes")}:</strong> {issueNotes}</p>}
+          {generalNotes && <p><strong>{translate("checklists.generalNotes")}:</strong> {generalNotes}</p>}
+          {!hasCleanerNotes && <p>{translate("checklists.noObservationsRecorded")}</p>}
+        </div>
+        {isReadyForReview ? (
+          <a className="button button--small button--secondary" href="#checklist-manager-actions">
+            {translate("checklists.jumpToManagerActions")}
+          </a>
+        ) : (
+          <p className="checklist-run__draft-action-note">{translate("checklists.draftActionsUnavailable")}</p>
+        )}
+      </section>
 
       {requiredPhotoTypes.length > 0 && (
         <section className="checklist-run__section" aria-labelledby="checklist-required-photos-title">
@@ -193,15 +278,8 @@ export function ChecklistRunDetail({
                 restock: draft.progress?.inventory?.needsRestock || 0,
               })}
             />
-            <DetailItem label={translate("checklists.draftRevision")} value={draft.revision || 0} />
             {lastSavedAt && <DetailItem label={translate("checklists.lastSavedAt")} value={lastSavedAt} />}
           </dl>
-          {(draft.issueNotes || draft.generalNotes) && (
-            <div className="checklist-run__draft-notes">
-              {draft.issueNotes && <p><strong>{translate("checklists.issueNotes")}:</strong> {draft.issueNotes}</p>}
-              {draft.generalNotes && <p><strong>{translate("checklists.generalNotes")}:</strong> {draft.generalNotes}</p>}
-            </div>
-          )}
         </section>
       )}
 
@@ -249,10 +327,11 @@ export function ChecklistRunDetail({
         </section>
       )}
 
-      {isReadyForReview && <ClientReportControls jobId={job.id} />}
+      <div id="checklist-manager-actions">
+        {isReadyForReview && <ClientReportControls jobId={job.id} />}
 
-      {canApproveAndComplete && (
-        <section className="checklist-run__section" aria-labelledby="checklist-approval-title">
+        {canApproveAndComplete && (
+          <section className="checklist-run__section" aria-labelledby="checklist-approval-title">
           <h3 id="checklist-approval-title">{translate("checklists.managerApproval")}</h3>
           {!isCompletionConfirmationVisible && (
             <button className="button button--primary" type="button" onClick={() => setIsCompletionConfirmationVisible(true)}>
@@ -273,13 +352,15 @@ export function ChecklistRunDetail({
             </div>
           )}
           {hasCompletionError && <p className="form-error" role="alert">{translate("checklists.approveAndCompleteError")}</p>}
-        </section>
-      )}
+          </section>
+        )}
+      </div>
 
-      <section className="checklist-run__section" aria-labelledby="checklist-context-title">
-        <h3 id="checklist-context-title">{translate("checklists.context")}</h3>
+      <details className="checklist-run__technical-details">
+        <summary>{translate("checklists.technicalDetails")}</summary>
         <dl className="detail-list checklist-run__details">
           <DetailItem label={translate("checklists.runId")} value={checklistRun.id} />
+          <DetailItem label={translate("checklists.jobId")} value={checklistRun.jobId || job.id} />
           <DetailItem
             label={translate("checklists.definitionVersion")}
             value={`v${checklistRun.definitionVersion || "?"}`}
@@ -291,8 +372,9 @@ export function ChecklistRunDetail({
           {createdAt && (
             <DetailItem label={translate("checklists.createdAt")} value={createdAt} />
           )}
+          {draft && <DetailItem label={translate("checklists.draftRevision")} value={draft.revision || 0} />}
         </dl>
-      </section>
+      </details>
       <ScrollToTopButton />
     </section>
   );
