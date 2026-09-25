@@ -2,8 +2,8 @@
 
 ## Metadata
 
-- **Last updated:** 2026-09-24
-- **Repository:** `irvingellan/cleanflow` (`main`)
+- **Last updated:** 2026-09-25
+- **Repository:** `irvingellan/cleanflow` (`main`; four overnight Gabi pilot changes merged but not deployed)
 - **Active product phase:** Gabi Pilot — controlled design-partner learning and
   validation alongside the manager's existing spreadsheet.
 
@@ -228,11 +228,19 @@ E2E tests passed; build and diff checks passed.
 
 ## Known limitations and pending validation
 
-- Overnight Gabi pilot stabilization branch (2026-09-25) adds a manager Job
-  detail edit for guest name and Job notes only. Schedule editing is deferred:
-  DEC-029 requires previous/new schedule, actor, time, and revision history to
-  be recorded atomically, and no schedule-history writer currently exists.
-  This branch work is not deployed.
+- Four approved overnight Gabi pilot changes are now merged to `main`, but are
+  **not deployed**:
+  - Cleaner photo guidance names JPEG, PNG, and WebP support; HEIC/HEIF remains
+    unsupported. The real-device photo-upload failure remains unresolved.
+  - Cleaner directory and offer selection support local name search while
+    preserving selections; no server search was added.
+  - The new Job Detail edit action covers guest name and notes only. Schedule
+    editing remains deferred under DEC-029; completed/archived Jobs remain
+    read-only.
+  - Assigned-cleaner reminder content is previewed before manual copy and uses
+    only the exact linked Property. Cleaner instructions may appear; parking,
+    access instructions, and key/code details remain manager-preview/manual-
+    copy only and require explicit opt-in. Nothing is sent automatically.
 - The OneSignal manager audience currently derives from active
   `managerPushDevices`; a manager with only OneSignal and no valid active device
   record is not yet included.
