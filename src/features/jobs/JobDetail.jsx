@@ -41,6 +41,7 @@ import {
 
 export function JobDetail({
   job,
+  property,
   knownCleaners,
   offers,
   isLoadingOffers,
@@ -131,6 +132,8 @@ export function JobDetail({
   const [hasSavedJobDetails, setHasSavedJobDetails] = useState(false);
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
+  const [reminderPreview, setReminderPreview] = useState(null);
+  const [isCopyingReminder, setIsCopyingReminder] = useState(false);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
   const startedAt = formatCreatedAt(job.startedAt, language);
@@ -140,6 +143,12 @@ export function JobDetail({
   const activeAssignments = (assignments || []).filter(
     (assignment) => assignment.isActive === true,
   );
+  const linkedProperty = property?.id === job.propertyId ? property : null;
+  const sensitivePropertyDetails = [
+    ["jobs.reminderParking", linkedProperty?.garageParking],
+    ["jobs.reminderAccessInstructions", linkedProperty?.accessInstructions],
+    ["jobs.reminderKeyCodeInfo", linkedProperty?.keyCodeInfo],
+  ].filter(([, value]) => typeof value === "string" && value.trim());
   const isAssigned = Boolean(
     job.assignedCleanerId ||
       ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(
@@ -200,6 +209,28 @@ export function JobDetail({
       offer.cleanerId &&
       !assignedCleanerIds.includes(offer.cleanerId),
   );
+  const reminderCleanerStillAssigned = reminderPreview
+    ? isAssignmentAware
+      ? job.operationalStatus === "ASSIGNED" && activeAssignments.some(
+        (assignment) => assignment.cleanerId === reminderPreview.cleanerId,
+      )
+      : job.operationalStatus === "ASSIGNED" && (
+        job.assignedCleanerId === reminderPreview.cleanerId ||
+        (!job.assignedCleanerId && reminderPreview.cleanerId === "legacy-assigned-cleaner" && job.assignedCleanerName)
+      )
+    : false;
+  const reminderPreviewMessage = reminderPreview
+    ? buildCleanerReminderMessage({
+      cleanerName: reminderPreview.cleanerName,
+      propertyName: job.propertyName || translate("properties.unnamed"),
+      scheduledDate: job.scheduledDate,
+      scheduledStart: job.scheduledStart,
+      propertyDetails: linkedProperty,
+      includeSensitiveAccess: reminderPreview.includeSensitiveAccess,
+      language,
+      translate,
+    })
+    : "";
 
   useEffect(() => {
     let isCurrent = true;
@@ -261,6 +292,8 @@ export function JobDetail({
     setEditingOfferCompensationFor(null);
     setOfferCompensationErrorFor(null);
     setCopiedOfferMessageId(null);
+    setReminderPreview(null);
+    setIsCopyingReminder(false);
     setOfferMessageCopyErrorId(null);
   }, [job.id]);
 
@@ -478,23 +511,23 @@ export function JobDetail({
     }
   }
 
-  async function copyMessageForCleaner(cleanerId, cleanerName) {
+  function openReminderPreview(cleanerId, cleanerName) {
     setCopyMessageErrorCleanerId(null);
+    setReminderPreview({ cleanerId, cleanerName, includeSensitiveAccess: false });
+  }
 
+  async function copyReminderMessage() {
+    if (!reminderPreview || !reminderCleanerStillAssigned || isCopyingReminder) return;
+    setCopyMessageErrorCleanerId(null);
+    setIsCopyingReminder(true);
     try {
-      await copyCleanerReminderMessage(
-        buildCleanerReminderMessage({
-          cleanerName,
-          propertyName: job.propertyName || translate("properties.unnamed"),
-          scheduledDate: job.scheduledDate,
-          scheduledStart: job.scheduledStart,
-          language,
-          translate,
-        }),
-      );
-      setCopiedCleanerId(cleanerId);
+      await copyCleanerReminderMessage(reminderPreviewMessage);
+      setCopiedCleanerId(reminderPreview.cleanerId);
+      setReminderPreview(null);
     } catch {
-      setCopyMessageErrorCleanerId(cleanerId);
+      setCopyMessageErrorCleanerId(reminderPreview.cleanerId);
+    } finally {
+      setIsCopyingReminder(false);
     }
   }
 
@@ -875,7 +908,7 @@ export function JobDetail({
             className="button"
             type="button"
             onClick={() =>
-              copyMessageForCleaner(
+              openReminderPreview(
                 job.assignedCleanerId || "legacy-assigned-cleaner",
                 assignedCleanerName,
               )
@@ -885,9 +918,6 @@ export function JobDetail({
               ? translate("jobs.messageCopied")
               : translate("jobs.copyMessageForCleaner", { cleaner: assignedCleanerName })}
           </button>
-          {copyMessageErrorCleanerId === (job.assignedCleanerId || "legacy-assigned-cleaner") && (
-            <p className="form-error" role="alert">{translate("jobs.copyMessageError")}</p>
-          )}
         </section>
       )}
 
@@ -936,7 +966,7 @@ export function JobDetail({
                           className="button"
                           type="button"
                           onClick={() =>
-                            copyMessageForCleaner(assignment.cleanerId, assignmentCleanerName)
+                            openReminderPreview(assignment.cleanerId, assignmentCleanerName)
                           }
                         >
                           {copiedCleanerId === assignment.cleanerId
@@ -945,9 +975,6 @@ export function JobDetail({
                               cleaner: assignmentCleanerName,
                             })}
                         </button>
-                        {copyMessageErrorCleanerId === assignment.cleanerId && (
-                          <p className="form-error" role="alert">{translate("jobs.copyMessageError")}</p>
-                        )}
                       </div>
                     )}
                     {canEditRoster && !isReplacing && (
@@ -1019,6 +1046,72 @@ export function JobDetail({
             </div>
           )}
           {assignmentError && <p className="form-error assignment-error" role="alert">{assignmentError}</p>}
+        </section>
+      )}
+
+      {reminderPreview && (
+        <section className="job-reminder-preview" aria-labelledby="job-reminder-preview-title">
+          <div className="job-reminder-preview__header">
+            <h3 id="job-reminder-preview-title">
+              {translate("jobs.reminderPreviewTitle", { cleaner: reminderPreview.cleanerName })}
+            </h3>
+            <button
+              className="button"
+              type="button"
+              disabled={isCopyingReminder}
+              onClick={() => setReminderPreview(null)}
+            >
+              {translate("common.cancel")}
+            </button>
+          </div>
+
+          {sensitivePropertyDetails.length > 0 && (
+            <div className="job-reminder-preview__sensitive">
+              <strong>{translate("jobs.reminderSensitiveAccessTitle")}</strong>
+              <p>{translate("jobs.reminderSensitiveAccessWarning")}</p>
+              <ul>
+                {sensitivePropertyDetails.map(([key, value]) => (
+                  <li key={key}>{translate(key, { details: value.trim() })}</li>
+                ))}
+              </ul>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={reminderPreview.includeSensitiveAccess}
+                  onChange={(event) => setReminderPreview((current) => ({
+                    ...current,
+                    includeSensitiveAccess: event.target.checked,
+                  }))}
+                />
+                {translate("jobs.reminderIncludeSensitiveAccess")}
+              </label>
+            </div>
+          )}
+
+          <div className="job-reminder-preview__message">
+            <strong>{translate("jobs.reminderPreviewMessage")}</strong>
+            <pre>{reminderPreviewMessage}</pre>
+          </div>
+
+          {!reminderCleanerStillAssigned && (
+            <p className="form-error" role="alert">
+              {translate("jobs.reminderCleanerNoLongerAssigned")}
+            </p>
+          )}
+          {copyMessageErrorCleanerId === reminderPreview.cleanerId && (
+            <p className="form-error" role="alert">{translate("jobs.copyMessageError")}</p>
+          )}
+
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={!reminderCleanerStillAssigned || isCopyingReminder}
+            onClick={copyReminderMessage}
+          >
+            {isCopyingReminder
+              ? translate("jobs.reminderCopying")
+              : translate("jobs.reminderCopyNow")}
+          </button>
         </section>
       )}
 

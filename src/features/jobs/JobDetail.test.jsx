@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { JobDetail } from "./JobDetail.jsx";
 
-function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {}) {
+function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {}, property = null) {
   const noOp = vi.fn();
   const { offers = [], ...jobOverrides } = overrides;
 
@@ -16,11 +16,12 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {})
           operationalStatus: status,
           ...jobOverrides,
         }}
+        property={property}
         knownCleaners={[]}
         offers={offers}
         isLoadingOffers={false}
         hasOffersError={false}
-        assignments={[]}
+        assignments={checklist.assignments || []}
         isLoadingAssignments={false}
         hasAssignmentsError={false}
         issues={[]}
@@ -183,7 +184,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getAllByText("Not set")).toHaveLength(3);
   });
 
-  it("copies a cleaner-specific reminder for an assigned legacy Job", async () => {
+  it("previews assigned Property details and copies sensitive access only after explicit confirmation", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = navigator.clipboard;
     Object.defineProperty(navigator, "clipboard", {
@@ -192,30 +193,98 @@ describe("JobDetail lifecycle actions", () => {
     });
 
     renderJobDetail("ASSIGNED", {
+      propertyId: "property-1",
       assignedCleanerId: "cleaner-a",
       assignedCleanerName: "Ana",
       scheduledDate: "2026-09-08",
       scheduledStart: "10:30",
+      notes: "Internal manager note",
+      clientPrice: 350,
+      cleanerPayout: 200,
+    }, {}, {}, {
+      id: "property-1",
+      garageParking: "Garage entrance",
+      cleanerInstructions: "Please reset the thermostat.",
+      accessInstructions: "Use side door code 8877.",
+      keyCodeInfo: "Lockbox key 3921.",
+      additionalNotes: "Internal property note",
+      address: "Private street address",
+      defaultClientPrice: 600,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Copy message for Ana" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
+    expect(writeText).not.toHaveBeenCalled();
+
+    const preview = screen.getByRole("region", { name: "Review reminder for Ana" });
+    expect(within(preview).getByText(/Please reset the thermostat/)).toBeVisible();
+    expect(within(preview).getByText(/Garage entrance/)).toBeVisible();
+    expect(within(preview).getByText(/Use side door code 8877/)).toBeVisible();
+    expect(within(preview).getByText(/Lockbox key 3921/)).toBeVisible();
+    expect(within(preview).getByText(/Property access details — private/)).toBeVisible();
+
+    const message = within(preview).getByText(/Hi Ana! 😊/);
+    expect(message).toHaveTextContent("Date: Sep 8, 2026");
+    expect(message).toHaveTextContent("Time: 10:30");
+    expect(message).toHaveTextContent("Please reset the thermostat.");
+    expect(message).not.toHaveTextContent("Garage entrance");
+    expect(message).not.toHaveTextContent("8877");
+    expect(message).not.toHaveTextContent("3921");
+    expect(message).not.toHaveTextContent("Private street address");
+    expect(message).not.toHaveTextContent("Internal manager note");
+    expect(message).not.toHaveTextContent("Internal property note");
+    expect(message).not.toHaveTextContent("350");
+    expect(message).not.toHaveTextContent("200");
+
+    fireEvent.click(within(preview).getByRole("checkbox", {
+      name: "Include these sensitive access details in the copied message",
+    }));
+    const confirmedMessage = within(preview).getByText(/Hi Ana! 😊/);
+    expect(confirmedMessage).toHaveTextContent("Sensitive access details:");
+    expect(confirmedMessage).toHaveTextContent("Garage entrance");
+    expect(confirmedMessage).toHaveTextContent("Use side door code 8877");
+    expect(confirmedMessage).toHaveTextContent("Lockbox key 3921");
+
+    fireEvent.click(within(preview).getByRole("button", { name: "Copy reminder" }));
 
     await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(
-        expect.stringContaining("Hi Ana! 😊"),
-      );
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Hi Ana! 😊"));
     });
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Time: 10:30"),
-    );
+    expect(writeText.mock.calls[0][0]).toContain("Time: 10:30");
+    expect(writeText.mock.calls[0][0]).toContain("Use side door code 8877");
+    expect(writeText.mock.calls[0][0]).not.toContain("Private street address");
+    expect(writeText.mock.calls[0][0]).not.toContain("Internal property note");
+    expect(writeText.mock.calls[0][0]).not.toContain("350");
     expect(screen.getByRole("button", { name: "Message copied" })).toBeVisible();
 
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: originalClipboard,
     });
+  });
+
+  it("uses only the active assigned cleaner and exact linked Property for schema-v2 reminders", () => {
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2,
+      propertyId: "property-1",
+      assignedCleanerIds: ["cleaner-a"],
+    }, {}, {
+      assignments: [{
+        id: "assignment-a",
+        cleanerId: "cleaner-a",
+        cleanerNameSnapshot: "Ana",
+        isActive: true,
+        executionStatus: "ASSIGNED",
+      }],
+    }, {
+      id: "different-property",
+      keyCodeInfo: "Must not be included",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
+
+    expect(screen.getByRole("region", { name: "Review reminder for Ana" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy reminder" })).toBeEnabled();
+    expect(screen.queryByText(/Must not be included/)).not.toBeInTheDocument();
   });
 
   it("shows a manager Create checklist action and prevents another click while creation is pending", () => {
@@ -719,6 +788,10 @@ describe("JobDetail lifecycle actions", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
+    expect(writeText).not.toHaveBeenCalled();
+    expect(screen.getByRole("region", { name: "Review reminder for Ana" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Review reminder for Beatriz" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy reminder" }));
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Hi Ana! 😊"));

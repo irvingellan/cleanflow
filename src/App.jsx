@@ -1203,6 +1203,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "job-detail" && selectedJob && (
           <JobDetail
             job={selectedJob}
+            property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
             knownCleaners={directoryCleaners}
             offers={jobOffers}
             isLoadingOffers={isLoadingOffers}

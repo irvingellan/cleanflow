@@ -11,6 +11,11 @@ function translate(key, replacements = {}) {
     "jobs.reminderDate": "Date: {date}",
     "jobs.reminderTime": "Time: {time}",
     "jobs.reminderProperty": "Property: {property}",
+    "jobs.reminderInstructions": "Cleaner instructions: {instructions}",
+    "jobs.reminderSensitiveAccessHeading": "Sensitive access details:",
+    "jobs.reminderParking": "Parking / garage: {details}",
+    "jobs.reminderAccessInstructions": "Access instructions: {details}",
+    "jobs.reminderKeyCodeInfo": "Key / code info: {details}",
     "jobs.reminderConfirmation": "Please confirm when you receive this. Thank you!",
     "common.notProvided": "Not provided",
   };
@@ -68,6 +73,50 @@ describe("cleaner reminder message", () => {
     expect(message).not.toContain("200");
     expect(message).not.toContain("Internal manager note");
     expect(message).not.toContain("1234");
+  });
+
+  it("includes cleaner instructions but keeps access details opt-in and excludes unrelated Property fields", () => {
+    const propertyDetails = {
+      cleanerInstructions: "Reset the thermostat.",
+      garageParking: "Park in the garage.",
+      accessInstructions: "Use code 8877.",
+      keyCodeInfo: "Lockbox key 3921.",
+      address: "Private street address",
+      additionalNotes: "Internal Property note",
+      defaultClientPrice: 350,
+      defaultCleanerPrice: 200,
+    };
+    const standardMessage = buildCleanerReminderMessage({
+      cleanerName: "Ana",
+      propertyName: "Harbor View Condo",
+      scheduledDate: "2026-09-08",
+      propertyDetails,
+      language: "en",
+      translate,
+    });
+
+    expect(standardMessage).toContain("Cleaner instructions: Reset the thermostat.");
+    expect(standardMessage).not.toContain("Park in the garage");
+    expect(standardMessage).not.toContain("8877");
+    expect(standardMessage).not.toContain("3921");
+    expect(standardMessage).not.toContain("Private street address");
+    expect(standardMessage).not.toContain("Internal Property note");
+    expect(standardMessage).not.toContain("350");
+    expect(standardMessage).not.toContain("200");
+
+    const confirmedMessage = buildCleanerReminderMessage({
+      cleanerName: "Ana",
+      propertyName: "Harbor View Condo",
+      scheduledDate: "2026-09-08",
+      propertyDetails,
+      includeSensitiveAccess: true,
+      language: "en",
+      translate,
+    });
+    expect(confirmedMessage).toContain("Sensitive access details:");
+    expect(confirmedMessage).toContain("Park in the garage.");
+    expect(confirmedMessage).toContain("Use code 8877.");
+    expect(confirmedMessage).toContain("Lockbox key 3921.");
   });
 
   it("copies the prepared message through the browser clipboard", async () => {

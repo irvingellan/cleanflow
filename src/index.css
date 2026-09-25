@@ -2674,6 +2674,71 @@ button.summary-card {
   padding-top: 20px;
 }
 
+.job-reminder-preview {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+  border: 1px solid var(--color-divider);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--color-surface-subtle);
+}
+
+.job-reminder-preview__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-reminder-preview__header h3,
+.job-reminder-preview__sensitive p,
+.job-reminder-preview__message pre {
+  margin: 0;
+}
+
+.job-reminder-preview__sensitive {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--color-warning-text);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--color-status-warning-bg);
+}
+
+.job-reminder-preview__sensitive ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.job-reminder-preview__sensitive label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.job-reminder-preview__sensitive input {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.job-reminder-preview__message {
+  display: grid;
+  gap: 8px;
+}
+
+.job-reminder-preview__message pre {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font: inherit;
+}
+
 .job-checklist,
 .checklist-run__section {
   display: grid;
