@@ -38,6 +38,22 @@ export function getJobGrossMargin(job) {
   return clientPrice - cleanerPayout;
 }
 
+export function buildJobDetailsUpdate({ guestName, notes }) {
+  const normalizedGuestName = optionalText(guestName);
+  if (normalizedGuestName.length > maximumGuestNameLength) {
+    throw new Error("Guest name is too long.");
+  }
+
+  return {
+    guestName: normalizedGuestName || undefined,
+    notes: optionalText(notes) || undefined,
+  };
+}
+
+export function canEditJobDetails(job) {
+  return job?.operationalStatus !== "COMPLETED" && !job?.archivedAt;
+}
+
 export function getJobSchemaVersion(job) {
   return Number.isInteger(job?.schemaVersion) && job.schemaVersion > 0
     ? job.schemaVersion

@@ -24,6 +24,7 @@ import {
   completeInProgressJob,
   startAssignedJob,
   updateJobPrices,
+  updateJobDetails,
   updateJobDataProvenance,
   archiveJob,
   restoreJob,
@@ -345,6 +346,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return updateJob((job) => updateJobPrices(job.id, prices));
   }
 
+  async function saveJobDetails(details) {
+    return updateJob((job) => updateJobDetails(job.id, details));
+  }
+
   async function saveDataProvenance(dataProvenance) {
     return updateJob(async (job) => {
       await updateJobDataProvenance(job.id, dataProvenance, actorUid);
@@ -528,6 +533,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       completeCleaning,
       approveChecklistRun,
       saveJobPrices,
+      saveJobDetails,
       saveDataProvenance,
       archive,
       restore,

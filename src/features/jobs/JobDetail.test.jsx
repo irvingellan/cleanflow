@@ -55,6 +55,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {})
         onStartCleaning={noOp}
         onCompleteCleaning={noOp}
         onUpdatePrices={callbacks.onUpdatePrices || noOp}
+        onUpdateDetails={callbacks.onUpdateDetails || noOp}
         onSimulateAssignedCleaner={noOp}
         onResolveIssue={noOp}
       />
@@ -63,6 +64,71 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {})
 }
 
 describe("JobDetail lifecycle actions", () => {
+  it("lets a manager edit only guest name and notes and reports the saved result", async () => {
+    const onUpdateDetails = vi.fn().mockResolvedValue({
+      guestName: "Updated guest",
+      notes: "Text the cleaner at arrival.",
+    });
+    renderJobDetail("UNASSIGNED", { guestName: "Original guest", notes: "Old note" }, { onUpdateDetails });
+
+    expect(screen.getByText("Old note")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Edit guest / notes" }));
+    fireEvent.change(screen.getByLabelText("Guest name (optional)"), { target: { value: " Updated guest " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Notes" }), { target: { value: " Text the cleaner at arrival. " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+
+    await waitFor(() => {
+      expect(onUpdateDetails).toHaveBeenCalledWith({
+        guestName: "Updated guest",
+        notes: "Text the cleaner at arrival.",
+      });
+      expect(screen.getByRole("status")).toHaveTextContent("Guest and notes updated.");
+    });
+  });
+
+  it("preserves the edit form and shows an error when saving Job details fails", async () => {
+    const onUpdateDetails = vi.fn().mockRejectedValue(new Error("offline"));
+    renderJobDetail("UNASSIGNED", {}, { onUpdateDetails });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit guest / notes" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Notes" }), { target: { value: "New note" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Unable to update guest and notes. Try again."));
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveValue("New note");
+  });
+
+  it("keeps completed or archived Job detail edits disabled to preserve history", () => {
+    const { rerender } = renderJobDetail("COMPLETED");
+
+    expect(screen.getByRole("button", { name: "Edit guest / notes" })).toBeDisabled();
+    expect(screen.getByText("Completed or archived service details are read-only to preserve history.")).toBeVisible();
+
+    rerender(
+      <TranslationProvider>
+        <JobDetail
+          job={{ id: "job-1", propertyName: "Pacific Beach Condo", operationalStatus: "ASSIGNED", archivedAt: { seconds: 1 } }}
+          knownCleaners={[]}
+          offers={[]}
+          isLoadingOffers={false}
+          hasOffersError={false}
+          assignments={[]}
+          isLoadingAssignments={false}
+          hasAssignmentsError={false}
+          issues={[]}
+          isLoadingIssues={false}
+          hasIssuesError={false}
+          onBack={vi.fn()}
+          onOfferToCleaners={vi.fn()}
+          onRefreshOffers={vi.fn()}
+          onUpdateDetails={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Edit guest / notes" })).toBeDisabled();
+  });
+
   it("shows derived gross margin only with both Job price snapshots and lets a manager edit only those prices", async () => {
     const onUpdatePrices = vi.fn().mockResolvedValue(undefined);
     const { rerender } = renderJobDetail("UNASSIGNED", {

@@ -228,6 +228,11 @@ E2E tests passed; build and diff checks passed.
 
 ## Known limitations and pending validation
 
+- Overnight Gabi pilot stabilization branch (2026-09-25) adds a manager Job
+  detail edit for guest name and Job notes only. Schedule editing is deferred:
+  DEC-029 requires previous/new schedule, actor, time, and revision history to
+  be recorded atomically, and no schedule-history writer currently exists.
+  This branch work is not deployed.
 - The OneSignal manager audience currently derives from active
   `managerPushDevices`; a manager with only OneSignal and no valid active device
   record is not yet included.
