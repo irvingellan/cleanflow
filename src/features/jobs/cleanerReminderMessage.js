@@ -10,6 +10,8 @@ export function buildCleanerReminderMessage({
   propertyName,
   scheduledDate,
   scheduledStart,
+  propertyDetails,
+  includeSensitiveAccess = false,
   language,
   translate,
 }) {
@@ -27,12 +29,31 @@ export function buildCleanerReminderMessage({
     lines.push(`🕐 ${translate("jobs.reminderTime", { time: scheduledStart })}`);
   }
 
-  lines.push(
-    `📍 ${translate("jobs.reminderProperty", { property: propertyName })}`,
-    "",
-    translate("jobs.reminderConfirmation"),
-  );
+  lines.push(`📍 ${translate("jobs.reminderProperty", { property: propertyName })}`);
 
+  const cleanerInstructions = typeof propertyDetails?.cleanerInstructions === "string"
+    ? propertyDetails.cleanerInstructions.trim()
+    : "";
+  if (cleanerInstructions) {
+    lines.push(translate("jobs.reminderInstructions", { instructions: cleanerInstructions }));
+  }
+
+  if (includeSensitiveAccess) {
+    const sensitiveDetails = [
+      ["jobs.reminderParking", propertyDetails?.garageParking],
+      ["jobs.reminderAccessInstructions", propertyDetails?.accessInstructions],
+      ["jobs.reminderKeyCodeInfo", propertyDetails?.keyCodeInfo],
+    ].filter(([, value]) => typeof value === "string" && value.trim());
+
+    if (sensitiveDetails.length > 0) {
+      lines.push("", translate("jobs.reminderSensitiveAccessHeading"));
+      for (const [key, value] of sensitiveDetails) {
+        lines.push(translate(key, { details: value.trim() }));
+      }
+    }
+  }
+
+  lines.push("", translate("jobs.reminderConfirmation"));
   return lines.join("\n");
 }
 
