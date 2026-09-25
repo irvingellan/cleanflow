@@ -1802,6 +1802,28 @@ button.summary-card {
   gap: 12px;
 }
 
+.cleaner-name-search {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.cleaner-name-search label {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.cleaner-name-search input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
 .cleaner-directory-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(120px, 0.7fr) auto;
