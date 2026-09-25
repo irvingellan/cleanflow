@@ -90,6 +90,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
   return (
     <div className={`public-checklist__photo${missing ? " public-checklist__photo--missing" : ""}`} aria-live="polite" ref={targetRef} tabIndex={-1}>
       <span className="public-checklist__photo-required">{translate("checklists.photoRequired")}</span>
+      {!isSaved && <p className="public-checklist__photo-guidance">{translate("checklists.photoFormatGuidance")}</p>}
       {isSaved && (
         <img
           className="public-checklist__photo-preview"
@@ -114,7 +115,11 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
       {missing && <p className="public-checklist__missing-marker">{translate("checklists.requiredPhotoNotSaved")}</p>}
       {state === "FAILED" && (
         <div className="public-checklist__photo-error" role="alert">
-          <p>{translate(error === "checklist_photo_too_large" ? "checklists.photoTooLarge" : "checklists.photoUploadFailed")}</p>
+          <p>{translate(error === "checklist_photo_too_large"
+            ? "checklists.photoTooLarge"
+            : error === "checklist_photo_invalid_type"
+              ? "checklists.photoUnsupportedType"
+              : "checklists.photoUploadFailed")}</p>
           {retryFile && <button className="button button--small" type="button" onClick={() => upload(retryFile)}>{translate("checklists.retryPhoto")}</button>}
         </div>
       )}
