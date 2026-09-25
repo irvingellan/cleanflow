@@ -289,6 +289,14 @@ for tomorrow's Jobs and 07:00 America/Los_Angeles for today's Jobs. They contain
 counts only, use the current Job schedule, skip archived/non-operational Jobs,
 and send no push when the target date has no operational Jobs.
 
+On the overnight pilot branch, Job Detail's manual reminder action is available
+only to the manager for a currently assigned cleaner while the Job remains
+`ASSIGNED`. It opens a preview first. Cleaner instructions from the exact linked
+Property appear there. Parking/garage, access instructions, and key/code details
+are marked private and copied only after explicit opt-in. No message is sent
+automatically, and these details are not added to public Offers, client reports,
+cleaner checklist projections, or notification payloads.
+
 **VALIDATED REQUIREMENT / PLANNED:** later reminders may include:
 
 - new Assignment notification;
