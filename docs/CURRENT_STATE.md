@@ -228,8 +228,8 @@ E2E tests passed; build and diff checks passed.
 
 ## Known limitations and pending validation
 
-- Four approved overnight Gabi pilot changes are now merged to `main`, but are
-  **not deployed**:
+- Four approved overnight Gabi pilot changes are merged to `main` and the
+  Hosting bundle is deployed from source commit `b49eda3`:
   - Cleaner photo guidance names JPEG, PNG, and WebP support; HEIC/HEIF remains
     unsupported. The real-device photo-upload failure remains unresolved.
   - Cleaner directory and offer selection support local name search while
@@ -241,6 +241,12 @@ E2E tests passed; build and diff checks passed.
     only the exact linked Property. Cleaner instructions may appear; parking,
     access instructions, and key/code details remain manager-preview/manual-
     copy only and require explicit opt-in. Nothing is sent automatically.
+- Deployment verification returned HTTPS 200, and `/version.json` matched the
+  build from `b49eda3`. A synthetic invalid public checklist token returned
+  404. No Function was redeployed: the only server-file change exports the
+  existing image validator for tests without changing request behavior. The
+  authenticated manager shell was not opened to avoid a possible push-device
+  registration refresh.
 - The OneSignal manager audience currently derives from active
   `managerPushDevices`; a manager with only OneSignal and no valid active device
   record is not yet included.
