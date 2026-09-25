@@ -52,7 +52,7 @@ function detectImage(buffer) {
   return null;
 }
 
-function normalizeImageUpload({ contentType, bytes }) {
+export function normalizeImageUpload({ contentType, bytes }) {
   if (!supportedImageTypes.has(contentType)) {
     throw new HttpsError("invalid-argument", "Choose a JPEG, PNG, or WebP image.");
   }

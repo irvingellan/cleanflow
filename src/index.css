@@ -3068,6 +3068,12 @@ button.summary-card {
   font-weight: 800;
 }
 
+.public-checklist__photo-guidance {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
 .public-checklist__photo-actions {
   display: flex;
   flex-wrap: wrap;

@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getPublicChecklist,
+  maximumChecklistEvidenceSizeBytes,
   publicChecklistRequestTimeoutMilliseconds,
   readyPublicChecklistForReview,
   savePublicChecklistDraft,
+  uploadPublicChecklistEvidence,
+  validateChecklistEvidenceFile,
 } from "./checklistCapabilityService.js";
 
 afterEach(() => {
@@ -12,6 +15,66 @@ afterEach(() => {
 });
 
 describe("public checklist requests", () => {
+  it.each(["image/jpeg", "image/png", "image/webp"])("accepts a %s file within the upload limit", (type) => {
+    const file = new File([new Uint8Array([1, 2, 3])], "photo", { type });
+    expect(() => validateChecklistEvidenceFile(file)).not.toThrow();
+  });
+
+  it.each(["image/heic", "image/heif", ""])("rejects unsupported or missing file MIME %j", (type) => {
+    const file = new File([new Uint8Array([1, 2, 3])], "photo", { type });
+    expect(() => validateChecklistEvidenceFile(file)).toThrowError(expect.objectContaining({
+      code: "checklist_photo_invalid_type",
+    }));
+  });
+
+  it("rejects oversized files before sending a request", () => {
+    const file = new File([new Uint8Array(maximumChecklistEvidenceSizeBytes + 1)], "large.jpg", { type: "image/jpeg" });
+    expect(() => validateChecklistEvidenceFile(file)).toThrowError(expect.objectContaining({
+      code: "checklist_photo_too_large",
+    }));
+  });
+
+  it("lets the cleaner retry the identical image after network and server failures", async () => {
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "photo.jpg", { type: "image/jpeg" });
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Network is unavailable"))
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ error: "checklist_photo_unavailable" }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const request = { token: "opaque-token", requirementId: "living-belongings", file };
+
+    await expect(uploadPublicChecklistEvidence(request)).rejects.toThrow("Network is unavailable");
+    await expect(uploadPublicChecklistEvidence(request)).rejects.toMatchObject({ code: "checklist_photo_unavailable" });
+    await expect(uploadPublicChecklistEvidence(request)).resolves.toMatchObject({
+      evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init).toMatchObject({ method: "PUT", credentials: "omit", body: file });
+      expect(init.headers).toMatchObject({ "Content-Type": "image/jpeg", "X-CleanFlow-Checklist-Item": "living-belongings" });
+    }
+  });
+
+  it("bounds a photo upload request that does not settle", async () => {
+    vi.useFakeTimers();
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "photo.jpg", { type: "image/jpeg" });
+    const fetchMock = vi.fn((_input, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = uploadPublicChecklistEvidence({ token: "opaque-token", requirementId: "living-belongings", file });
+    const timeoutExpectation = expect(request).rejects.toMatchObject({ code: "checklist_request_timeout", stage: "request" });
+    await vi.advanceTimersByTimeAsync(publicChecklistRequestTimeoutMilliseconds);
+    await timeoutExpectation;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds a non-settling public read instead of leaving the cleaner loading indefinitely", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn((_input, init) => new Promise((_resolve, reject) => {

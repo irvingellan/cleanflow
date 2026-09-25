@@ -166,6 +166,7 @@ describe("PublicChecklistPage", () => {
     const { container } = renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
     expect(screen.getByText("Photo required")).toBeVisible();
+    expect(screen.getByText("Supported: JPEG, PNG, or WebP. HEIC/HEIF is not supported.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Take photo" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Choose photo" })).toBeVisible();
     const inputs = container.querySelectorAll('input[type="file"]');
@@ -232,6 +233,30 @@ describe("PublicChecklistPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry photo" }));
     await waitFor(() => expect(uploadPublicChecklistEvidence).toHaveBeenCalledTimes(2));
     expect(uploadPublicChecklistEvidence.mock.calls[1][0].file).toBe(file);
+  });
+
+  it("explains unsupported HEIC and keeps checklist answers and photo selection usable", async () => {
+    uploadPublicChecklistEvidence.mockRejectedValueOnce({ code: "checklist_photo_invalid_type" });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenCalled());
+
+    const file = new File([new Uint8Array([0, 0, 0, 0, 102, 116, 121, 112])], "photo.heic", { type: "image/heic" });
+    const [cameraInput] = document.querySelectorAll('input[type="file"]');
+    fireEvent.change(cameraInput, { target: { files: [file] } });
+
+    const englishMessage = "Use a JPEG, PNG, or WebP image. HEIC/HEIF photos are not supported yet.";
+    expect(await screen.findByText(englishMessage)).toBeVisible();
+    expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Choose photo" })).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "pt" } });
+    expect(screen.getByText("Use uma imagem JPEG, PNG ou WebP. Fotos HEIC/HEIF ainda não são compatíveis.")).toBeVisible();
+    expect(screen.getByText("Compatíveis: JPEG, PNG ou WebP. HEIC/HEIF não é compatível.")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "es" } });
+    expect(screen.getByText("Usa una imagen JPEG, PNG o WebP. Las fotos HEIC/HEIF aún no son compatibles.")).toBeVisible();
+    expect(screen.getByText("Compatibles: JPEG, PNG o WebP. HEIC/HEIF no es compatible.")).toBeVisible();
   });
 
   it("optimistically saves checklist and inventory choices through the capability API", async () => {
