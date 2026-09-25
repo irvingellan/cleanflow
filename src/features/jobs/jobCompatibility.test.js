@@ -5,6 +5,8 @@ import {
   LEGACY_JOB_SCHEMA_VERSION,
   SINGULAR_JOB_SCHEMA_VERSION,
   buildCurrentJobCreateData,
+  buildJobDetailsUpdate,
+  canEditJobDetails,
   canManageAssignmentAwareOffers,
   getAssignedCleanerIds,
   getJobGrossMargin,
@@ -15,6 +17,24 @@ import {
 } from "./jobCompatibility.js";
 
 describe("Job compatibility", () => {
+  it("normalizes editable Job details and omits blank optional values", () => {
+    expect(buildJobDetailsUpdate({ guestName: "  Guest  ", notes: "  Entry note  " })).toEqual({
+      guestName: "Guest",
+      notes: "Entry note",
+    });
+    expect(buildJobDetailsUpdate({ guestName: "  ", notes: "" })).toEqual({
+      guestName: undefined,
+      notes: undefined,
+    });
+    expect(() => buildJobDetailsUpdate({ guestName: "x".repeat(121), notes: "" })).toThrow("Guest name is too long.");
+  });
+
+  it("does not allow guest/notes edits to completed or archived Jobs", () => {
+    expect(canEditJobDetails({ operationalStatus: "ASSIGNED" })).toBe(true);
+    expect(canEditJobDetails({ operationalStatus: "COMPLETED" })).toBe(false);
+    expect(canEditJobDetails({ operationalStatus: "ASSIGNED", archivedAt: { seconds: 1 } })).toBe(false);
+  });
+
   it("keeps versionless legacy singular-cleaner and payout fields readable", () => {
     const legacyJob = normalizeJobRecord({
       assignedCleanerId: "cleaner-1",

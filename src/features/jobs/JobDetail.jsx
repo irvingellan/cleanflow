@@ -22,6 +22,8 @@ import { useTranslation } from "../../i18n/translations.js";
 import { ChecklistCapabilityControls } from "../checklists/ChecklistCapabilityControls.jsx";
 import {
   canManageAssignmentAwareOffers,
+  canEditJobDetails,
+  maximumGuestNameLength,
   getJobGrossMargin,
   getAssignedCleanerIds,
   isAssignmentAwareJob,
@@ -78,6 +80,7 @@ export function JobDetail({
   onStartCleaning,
   onCompleteCleaning,
   onUpdatePrices,
+  onUpdateDetails,
   onSimulateAssignedCleaner,
   onResolveIssue,
   onSaveDataProvenance,
@@ -118,6 +121,14 @@ export function JobDetail({
   const [isSavingPrices, setIsSavingPrices] = useState(false);
   const [priceSaveError, setPriceSaveError] = useState("");
   const [hasSavedPrices, setHasSavedPrices] = useState(false);
+  const [isEditingJobDetails, setIsEditingJobDetails] = useState(false);
+  const [jobDetailValues, setJobDetailValues] = useState(() => ({
+    guestName: job.guestName || "",
+    notes: job.notes || "",
+  }));
+  const [isSavingJobDetails, setIsSavingJobDetails] = useState(false);
+  const [jobDetailsSaveError, setJobDetailsSaveError] = useState("");
+  const [hasSavedJobDetails, setHasSavedJobDetails] = useState(false);
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const createdAt = formatCreatedAt(job.createdAt, language);
@@ -234,6 +245,17 @@ export function JobDetail({
   }, [job.id]);
 
   useEffect(() => {
+    setJobDetailValues({
+      guestName: job.guestName || "",
+      notes: job.notes || "",
+    });
+    setIsEditingJobDetails(false);
+    setIsSavingJobDetails(false);
+    setJobDetailsSaveError("");
+    setHasSavedJobDetails(false);
+  }, [job.id]);
+
+  useEffect(() => {
     setPublicOfferLink(null);
     setPublicOfferLinkError(null);
     setEditingOfferCompensationFor(null);
@@ -250,6 +272,48 @@ export function JobDetail({
     setPriceSaveError("");
     setHasSavedPrices(false);
     setIsEditingPrices(true);
+  }
+
+  function startJobDetailsEdit() {
+    if (!canEditJobDetails(job)) return;
+    setJobDetailValues({
+      guestName: job.guestName || "",
+      notes: job.notes || "",
+    });
+    setJobDetailsSaveError("");
+    setHasSavedJobDetails(false);
+    setIsEditingJobDetails(true);
+  }
+
+  async function saveJobDetails(event) {
+    event.preventDefault();
+    const details = {
+      guestName: jobDetailValues.guestName.trim(),
+      notes: jobDetailValues.notes.trim(),
+    };
+
+    if (details.guestName.length > maximumGuestNameLength) {
+      setJobDetailsSaveError(translate("jobs.guestNameTooLong"));
+      return;
+    }
+
+    setIsSavingJobDetails(true);
+    setJobDetailsSaveError("");
+    setHasSavedJobDetails(false);
+
+    try {
+      const updatedJob = await onUpdateDetails(details);
+      setJobDetailValues({
+        guestName: updatedJob?.guestName || details.guestName,
+        notes: updatedJob?.notes || details.notes,
+      });
+      setIsEditingJobDetails(false);
+      setHasSavedJobDetails(true);
+    } catch {
+      setJobDetailsSaveError(translate("jobs.detailsUpdateError"));
+    } finally {
+      setIsSavingJobDetails(false);
+    }
   }
 
   async function savePrices(event) {
@@ -553,6 +617,74 @@ export function JobDetail({
           <DetailItem label={translate("jobs.createdTime")} value={createdAt} />
         )}
       </dl>
+
+      <section className="job-details-edit" aria-label={translate("jobs.editDetails")}>
+        {!isEditingJobDetails && (
+          <>
+            <button
+              className="button"
+              type="button"
+              disabled={!canEditJobDetails(job)}
+              onClick={startJobDetailsEdit}
+            >
+              {translate("jobs.editDetails")}
+            </button>
+            {!canEditJobDetails(job) && (
+              <p className="form-hint">{translate("jobs.detailsReadOnlyHistorical")}</p>
+            )}
+          </>
+        )}
+        {hasSavedJobDetails && !isEditingJobDetails && (
+          <p className="form-success" role="status">{translate("jobs.detailsSaved")}</p>
+        )}
+        {isEditingJobDetails && (
+          <form className="cleaning-form" noValidate onSubmit={saveJobDetails}>
+            <label>
+              {translate("jobs.guestName")}
+              <input
+                type="text"
+                name="guestName"
+                maxLength={maximumGuestNameLength}
+                value={jobDetailValues.guestName}
+                onChange={(event) => setJobDetailValues((current) => ({
+                  ...current,
+                  guestName: event.target.value,
+                }))}
+              />
+            </label>
+            <label>
+              {translate("common.notes")}
+              <textarea
+                name="notes"
+                rows="4"
+                value={jobDetailValues.notes}
+                onChange={(event) => setJobDetailValues((current) => ({
+                  ...current,
+                  notes: event.target.value,
+                }))}
+              />
+            </label>
+            {jobDetailsSaveError && <p className="form-error" role="alert">{jobDetailsSaveError}</p>}
+            <div className="button-row">
+              <button
+                className="button"
+                type="button"
+                disabled={isSavingJobDetails}
+                onClick={() => {
+                  setIsEditingJobDetails(false);
+                  setJobDetailsSaveError("");
+                  setJobDetailValues({ guestName: job.guestName || "", notes: job.notes || "" });
+                }}
+              >
+                {translate("common.cancel")}
+              </button>
+              <button className="button button--primary" type="submit" disabled={isSavingJobDetails}>
+                {isSavingJobDetails ? translate("jobs.savingDetails") : translate("jobs.saveDetails")}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
 
       <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
         {!isEditingPrices && (

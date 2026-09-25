@@ -20,6 +20,8 @@ import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import {
   buildCurrentJobCreateData,
+  buildJobDetailsUpdate,
+  canEditJobDetails,
   isAssignmentAwareJob,
   normalizeJobRecord,
   optionalJobPrice,
@@ -604,6 +606,27 @@ export async function updateJobPrices(jobId, { clientPrice, cleanerPayout }) {
   await updateDoc(reference, {
     clientPrice: normalizedClientPrice === undefined ? deleteField() : normalizedClientPrice,
     cleanerPayout: normalizedCleanerPayout === undefined ? deleteField() : normalizedCleanerPayout,
+  });
+
+  return jobFromSnapshot(await getDoc(reference));
+}
+
+export async function updateJobDetails(jobId, details) {
+  const normalizedDetails = buildJobDetailsUpdate(details);
+  const reference = jobDocument(jobId);
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("Job not found.");
+    if (!canEditJobDetails(snapshot.data())) {
+      const error = new Error("Completed or archived Job details are read-only.");
+      error.code = "job-details-edit-not-allowed";
+      throw error;
+    }
+    transaction.update(reference, {
+      guestName: normalizedDetails.guestName ?? deleteField(),
+      notes: normalizedDetails.notes ?? deleteField(),
+    });
   });
 
   return jobFromSnapshot(await getDoc(reference));

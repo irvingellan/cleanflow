@@ -1521,6 +1521,13 @@ Object.assign(messages.es, {
 });
 
 Object.assign(messages.en, {
+  "jobs.editDetails": "Edit guest / notes",
+  "jobs.saveDetails": "Save details",
+  "jobs.savingDetails": "Saving details…",
+  "jobs.detailsSaved": "Guest and notes updated.",
+  "jobs.detailsUpdateError": "Unable to update guest and notes. Try again.",
+  "jobs.guestNameTooLong": "Keep the guest name under 120 characters.",
+  "jobs.detailsReadOnlyHistorical": "Completed or archived service details are read-only to preserve history.",
   "cleaners.search": "Search cleaners by name",
   "cleaners.searchNoResults": "No cleaners match this search.",
   "offers.searchCleaners": "Search cleaners by name",
@@ -1528,6 +1535,13 @@ Object.assign(messages.en, {
 });
 
 Object.assign(messages.pt, {
+  "jobs.editDetails": "Editar hóspede / observações",
+  "jobs.saveDetails": "Salvar detalhes",
+  "jobs.savingDetails": "Salvando detalhes…",
+  "jobs.detailsSaved": "Hóspede e observações atualizados.",
+  "jobs.detailsUpdateError": "Não foi possível atualizar o hóspede e as observações. Tente novamente.",
+  "jobs.guestNameTooLong": "Use no máximo 120 caracteres para o nome do hóspede.",
+  "jobs.detailsReadOnlyHistorical": "Os detalhes de serviços concluídos ou arquivados são somente leitura para preservar o histórico.",
   "cleaners.search": "Buscar cleaners por nome",
   "cleaners.searchNoResults": "Nenhuma cleaner corresponde a esta busca.",
   "offers.searchCleaners": "Buscar cleaners por nome",
@@ -1535,6 +1549,13 @@ Object.assign(messages.pt, {
 });
 
 Object.assign(messages.es, {
+  "jobs.editDetails": "Editar huésped / notas",
+  "jobs.saveDetails": "Guardar detalles",
+  "jobs.savingDetails": "Guardando detalles…",
+  "jobs.detailsSaved": "Se actualizaron el huésped y las notas.",
+  "jobs.detailsUpdateError": "No se pudieron actualizar el huésped y las notas. Inténtalo de nuevo.",
+  "jobs.guestNameTooLong": "Usa como máximo 120 caracteres para el nombre del huésped.",
+  "jobs.detailsReadOnlyHistorical": "Los detalles de servicios completados o archivados son de solo lectura para preservar el historial.",
   "cleaners.search": "Buscar cleaners por nombre",
   "cleaners.searchNoResults": "Ninguna cleaner coincide con esta búsqueda.",
   "offers.searchCleaners": "Buscar cleaners por nombre",
