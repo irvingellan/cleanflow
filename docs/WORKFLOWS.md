@@ -228,18 +228,25 @@ payment processing are not currently implemented.
 
 ## Rescheduling workflow
 
-**VALIDATED REQUIREMENT / PLANNED:**
+**VALIDATED REQUIREMENT / CURRENTLY IMPLEMENTED ON AN ISOLATED FEATURE BRANCH
+(NOT MERGED OR DEPLOYED):**
 
 ```text
 Manager changes Job schedule
 → prior schedule is recorded
-→ Job schedule revision advances
+→ Job schedule revision and checklist context revision advance atomically
 → existing Offers and Assignments remain historically intact
-→ manager reviews any required reconfirmation/reminder action
+→ Job worklists and reminder calculations use the current Job schedule
+→ manager is warned that manually sent external messages may be stale
 ```
 
 The system must not silently delete an Offer, Assignment, or history because a
-date changes.
+date changes. Only non-archived `UNASSIGNED`, `OFFERED`, and `ASSIGNED` Jobs
+can be rescheduled. In-progress/completed/archived Jobs are locked. If the
+initial Checklist Run exists, rescheduling is locked so its frozen schedule
+snapshot and capability context cannot become inconsistent. Browser clients
+cannot update schedule fields directly; a manager-authorized callable writes
+the Job and its `scheduleHistory` record in one transaction.
 
 **OPEN QUESTION:** whether changed schedules automatically require cleaner
 reconfirmation, withdraw pending Offers, or send a reminder is not yet decided.

@@ -110,7 +110,8 @@ Conceptual fields include:
 
 - identity, Organization, Client, Property, and optional Reservation reference;
 - property/client snapshots and optional `guestName`;
-- scheduled date/time, timezone, current schedule revision, and audit history;
+- scheduled date/time, timezone, monotonic `scheduleRevision`, and Job-scoped
+  schedule audit history;
 - `checklistContextRevision`: a monotonic cleaner-capability invalidation value;
 - overall operational status;
 - Job-effective instructions, checklist/evidence references, and notes;
@@ -237,12 +238,27 @@ and client delivery remain separate future work.
 
 ## Scheduling and reschedule history
 
-Frequent schedule changes are a validated workflow. A reschedule should retain:
+Frequent schedule changes are a validated workflow. The current bounded
+implementation on the isolated `feature/audited-job-reschedule-2026-09-25`
+branch (not merged or deployed) records each actual change atomically with the
+Job under `jobs/{jobId}/scheduleHistory/{scheduleRevision}`. Missing Job
+revisions mean `0`. The history entry contains:
 
-- previous and new schedule values;
-- schedule revision;
-- actor, timestamp, and optional reason;
-- Offer and Assignment context rather than deleting or overwriting it.
+- previous and new scheduled date/time (`null` when the optional time is blank);
+- the monotonically increasing schedule revision;
+- manager actor UID and server timestamp.
+
+The same transaction updates the Job's current schedule, `scheduleRevision`,
+and `checklistContextRevision`. It preserves Offers, Assignments, and unrelated
+Job fields. Browser clients cannot directly change scheduled date/time or
+`scheduleRevision`; the manager-authorized server callable is the write path.
+The schedule-history subcollection is server-written and has no client write
+permission.
+
+Only non-archived `UNASSIGNED`, `OFFERED`, and `ASSIGNED` Jobs may be changed.
+If the initial Checklist Run exists, schedule editing is blocked: its frozen Job
+snapshot and any issued capability must not be rewritten or left describing an
+old date/time. This conservative lock applies even to an untouched `DRAFT` Run.
 
 Whether a reschedule requires a cleaner to reconfirm, withdraws a pending Offer,
 or triggers a reminder is an **OPEN QUESTION**. The audit model must support

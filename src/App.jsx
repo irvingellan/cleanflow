@@ -468,6 +468,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       approveChecklistRun,
       saveJobPrices,
       saveJobDetails,
+      saveJobSchedule,
       resolveJobIssue,
       saveDataProvenance: saveJobDataProvenance,
       archive: archiveJobRecord,
@@ -1254,6 +1255,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onCompleteCleaning={completeCleaning}
             onUpdatePrices={saveJobPrices}
             onUpdateDetails={saveJobDetails}
+            onUpdateSchedule={saveJobSchedule}
             onSimulateAssignedCleaner={openAssignedCleanerJob}
             onResolveIssue={resolveJobIssue}
             onSaveDataProvenance={saveJobDataProvenance}

@@ -49,6 +49,9 @@ service cloud.firestore {
     // advance it exactly once. Server-only checklist namespaces remain denied.
     function validJobChecklistContextRevisionCreate() {
       return hasValidChecklistContextRevision(request.resource.data)
+        && (!('scheduleRevision' in request.resource.data)
+          || (request.resource.data.scheduleRevision is int
+            && request.resource.data.scheduleRevision == 0))
         && (!('checklistContextRevision' in request.resource.data)
           || checklistContextRevision(request.resource.data) == 0);
     }
@@ -61,6 +64,11 @@ service cloud.firestore {
               == checklistContextRevision(resource.data) + 1)
           : !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['checklistContextRevision']));
+    }
+
+    function jobScheduleUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['scheduledDate', 'scheduledStart', 'scheduleRevision']);
     }
 
     function assignmentParentRevisionAdvanced(orgId, jobId) {
@@ -145,6 +153,7 @@ service cloud.firestore {
           && activeManager(orgId)
           || (collectionName == 'jobs'
             && activeManager(orgId)
+            && jobScheduleUnchanged()
             && validJobChecklistContextRevisionUpdate());
       }
 

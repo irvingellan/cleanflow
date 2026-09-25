@@ -234,13 +234,22 @@ E2E tests passed; build and diff checks passed.
     unsupported. The real-device photo-upload failure remains unresolved.
   - Cleaner directory and offer selection support local name search while
     preserving selections; no server search was added.
-  - The new Job Detail edit action covers guest name and notes only. Schedule
-    editing remains deferred under DEC-029; completed/archived Jobs remain
-    read-only.
+  - The new Job Detail edit action on `main` covers guest name and notes only;
+    completed/archived Jobs remain read-only.
   - Assigned-cleaner reminder content is previewed before manual copy and uses
     only the exact linked Property. Cleaner instructions may appear; parking,
     access instructions, and key/code details remain manager-preview/manual-
     copy only and require explicit opt-in. Nothing is sent automatically.
+- An isolated `feature/audited-job-reschedule-2026-09-25` branch contains a
+  locally validated rescheduling implementation from current `main`; it is
+  pushed but not merged or deployed.
+  It adds manager-only, audited date/time edits for non-archived
+  `UNASSIGNED`/`OFFERED`/`ASSIGNED` Jobs, with atomic Job plus
+  `scheduleHistory/{scheduleRevision}` writes and monotonic schedule/checklist
+  context revisions. Browser writes to schedule fields are denied. Existing
+  Offers and Assignments are preserved. Rescheduling is blocked after any
+  initial Checklist Run exists to protect its frozen schedule snapshot and
+  capability. Cleaner reconfirmation/reminder policy remains open.
 - Deployment verification returned HTTPS 200, and `/version.json` matched the
   build from `b49eda3`. A synthetic invalid public checklist token returned
   404. No Function was redeployed: the only server-file change exports the

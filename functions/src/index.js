@@ -46,6 +46,7 @@ import {
   uploadPublicChecklistEvidence,
 } from "./checklistEvidenceService.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
+import { rescheduleJobForManager } from "./jobScheduleService.js";
 import {
   downloadPublicClientReportPhoto,
   getClientReportCapabilityForManager,
@@ -655,6 +656,20 @@ export const approveChecklistRun = onCall(
     }
 
     return approveChecklistRunForManager(db, { organizationId, jobId });
+  },
+);
+
+export const rescheduleJob = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return rescheduleJobForManager(db, {
+      organizationId,
+      jobId: request.data?.jobId,
+      scheduledDate: request.data?.scheduledDate,
+      scheduledStart: request.data?.scheduledStart,
+      actorUid: request.auth.uid,
+    });
   },
 );
 

@@ -29,6 +29,7 @@ import {
   archiveJob,
   restoreJob,
 } from "./jobService.js";
+import { rescheduleJob as rescheduleJobRequest } from "./jobScheduleService.js";
 
 function emptyDetailData() {
   return {
@@ -350,6 +351,25 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return updateJob((job) => updateJobDetails(job.id, details));
   }
 
+  async function saveJobSchedule(schedule) {
+    if (!selectedJob) return null;
+    const job = selectedJob;
+    const result = await rescheduleJobRequest({ jobId: job.id, ...schedule });
+    const updatedJob = {
+      ...job,
+      scheduledDate: result.scheduledDate,
+      scheduleRevision: result.scheduleRevision,
+      checklistContextRevision: result.checklistContextRevision,
+    };
+    if (result.scheduledStart) {
+      updatedJob.scheduledStart = result.scheduledStart;
+    } else {
+      delete updatedJob.scheduledStart;
+    }
+    updateSelectedJob(updatedJob);
+    return { job: updatedJob, changed: result.changed };
+  }
+
   async function saveDataProvenance(dataProvenance) {
     return updateJob(async (job) => {
       await updateJobDataProvenance(job.id, dataProvenance, actorUid);
@@ -534,6 +554,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       approveChecklistRun,
       saveJobPrices,
       saveJobDetails,
+      saveJobSchedule,
       saveDataProvenance,
       archive,
       restore,

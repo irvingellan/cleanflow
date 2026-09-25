@@ -483,12 +483,27 @@ reconciliation workflow remain to be designed.
 ## DEC-029 — Rescheduling requires audit history and context preservation
 
 Date: 2026-08-29
-Status: Accepted direction; implementation planned
+Status: Accepted; implemented locally on an isolated feature branch (not merged or deployed)
 
 Rescheduling is a first-class operational change. A date/time change must
 record previous and new schedule context, actor, timestamp, and revision. It
 must not silently delete, overwrite, or discard related Offers, Assignments, or
 operational history.
+
+The bounded pilot implementation allows an active organization manager to
+reschedule only non-archived `UNASSIGNED`, `OFFERED`, or `ASSIGNED` Jobs. Job
+schedule fields and `scheduleRevision` are server-written through one callable;
+the current Job update, `scheduleRevision`, `checklistContextRevision`, and
+`scheduleHistory/{scheduleRevision}` record commit atomically. Missing revisions
+mean `0`. Browser clients cannot directly change schedule fields. Existing
+Offers and Assignments are preserved and their interest, decline, execution,
+and compensation data are not rewritten.
+
+Schedule editing is blocked once the Job's initial Checklist Run exists because
+its schedule is part of a frozen snapshot and any cleaner capability is bound
+to that context. Editing is also blocked for archived, `IN_PROGRESS`, and
+`COMPLETED` Jobs. After a successful change the manager is reminded that
+manually sent external communication may need to be resent.
 
 **OPEN QUESTION:** whether an active Offer or Assignment must reconfirm after a
 schedule revision, and which reminder behavior follows, remains open.

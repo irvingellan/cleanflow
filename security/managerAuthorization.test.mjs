@@ -32,6 +32,7 @@ const {
   publicOffer,
   publicChecklist,
   publicClientReport,
+  rescheduleJob,
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
 const { createHash } = await import("node:crypto");
@@ -103,6 +104,13 @@ test("only an active manager can update Job price snapshots without changing che
   await assertFails(cleanerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
 });
 
+test("browser-created Jobs cannot begin with an arbitrary schedule revision", async () => {
+  const jobs = account("manager").firestore().collection(`${root}/jobs`);
+  await assertFails(jobs.doc("revision-one").set({ organizationId: org, scheduleRevision: 1 }));
+  await assertFails(jobs.doc("revision-negative").set({ organizationId: org, scheduleRevision: -1 }));
+  await assertSucceeds(jobs.doc("revision-zero").set({ organizationId: org, scheduleRevision: 0 }));
+});
+
 test("manager browsers cannot directly read or mutate server-only checklist notification and client report records", async () => {
   const db = account("manager").firestore();
   const pathsToProtect = [
@@ -165,7 +173,9 @@ test("Job checklist context revision is monotonic and Assignment mutations advan
   await assertFails(job.update({ checklistContextRevision: 0 }));
   await assertFails(job.update({ checklistContextRevision: -1 }));
   await assertFails(job.update({ scheduledDate: "2026-09-22", checklistContextRevision: 1 }));
-  await assertSucceeds(job.update({ scheduledDate: "2026-09-22", checklistContextRevision: 2 }));
+  await assertFails(job.update({ scheduledDate: "2026-09-22", checklistContextRevision: 2 }));
+  await assertFails(job.update({ scheduledStart: "11:00", checklistContextRevision: 2 }));
+  await assertFails(job.update({ scheduleRevision: 1 }));
   await assertFails(job.set({ organizationId: org, fixture: true }));
 
   await assertFails(assignment.update({ cleanerId: "cleaner-b" }));
@@ -174,10 +184,208 @@ test("Job checklist context revision is monotonic and Assignment mutations advan
   remove.update(job, {
     assignedCleanerIds: [],
     operationalStatus: "OFFERED",
-    checklistContextRevision: 3,
+    checklistContextRevision: 2,
   });
   remove.update(assignment, { isActive: false });
   await assertSucceeds(remove.commit());
+});
+
+async function seedRescheduleJob({ jobId = "job", status = "UNASSIGNED", revisions = {}, archivedAt } = {}) {
+  const jobReference = admin.doc(`${root}/jobs/${jobId}`);
+  await jobReference.set({
+    organizationId: org,
+    propertyId: "property",
+    propertyName: "Fixture Property",
+    clientId: "client",
+    clientName: "Fixture Client",
+    scheduledDate: "2026-10-01",
+    scheduledStart: "10:00",
+    operationalStatus: status,
+    clientPrice: 350,
+    cleanerPayout: 200,
+    notes: "Keep this note",
+    guestName: "Existing guest",
+    dataProvenance: "REAL",
+    assignedCleanerIds: status === "ASSIGNED" ? ["cleaner-a"] : [],
+    ...(archivedAt ? { archivedAt } : {}),
+    ...revisions,
+  });
+  return jobReference;
+}
+
+test("active manager reschedules an unassigned Job with an atomic actor/time/revision audit", async () => {
+  const jobReference = await seedRescheduleJob();
+  await admin.doc(`${root}/jobs/second-job`).set({
+    organizationId: org,
+    operationalStatus: "UNASSIGNED",
+    scheduledDate: "2026-10-03",
+  });
+  const result = await rescheduleJob.run(request("manager", {
+    jobId: "job",
+    scheduledDate: "2026-10-05",
+    scheduledStart: "14:30",
+  }));
+
+  assert.deepEqual(result, {
+    jobId: "job",
+    changed: true,
+    scheduledDate: "2026-10-05",
+    scheduledStart: "14:30",
+    scheduleRevision: 1,
+    checklistContextRevision: 1,
+  });
+  const [job, history] = await Promise.all([
+    jobReference.get(),
+    jobReference.collection("scheduleHistory").doc("1").get(),
+  ]);
+  assert.equal(job.data().scheduledDate, "2026-10-05");
+  assert.equal(job.data().scheduledStart, "14:30");
+  assert.equal(job.data().scheduleRevision, 1);
+  assert.equal(job.data().checklistContextRevision, 1);
+  assert.equal(history.data().previousScheduledDate, "2026-10-01");
+  assert.equal(history.data().previousScheduledStart, "10:00");
+  assert.equal(history.data().newScheduledDate, "2026-10-05");
+  assert.equal(history.data().newScheduledStart, "14:30");
+  assert.equal(history.data().actorUid, "manager");
+  assert.ok(history.data().changedAt instanceof Timestamp);
+  assert.deepEqual({
+    propertyId: job.data().propertyId,
+    clientId: job.data().clientId,
+    clientPrice: job.data().clientPrice,
+    cleanerPayout: job.data().cleanerPayout,
+    notes: job.data().notes,
+    guestName: job.data().guestName,
+    dataProvenance: job.data().dataProvenance,
+  }, {
+    propertyId: "property",
+    clientId: "client",
+    clientPrice: 350,
+    cleanerPayout: 200,
+    notes: "Keep this note",
+    guestName: "Existing guest",
+    dataProvenance: "REAL",
+  });
+
+  const ordered = await admin.collection(`${root}/jobs`).orderBy("scheduledDate").get();
+  const orderedIds = ordered.docs.map((document) => document.id);
+  assert.ok(orderedIds.indexOf("second-job") < orderedIds.indexOf("job"));
+  assert.equal(ordered.docs.find((document) => document.id === "job").data().scheduledDate, "2026-10-05");
+  const { buildManagerReminder, managerReminderTypes } = await import("../functions/src/managerReminders.js");
+  const reminder = buildManagerReminder({
+    type: managerReminderTypes.TODAY_07,
+    jobs: [job.data()],
+    now: new Date("2026-10-05T12:00:00.000Z"),
+    timeZone: "UTC",
+  });
+  assert.equal(reminder.jobCount, 1);
+});
+
+test("OFFERED and ASSIGNED rescheduling preserves Offers and Assignments", async () => {
+  for (const status of ["OFFERED", "ASSIGNED"]) {
+    const jobId = `job-${status.toLowerCase()}`;
+    const jobReference = await seedRescheduleJob({ jobId, status });
+    const offerReference = jobReference.collection("offers").doc("offer");
+    const assignmentReference = jobReference.collection("assignments").doc("assignment");
+    await offerReference.set({ status: "INTERESTED", offeredCompensation: 125 });
+    await assignmentReference.set({ cleanerId: "cleaner-a", isActive: true, executionStatus: "ASSIGNED" });
+
+    await rescheduleJob.run(request("manager", {
+      jobId, scheduledDate: "2026-10-03", scheduledStart: "",
+    }));
+
+    assert.deepEqual((await offerReference.get()).data(), { status: "INTERESTED", offeredCompensation: 125 });
+    assert.deepEqual((await assignmentReference.get()).data(), {
+      cleanerId: "cleaner-a", isActive: true, executionStatus: "ASSIGNED",
+    });
+    assert.equal((await jobReference.get()).data().scheduledStart, undefined);
+    assert.equal((await jobReference.collection("scheduleHistory").doc("1").get()).data().newScheduledStart, null);
+  }
+});
+
+test("reschedule rejects archived, in-progress and completed Jobs without mutation", async () => {
+  for (const [jobId, options] of [
+    ["job-archived", { status: "ASSIGNED", archivedAt: Timestamp.now() }],
+    ["job-in-progress", { status: "IN_PROGRESS" }],
+    ["job-completed", { status: "COMPLETED" }],
+  ]) {
+    const jobReference = await seedRescheduleJob({ ...options, jobId });
+    const before = (await jobReference.get()).data();
+    await assert.rejects(rescheduleJob.run(request("manager", {
+      jobId, scheduledDate: "2026-10-04", scheduledStart: "11:00",
+    })), { code: "failed-precondition" });
+    assert.deepEqual((await jobReference.get()).data(), before);
+    assert.equal((await jobReference.collection("scheduleHistory").get()).size, 0);
+  }
+});
+
+test("invalid schedule inputs, non-managers, and Jobs with a Checklist Run are rejected safely", async () => {
+  const jobReference = await seedRescheduleJob();
+  for (const uid of ["cleaner", "other-manager", "inactive", null]) {
+    await assert.rejects(rescheduleJob.run(request(uid, {
+      jobId: "job", scheduledDate: "2026-10-02", scheduledStart: "10:00",
+    })), uid === null ? { code: "unauthenticated" } : { code: "permission-denied" });
+  }
+  for (const [scheduledDate, scheduledStart] of [
+    ["2026-02-30", "10:00"], ["10/02/2026", "10:00"], ["2026-10-02", "24:00"], ["2026-10-02", "09:60"],
+  ]) {
+    await assert.rejects(rescheduleJob.run(request("manager", {
+      jobId: "job", scheduledDate, scheduledStart,
+    })), { code: "invalid-argument" });
+  }
+  await jobReference.collection("checklistRuns").doc("initial").set({ status: "DRAFT", jobSnapshot: { scheduledDate: "2026-10-01" } });
+  await jobReference.collection("checklistRuns").doc("initial").collection("checklistCapabilities").doc("active").set({ state: "ACTIVE" });
+  const before = (await jobReference.get()).data();
+  await assert.rejects(rescheduleJob.run(request("manager", {
+    jobId: "job", scheduledDate: "2026-10-02", scheduledStart: "10:00",
+  })), { code: "failed-precondition" });
+  assert.deepEqual((await jobReference.get()).data(), before);
+  assert.equal((await jobReference.collection("scheduleHistory").get()).size, 0);
+});
+
+test("repeated request is idempotent and a history conflict leaves the Job unchanged", async () => {
+  const jobReference = await seedRescheduleJob();
+  const payload = { jobId: "job", scheduledDate: "2026-10-02", scheduledStart: "10:00" };
+  const first = await rescheduleJob.run(request("manager", payload));
+  const retry = await rescheduleJob.run(request("manager", payload));
+  assert.equal(first.changed, true);
+  assert.equal(retry.changed, false);
+  assert.equal((await jobReference.collection("scheduleHistory").get()).size, 1);
+
+  const conflictJobId = "history-collision-job";
+  const conflictJob = await seedRescheduleJob({ jobId: conflictJobId });
+  const collision = conflictJob.collection("scheduleHistory").doc("1");
+  await collision.set({ scheduleRevision: 1, fixture: true });
+  const before = (await conflictJob.get()).data();
+  await assert.rejects(rescheduleJob.run(request("manager", { ...payload, jobId: conflictJobId })), { code: "failed-precondition" });
+  assert.deepEqual((await conflictJob.get()).data(), before);
+  assert.deepEqual((await collision.get()).data(), { scheduleRevision: 1, fixture: true });
+});
+
+test("concurrent identical reschedule requests produce one schedule revision and one history record", async () => {
+  const jobReference = await seedRescheduleJob();
+  const payload = { jobId: "job", scheduledDate: "2026-10-02", scheduledStart: "10:00" };
+  const results = await Promise.all([
+    rescheduleJob.run(request("manager", payload)),
+    rescheduleJob.run(request("manager", payload)),
+  ]);
+  assert.equal(results.filter((result) => result.changed).length, 1);
+  assert.equal((await jobReference.get()).data().scheduleRevision, 1);
+  assert.equal((await jobReference.collection("scheduleHistory").get()).size, 1);
+});
+
+test("malformed revision state fails closed without changing the Job or writing history", async () => {
+  for (const [jobId, revisions] of [
+    ["job-negative-schedule-revision", { scheduleRevision: -1 }],
+    ["job-malformed-context-revision", { checklistContextRevision: "not-a-number" }],
+  ]) {
+    const jobReference = await seedRescheduleJob({ jobId, revisions });
+    const before = (await jobReference.get()).data();
+    await assert.rejects(rescheduleJob.run(request("manager", {
+      jobId, scheduledDate: "2026-10-02", scheduledStart: "10:00",
+    })), { code: "failed-precondition" });
+    assert.deepEqual((await jobReference.get()).data(), before);
+    assert.equal((await jobReference.collection("scheduleHistory").get()).size, 0);
+  }
 });
 
 test("membership is own-get only; neither manager nor outsider can self-escalate or list members", async () => {
