@@ -173,7 +173,11 @@ E2E tests passed; build and diff checks passed.
   agreed” state. Only pre-snapshot legacy single-cleaner Offers may fall back
   to Job `cleanerPayout`; schema-v2 Job totals are never treated as per-cleaner
   compensation. Interest/decline and manager-controlled Assignment behavior are
-  unchanged. This change is committed but not deployed.
+  unchanged. Commit `d8a67d5` was deployed on 2026-09-24 to the `publicOffer`
+  Function and live Hosting. HTTPS returned 200; the hosted build marker and
+  JS/CSS asset hashes matched the approved build; a synthetic unknown Offer
+  token returned 404. No real Offer link or response was tested, and no
+  operational record was changed.
 - Cleaner review submission and explicit manager approval/Job completion exist
   in the current implementation. Automatic email/WhatsApp delivery does not.
 - The preferred future workflow is: a manager manually shares a secure
