@@ -9,6 +9,7 @@ import {
 import { useTranslation } from "../../i18n/translations.js";
 import { createIssue } from "../issues/issueService.js";
 import { createJobOffers, respondToJobOffer } from "./jobOfferService.js";
+import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 
 export function OfferCleaners({
   job,
@@ -20,8 +21,10 @@ export function OfferCleaners({
 }) {
   const { translate } = useTranslation();
   const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
+  const [cleanerSearch, setCleanerSearch] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [hasSendError, setHasSendError] = useState(false);
+  const visibleCleaners = filterCleanersByName(cleaners, cleanerSearch);
 
   function toggleCleaner(cleanerId) {
     setSelectedCleanerIds((currentIds) =>
@@ -89,20 +92,34 @@ export function OfferCleaners({
 
       {!isLoading && !hasError && cleaners.length > 0 && (
         <form className="offer-form" onSubmit={sendOffers}>
-          <div className="cleaner-list">
-            {cleaners.map((cleaner) => (
-              <label key={cleaner.id} className="cleaner-option">
-                <input
-                  type="checkbox"
-                  checked={selectedCleanerIds.includes(cleaner.id)}
-                  onChange={() => toggleCleaner(cleaner.id)}
-                />
-                <span>
-                  {cleaner.name || translate("common.notProvided")}
-                </span>
-              </label>
-            ))}
+          <div className="cleaner-name-search">
+            <label htmlFor="offer-cleaners-search">{translate("offers.searchCleaners")}</label>
+            <input
+              id="offer-cleaners-search"
+              type="search"
+              value={cleanerSearch}
+              onChange={(event) => setCleanerSearch(event.target.value)}
+            />
           </div>
+
+          {visibleCleaners.length === 0 ? (
+            <StateCard message={translate("offers.searchNoCleaners")} />
+          ) : (
+            <div className="cleaner-list">
+              {visibleCleaners.map((cleaner) => (
+                <label key={cleaner.id} className="cleaner-option">
+                  <input
+                    type="checkbox"
+                    checked={selectedCleanerIds.includes(cleaner.id)}
+                    onChange={() => toggleCleaner(cleaner.id)}
+                  />
+                  <span>
+                    {cleaner.name || translate("common.notProvided")}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
 
           {hasSendError && (
             <p className="form-error" role="alert">

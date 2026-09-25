@@ -1520,6 +1520,27 @@ Object.assign(messages.es, {
   "clientReport.checklistItem": "Elemento del checklist",
 });
 
+Object.assign(messages.en, {
+  "cleaners.search": "Search cleaners by name",
+  "cleaners.searchNoResults": "No cleaners match this search.",
+  "offers.searchCleaners": "Search cleaners by name",
+  "offers.searchNoCleaners": "No cleaners match this search.",
+});
+
+Object.assign(messages.pt, {
+  "cleaners.search": "Buscar cleaners por nome",
+  "cleaners.searchNoResults": "Nenhuma cleaner corresponde a esta busca.",
+  "offers.searchCleaners": "Buscar cleaners por nome",
+  "offers.searchNoCleaners": "Nenhuma cleaner corresponde a esta busca.",
+});
+
+Object.assign(messages.es, {
+  "cleaners.search": "Buscar cleaners por nombre",
+  "cleaners.searchNoResults": "Ninguna cleaner coincide con esta búsqueda.",
+  "offers.searchCleaners": "Buscar cleaners por nombre",
+  "offers.searchNoCleaners": "Ninguna cleaner coincide con esta búsqueda.",
+});
+
 function getInitialLanguage() {
   if (typeof window === "undefined") return "en";
 

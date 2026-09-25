@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { preferredLanguageLabel } from "./cleanerPresentation.js";
+import { filterCleanersByName } from "./cleanerSearch.js";
 
 function InformationIcon({ name }) {
   if (name === "phone") {
@@ -23,6 +25,7 @@ function InformationIcon({ name }) {
 
 export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded }) {
   const { translate } = useTranslation();
+  const [search, setSearch] = useState("");
 
   if (isLoading) {
     return <StateCard message={translate("cleaners.loading")} status="status" />;
@@ -35,6 +38,7 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
   const sortedCleaners = [...cleaners].sort((firstCleaner, secondCleaner) =>
     (firstCleaner.name || "").localeCompare(secondCleaner.name || ""),
   );
+  const filteredCleaners = filterCleanersByName(sortedCleaners, search);
 
   return (
     <section aria-labelledby="cleaners-title">
@@ -54,40 +58,55 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
       {sortedCleaners.length === 0 ? (
         <StateCard message={translate("cleaners.empty")} />
       ) : (
-        <div className="cleaner-directory">
-          {sortedCleaners.map((cleaner) => (
-            <button
-              key={cleaner.id}
-              className="cleaner-directory-card"
-              type="button"
-              aria-label={translate("cleaners.view", {
-                cleaner: cleaner.name || translate("common.notProvided"),
-              })}
-              onClick={() => onSelect(cleaner)}
-            >
-              <span className="cleaner-directory-card__identity">
-                <strong>{cleaner.name || translate("common.notProvided")}</strong>
-                <span className="cleaner-directory-card__detail">
-                  <InformationIcon name="phone" />
-                  {cleaner.phone || translate("cleaners.noPhone")}
-                </span>
-              </span>
-              <span className="cleaner-directory-card__details">
-                <span className="cleaner-directory-card__detail">
-                  <InformationIcon name="language" />
-                  {preferredLanguageLabel(cleaner.preferredLanguage, translate)}
-                </span>
-              </span>
-              <span className="status-badge cleaner-directory-card__status-badge">
-                {cleaner.active === false
-                  ? translate("common.inactive")
-                  : translate("common.active")}
-              </span>
-              <DataProvenanceBadge record={cleaner} />
-              {cleaner.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="cleaner-name-search">
+            <label htmlFor="cleaner-directory-search">{translate("cleaners.search")}</label>
+            <input
+              id="cleaner-directory-search"
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          {filteredCleaners.length === 0 ? (
+            <StateCard message={translate("cleaners.searchNoResults")} />
+          ) : (
+            <div className="cleaner-directory">
+              {filteredCleaners.map((cleaner) => (
+                <button
+                  key={cleaner.id}
+                  className="cleaner-directory-card"
+                  type="button"
+                  aria-label={translate("cleaners.view", {
+                    cleaner: cleaner.name || translate("common.notProvided"),
+                  })}
+                  onClick={() => onSelect(cleaner)}
+                >
+                  <span className="cleaner-directory-card__identity">
+                    <strong>{cleaner.name || translate("common.notProvided")}</strong>
+                    <span className="cleaner-directory-card__detail">
+                      <InformationIcon name="phone" />
+                      {cleaner.phone || translate("cleaners.noPhone")}
+                    </span>
+                  </span>
+                  <span className="cleaner-directory-card__details">
+                    <span className="cleaner-directory-card__detail">
+                      <InformationIcon name="language" />
+                      {preferredLanguageLabel(cleaner.preferredLanguage, translate)}
+                    </span>
+                  </span>
+                  <span className="status-badge cleaner-directory-card__status-badge">
+                    {cleaner.active === false
+                      ? translate("common.inactive")
+                      : translate("common.active")}
+                  </span>
+                  <DataProvenanceBadge record={cleaner} />
+                  {cleaner.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
       <ScrollToTopButton />
     </section>
