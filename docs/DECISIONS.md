@@ -483,7 +483,7 @@ reconciliation workflow remain to be designed.
 ## DEC-029 — Rescheduling requires audit history and context preservation
 
 Date: 2026-08-29
-Status: Accepted; implemented locally on an isolated feature branch (not merged or deployed)
+Status: Accepted; implemented and deployed to the controlled pilot on 2026-09-26
 
 Rescheduling is a first-class operational change. A date/time change must
 record previous and new schedule context, actor, timestamp, and revision. It

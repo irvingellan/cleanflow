@@ -2,8 +2,8 @@
 
 ## Metadata
 
-- **Last updated:** 2026-09-25
-- **Repository:** `irvingellan/cleanflow` (`main`; four overnight Gabi pilot changes merged but not deployed)
+- **Last updated:** 2026-09-26
+- **Repository:** `irvingellan/cleanflow` (`main`; audited Job rescheduling and mobile photo-retry target are integrated and deployed)
 - **Active product phase:** Gabi Pilot — controlled design-partner learning and
   validation alongside the manager's existing spreadsheet.
 
@@ -32,6 +32,28 @@ rescheduling, and Cleaner Hub work remain incremental.
   deploy Functions before Hosting when public-offer compatibility changes.
 
 ## Verified recent state
+
+### Audited Job rescheduling and mobile photo retry
+
+- `895514e feat(jobs): add audited pre-start rescheduling` and
+  `30f8624 fix(checklist): enlarge mobile photo retry target` are integrated
+  into `main` and deployed to the Gabi pilot on 2026-09-26.
+- An active organization manager can change date/time only for non-archived
+  `UNASSIGNED`, `OFFERED`, or `ASSIGNED` Jobs. The callable atomically updates
+  the Job and `scheduleHistory/{scheduleRevision}`, records previous/new
+  date/time, actor UID, and server time, and advances both schedule and
+  checklist-context revisions. Browser schedule writes remain denied; Offers,
+  Assignments, prices, and other Job data are preserved. Any existing initial
+  Checklist Run blocks schedule changes to protect its frozen context. The UI
+  warns that manually sent cleaner details may need to be resent.
+- Firestore Rules, `functions:rescheduleJob`, and Hosting were deployed in
+  that order. Hosting responds with HTTP 200; its version marker and checked
+  bundle assets match the local production build from `30f8624`; the callable
+  is listed in `us-central1`; a synthetic invalid checklist token returned a
+  bounded 404. No real Job was rescheduled or otherwise modified.
+- The separate photo Retry control now has a 44px minimum touch target on
+  narrow screens. The real-device photo-upload incident remains unverified;
+  HEIC/HEIF is still unsupported.
 
 ### Issue #39 — OneSignal and manager reminders
 
@@ -228,8 +250,8 @@ E2E tests passed; build and diff checks passed.
 
 ## Known limitations and pending validation
 
-- Four approved overnight Gabi pilot changes are merged to `main` and the
-  Hosting bundle is deployed from source commit `b49eda3`:
+- Four approved overnight Gabi pilot changes are merged to `main` and are
+  included in the current Hosting release from source commit `30f8624`:
   - Cleaner photo guidance names JPEG, PNG, and WebP support; HEIC/HEIF remains
     unsupported. The real-device photo-upload failure remains unresolved.
   - Cleaner directory and offer selection support local name search while
@@ -240,22 +262,9 @@ E2E tests passed; build and diff checks passed.
     only the exact linked Property. Cleaner instructions may appear; parking,
     access instructions, and key/code details remain manager-preview/manual-
     copy only and require explicit opt-in. Nothing is sent automatically.
-- An isolated `feature/audited-job-reschedule-2026-09-25` branch contains a
-  locally validated rescheduling implementation from current `main`; it is
-  pushed but not merged or deployed.
-  It adds manager-only, audited date/time edits for non-archived
-  `UNASSIGNED`/`OFFERED`/`ASSIGNED` Jobs, with atomic Job plus
-  `scheduleHistory/{scheduleRevision}` writes and monotonic schedule/checklist
-  context revisions. Browser writes to schedule fields are denied. Existing
-  Offers and Assignments are preserved. Rescheduling is blocked after any
-  initial Checklist Run exists to protect its frozen schedule snapshot and
-  capability. Cleaner reconfirmation/reminder policy remains open.
-- Deployment verification returned HTTPS 200, and `/version.json` matched the
-  build from `b49eda3`. A synthetic invalid public checklist token returned
-  404. No Function was redeployed: the only server-file change exports the
-  existing image validator for tests without changing request behavior. The
-  authenticated manager shell was not opened to avoid a possible push-device
-  registration refresh.
+- Cleaner reconfirmation/reminder policy after a schedule change remains open.
+- The authenticated manager shell was not opened during the 2026-09-26
+  deployment smoke checks to avoid a possible push-device registration refresh.
 - The OneSignal manager audience currently derives from active
   `managerPushDevices`; a manager with only OneSignal and no valid active device
   record is not yet included.
