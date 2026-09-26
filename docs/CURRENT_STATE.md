@@ -33,6 +33,24 @@ rescheduling, and Cleaner Hub work remain incremental.
 
 ## Verified recent state
 
+### Required cleaner count
+
+- The current `main` source now gives Assignment-aware Jobs an explicit
+  `requiredCleanerCount` default of `1`, bounded to `1`–`4` for this pilot.
+  Missing values on existing/legacy Jobs read as `1`; no production migration
+  was made or is required.
+- Manager Job Detail shows required and active-assigned counts, permits count
+  edits only before work starts, and disables Assign actions when full. Offers
+  may still be sent to more cleaners than required; extra `INTERESTED` Offers
+  and their compensation snapshots remain intact.
+- Active-manager server transactions enforce assignment/removal/replacement
+  capacity, required-count changes, and the full-team `IN_PROGRESS` gate.
+  Browser roster/count/start writes are denied. Legacy singular-cleaner Jobs
+  still count as one without synthetic Assignments.
+- This implementation is committed on `main` but **not deployed**. Its next
+  release requires Firestore Rules, the five roster/count/start Functions,
+  and Firebase Hosting. No production data was migrated or changed.
+
 ### Audited Job rescheduling and mobile photo retry
 
 - `895514e feat(jobs): add audited pre-start rescheduling` and

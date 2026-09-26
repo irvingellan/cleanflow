@@ -50,10 +50,11 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         onIssueChecklistCapability={callbacks.onIssueChecklistCapability || noOp}
         onRevokeChecklistCapability={callbacks.onRevokeChecklistCapability || noOp}
         onCreatePublicOfferLink={callbacks.onCreatePublicOfferLink || noOp}
-        onAssignCleaner={noOp}
+        onAssignCleaner={callbacks.onAssignCleaner || noOp}
         onRemoveAssignment={noOp}
         onReplaceAssignment={noOp}
-        onStartCleaning={noOp}
+        onUpdateRequiredCleanerCount={callbacks.onUpdateRequiredCleanerCount || noOp}
+        onStartCleaning={callbacks.onStartCleaning || noOp}
         onCompleteCleaning={noOp}
         onUpdatePrices={callbacks.onUpdatePrices || noOp}
         onUpdateDetails={callbacks.onUpdateDetails || noOp}
@@ -773,6 +774,7 @@ describe("JobDetail lifecycle actions", () => {
             propertyName: "Team Property",
             operationalStatus: "ASSIGNED",
             schemaVersion: 2,
+            requiredCleanerCount: 3,
             assignedCleanerIds: ["cleaner-a"],
           }}
           knownCleaners={[
@@ -808,7 +810,7 @@ describe("JobDetail lifecycle actions", () => {
     );
 
     expect(screen.getByText("Assigned cleaners")).toBeVisible();
-    expect(screen.getByText("1 cleaner assigned")).toBeVisible();
+    expect(screen.getAllByText("1 of 3")).not.toHaveLength(0);
     expect(screen.queryByText("Assigned cleaner")).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
     expect(onAssignCleaner).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-b" }));
@@ -880,5 +882,86 @@ describe("JobDetail lifecycle actions", () => {
       configurable: true,
       value: originalClipboard,
     });
+  });
+});
+
+describe("required cleaner count in Job Detail", () => {
+  const assignment = (id) => ({
+    id: `assignment-${id}`,
+    cleanerId: `cleaner-${id}`,
+    cleanerNameSnapshot: `Cleaner ${id}`,
+    isActive: true,
+    executionStatus: "ASSIGNED",
+  });
+
+  it("shows required and assigned counts and blocks start while the v2 team is short", () => {
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2,
+      requiredCleanerCount: 3,
+      assignedCleanerIds: ["cleaner-a", "cleaner-b"],
+    }, {}, { assignments: [assignment("a"), assignment("b")] });
+
+    expect(screen.getAllByText("2 of 3").length).toBeGreaterThan(0);
+    expect(screen.getByText("This service needs 3 cleaners. 2 are currently assigned.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start cleaning" })).toBeDisabled();
+  });
+
+  it("allows start at full capacity and shows Team complete", async () => {
+    const onStartCleaning = vi.fn();
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2,
+      requiredCleanerCount: 3,
+      assignedCleanerIds: ["cleaner-a", "cleaner-b", "cleaner-c"],
+    }, { onStartCleaning }, { assignments: [assignment("a"), assignment("b"), assignment("c")] });
+
+    expect(screen.getAllByText("3 of 3").length).toBeGreaterThan(0);
+    expect(screen.getByText("Team complete")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start cleaning" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Start cleaning" }));
+    await waitFor(() => expect(onStartCleaning).toHaveBeenCalledOnce());
+  });
+
+  it("offers count edits only for editable v2 Jobs and saves the selected count", async () => {
+    const onUpdateRequiredCleanerCount = vi.fn().mockResolvedValue({ requiredCleanerCount: 3 });
+    const { unmount: unmountEditable } = renderJobDetail(
+      "OFFERED",
+      { schemaVersion: 2, requiredCleanerCount: 1 },
+      { onUpdateRequiredCleanerCount },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit cleaners needed" }));
+    fireEvent.change(screen.getByLabelText("Cleaners needed"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save cleaner count" }));
+
+    await waitFor(() => expect(onUpdateRequiredCleanerCount).toHaveBeenCalledWith(3));
+    unmountEditable();
+
+    for (const [status, archivedAt] of [
+      ["IN_PROGRESS", undefined],
+      ["COMPLETED", undefined],
+      ["ASSIGNED", { seconds: 1 }],
+    ]) {
+      const { unmount } = renderJobDetail(status, {
+        schemaVersion: 2,
+        requiredCleanerCount: 2,
+        ...(archivedAt ? { archivedAt } : {}),
+      });
+      expect(screen.queryByRole("button", { name: "Edit cleaners needed" })).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("keeps interested Offers visible but hides another Assign action when full", () => {
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2,
+      requiredCleanerCount: 1,
+      assignedCleanerIds: ["cleaner-a"],
+      offers: [{ id: "offer-b", cleanerId: "cleaner-b", cleanerName: "Cleaner B", status: "INTERESTED" }],
+    }, {}, { assignments: [assignment("a")] });
+
+    expect(screen.getByText("Cleaner B")).toBeVisible();
+    expect(screen.getByText("Interested")).toBeVisible();
+    expect(screen.getByText("Team is currently full.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Assign" })).not.toBeInTheDocument();
   });
 });

@@ -40,6 +40,20 @@ Interest never automatically assigns a Job. `accepted` is not an Offer status.
 Cleaners must not see competing Offers, responses, assignment count, or another
 cleaner's compensation.
 
+**Current required cleaner count:** new Assignment-aware Jobs start with an
+explicit `requiredCleanerCount` of `1`, with a bounded pilot maximum of `4`.
+Missing values on existing Jobs read as `1`; no migration is required. Sending
+Offers and receiving interest remains independent of this number, so interested
+Offers remain unchanged when the team is full. An active manager may edit the
+count only while a non-archived Job is `UNASSIGNED`, `OFFERED`, or `ASSIGNED`,
+and cannot lower it below the current active Assignment count. Manager
+Assignment, removal, replacement, count changes, and the Job start capacity
+check use server transactions; direct browser roster/count/start writes are
+denied. A full roster blocks further Assignments without changing other Offers.
+The Job cannot enter `IN_PROGRESS` until it has at least the required number of
+active Assignments. A legacy singular-cleaner Job reads as one and retains its
+existing direct-cleaner compatibility path without a synthetic Assignment.
+
 **CURRENT public Offer handoff:** before creating or replacing a pending
 cleaner's public link, the manager confirms that cleaner's offered amount. The
 amount is snapshotted on the Offer and is shown both on `/offer/:token` and in

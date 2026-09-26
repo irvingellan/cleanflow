@@ -2,7 +2,12 @@ import { useState } from "react";
 import { BackButton } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
-import { maximumGuestNameLength, optionalJobPrice } from "./jobCompatibility.js";
+import {
+  maximumGuestNameLength,
+  optionalJobPrice,
+  parseRequiredCleanerCount,
+  maximumRequiredCleanerCount,
+} from "./jobCompatibility.js";
 import { createJob } from "./jobService.js";
 
 export function CreateCleaningForm({ property, onBack, onCreated }) {
@@ -16,6 +21,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
     scheduledStart: "",
     clientPrice: property.defaultClientPrice ?? "",
     cleanerPayout: property.defaultCleanerPrice ?? "",
+    requiredCleanerCount: "1",
     guestName: "",
     notes: "",
   });
@@ -38,10 +44,16 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
 
     const clientPrice = optionalJobPrice(formValues.clientPrice);
     const cleanerPayout = optionalJobPrice(formValues.cleanerPayout);
+    const requiredCleanerCount = parseRequiredCleanerCount(formValues.requiredCleanerCount);
     const notes = formValues.notes.trim();
 
     if (clientPrice === null || cleanerPayout === null) {
       setSaveError(translate("jobs.priceInvalid"));
+      setIsSaving(false);
+      return;
+    }
+    if (requiredCleanerCount === null) {
+      setSaveError(translate("jobs.requiredCleanerCountInvalid", { maximum: maximumRequiredCleanerCount }));
       setIsSaving(false);
       return;
     }
@@ -56,6 +68,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
         scheduledStart: formValues.scheduledStart,
         clientPrice,
         cleanerPayout,
+        requiredCleanerCount,
         notes,
         guestName: formValues.guestName,
       });
@@ -105,6 +118,21 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
             name="scheduledStart"
             value={formValues.scheduledStart}
             onChange={updateField}
+          />
+        </label>
+
+        <label>
+          {translate("jobs.requiredCleanerCount")}
+          <input
+            type="number"
+            name="requiredCleanerCount"
+            min="1"
+            max={maximumRequiredCleanerCount}
+            step="1"
+            inputMode="numeric"
+            value={formValues.requiredCleanerCount}
+            onChange={updateField}
+            required
           />
         </label>
 

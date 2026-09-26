@@ -105,21 +105,21 @@ test("a v2 Job supports an additive manager roster before work starts", async ({
   await page.getByRole("button", { name: "View E2E Team Property" }).click();
 
   const offers = page.locator(".offer-status-item");
+  const roster = page.locator(".assignment-roster");
   await expect(
     offers.filter({ hasText: "E2E Team Cleaner C" }).getByRole("button", { name: "Assign" }),
   ).toHaveCount(0);
   await offers.filter({ hasText: "E2E Team Cleaner A" }).getByRole("button", { name: "Assign" }).click();
-  await expect(page.getByText("1 cleaner assigned")).toBeVisible();
+  await expect(roster.getByText("1 of 2", { exact: true })).toBeVisible();
   await offers.filter({ hasText: "E2E Team Cleaner B" }).getByRole("button", { name: "Assign" }).click();
-  await expect(page.getByText("2 cleaners assigned")).toBeVisible();
+  await expect(roster.getByText("2 of 2", { exact: true })).toBeVisible();
 
-  const roster = page.locator(".assignment-roster");
   await roster
     .locator(".assignment-roster__item")
     .filter({ hasText: "E2E Team Cleaner A" })
     .getByRole("button", { name: "Remove" })
     .click();
-  await expect(page.getByText("1 cleaner assigned")).toBeVisible();
+  await expect(roster.getByText("1 of 2", { exact: true })).toBeVisible();
   await expect(roster.locator("strong", { hasText: "E2E Team Cleaner B" })).toBeVisible();
 
   const db = getE2eFirestore();
@@ -151,6 +151,7 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
     name: "Jobs",
   }).click();
   await page.getByRole("button", { name: "View E2E V2 Offer Property" }).click();
+  const roster = page.locator(".assignment-roster");
 
   await page.getByRole("button", { name: "Offer cleaning to cleaners" }).click();
   await page.getByLabel("E2E Team Cleaner A").check();
@@ -182,12 +183,12 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
     .filter({ hasText: "E2E Team Cleaner A" })
     .getByRole("button", { name: "Assign" })
     .click();
-  await expect(page.getByText("1 cleaner assigned")).toBeVisible();
+  await expect(roster.getByText("1 of 2", { exact: true })).toBeVisible();
   await offers
     .filter({ hasText: "E2E Team Cleaner B" })
     .getByRole("button", { name: "Assign" })
     .click();
-  await expect(page.getByText("2 cleaners assigned")).toBeVisible();
+  await expect(roster.getByText("2 of 2", { exact: true })).toBeVisible();
 
   const jobSnapshot = await db
     .collection("organizations")
@@ -208,6 +209,48 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
     "INTERESTED",
     "INTERESTED",
   ]);
+});
+
+test("required cleaner capacity gates assignment and Job start without consuming reserve interest", async ({ page }) => {
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", {
+    name: "Jobs",
+  }).click();
+  await page.getByRole("button", { name: "View E2E Capacity Property" }).click();
+
+  const offers = page.locator(".offer-status-item");
+  const roster = page.locator(".assignment-roster");
+  const startButton = page.getByRole("button", { name: "Start cleaning" });
+  await expect(roster.getByText("0 of 3", { exact: true })).toBeVisible();
+  await expect(startButton).toHaveCount(0);
+  for (const [cleanerName, assignedCount] of [
+    ["E2E Team Cleaner A", "1 of 3"],
+    ["E2E Team Cleaner B", "2 of 3"],
+  ]) {
+    await offers.filter({ hasText: cleanerName }).getByRole("button", { name: "Assign" }).click();
+    await expect(roster.getByText(assignedCount, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByText("This service needs 3 cleaners. 2 are currently assigned.")).toBeVisible();
+  await expect(startButton).toBeDisabled();
+
+  await offers.filter({ hasText: "E2E Team Cleaner C" }).getByRole("button", { name: "Assign" }).click();
+  await expect(roster.getByText("3 of 3", { exact: true })).toBeVisible();
+  await expect(page.getByText("Team complete")).toBeVisible();
+  await expect(startButton).toBeEnabled();
+  await expect(offers.filter({ hasText: "E2E Team Cleaner D" }).getByRole("button", { name: "Assign" })).toHaveCount(0);
+
+  const db = getE2eFirestore();
+  const job = db.collection("organizations").doc("cleanflow-demo").collection("jobs").doc("e2e-capacity-job");
+  const interestedOffers = await job.collection("offers").get();
+  expect(interestedOffers.docs.map((offer) => offer.data().status).sort()).toEqual(Array(4).fill("INTERESTED"));
+  await startButton.click();
+  await expect(page.getByText("Cleaning in progress")).toBeVisible();
+  expect((await job.get()).data()).toMatchObject({
+    operationalStatus: "IN_PROGRESS",
+    requiredCleanerCount: 3,
+    assignedCleanerIds: ["e2e-team-cleaner-a", "e2e-team-cleaner-b", "e2e-team-cleaner-c"],
+  });
+  expect((await job.collection("assignments").get()).docs.filter((assignment) => assignment.data().isActive))
+    .toHaveLength(3);
 });
 
 test("Client property navigation returns to the originating Client", async ({ page }) => {
@@ -237,6 +280,8 @@ test("a manager-created Job keeps optional guest context from a linked Property"
   await page.getByRole("button", { name: "Create cleaning" }).click();
   await page.getByRole("textbox", { name: "Date" }).fill("2026-09-15");
   await page.getByRole("textbox", { name: "Scheduled time" }).fill("10:00");
+  await expect(page.getByLabel("Cleaners needed")).toHaveValue("1");
+  await page.getByLabel("Cleaners needed").fill("3");
   await page.getByLabel("Guest name (optional)").fill("E2E Guest");
   await page.getByRole("button", { name: "Create cleaning" }).click();
   await expect(page.getByRole("heading", { name: "Service created" })).toBeVisible();
@@ -244,4 +289,9 @@ test("a manager-created Job keeps optional guest context from a linked Property"
   await page.getByRole("button", { name: "View service" }).click();
   await expect(page.getByText("E2E Guest")).toBeVisible();
   await expect(page.getByText("10:00")).toBeVisible();
+  const createdJobs = await getE2eFirestore()
+    .collection("organizations").doc("cleanflow-demo").collection("jobs").get();
+  const createdJob = createdJobs.docs.find((snapshot) => snapshot.data().guestName === "E2E Guest");
+  expect(createdJob.data()).toMatchObject({ schemaVersion: 2, requiredCleanerCount: 3 });
+  await expect(page.getByText("3", { exact: true })).toBeVisible();
 });

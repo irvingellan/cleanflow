@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "firebase emulators:exec --project demo-cleanflow --only auth,firestore \"playwright test\"",
+    "test:e2e": "firebase emulators:exec --project demo-cleanflow --only auth,firestore,functions \"playwright test\"",
     "test:security": "firebase emulators:exec --project demo-cleanflow --only firestore,storage \"node --test --test-concurrency=1 security/managerAuthorization.test.mjs\"",
     "test:all": "npm test && npm run test:e2e",
     "visual:env": "npm run build:emulators",

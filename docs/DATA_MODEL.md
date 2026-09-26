@@ -114,6 +114,8 @@ Conceptual fields include:
   schedule audit history;
 - `checklistContextRevision`: a monotonic cleaner-capability invalidation value;
 - overall operational status;
+- `requiredCleanerCount` for Assignment-aware Jobs: integer `1`–`4`, default
+  `1` on newly created Jobs;
 - Job-effective instructions, checklist/evidence references, and notes;
 - client pricing model and resolved client charge;
 - assignment summary suitable for manager queries;
@@ -133,6 +135,15 @@ UNASSIGNED → OFFERED → ASSIGNED → IN_PROGRESS → COMPLETED
 one Cleaner's work. Aggregate state must remain distinct from per-Cleaner
 execution. `WAITING_FOR_QA` is an optional future review concept, not the
 normal design-partner pilot completion gate.
+
+**Current required team size:** new schema-version-2 Jobs explicitly persist
+`requiredCleanerCount`, defaulting to `1`; the pilot bound is `1`–`4`. An
+existing Job without the field, including a legacy Job, reads as `1`. There is
+no bulk migration. Only an active manager may change the count on a non-archived
+pre-start Job, and not below its active Assignment count. Capacity and the
+transition to `IN_PROGRESS` are checked transactionally against active
+Assignment records. Legacy singular-cleaner Jobs count as one and do not gain
+synthetic Assignment documents.
 
 **Phase 5A checklist foundation:** missing `checklistContextRevision` means
 legacy revision `0`. Context-changing Job or Assignment mutations advance it

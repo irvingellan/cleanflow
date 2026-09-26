@@ -33,6 +33,11 @@ const {
   publicChecklist,
   publicClientReport,
   rescheduleJob,
+  assignInterestedCleaner,
+  removeCleanerAssignment,
+  replaceCleanerAssignment,
+  updateRequiredCleanerCount,
+  startAssignedJob,
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
 const { createHash } = await import("node:crypto");
@@ -153,22 +158,12 @@ test("organization A manager cannot use organization B paths regardless of paylo
     .put(new Uint8Array([1]), { contentType: "image/jpeg" }));
 });
 
-test("Job checklist context revision is monotonic and Assignment mutations advance it atomically", async () => {
+test("manager browsers cannot change the Assignment roster, cleaner count, or start a Job directly", async () => {
   const db = account("manager").firestore();
   const job = db.doc(`${root}/jobs/job`);
   const assignment = db.doc(`${root}/${assignmentPath}`);
 
   await assertFails(assignment.set({ cleanerId: "cleaner-a", isActive: true }));
-
-  const assign = db.batch();
-  assign.update(job, {
-    assignedCleanerIds: ["cleaner-a"],
-    operationalStatus: "ASSIGNED",
-    checklistContextRevision: 1,
-  });
-  assign.set(assignment, { cleanerId: "cleaner-a", isActive: true });
-  await assertSucceeds(assign.commit());
-
   await assertSucceeds(job.update({ notes: "Unrelated manager edit" }));
   await assertFails(job.update({ checklistContextRevision: 0 }));
   await assertFails(job.update({ checklistContextRevision: -1 }));
@@ -176,18 +171,270 @@ test("Job checklist context revision is monotonic and Assignment mutations advan
   await assertFails(job.update({ scheduledDate: "2026-09-22", checklistContextRevision: 2 }));
   await assertFails(job.update({ scheduledStart: "11:00", checklistContextRevision: 2 }));
   await assertFails(job.update({ scheduleRevision: 1 }));
-  await assertFails(job.set({ organizationId: org, fixture: true }));
+  await assertFails(job.update({ assignedCleanerIds: ["cleaner-a"] }));
+  await assertFails(job.update({ requiredCleanerCount: 3 }));
+  await assertFails(job.update({ schemaVersion: 1 }));
+  await assertFails(job.update({ operationalStatus: "IN_PROGRESS" }));
 
   await assertFails(assignment.update({ cleanerId: "cleaner-b" }));
   await assertFails(assignment.update({ isActive: false }));
-  const remove = db.batch();
-  remove.update(job, {
-    assignedCleanerIds: [],
-    operationalStatus: "OFFERED",
-    checklistContextRevision: 2,
+  await assertFails(assignment.delete());
+});
+
+test("new v2 Jobs require a bounded cleaner count while legacy Jobs remain additive", async () => {
+  const jobs = account("manager").firestore().collection(`${root}/jobs`);
+  await assertFails(jobs.doc("team-missing-count").set({
+    organizationId: org, schemaVersion: 2, operationalStatus: "UNASSIGNED",
+  }));
+  for (const requiredCleanerCount of [0, 5, 1.5, "2"]) {
+    await assertFails(jobs.doc(`team-invalid-${String(requiredCleanerCount).replace(".", "-")}`).set({
+      organizationId: org, schemaVersion: 2, requiredCleanerCount, operationalStatus: "UNASSIGNED",
+    }));
+  }
+  await assertSucceeds(jobs.doc("team-valid").set({
+    organizationId: org, schemaVersion: 2, requiredCleanerCount: 4,
+    assignedCleanerIds: [], operationalStatus: "UNASSIGNED",
+  }));
+  await assertSucceeds(jobs.doc("legacy-single-cleaner").set({
+    organizationId: org, schemaVersion: 1, operationalStatus: "UNASSIGNED",
+  }));
+});
+
+async function seedCleanerCapacityJob({ jobId, requiredCleanerCount, status = "OFFERED", assignedCleanerIds = [], archivedAt } = {}) {
+  const jobReference = admin.doc(root + "/jobs/" + jobId);
+  await jobReference.set({
+    organizationId: org,
+    schemaVersion: 2,
+    requiredCleanerCount,
+    operationalStatus: status,
+    assignedCleanerIds,
+    checklistContextRevision: assignedCleanerIds.length,
+    propertyId: "property",
+    propertyName: "Fixture Property",
+    scheduledDate: "2026-10-01",
+    clientPrice: 350,
+    cleanerPayout: 200,
+    notes: "Keep this note",
+    ...(archivedAt ? { archivedAt } : {}),
   });
-  remove.update(assignment, { isActive: false });
-  await assertSucceeds(remove.commit());
+  return jobReference;
+}
+
+async function seedInterestedOffers(jobReference, cleanerIds) {
+  await Promise.all(cleanerIds.map((cleanerId, index) => jobReference.collection("offers").doc("offer-" + cleanerId).set({
+    organizationId: org,
+    jobId: jobReference.id,
+    cleanerId,
+    cleanerName: "Cleaner " + cleanerId,
+    status: "INTERESTED",
+    offeredCompensation: 100 + index,
+  })));
+}
+
+test("manager assigns only to required capacity, preserves interested Offers, and removal/replacement reopen one slot", async () => {
+  const jobReference = await seedCleanerCapacityJob({ jobId: "capacity-three", requiredCleanerCount: 3 });
+  await jobReference.update({ payoutId: "existing-payout", payoutPaidAt: Timestamp.fromMillis(1234) });
+  const checklistRun = jobReference.collection("checklistRuns").doc("initial");
+  const openIssue = jobReference.collection("issues").doc("existing-issue");
+  await checklistRun.set({ status: "DRAFT", resolvedDefinition: { version: 1, sections: [] } });
+  await openIssue.set({ status: "OPEN", description: "Existing issue fixture" });
+  const checklistBefore = (await checklistRun.get()).data();
+  const issueBefore = (await openIssue.get()).data();
+  const jobFinancialBefore = (await jobReference.get()).data();
+  const cleanerIds = ["cleaner-a", "cleaner-b", "cleaner-c", "cleaner-d"];
+  await seedInterestedOffers(jobReference, cleanerIds);
+
+  for (const cleanerId of cleanerIds.slice(0, 3)) {
+    const assigned = await assignInterestedCleaner.run(request("manager", {
+      jobId: jobReference.id, offerId: "offer-" + cleanerId,
+    }));
+    assert.equal(assigned.changed, true);
+  }
+  await assert.rejects(assignInterestedCleaner.run(request("manager", {
+    jobId: jobReference.id, offerId: "offer-cleaner-d",
+  })), (error) => error.code === "failed-precondition" && error.details?.reason === "team-full");
+
+  let job = (await jobReference.get()).data();
+  assert.deepEqual(job.assignedCleanerIds, cleanerIds.slice(0, 3));
+  assert.equal(job.requiredCleanerCount, 3);
+  assert.equal(job.checklistContextRevision, 3);
+  assert.equal(job.clientPrice, 350);
+  assert.equal(job.cleanerPayout, 200);
+  assert.equal(job.notes, "Keep this note");
+  assert.equal(job.payoutId, "existing-payout");
+  assert.equal(job.payoutPaidAt.toMillis(), 1234);
+  let offers = await jobReference.collection("offers").get();
+  assert.deepEqual(offers.docs.map((offer) => offer.data().status).sort(), Array(4).fill("INTERESTED"));
+  assert.deepEqual(offers.docs.map((offer) => offer.data().offeredCompensation).sort(), [100, 101, 102, 103]);
+
+  const assignments = await jobReference.collection("assignments").get();
+  const firstAssignment = assignments.docs.find((entry) => entry.data().cleanerId === "cleaner-a");
+  await removeCleanerAssignment.run(request("manager", {
+    jobId: jobReference.id, assignmentId: firstAssignment.id,
+  }));
+  job = (await jobReference.get()).data();
+  assert.deepEqual(job.assignedCleanerIds, ["cleaner-b", "cleaner-c"]);
+  assert.equal(job.checklistContextRevision, 4);
+  assert.equal((await firstAssignment.ref.get()).data().isActive, false);
+  assert.equal((await firstAssignment.ref.get()).data().removedByUid, "manager");
+
+  await assignInterestedCleaner.run(request("manager", {
+    jobId: jobReference.id, offerId: "offer-cleaner-d",
+  }));
+  const replacementTarget = (await jobReference.collection("assignments").get()).docs
+    .find((entry) => entry.data().cleanerId === "cleaner-b");
+  await replaceCleanerAssignment.run(request("manager", {
+    jobId: jobReference.id,
+    assignmentId: replacementTarget.id,
+    replacementOfferId: "offer-cleaner-a",
+  }));
+  job = (await jobReference.get()).data();
+  assert.equal(new Set(job.assignedCleanerIds).size, 3);
+  assert.equal(job.requiredCleanerCount, 3);
+  assert.equal(job.checklistContextRevision, 6);
+  offers = await jobReference.collection("offers").get();
+  assert.deepEqual(offers.docs.map((offer) => offer.data().status).sort(), Array(4).fill("INTERESTED"));
+  assert.deepEqual((await checklistRun.get()).data(), checklistBefore);
+  assert.deepEqual((await openIssue.get()).data(), issueBefore);
+  const financialAfter = (await jobReference.get()).data();
+  assert.deepEqual({
+    clientPrice: financialAfter.clientPrice,
+    cleanerPayout: financialAfter.cleanerPayout,
+    payoutId: financialAfter.payoutId,
+    payoutPaidAt: financialAfter.payoutPaidAt.toMillis(),
+  }, {
+    clientPrice: jobFinancialBefore.clientPrice,
+    cleanerPayout: jobFinancialBefore.cleanerPayout,
+    payoutId: jobFinancialBefore.payoutId,
+    payoutPaidAt: jobFinancialBefore.payoutPaidAt.toMillis(),
+  });
+});
+
+test("roster removal and replacement refuse Assignments whose execution has started", async () => {
+  const jobReference = await seedCleanerCapacityJob({ jobId: "started-assignment-roster", requiredCleanerCount: 1 });
+  await seedInterestedOffers(jobReference, ["cleaner-a", "cleaner-b"]);
+  await assignInterestedCleaner.run(request("manager", { jobId: jobReference.id, offerId: "offer-cleaner-a" }));
+  const assignment = (await jobReference.collection("assignments").get()).docs[0];
+  await assignment.ref.update({ executionStatus: "IN_PROGRESS", startedAt: Timestamp.now() });
+
+  for (const operation of [
+    () => removeCleanerAssignment.run(request("manager", { jobId: jobReference.id, assignmentId: assignment.id })),
+    () => replaceCleanerAssignment.run(request("manager", {
+      jobId: jobReference.id, assignmentId: assignment.id, replacementOfferId: "offer-cleaner-b",
+    })),
+  ]) {
+    await assert.rejects(operation(), (error) => error.code === "failed-precondition"
+      && error.details?.reason === "assignment-execution-started");
+  }
+  assert.equal((await assignment.ref.get()).data().isActive, true);
+  assert.deepEqual((await jobReference.get()).data().assignedCleanerIds, ["cleaner-a"]);
+  assert.equal((await jobReference.collection("assignments").get()).size, 1);
+});
+
+test("required cleaner count is validated and locked below the active team or after work starts", async () => {
+  const jobReference = await seedCleanerCapacityJob({ jobId: "count-change", requiredCleanerCount: 3 });
+  await seedInterestedOffers(jobReference, ["cleaner-a", "cleaner-b"]);
+  await assignInterestedCleaner.run(request("manager", { jobId: jobReference.id, offerId: "offer-cleaner-a" }));
+  await assignInterestedCleaner.run(request("manager", { jobId: jobReference.id, offerId: "offer-cleaner-b" }));
+  await assert.rejects(updateRequiredCleanerCount.run(request("manager", {
+    jobId: jobReference.id, requiredCleanerCount: 1,
+  })), (error) => error.code === "failed-precondition" && error.details?.reason === "below-assigned-count");
+  await assert.rejects(updateRequiredCleanerCount.run(request("manager", {
+    jobId: jobReference.id, requiredCleanerCount: 5,
+  })), { code: "invalid-argument" });
+  const raised = await updateRequiredCleanerCount.run(request("manager", {
+    jobId: jobReference.id, requiredCleanerCount: 4,
+  }));
+  assert.deepEqual(raised, { changed: true, requiredCleanerCount: 4 });
+  await updateRequiredCleanerCount.run(request("manager", { jobId: jobReference.id, requiredCleanerCount: 2 }));
+
+  for (const [jobId, state] of [
+    ["count-in-progress", { status: "IN_PROGRESS" }],
+    ["count-completed", { status: "COMPLETED" }],
+    ["count-archived", { status: "ASSIGNED", archivedAt: Timestamp.now() }],
+  ]) {
+    await seedCleanerCapacityJob({ jobId, requiredCleanerCount: 2, ...state });
+    await assert.rejects(updateRequiredCleanerCount.run(request("manager", {
+      jobId, requiredCleanerCount: 3,
+    })), { code: "failed-precondition" });
+  }
+});
+
+test("Job start is capacity-gated and idempotent, with legacy singular compatibility", async () => {
+  const jobReference = await seedCleanerCapacityJob({ jobId: "start-team", requiredCleanerCount: 3 });
+  await seedInterestedOffers(jobReference, ["cleaner-a", "cleaner-b", "cleaner-c", "cleaner-d"]);
+  await assignInterestedCleaner.run(request("manager", { jobId: jobReference.id, offerId: "offer-cleaner-a" }));
+  await assignInterestedCleaner.run(request("manager", { jobId: jobReference.id, offerId: "offer-cleaner-b" }));
+  await assert.rejects(startAssignedJob.run(request("manager", { jobId: jobReference.id })),
+    (error) => error.code === "failed-precondition" && error.details?.reason === "team-understaffed");
+  assert.equal((await jobReference.get()).data().operationalStatus, "ASSIGNED");
+
+  await assignInterestedCleaner.run(request("manager", { jobId: jobReference.id, offerId: "offer-cleaner-c" }));
+  await startAssignedJob.run(request("manager", { jobId: jobReference.id }));
+  const started = (await jobReference.get()).data();
+  assert.equal(started.operationalStatus, "IN_PROGRESS");
+  assert.ok(started.startedAt instanceof Timestamp);
+  const revision = started.checklistContextRevision;
+  await startAssignedJob.run(request("manager", { jobId: jobReference.id }));
+  const retried = (await jobReference.get()).data();
+  assert.equal(retried.checklistContextRevision, revision);
+  assert.equal(retried.startedAt.toMillis(), started.startedAt.toMillis());
+  const startedAssignments = (await jobReference.collection("assignments").get()).docs
+    .filter((entry) => entry.data().isActive);
+  assert.equal(startedAssignments.length, 3);
+  assert.ok(startedAssignments.every((entry) => entry.data().executionStatus === "ASSIGNED"));
+  assert.ok(startedAssignments.every((entry) => !Object.hasOwn(entry.data(), "startedAt")));
+  await assert.rejects(assignInterestedCleaner.run(request("manager", {
+    jobId: jobReference.id, offerId: "offer-cleaner-d",
+  })), (error) => error.code === "failed-precondition" && error.details?.reason === "assignment-roster-locked");
+  assert.equal((await jobReference.collection("offers").doc("offer-cleaner-d").get()).data().status, "INTERESTED");
+
+  const legacyJob = admin.doc(root + "/jobs/start-legacy");
+  await legacyJob.set({ organizationId: org, assignedCleanerId: "legacy-cleaner", operationalStatus: "ASSIGNED" });
+  await startAssignedJob.run(request("manager", { jobId: legacyJob.id }));
+  assert.equal((await legacyJob.get()).data().operationalStatus, "IN_PROGRESS");
+  assert.equal((await legacyJob.collection("assignments").get()).size, 0);
+});
+
+test("concurrent manager assignments serialize the last slot", async () => {
+  const jobReference = await seedCleanerCapacityJob({ jobId: "capacity-race", requiredCleanerCount: 1 });
+  await seedInterestedOffers(jobReference, ["cleaner-a", "cleaner-b"]);
+  const results = await Promise.allSettled(["cleaner-a", "cleaner-b"].map((cleanerId) =>
+    assignInterestedCleaner.run(request("manager", {
+      jobId: jobReference.id, offerId: "offer-" + cleanerId,
+    })),
+  ));
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal((await jobReference.collection("assignments").get()).docs
+    .filter((entry) => entry.data().isActive).length, 1);
+  const job = (await jobReference.get()).data();
+  assert.equal(job.assignedCleanerIds.length, 1);
+  assert.equal(job.checklistContextRevision, 1);
+  assert.deepEqual((await jobReference.collection("offers").get()).docs
+    .map((offer) => offer.data().status).sort(), ["INTERESTED", "INTERESTED"]);
+});
+
+test("Assignment and count Functions require an active manager and cannot cross organizations", async () => {
+  await seedCleanerCapacityJob({ jobId: "protected-team", requiredCleanerCount: 1 });
+  for (const [uid, anonymous, code] of [
+    ["cleaner", false, "permission-denied"],
+    ["other-manager", false, "permission-denied"],
+    ["inactive", false, "permission-denied"],
+    ["anonymous-member", true, "unauthenticated"],
+    [null, false, "unauthenticated"],
+  ]) {
+    const input = request(uid, { organizationId: "other", jobId: "protected-team", requiredCleanerCount: 3 }, anonymous);
+    await assert.rejects(updateRequiredCleanerCount.run(input), { code });
+    await assert.rejects(assignInterestedCleaner.run({ ...input, data: { ...input.data, offerId: "fake" } }), { code });
+    await assert.rejects(removeCleanerAssignment.run({ ...input, data: { ...input.data, assignmentId: "fake" } }), { code });
+    await assert.rejects(replaceCleanerAssignment.run({ ...input, data: {
+      ...input.data, assignmentId: "fake", replacementOfferId: "fake",
+    } }), { code });
+    await assert.rejects(startAssignedJob.run(input), { code });
+  }
+  assert.equal((await admin.doc(root + "/jobs/protected-team").get()).data().requiredCleanerCount, 1);
+  assert.equal((await admin.doc("organizations/other/jobs/job").get()).data().operationalStatus, undefined);
 });
 
 async function seedRescheduleJob({ jobId = "job", status = "UNASSIGNED", revisions = {}, archivedAt } = {}) {

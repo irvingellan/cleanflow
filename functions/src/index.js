@@ -48,6 +48,13 @@ import {
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { rescheduleJobForManager } from "./jobScheduleService.js";
 import {
+  assignInterestedCleanerForManager,
+  removeAssignmentForManager,
+  replaceAssignmentForManager,
+  startAssignedJobForManager,
+  updateRequiredCleanerCountForManager,
+} from "./jobTeamService.js";
+import {
   downloadPublicClientReportPhoto,
   getClientReportCapabilityForManager,
   issueClientReportForManager,
@@ -669,6 +676,68 @@ export const rescheduleJob = onCall(
       scheduledDate: request.data?.scheduledDate,
       scheduledStart: request.data?.scheduledStart,
       actorUid: request.auth.uid,
+    });
+  },
+);
+
+export const assignInterestedCleaner = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return assignInterestedCleanerForManager(db, {
+      organizationId,
+      jobId: request.data?.jobId,
+      offerId: request.data?.offerId,
+    });
+  },
+);
+
+export const removeCleanerAssignment = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return removeAssignmentForManager(db, {
+      organizationId,
+      jobId: request.data?.jobId,
+      assignmentId: request.data?.assignmentId,
+      actorUid: request.auth.uid,
+    });
+  },
+);
+
+export const replaceCleanerAssignment = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return replaceAssignmentForManager(db, {
+      organizationId,
+      jobId: request.data?.jobId,
+      assignmentId: request.data?.assignmentId,
+      replacementOfferId: request.data?.replacementOfferId,
+      actorUid: request.auth.uid,
+    });
+  },
+);
+
+export const updateRequiredCleanerCount = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return updateRequiredCleanerCountForManager(db, {
+      organizationId,
+      jobId: request.data?.jobId,
+      requiredCleanerCount: request.data?.requiredCleanerCount,
+    });
+  },
+);
+
+export const startAssignedJob = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return startAssignedJobForManager(db, {
+      organizationId,
+      jobId: request.data?.jobId,
     });
   },
 );

@@ -15,7 +15,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { db } from "../../services/firebase/client.js";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../../services/firebase/client.js";
 import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import {
@@ -31,6 +32,7 @@ import { buildChecklistContextRevisionUpdate } from "./checklistContextRevision.
 const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
 const upcomingSummaryLimit = 3;
+const startAssignedJobCall = httpsCallable(functions, "startAssignedJob");
 const activeOperationalStatuses = [
   "UNASSIGNED",
   "OFFERED",
@@ -465,48 +467,9 @@ export async function assignCleanerToJob(jobId, cleaner) {
 }
 
 export async function startAssignedJob(jobId) {
-  const reference = jobDocument(jobId);
-
-  await runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(reference);
-
-    if (!snapshot.exists()) {
-      const error = new Error("Job not found.");
-      error.code = "job-not-found";
-      throw error;
-    }
-
-    const job = snapshot.data();
-
-    if (isAssignmentAwareJob(job)) {
-      const error = new Error("Team Job execution is not available in this slice.");
-      error.code = "assignment-aware-execution-deferred";
-      error.job = jobFromSnapshot(snapshot);
-      throw error;
-    }
-
-    if (job.operationalStatus !== "ASSIGNED") {
-      const error = new Error("This job cannot be started from its current status.");
-      error.code = "invalid-job-transition";
-      error.job = jobFromSnapshot(snapshot);
-      throw error;
-    }
-
-    const updates = {
-      operationalStatus: "IN_PROGRESS",
-    };
-
-    if (!job.startedAt) {
-      updates.startedAt = serverTimestamp();
-    }
-
-    transaction.update(reference, {
-      ...updates,
-      ...buildChecklistContextRevisionUpdate(job, updates),
-    });
-  });
-
-  const snapshot = await getDoc(reference);
+  await startAssignedJobCall({ jobId });
+  const snapshot = await getDoc(jobDocument(jobId));
+  if (!snapshot.exists()) throw new Error("Job not found.");
   return jobFromSnapshot(snapshot);
 }
 
@@ -565,6 +528,7 @@ export async function createJob({
   scheduledStart,
   clientPrice,
   cleanerPayout,
+  requiredCleanerCount,
   notes,
   guestName,
 }) {
@@ -578,6 +542,7 @@ export async function createJob({
     scheduledStart,
     clientPrice,
     cleanerPayout,
+    requiredCleanerCount,
     notes,
     guestName,
   });

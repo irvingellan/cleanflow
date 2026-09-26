@@ -689,3 +689,28 @@ report; it does not create a client account or authorize checklist edits.
 Managers share links manually. Email/WhatsApp integration, PDF generation,
 client portals, Job completion, and payment changes remain separate and are not
 implemented by this decision.
+
+---
+
+## DEC-039 — Enforce a bounded required cleaner count per Job
+
+Date: 2026-09-26
+Status: Accepted; implementation committed on `main`, not deployed
+
+`requiredCleanerCount` means the number of active Cleaner Assignments needed
+before a Job may start. Newly created Assignment-aware Jobs persist an explicit
+default of `1`; the initial pilot control is bounded to integers `1` through
+`4`. Missing values on existing Jobs, including legacy Jobs, read as `1`; do
+not bulk-migrate records. Legacy singular-cleaner Jobs continue to use their
+existing cleaner fields and must not receive synthetic Assignment records.
+
+Offer selection and interest remain independent of capacity. A manager may
+offer to more cleaners than required, and extra `INTERESTED` Offers remain
+unchanged when capacity is full. Only an active organization manager can
+assign, remove, or replace a cleaner, change the required count, or start the
+Job. Server transactions enforce Assignment capacity, projection consistency,
+the pre-start count-edit window, and the full-team start gate. Browser clients
+cannot directly mutate Assignment records, the roster/count projection, the
+schema-version discriminator, or start a Job. These changes do not divide or
+rewrite Offer compensation, alter payment/payout state, or advance individual
+Assignment execution; the Job remains the overall lifecycle owner.

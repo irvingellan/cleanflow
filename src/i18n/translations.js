@@ -11,6 +11,7 @@ export const languageOptions = [
 
 const messages = {
   en: {
+    "jobs.requiredCleanerCount": "Cleaners needed", "jobs.assignedOfRequired": "Team", "jobs.assignedOfRequiredValue": "{assigned} of {required}", "jobs.teamComplete": "Team complete", "jobs.teamFull": "Team is currently full.", "jobs.editRequiredCleanerCount": "Edit cleaners needed", "jobs.saveRequiredCleanerCount": "Save cleaner count", "jobs.savingRequiredCleanerCount": "Saving…", "jobs.requiredCleanerCountInvalid": "Choose an integer from 1 to {maximum}.", "jobs.requiredCleanerCountBelowAssigned": "The count cannot be lower than the {assigned} cleaners already assigned.", "jobs.requiredCleanerCountSaveError": "Unable to update the required cleaner count.", "jobs.startNeedsMoreCleaners": "This service needs {required} cleaners. {assigned} are currently assigned.",
     "auth.managerAccessLoading": "Checking manager access…",
     "auth.managerAccessDenied": "This account does not have active manager access. Contact your administrator.",
     "auth.managerAccessError": "Unable to verify manager access. Check your connection and reload.",
@@ -45,6 +46,7 @@ const messages = {
     "clients.title": "Clients", "clients.new": "New client", "clients.loading": "Loading clients…", "clients.error": "Unable to load clients.", "clients.empty": "No clients found.", "clients.createTitle": "New client", "clients.name": "Client name", "clients.save": "Save client", "clients.creating": "Saving…", "clients.nameRequired": "Enter a client name.", "clients.createError": "Unable to create client.", "clients.view": "View {client}", "clients.details": "Client details", "clients.linkedProperties": "Linked properties", "clients.propertiesLoading": "Loading linked properties…", "clients.propertiesError": "Unable to load linked properties.", "clients.noLinkedProperties": "No linked properties.", "clients.openProperty": "Open property", "clients.upcomingService": "Upcoming service", "clients.upcomingServices": "Upcoming services", "clients.noUpcomingService": "No upcoming service", "clients.recentHistory": "Recent history", "clients.historyLoading": "Loading client history…", "clients.historyError": "Unable to load client history.", "clients.noRecentHistory": "No recent service history.",
   },
   pt: {
+    "jobs.requiredCleanerCount": "Quantidade de cleaners", "jobs.assignedOfRequired": "Equipe", "jobs.assignedOfRequiredValue": "{assigned} de {required}", "jobs.teamComplete": "Equipe completa", "jobs.teamFull": "A equipe está completa no momento.", "jobs.editRequiredCleanerCount": "Editar quantidade de cleaners", "jobs.saveRequiredCleanerCount": "Salvar quantidade", "jobs.savingRequiredCleanerCount": "Salvando…", "jobs.requiredCleanerCountInvalid": "Escolha um número inteiro de 1 a {maximum}.", "jobs.requiredCleanerCountBelowAssigned": "A quantidade não pode ser menor que as {assigned} cleaners já atribuídas.", "jobs.requiredCleanerCountSaveError": "Não foi possível atualizar a quantidade necessária de cleaners.", "jobs.startNeedsMoreCleaners": "Este serviço precisa de {required} cleaners. {assigned} estão atribuídas no momento.",
     "auth.managerAccessLoading": "Verificando acesso de gerente…",
     "auth.managerAccessDenied": "Esta conta não tem acesso ativo de gerente. Entre em contato com o administrador.",
     "auth.managerAccessError": "Não foi possível verificar o acesso. Verifique sua conexão e recarregue.",
@@ -80,6 +82,7 @@ const messages = {
     "dashboard.needsAttentionDescription": "Principais prioridades operacionais entre atribuições, interesse de cleaners e problemas.",
   },
   es: {
+    "jobs.requiredCleanerCount": "Cantidad de cleaners necesarias", "jobs.assignedOfRequired": "Equipo", "jobs.assignedOfRequiredValue": "{assigned} de {required}", "jobs.teamComplete": "Equipo completo", "jobs.teamFull": "El equipo está completo por ahora.", "jobs.editRequiredCleanerCount": "Editar cantidad de cleaners", "jobs.saveRequiredCleanerCount": "Guardar cantidad", "jobs.savingRequiredCleanerCount": "Guardando…", "jobs.requiredCleanerCountInvalid": "Elige un número entero del 1 al {maximum}.", "jobs.requiredCleanerCountBelowAssigned": "La cantidad no puede ser menor que las {assigned} cleaners ya asignadas.", "jobs.requiredCleanerCountSaveError": "No se pudo actualizar la cantidad necesaria de cleaners.", "jobs.startNeedsMoreCleaners": "Este servicio necesita {required} cleaners. Hay {assigned} asignadas actualmente.",
     "auth.managerAccessLoading": "Verificando acceso de gestión…",
     "auth.managerAccessDenied": "Esta cuenta no tiene acceso activo de gestión. Contacta al administrador.",
     "auth.managerAccessError": "No se pudo verificar el acceso. Revisa tu conexión y vuelve a cargar.",

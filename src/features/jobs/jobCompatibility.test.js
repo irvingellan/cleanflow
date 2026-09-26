@@ -9,11 +9,14 @@ import {
   canEditJobDetails,
   canManageAssignmentAwareOffers,
   getAssignedCleanerIds,
+  getRequiredCleanerCount,
+  maximumRequiredCleanerCount,
   getJobGrossMargin,
   getJobSchemaVersion,
   isLegacyJob,
   normalizeJobRecord,
   optionalJobPrice,
+  parseRequiredCleanerCount,
 } from "./jobCompatibility.js";
 
 describe("Job compatibility", () => {
@@ -106,9 +109,30 @@ describe("Job compatibility", () => {
       operationalStatus: "UNASSIGNED",
       assignedCleanerIds: [],
       checklistContextRevision: 0,
+      requiredCleanerCount: 1,
     });
     expect(job).not.toHaveProperty("clientId");
     expect(job).not.toHaveProperty("guestName");
+  });
+
+  it("persists the requested bounded cleaner count and treats a missing legacy value as one", () => {
+    const job = buildCurrentJobCreateData({
+      organizationId: "clean-flow-demo",
+      propertyId: "property-1",
+      propertyName: "Linked Property",
+      clientName: "Snapshot Client",
+      scheduledDate: "2026-09-01",
+      requiredCleanerCount: 3,
+    });
+
+    expect(job.requiredCleanerCount).toBe(3);
+    expect(getRequiredCleanerCount({ schemaVersion: 2 })).toBe(1);
+    expect(getRequiredCleanerCount({ assignedCleanerId: "legacy-cleaner" })).toBe(1);
+    expect(maximumRequiredCleanerCount).toBe(4);
+    expect(parseRequiredCleanerCount("3")).toBe(3);
+    for (const value of ["", "0", "1.5", "5", "-1", "abc"]) {
+      expect(parseRequiredCleanerCount(value)).toBeNull();
+    }
   });
 
   it("copies only an explicitly supplied canonical Client ID", () => {

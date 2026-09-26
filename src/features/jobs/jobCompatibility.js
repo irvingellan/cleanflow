@@ -3,6 +3,24 @@ export const SINGULAR_JOB_SCHEMA_VERSION = 1;
 export const ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION = 2;
 export const CURRENT_JOB_SCHEMA_VERSION = ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION;
 export const maximumGuestNameLength = 120;
+export const maximumRequiredCleanerCount = 4;
+
+export function getRequiredCleanerCount(job) {
+  if (!isAssignmentAwareJob(job)) return 1;
+  const value = job?.requiredCleanerCount;
+  return Number.isSafeInteger(value) && value >= 1 && value <= maximumRequiredCleanerCount
+    ? value
+    : 1;
+}
+
+export function parseRequiredCleanerCount(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return null;
+  const count = Number(text);
+  return Number.isSafeInteger(count) && count >= 1 && count <= maximumRequiredCleanerCount
+    ? count
+    : null;
+}
 
 import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
 import { getChecklistContextRevision } from "./checklistContextRevision.js";
@@ -129,6 +147,7 @@ export function buildCurrentJobCreateData({
   scheduledStart,
   clientPrice,
   cleanerPayout,
+  requiredCleanerCount = 1,
   notes,
   guestName,
 }) {
@@ -136,6 +155,7 @@ export function buildCurrentJobCreateData({
   const normalizedScheduledStart = optionalText(scheduledStart);
   const normalizedClientPrice = optionalJobPrice(clientPrice);
   const normalizedCleanerPayout = optionalJobPrice(cleanerPayout);
+  const normalizedRequiredCleanerCount = parseRequiredCleanerCount(requiredCleanerCount);
 
   if (normalizedGuestName.length > maximumGuestNameLength) {
     throw new Error("Guest name is too long.");
@@ -143,6 +163,9 @@ export function buildCurrentJobCreateData({
 
   if (normalizedClientPrice === null || normalizedCleanerPayout === null) {
     throw new Error("Job prices must be non-negative numbers.");
+  }
+  if (normalizedRequiredCleanerCount === null) {
+    throw new Error(`Required cleaner count must be an integer from 1 to ${maximumRequiredCleanerCount}.`);
   }
 
   const job = {
@@ -154,6 +177,7 @@ export function buildCurrentJobCreateData({
     notes,
     operationalStatus: "UNASSIGNED",
     schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
+    requiredCleanerCount: normalizedRequiredCleanerCount,
     checklistContextRevision: 0,
     assignedCleanerIds: [],
     dataProvenance: "REAL",

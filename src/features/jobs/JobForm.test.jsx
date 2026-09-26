@@ -34,6 +34,7 @@ describe("CreateCleaningForm", () => {
     expect(screen.getByLabelText("Client")).toHaveValue("Carl");
     expect(screen.getByLabelText("Client price")).toHaveValue(350);
     expect(screen.getByLabelText("Cleaner payout")).toHaveValue(200);
+    expect(screen.getByLabelText("Cleaners needed")).toHaveValue(1);
     expect(screen.getByDisplayValue("Unassigned")).toBeVisible();
   });
 
@@ -49,6 +50,7 @@ describe("CreateCleaningForm", () => {
       scheduledDate: "2026-09-01",
       clientPrice: 350,
       cleanerPayout: 200,
+      requiredCleanerCount: 3,
       guestName: "Taylor Morgan",
       notes: "",
       operationalStatus: "UNASSIGNED",
@@ -79,6 +81,9 @@ describe("CreateCleaningForm", () => {
     fireEvent.change(screen.getByLabelText("Scheduled time"), {
       target: { value: "10:00" },
     });
+    fireEvent.change(screen.getByLabelText("Cleaners needed"), {
+      target: { value: "3" },
+    });
     fireEvent.change(screen.getByLabelText("Guest name (optional)"), {
       target: { value: " Taylor Morgan " },
     });
@@ -94,6 +99,7 @@ describe("CreateCleaningForm", () => {
         scheduledStart: "10:00",
         clientPrice: 350,
         cleanerPayout: 200,
+        requiredCleanerCount: 3,
         guestName: " Taylor Morgan ",
         notes: "",
       });
