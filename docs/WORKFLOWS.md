@@ -40,6 +40,18 @@ Interest never automatically assigns a Job. `accepted` is not an Offer status.
 Cleaners must not see competing Offers, responses, assignment count, or another
 cleaner's compensation.
 
+**CURRENT v0 assignment acknowledgment:** after an interested cleaner's Offer
+produces a current active Assignment, that cleaner can use the same still-valid
+public Offer link to confirm they will be there. The server revalidates the
+token, Offer, Job, and exact Assignment, then records a server timestamp and
+source Offer ID on that Assignment. Repeated requests are idempotent. The
+manager sees awaiting/confirmed for the active roster; the UI makes clear that
+link possession does not verify the person's identity. This does not change
+Offer response, Job or Assignment execution state, payment, or the manager's
+start/completion controls. Removed/replaced, archived, expired, or otherwise
+ineligible links cannot acknowledge. Legacy records without a safe Offer-to-
+Assignment relationship are not retrofitted.
+
 **Required cleaner count implementation on `main` (not deployed):** new
 Assignment-aware Jobs start with an explicit `requiredCleanerCount` of `1`,
 bounded to `1`–`4`. Missing values on existing Jobs read as `1`; no migration

@@ -1612,3 +1612,70 @@ test("public capability GET/response remains independent of auth and only update
   await assertFails(account("outsider").firestore()
     .doc(`${root}/jobs/public-job/offers/cleaner`).update({ offeredCompensation: 1 }));
 });
+
+test("current public Offer link acknowledges only its active Assignment without changing lifecycle", async () => {
+  const token = Buffer.alloc(32, 9).toString("base64url");
+  const job = admin.doc(`${root}/jobs/acknowledgment-job`);
+  const offer = job.collection("offers").doc("offer-a");
+  const assignment = job.collection("assignments").doc("assignment-a");
+  await job.set({
+    schemaVersion: 2,
+    operationalStatus: "ASSIGNED",
+    assignedCleanerIds: ["cleaner-a"],
+    propertyName: "Fixture Property",
+    clientPrice: 400,
+    cleanerPayout: 250,
+    notes: "Private manager note",
+  });
+  await offer.set({
+    status: "INTERESTED",
+    cleanerId: "cleaner-a",
+    offeredCompensation: 125,
+    publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+    publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+  });
+  await assignment.set({
+    organizationId: org,
+    jobId: job.id,
+    cleanerId: "cleaner-a",
+    sourceOfferId: offer.id,
+    isActive: true,
+    executionStatus: "ASSIGNED",
+  });
+  async function http(method, query = {}, body = {}) {
+    const response = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+    await publicOffer({ method, query, body }, response);
+    return response;
+  }
+
+  const originalJob = (await job.get()).data();
+  const originalOffer = (await offer.get()).data();
+  const publicPage = await http("GET", { token });
+  assert.equal(publicPage.code, 200);
+  assert.deepEqual(publicPage.body.offer, {
+    propertyName: "Fixture Property",
+    scheduledDate: null,
+    scheduledStart: null,
+    status: "INTERESTED",
+    offeredCompensation: 125,
+    assignmentAcknowledgment: "AWAITING_CONFIRMATION",
+  });
+
+  const acknowledged = await http("POST", {}, { token, action: "ACKNOWLEDGE_ASSIGNMENT" });
+  assert.equal(acknowledged.code, 200);
+  assert.deepEqual(acknowledged.body, { assignmentAcknowledgment: "CONFIRMED" });
+  const confirmedAssignment = (await assignment.get()).data();
+  assert.ok(confirmedAssignment.cleanerAcknowledgedAt instanceof Timestamp);
+  assert.equal(confirmedAssignment.cleanerAcknowledgedOfferId, offer.id);
+  assert.equal(confirmedAssignment.executionStatus, "ASSIGNED");
+  assert.deepEqual((await job.get()).data(), originalJob);
+  assert.deepEqual((await offer.get()).data(), originalOffer);
+
+  const repeated = await http("POST", {}, { token, action: "ACKNOWLEDGE_ASSIGNMENT" });
+  assert.equal(repeated.code, 200);
+  assert.equal((await assignment.get()).data().cleanerAcknowledgedAt.toMillis(), confirmedAssignment.cleanerAcknowledgedAt.toMillis());
+  const reloaded = await http("GET", { token });
+  assert.equal(reloaded.body.offer.assignmentAcknowledgment, "CONFIRMED");
+  await assertFails(account("manager").firestore().doc(assignment.path)
+    .update({ cleanerAcknowledgedOfferId: "forged" }));
+});

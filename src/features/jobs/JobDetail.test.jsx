@@ -490,6 +490,7 @@ describe("JobDetail lifecycle actions", () => {
     renderJobDetail("ASSIGNED", {
       schemaVersion: 2,
       assignedCleanerIds: ["cleaner-a"],
+      offers: [{ id: "offer-a", cleanerId: "cleaner-a", status: "INTERESTED" }],
     }, { onIssueChecklistCapability, onRevokeChecklistCapability }, {
       run: { id: "initial", status: "DRAFT", checklistItemCount: 28, inventoryItemCount: 13 },
       capability: { state: "NONE" },
@@ -785,7 +786,7 @@ describe("JobDetail lifecycle actions", () => {
             { id: "offer-a", cleanerId: "cleaner-a", cleanerName: "Ana", status: "INTERESTED" },
             { id: "offer-b", cleanerId: "cleaner-b", cleanerName: "Beatriz", status: "INTERESTED" },
           ]}
-          assignments={[{ id: "assignment-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Ana", isActive: true, executionStatus: "ASSIGNED" }]}
+          assignments={[{ id: "assignment-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Ana", sourceOfferId: "offer-a", isActive: true, executionStatus: "ASSIGNED" }]}
           isLoadingOffers={false}
           hasOffersError={false}
           isLoadingAssignments={false}
@@ -811,9 +812,32 @@ describe("JobDetail lifecycle actions", () => {
 
     expect(screen.getByText("Assigned cleaners")).toBeVisible();
     expect(screen.getAllByText("1 of 3")).not.toHaveLength(0);
+    expect(screen.getByTestId("assignment-acknowledgment-assignment-a")).toHaveTextContent("Awaiting confirmation");
+    expect(screen.getByText("A link response does not verify who is holding or using the link.")).toBeVisible();
     expect(screen.queryByText("Assigned cleaner")).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
     expect(onAssignCleaner).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-b" }));
+  });
+
+  it("shows a cleaner acknowledgment as confirmed only on its matching Assignment", () => {
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2,
+      assignedCleanerIds: ["cleaner-a"],
+      offers: [{ id: "offer-a", cleanerId: "cleaner-a", status: "INTERESTED" }],
+    }, {}, {
+      assignments: [{
+        id: "assignment-a",
+        cleanerId: "cleaner-a",
+        cleanerNameSnapshot: "Ana",
+        sourceOfferId: "offer-a",
+        cleanerAcknowledgedOfferId: "offer-a",
+        cleanerAcknowledgedAt: { seconds: 10 },
+        isActive: true,
+        executionStatus: "ASSIGNED",
+      }],
+    });
+
+    expect(screen.getByTestId("assignment-acknowledgment-assignment-a")).toHaveTextContent("Confirmed through link");
   });
 
   it("creates a recipient-specific reminder for an assigned cleaner in a team Job", async () => {

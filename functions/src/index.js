@@ -55,6 +55,11 @@ import {
   updateRequiredCleanerCountForManager,
 } from "./jobTeamService.js";
 import {
+  acknowledgePublicOfferAssignment,
+  assignmentAcknowledgmentStates,
+  loadPublicOfferAssignmentAcknowledgment,
+} from "./publicOfferAssignmentAcknowledgment.js";
+import {
   downloadPublicClientReportPhoto,
   getClientReportCapabilityForManager,
   issueClientReportForManager,
@@ -395,7 +400,7 @@ async function offerReferenceForTokenHash(tokenHash) {
   return jobReferenceFromOffer(offerDocument) ? offerDocument : null;
 }
 
-export function publicOfferResult(offerData, jobData) {
+export function publicOfferResult(offerData, jobData, { assignmentAcknowledgment = null } = {}) {
   const state = offerState(offerData, jobData, new Date());
 
   if (state !== "available") {
@@ -428,6 +433,9 @@ export function publicOfferResult(offerData, jobData) {
     : null;
 
   offer.offeredCompensation = safeOfferedCompensation;
+  if (Object.values(assignmentAcknowledgmentStates).includes(assignmentAcknowledgment)) {
+    offer.assignmentAcknowledgment = assignmentAcknowledgment;
+  }
   // Keep the existing legacy wire field for old clients during rollout.
   if (!isAssignmentAwareJobData(jobData)) {
     offer.cleanerPayout = safeOfferedCompensation;
@@ -467,7 +475,16 @@ async function loadPublicOffer(token) {
     return { state: "not-found" };
   }
 
-  return publicOfferResult(offerData, jobSnapshot.data());
+  const jobData = jobSnapshot.data();
+  const assignmentAcknowledgment = await loadPublicOfferAssignmentAcknowledgment(db, {
+    organizationId,
+    jobId: jobDocument.id,
+    job: jobData,
+    offerId: offerDocument.id,
+    offer: offerData,
+    tokenHash,
+  });
+  return publicOfferResult(offerData, jobData, { assignmentAcknowledgment });
 }
 
 function optionalContextValue(value, maximumLength) {
@@ -1199,9 +1216,10 @@ export const publicOffer = onRequest(
         return;
       }
 
-      const { token, status } = request.body || {};
+      const { token, status, action } = request.body || {};
 
-      if (!validToken(token) || !["INTERESTED", "DECLINED"].includes(status)) {
+      const isAssignmentAcknowledgment = action === "ACKNOWLEDGE_ASSIGNMENT";
+      if (!validToken(token) || (!isAssignmentAcknowledgment && !["INTERESTED", "DECLINED"].includes(status))) {
         sendPublicError(response, 400, "invalid_request");
         return;
       }
@@ -1212,6 +1230,32 @@ export const publicOffer = onRequest(
 
       if (!offerDocument || !jobDocument) {
         sendPublicError(response, 404, "offer_not_found");
+        return;
+      }
+
+      if (isAssignmentAcknowledgment) {
+        const result = await acknowledgePublicOfferAssignment(db, {
+          organizationId,
+          jobReference: jobDocument,
+          offerReference: offerDocument,
+          tokenHash,
+        });
+        if (result.state === "not-found") {
+          sendPublicError(response, 404, "offer_not_found");
+          return;
+        }
+        if (result.state === "expired") {
+          sendPublicError(response, 410, "offer_expired");
+          return;
+        }
+        if (result.state !== "confirmed") {
+          sendPublicError(response, 410, "offer_unavailable");
+          return;
+        }
+        configureResponse(response);
+        response.status(200).json({
+          assignmentAcknowledgment: assignmentAcknowledgmentStates.confirmed,
+        });
         return;
       }
 

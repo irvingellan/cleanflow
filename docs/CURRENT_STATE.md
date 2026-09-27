@@ -1,7 +1,7 @@
 # CleanFlow — Current State
 
-- **Updated:** 2026-09-26
-- **Repository:** `main`; current source commit `b4b35bf` is also on `origin/main`.
+- **Updated:** 2026-09-27
+- **Repository:** `main`; use the current Git checkout/log as the source revision.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
 
@@ -27,6 +27,12 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   manager-preview/manual-copy Property reminder, mobile photo retry target, and
   audited pre-start rescheduling. Rescheduling is deployed with its Rules and
   `rescheduleJob` Function. Any initial Checklist Run locks schedule changes.
+- Cleaner Assignment acknowledgment v0 is implemented on `main` but not
+  deployed. The existing public Offer link can record a cleaner's attendance
+  acknowledgment on the exact current Assignment; managers see awaiting or
+  confirmed. Link possession is not identity verification. This does not alter
+  Offer/Job/Assignment lifecycle, payment, or start/completion gates, and legacy
+  Jobs without a safe Offer-to-Assignment relationship are not retrofitted.
 - The review-handoff notification Function is deployed. Scheduled manager
   reminders use FCM; Irving has received a real reminder on a phone. Gabi's
   delivery/device-registration result remains unresolved and must be checked

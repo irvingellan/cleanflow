@@ -10,6 +10,7 @@ import {
 } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerNamesById } from "../cleaners/cleanerService.js";
+import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { formatIssueCategory } from "../issues/issuePresentation.js";
 import {
   formatCreatedAt,
@@ -34,6 +35,7 @@ import {
 import {
   buildCleanerReminderMessage,
   copyCleanerReminderMessage,
+  reusableAssignmentOfferUrl,
 } from "./cleanerReminderMessage.js";
 import {
   buildCleanerOfferMessage,
@@ -161,6 +163,9 @@ export function JobDetail({
   const activeAssignments = (assignments || []).filter(
     (assignment) => assignment.isActive === true,
   );
+  const hasAssignmentAcknowledgment = activeAssignments.some(
+    (assignment) => getAssignmentAcknowledgmentState(assignment, offers),
+  );
   const requiredCleanerCount = getRequiredCleanerCount(job);
   const assignedCleanerCount = isAssignmentAware
     ? activeAssignments.length
@@ -246,6 +251,19 @@ export function JobDetail({
         (!job.assignedCleanerId && reminderPreview.cleanerId === "legacy-assigned-cleaner" && job.assignedCleanerName)
       )
     : false;
+  const reminderPreviewAssignment = reminderPreview?.assignmentId
+    ? activeAssignments.find((assignment) => assignment.id === reminderPreview.assignmentId)
+    : null;
+  const reminderPreviewOffer = reminderPreviewAssignment
+    ? offers.find((offer) => offer.id === reminderPreviewAssignment.sourceOfferId)
+    : null;
+  const reminderPreviewOfferUrl = reusableAssignmentOfferUrl({
+    job,
+    assignment: reminderPreviewAssignment,
+    offer: reminderPreviewOffer,
+    link: publicOfferLink,
+    origin: typeof window === "undefined" ? undefined : window.location.origin,
+  });
   const reminderPreviewMessage = reminderPreview
     ? buildCleanerReminderMessage({
       cleanerName: reminderPreview.cleanerName,
@@ -254,6 +272,7 @@ export function JobDetail({
       scheduledStart: job.scheduledStart,
       propertyDetails: linkedProperty,
       includeSensitiveAccess: reminderPreview.includeSensitiveAccess,
+      assignmentOfferUrl: reminderPreviewOfferUrl,
       language,
       translate,
     })
@@ -661,9 +680,9 @@ export function JobDetail({
     }
   }
 
-  function openReminderPreview(cleanerId, cleanerName) {
+  function openReminderPreview(cleanerId, cleanerName, assignmentId = null) {
     setCopyMessageErrorCleanerId(null);
-    setReminderPreview({ cleanerId, cleanerName, includeSensitiveAccess: false });
+    setReminderPreview({ cleanerId, cleanerName, assignmentId, includeSensitiveAccess: false });
   }
 
   async function copyReminderMessage() {
@@ -1267,13 +1286,20 @@ export function JobDetail({
                     <span className="status-badge">
                       {formatOperationalStatus(assignment.executionStatus, translate)}
                     </span>
+                    {getAssignmentAcknowledgmentState(assignment, offers) && (
+                      <span className="status-badge" data-testid={`assignment-acknowledgment-${assignment.id}`}>
+                        {translate(getAssignmentAcknowledgmentState(assignment, offers) === "CONFIRMED"
+                          ? "jobs.assignmentConfirmationConfirmed"
+                          : "jobs.assignmentConfirmationAwaiting")}
+                      </span>
+                    )}
                     {job.operationalStatus === "ASSIGNED" && (
                       <div className="assignment-roster__message-action">
                         <button
                           className="button"
                           type="button"
                           onClick={() =>
-                            openReminderPreview(assignment.cleanerId, assignmentCleanerName)
+                            openReminderPreview(assignment.cleanerId, assignmentCleanerName, assignment.id)
                           }
                         >
                           {copiedCleanerId === assignment.cleanerId
@@ -1351,6 +1377,9 @@ export function JobDetail({
                 );
               })}
             </div>
+          )}
+          {hasAssignmentAcknowledgment && (
+            <p className="form-hint">{translate("jobs.assignmentConfirmationDisclaimer")}</p>
           )}
           {assignmentError && <p className="form-error assignment-error" role="alert">{assignmentError}</p>}
         </section>

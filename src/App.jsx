@@ -33,6 +33,7 @@ import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningC
 import { ChecklistRunDetail } from "./features/checklists/ChecklistRunDetail.jsx";
 import { PublicChecklistPage } from "./features/checklists/PublicChecklistPage.jsx";
 import { PublicClientReportPage } from "./features/checklists/PublicClientReportPage.jsx";
+import { PublicOfferAssignmentAcknowledgment } from "./features/public-offers/PublicOfferAssignmentAcknowledgment.jsx";
 import { PublicOfferCompensation } from "./features/public-offers/PublicOfferCompensation.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
@@ -55,6 +56,7 @@ import {
   OffersSuccess,
 } from "./features/jobs/JobWorkflowViews.jsx";
 import {
+  acknowledgePublicOfferAssignment,
   getPublicOffer,
   respondToPublicOffer,
 } from "./features/public-offers/publicOfferService.js";
@@ -268,6 +270,27 @@ function PublicOfferPage({ token }) {
     }
   }
 
+  async function acknowledgeAssignment() {
+    setIsResponding(true);
+    setResponseError(null);
+
+    try {
+      const result = await acknowledgePublicOfferAssignment({ token });
+      setOffer((currentOffer) => ({
+        ...currentOffer,
+        assignmentAcknowledgment: result.assignmentAcknowledgment,
+      }));
+    } catch (error) {
+      if (["offer_not_found", "offer_expired", "offer_unavailable"].includes(error.code)) {
+        setLoadError(error.code);
+      } else {
+        setResponseError(error.code || "request_failed");
+      }
+    } finally {
+      setIsResponding(false);
+    }
+  }
+
   const errorMessage = {
     offer_not_found: "publicOffer.notFound",
     offer_expired: "publicOffer.expired",
@@ -320,6 +343,14 @@ function PublicOfferPage({ token }) {
                 label={translate("publicOffer.status")}
                 value={formatStatus(offer.status, translate)}
               />
+              {offer.assignmentAcknowledgment && (
+                <DetailItem
+                  label={translate("publicOffer.assignment")}
+                  value={translate(offer.assignmentAcknowledgment === "CONFIRMED"
+                    ? "publicOffer.assignmentAcknowledgedShort"
+                    : "publicOffer.assignmentAwaitingShort")}
+                />
+              )}
             </dl>
 
             {responseError && (
@@ -327,6 +358,12 @@ function PublicOfferPage({ token }) {
                 {translate("publicOffer.responseError")}
               </p>
             )}
+
+            <PublicOfferAssignmentAcknowledgment
+              state={offer.assignmentAcknowledgment}
+              isSaving={isResponding}
+              onConfirm={acknowledgeAssignment}
+            />
 
             {offer.status === "PENDING" && (
               <div className="public-offer-actions" aria-label={translate("publicOffer.status")}>
@@ -349,7 +386,7 @@ function PublicOfferPage({ token }) {
               </div>
             )}
 
-            {hasAnswered && (
+            {hasAnswered && !offer.assignmentAcknowledgment && (
               <p className="public-offer-confirmation" role="status">
                 {offer.status === "INTERESTED"
                   ? translate("publicOffer.interestedConfirmation")

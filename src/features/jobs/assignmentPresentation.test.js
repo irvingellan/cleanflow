@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { assignedCleanerSummary } from "./assignmentPresentation.js";
+import {
+  assignedCleanerSummary,
+  getAssignmentAcknowledgmentState,
+} from "./assignmentPresentation.js";
 
 const translate = (key, values = {}) =>
   `${key}:${values.count ?? ""}`;
@@ -65,5 +68,34 @@ describe("assignedCleanerSummary", () => {
         fallback,
       ),
     ).toBe("Current Cleaner");
+  });
+});
+
+describe("assignment acknowledgment presentation", () => {
+  it("shows awaiting and confirmed only for an acknowledgment tied to its source Offer", () => {
+    const offers = [{ id: "offer-a", cleanerId: "cleaner-a", status: "INTERESTED" }];
+    expect(getAssignmentAcknowledgmentState({
+      sourceOfferId: "offer-a",
+      cleanerId: "cleaner-a",
+      isActive: true,
+    }, offers))
+      .toBe("AWAITING_CONFIRMATION");
+    expect(getAssignmentAcknowledgmentState({
+      isActive: true,
+      cleanerId: "cleaner-a",
+      sourceOfferId: "offer-a",
+      cleanerAcknowledgedOfferId: "offer-a",
+      cleanerAcknowledgedAt: { seconds: 10 },
+    }, offers)).toBe("CONFIRMED");
+    expect(getAssignmentAcknowledgmentState({
+      isActive: true,
+      cleanerId: "cleaner-a",
+      sourceOfferId: "offer-b",
+      cleanerAcknowledgedOfferId: "offer-a",
+      cleanerAcknowledgedAt: { seconds: 10 },
+    }, offers)).toBeNull();
+    expect(getAssignmentAcknowledgmentState({ sourceOfferId: "offer-a", cleanerId: "cleaner-b", isActive: true }, offers)).toBeNull();
+    expect(getAssignmentAcknowledgmentState({ sourceOfferId: "offer-a", cleanerId: "cleaner-a", isActive: false }, offers)).toBeNull();
+    expect(getAssignmentAcknowledgmentState({})).toBeNull();
   });
 });

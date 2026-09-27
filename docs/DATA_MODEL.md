@@ -165,6 +165,9 @@ Conceptual fields include:
 
 - Job, Organization, and Cleaner references;
 - cleaner-name snapshot and optional source Offer reference;
+- optional `cleanerAcknowledgedAt` server timestamp and
+  `cleanerAcknowledgedOfferId`, written only by the public Offer Function when
+  that exact interested Offer produced the current active Assignment;
 - per-Cleaner execution/timing and future lifecycle timestamps;
 - fixed or hourly compensation configuration;
 - worked hours and manager-approved hours;
@@ -174,6 +177,12 @@ Conceptual fields include:
   queries.
 
 ### Assignment execution
+
+**CURRENT v0 acknowledgment:** these optional fields are operational
+information only. They do not identify the link holder, change Offer/Job/
+Assignment execution status, affect payment, or gate start/completion. An
+acknowledgment is valid only for the Assignment's current `sourceOfferId`;
+replacement Assignments do not inherit it.
 
 Per-Cleaner starts, finishes, and work duration are validated needs for team
 Jobs. Exact submission/approval states are future design work; they must not

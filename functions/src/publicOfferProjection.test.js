@@ -27,6 +27,7 @@ describe("public offer projection", () => {
   it("uses the v2 per-Offer snapshot and excludes Job prices, margin, and team fields", () => {
     const snapshotted = publicOfferResult({
       ...availableOffer(),
+      status: "INTERESTED",
       offeredCompensation: 125,
     }, {
       schemaVersion: 2,
@@ -37,18 +38,29 @@ describe("public offer projection", () => {
       clientPrice: 300,
       notes: "Manager-only note",
       assignedCleanerIds: ["cleaner-a", "cleaner-b"],
+    }, {
+      assignmentAcknowledgment: "AWAITING_CONFIRMATION",
     });
 
     expect(snapshotted.offer).toMatchObject({
       propertyName: "Safe Property",
       offeredCompensation: 125,
-      status: "PENDING",
+      status: "INTERESTED",
+      assignmentAcknowledgment: "AWAITING_CONFIRMATION",
     });
     expect(snapshotted.offer).not.toHaveProperty("cleanerPayout");
     expect(snapshotted.offer).not.toHaveProperty("clientPrice");
     expect(snapshotted.offer).not.toHaveProperty("grossMargin");
     expect(snapshotted.offer).not.toHaveProperty("assignedCleanerIds");
     expect(snapshotted.offer).not.toHaveProperty("notes");
+    expect(Object.keys(snapshotted.offer).sort()).toEqual([
+      "assignmentAcknowledgment",
+      "offeredCompensation",
+      "propertyName",
+      "scheduledDate",
+      "scheduledStart",
+      "status",
+    ].sort());
   });
 
   it("shows an explicit unset amount for v2 Offers instead of treating a Job total as per-cleaner pay", () => {

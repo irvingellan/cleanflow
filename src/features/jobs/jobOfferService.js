@@ -178,7 +178,8 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
 
   const token = createPublicOfferToken();
   const tokenHash = await hashPublicOfferToken(token);
-  const expiresAt = Timestamp.fromMillis(Date.now() + publicOfferTokenLifetimeMilliseconds);
+  const expiresAtMs = Date.now() + publicOfferTokenLifetimeMilliseconds;
+  const expiresAt = Timestamp.fromMillis(expiresAtMs);
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, cleanerId);
 
@@ -211,5 +212,7 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
   return {
     url: new URL(`/offer/${token}`, window.location.origin).toString(),
     offeredCompensation,
+    tokenHash,
+    expiresAtMs,
   };
 }

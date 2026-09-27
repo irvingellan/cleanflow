@@ -74,6 +74,8 @@ describe("createPublicOfferLink compensation snapshot", () => {
     expect(result).toMatchObject({
       url: expect.stringMatching(/^http:\/\/localhost:\d+\/offer\//),
       offeredCompensation: 125.5,
+      tokenHash: "00".repeat(32),
+      expiresAtMs: expect.any(Number),
     });
   });
 

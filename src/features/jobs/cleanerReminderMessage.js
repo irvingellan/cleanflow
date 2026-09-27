@@ -12,6 +12,7 @@ export function buildCleanerReminderMessage({
   scheduledStart,
   propertyDetails,
   includeSensitiveAccess = false,
+  assignmentOfferUrl = null,
   language,
   translate,
 }) {
@@ -53,8 +54,42 @@ export function buildCleanerReminderMessage({
     }
   }
 
-  lines.push("", translate("jobs.reminderConfirmation"));
+  lines.push("", assignmentOfferUrl
+    ? translate("jobs.reminderCleanFlowConfirmation", { url: assignmentOfferUrl })
+    : translate("jobs.reminderConfirmation"));
   return lines.join("\n");
+}
+
+export function reusableAssignmentOfferUrl({
+  job,
+  assignment,
+  offer,
+  link,
+  now = Date.now(),
+  origin,
+}) {
+  if (!Number.isInteger(job?.schemaVersion) || job.schemaVersion < 2
+    || job?.operationalStatus !== "ASSIGNED" || job?.archivedAt
+    || assignment?.isActive !== true
+    || !assignment.sourceOfferId
+    || offer?.id !== assignment.sourceOfferId
+    || offer?.status !== "INTERESTED"
+    || offer?.cleanerId !== assignment.cleanerId
+    || link?.offerId !== offer?.id
+    || !link?.url
+    || link.tokenHash !== offer.publicOfferTokenHash
+    || !Number.isFinite(link.expiresAtMs)
+    || link.expiresAtMs <= now
+    || !offer.publicOfferExpiresAt?.toMillis
+    || offer.publicOfferExpiresAt.toMillis() <= now) return null;
+
+  try {
+    const parsed = new URL(link.url);
+    if ((origin && parsed.origin !== origin) || !["https:", "http:"].includes(parsed.protocol)) return null;
+  } catch {
+    return null;
+  }
+  return link.url;
 }
 
 export async function copyCleanerReminderMessage(message) {

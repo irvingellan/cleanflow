@@ -58,3 +58,18 @@ export async function respondToPublicOffer({ token, status }) {
 
   return body;
 }
+
+export async function acknowledgePublicOfferAssignment({ token }) {
+  const body = await request(publicOfferApiPath, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ token, action: "ACKNOWLEDGE_ASSIGNMENT" }),
+    credentials: "omit",
+  });
+
+  if (body.assignmentAcknowledgment !== "CONFIRMED") {
+    throw new PublicOfferRequestError("request_failed");
+  }
+
+  return body;
+}

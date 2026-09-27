@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildCleanerReminderMessage,
   copyCleanerReminderMessage,
+  reusableAssignmentOfferUrl,
 } from "./cleanerReminderMessage.js";
 
 function translate(key, replacements = {}) {
@@ -17,6 +18,7 @@ function translate(key, replacements = {}) {
     "jobs.reminderAccessInstructions": "Access instructions: {details}",
     "jobs.reminderKeyCodeInfo": "Key / code info: {details}",
     "jobs.reminderConfirmation": "Please confirm when you receive this. Thank you!",
+    "jobs.reminderCleanFlowConfirmation": "Please confirm you'll be there through your CleanFlow link: {url}",
     "common.notProvided": "Not provided",
   };
 
@@ -54,6 +56,64 @@ describe("cleaner reminder message", () => {
     });
 
     expect(message).not.toContain("Time:");
+  });
+
+  it("includes the CleanFlow confirmation instruction only when the caller supplies a current link", () => {
+    const message = buildCleanerReminderMessage({
+      cleanerName: "Ana",
+      propertyName: "Harbor View Condo",
+      scheduledDate: "2026-09-08",
+      assignmentOfferUrl: "https://cleanflow.example/offer/current-token",
+      language: "en",
+      translate,
+    });
+    expect(message).toContain("confirm you'll be there through your CleanFlow link: https://cleanflow.example/offer/current-token");
+
+    const withoutLink = buildCleanerReminderMessage({
+      cleanerName: "Ana",
+      propertyName: "Harbor View Condo",
+      scheduledDate: "2026-09-08",
+      language: "en",
+      translate,
+    });
+    expect(withoutLink).toContain("Please confirm when you receive this. Thank you!");
+  });
+
+  it("reuses only a current unexpired link for the active Assignment's exact source Offer", () => {
+    const now = 1_800_000_000_000;
+    const job = { schemaVersion: 2, operationalStatus: "ASSIGNED" };
+    const assignment = {
+      id: "assignment-a",
+      cleanerId: "cleaner-a",
+      sourceOfferId: "offer-a",
+      isActive: true,
+    };
+    const offer = {
+      id: "offer-a",
+      cleanerId: "cleaner-a",
+      status: "INTERESTED",
+      publicOfferTokenHash: "current-hash",
+      publicOfferExpiresAt: { toMillis: () => now + 5_000 },
+    };
+    const link = {
+      offerId: "offer-a",
+      tokenHash: "current-hash",
+      expiresAtMs: now + 5_000,
+      url: "https://cleanflow.example/offer/opaque-token",
+    };
+
+    expect(reusableAssignmentOfferUrl({ job, assignment, offer, link, now, origin: "https://cleanflow.example" }))
+      .toBe(link.url);
+    expect(reusableAssignmentOfferUrl({ job, assignment, offer, link: { ...link, tokenHash: "rotated" }, now }))
+      .toBeNull();
+    expect(reusableAssignmentOfferUrl({ job, assignment, offer, link: { ...link, expiresAtMs: now }, now }))
+      .toBeNull();
+    expect(reusableAssignmentOfferUrl({ job, assignment: { ...assignment, isActive: false }, offer, link, now }))
+      .toBeNull();
+    expect(reusableAssignmentOfferUrl({ job: { ...job, archivedAt: {} }, assignment, offer, link, now }))
+      .toBeNull();
+    expect(reusableAssignmentOfferUrl({ job, assignment, offer, link: { ...link, url: "https://attacker.example/offer/token" }, now, origin: "https://cleanflow.example" }))
+      .toBeNull();
   });
 
   it("does not expose financial or internal Job data because it accepts only safe fields", () => {

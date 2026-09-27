@@ -1640,6 +1640,48 @@ Object.assign(messages.es, {
   "offers.searchNoCleaners": "Ninguna cleaner coincide con esta búsqueda.",
 });
 
+Object.assign(messages.en, {
+  "publicOffer.assignment": "Assignment",
+  "publicOffer.assignmentAwaitingShort": "Awaiting your confirmation",
+  "publicOffer.assignmentAcknowledgedShort": "Confirmed",
+  "publicOffer.assignmentAwaitingConfirmation": "The manager assigned you to this service. Please confirm you'll be there.",
+  "publicOffer.assignmentAcknowledge": "Confirm I'll be there",
+  "publicOffer.assignmentAcknowledging": "Saving your confirmation…",
+  "publicOffer.assignmentAcknowledged": "Your confirmation was saved.",
+  "jobs.assignmentConfirmationAwaiting": "Awaiting confirmation",
+  "jobs.assignmentConfirmationConfirmed": "Confirmed through link",
+  "jobs.assignmentConfirmationDisclaimer": "A link response does not verify who is holding or using the link.",
+  "jobs.reminderCleanFlowConfirmation": "Please confirm you'll be there through your CleanFlow link: {url}",
+});
+
+Object.assign(messages.pt, {
+  "publicOffer.assignment": "Atribuição",
+  "publicOffer.assignmentAwaitingShort": "Aguardando sua confirmação",
+  "publicOffer.assignmentAcknowledgedShort": "Confirmado",
+  "publicOffer.assignmentAwaitingConfirmation": "A gerente atribuiu este serviço a você. Confirme que estará presente.",
+  "publicOffer.assignmentAcknowledge": "Confirmo que estarei presente",
+  "publicOffer.assignmentAcknowledging": "Salvando sua confirmação…",
+  "publicOffer.assignmentAcknowledged": "Sua confirmação foi salva.",
+  "jobs.assignmentConfirmationAwaiting": "Aguardando confirmação",
+  "jobs.assignmentConfirmationConfirmed": "Confirmado pelo link",
+  "jobs.assignmentConfirmationDisclaimer": "A resposta pelo link não verifica quem está com o link nem quem o utilizou.",
+  "jobs.reminderCleanFlowConfirmation": "Confirme que estará presente pelo seu link do CleanFlow: {url}",
+});
+
+Object.assign(messages.es, {
+  "publicOffer.assignment": "Asignación",
+  "publicOffer.assignmentAwaitingShort": "Esperando tu confirmación",
+  "publicOffer.assignmentAcknowledgedShort": "Confirmado",
+  "publicOffer.assignmentAwaitingConfirmation": "La gerente te asignó este servicio. Confirma que asistirás.",
+  "publicOffer.assignmentAcknowledge": "Confirmo que asistiré",
+  "publicOffer.assignmentAcknowledging": "Guardando tu confirmación…",
+  "publicOffer.assignmentAcknowledged": "Se guardó tu confirmación.",
+  "jobs.assignmentConfirmationAwaiting": "Esperando confirmación",
+  "jobs.assignmentConfirmationConfirmed": "Confirmado mediante el enlace",
+  "jobs.assignmentConfirmationDisclaimer": "La respuesta del enlace no verifica quién tiene o utiliza el enlace.",
+  "jobs.reminderCleanFlowConfirmation": "Confirma que asistirás mediante tu enlace de CleanFlow: {url}",
+});
+
 function getInitialLanguage() {
   if (typeof window === "undefined") return "en";
 
