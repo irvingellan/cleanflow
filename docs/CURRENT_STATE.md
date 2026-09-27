@@ -27,8 +27,8 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   manager-preview/manual-copy Property reminder, mobile photo retry target, and
   audited pre-start rescheduling. Rescheduling is deployed with its Rules and
   `rescheduleJob` Function. Any initial Checklist Run locks schedule changes.
-- Cleaner Assignment acknowledgment v0 is implemented on `main` but not
-  deployed. The existing public Offer link can record a cleaner's attendance
+- Cleaner Assignment acknowledgment v0 is deployed. The existing public Offer
+  link can record a cleaner's attendance
   acknowledgment on the exact current Assignment; managers see awaiting or
   confirmed. Link possession is not identity verification. This does not alter
   Offer/Job/Assignment lifecycle, payment, or start/completion gates, and legacy
@@ -50,9 +50,13 @@ The WhatsApp click-to-chat handoff is integrated into deployable main for
 manager-created Cleaner Offers and assigned-cleaner reminder previews. It uses
 the existing reviewed message text, opens a prefilled draft for the manager to
 manually send, and creates no sent/delivery state. It and Assignment
-acknowledgment are approved for release, not yet deployed or validated by Gabi.
-Rules preserve the existing roster path and protect only server-owned
-acknowledgment fields. No WhatsApp API or automatic sending is involved.
+acknowledgment were deployed from `2630f7a` on 2026-09-27: only `publicOffer`,
+Hosting, and the narrow server-owned acknowledgment-field Rules guard. The
+existing roster path remains intact without required-count gates. HTTPS,
+invalid-token behavior, Function ACTIVE state, and build/asset hashes passed
+non-mutating smoke checks. Gabi/cleaner acknowledgment and actual WhatsApp
+launch/manual-send behavior remain unvalidated. No WhatsApp API or automatic
+sending is involved.
 
 ## Real-use evidence
 
