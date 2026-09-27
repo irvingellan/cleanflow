@@ -18,6 +18,16 @@ Use the lightest mode that safely fits. A narrow request does not need a
 ceremony-heavy plan; uncertainty, persistent data, authorization, or a shared
 application-shell change does.
 
+For substantial work during the Gabi pilot, classify the request as **REAL
+BLOCKER**, **VALIDATED NEED**, **EXPERIMENT FIRST**, or **PARK**. Only the first
+two normally proceed directly to implementation. Test hypotheses with the
+cheapest useful experiment before building; do not expand speculative features
+without real-use evidence. Preserve necessary privacy/security boundaries, but
+do not add proactive hardening without a concrete failure or risk. An
+implementation review does not validate product policy; track implementation,
+deployment, Gabi validation, and proven real use as separate states. See
+[DEC-040](DECISIONS.md#dec-040--pilot-evidence-gate).
+
 ## 2. Native Codex-first delivery loop
 
 ```text

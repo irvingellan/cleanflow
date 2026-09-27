@@ -1,336 +1,143 @@
 # CleanFlow — Current State
 
-## Metadata
+- **Updated:** 2026-09-26
+- **Repository:** `main`; current source commit `b4b35bf` is also on `origin/main`.
+- **Production:** Firebase project `clean-flow-prototipo`; live app at
+  <https://clean-flow-prototipo.web.app>.
 
-- **Last updated:** 2026-09-26
-- **Repository:** `irvingellan/cleanflow` (`main`; audited Job rescheduling and mobile photo-retry target are integrated and deployed)
-- **Active product phase:** Gabi Pilot — controlled design-partner learning and
-  validation alongside the manager's existing spreadsheet.
+## Current pilot phase
 
-## Current product phase
+CleanFlow is in a real, gradual Gabi pilot. Gabi uses it for real Jobs while
+still keeping her existing operational source in parallel. CleanFlow is not yet
+the sole system of record for upcoming work. The immediate goal is learning and
+adoption: reduce double entry, represent upcoming work reliably, observe a real
+cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
 
-CleanFlow is a manager-facing operational web/PWA for Clients, Properties,
-Cleaners, Jobs, Offers, Issues, dashboard worklists, and legacy payout records.
-It supports a gradual real-use pilot; it is not yet the sole system of record.
-The Job model is evolving additively from legacy singular-cleaner behavior toward
-manager-controlled Assignment rosters. Future execution, pricing, invoicing,
-rescheduling, and Cleaner Hub work remain incremental.
+## Production baseline
 
-## Environment and deployment state
+- The P0 manager authorization boundary is live. Direct manager access requires
+  active organization `MANAGER` membership; the two pilot manager memberships
+  were provisioned before release. The live manager smoke test passed and
+  anonymous protected access was denied.
+- Production release records confirm manager checklist review, report-link and
+  completion paths; public cleaner checklist/offer paths; and the approved
+  cleaner-offer compensation snapshot. This confirms availability, not that a
+  complete real photo-backed cleaning/report journey has succeeded.
+- Hosting includes the deployed cleaner name search, Job guest/notes editing,
+  manager-preview/manual-copy Property reminder, mobile photo retry target, and
+  audited pre-start rescheduling. Rescheduling is deployed with its Rules and
+  `rescheduleJob` Function. Any initial Checklist Run locks schedule changes.
+- The review-handoff notification Function is deployed. Scheduled manager
+  reminders use FCM; Irving has received a real reminder on a phone. Gabi's
+  delivery/device-registration result remains unresolved and must be checked
+  separately. Page-load telemetry is diagnostic only, not an adoption metric.
+- OneSignal remains a frozen experiment. Do not resume cutover or delete its
+  existing browser integration unless a concrete FCM limitation is observed.
+- `b4b35bf` adds required-cleaner-count behavior on `main`; it is tested but
+  **not deployed**. Deployment is held pending Gabi's answer about the hard
+  full-team start gate (see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)).
 
-- The controlled pilot uses Firebase Hosting at
-  `https://clean-flow-prototipo.web.app` with Firebase Authentication,
-  Firestore, Storage, and Functions.
-- The P0 manager-authorization release is live at `167155c`: Firestore Rules,
-  Storage Rules, the affected Functions, and Hosting were deployed together.
-- The two approved pilot managers have active `MANAGER` memberships. A live
-  manager smoke test passed; anonymous protected Firestore access returned
-  `403`.
-- Before a pilot release, follow
-  [PILOT_RELEASE_RUNBOOK.md](PILOT_RELEASE_RUNBOOK.md): verify a managed
-  Firestore export, intended Auth accounts, required secrets/configuration, and
-  deploy Functions before Hosting when public-offer compatibility changes.
+## Real-use evidence
 
-## Verified recent state
+- Gabi has created real Jobs in CleanFlow. Selected real Properties from her
+  Notion Property Directory were imported after explicit selection and preview;
+  obvious duplicate Property records from that import were reconciled while
+  preserving operational history. The broader upcoming-Job/Cleaner and
+  system-of-record transition is incomplete. Do not describe the import as
+  either “none” or a completed migration.
+- Real cleaners have opened checklist links and entered checklist data. This is
+  real use, but not proof of a reliable complete journey.
+- The cleaner checklist supports JPEG, PNG, and WebP up to the current 5 MB
+  limit; HEIC/HEIF is unsupported and the UI explains the supported formats.
+  The real mobile photo-upload failure has not been diagnosed. Do not claim
+  resizing or retry guidance resolved it.
+- Irving's scheduled FCM receipt is confirmed; Gabi's reminder delivery remains
+  a separate device/registration validation question.
+- Astra read-only Runs A, D, and E and the Project X-Ray review are candidate
+  audit evidence preserved in Issue #27. They are **not** a consolidated,
+  approved implementation plan.
 
-### Required cleaner count
+## Unresolved blockers / validation
 
-- The current `main` source now gives Assignment-aware Jobs an explicit
-  `requiredCleanerCount` default of `1`, bounded to `1`–`4` for this pilot.
-  Missing values on existing/legacy Jobs read as `1`; no production migration
-  was made or is required.
-- Manager Job Detail shows required and active-assigned counts, permits count
-  edits only before work starts, and disables Assign actions when full. Offers
-  may still be sent to more cleaners than required; extra `INTERESTED` Offers
-  and their compensation snapshots remain intact.
-- Active-manager server transactions enforce assignment/removal/replacement
-  capacity, required-count changes, and the full-team `IN_PROGRESS` gate.
-  Browser roster/count/start writes are denied. Legacy singular-cleaner Jobs
-  still count as one without synthetic Assignments.
-- This implementation is committed on `main` but **not deployed**. Its next
-  release requires Firestore Rules, the five roster/count/start Functions,
-  and Firebase Hosting. No production data was migrated or changed.
+- Capture the real photo-upload failure stage and safe error details, then
+  observe one real cleaning through saved checklist, required evidence,
+  manager review, report use, and completion. Until then, the full pilot flow
+  is not proven reliable.
+- Reduce double entry by reconciling upcoming work against Gabi's authoritative
+  source. Define an explicit pilot exit criterion with her; do not assume the
+  parallel-use period ends automatically.
+- Validate Gabi's FCM device registration/delivery separately from Irving's
+  successful reminder receipt. Do not force-run reminders or send test pushes.
+- The owner report is a product hypothesis with external interest, not a
+  roadmap commitment. Test value by using reports with owners and observing
+  whether they value/open them.
+- If Gabi is blocked in real work because a Checklist Run was created before a
+  schedule change, revisit the current rescheduling lock with the smallest safe
+  change. Otherwise keep the lock.
+- Legacy and Assignment-aware Job paths are maintenance debt, not a reason for
+  immediate cleanup. Before migration/removal, inventory real records, verify
+  backup, identify history/monetary dependencies, and validate real operation
+  for a short period.
+- Consider resizing only if captured errors point to size/format; add more
+  owner-report photos only after one-photo reliability; revisit capability
+  consolidation before adding another link type. Do not treat these as current
+  implementation tasks.
 
-### Audited Job rescheduling and mobile photo retry
+## Deployment holds
 
-- `895514e feat(jobs): add audited pre-start rescheduling` and
-  `30f8624 fix(checklist): enlarge mobile photo retry target` are integrated
-  into `main` and deployed to the Gabi pilot on 2026-09-26.
-- An active organization manager can change date/time only for non-archived
-  `UNASSIGNED`, `OFFERED`, or `ASSIGNED` Jobs. The callable atomically updates
-  the Job and `scheduleHistory/{scheduleRevision}`, records previous/new
-  date/time, actor UID, and server time, and advances both schedule and
-  checklist-context revisions. Browser schedule writes remain denied; Offers,
-  Assignments, prices, and other Job data are preserved. Any existing initial
-  Checklist Run blocks schedule changes to protect its frozen context. The UI
-  warns that manually sent cleaner details may need to be resent.
-- Firestore Rules, `functions:rescheduleJob`, and Hosting were deployed in
-  that order. Hosting responds with HTTP 200; its version marker and checked
-  bundle assets match the local production build from `30f8624`; the callable
-  is listed in `us-central1`; a synthetic invalid checklist token returned a
-  bounded 404. No real Job was rescheduled or otherwise modified.
-- The separate photo Retry control now has a 44px minimum touch target on
-  narrow screens. The real-device photo-upload incident remains unverified;
-  HEIC/HEIF is still unsupported.
+- **Required cleaner count (`b4b35bf`):** implemented and tested on `main`,
+  reviewed **KEEP AS-IS** technically, but not deployed. Ask Gabi: “If a
+  cleaning needs 3 cleaners and only 2 are available/show up, should CleanFlow
+  block starting the service, or warn you and allow a manager override?” The
+  hard-block policy is awaiting her validation. Do not include this feature in
+  a broad deployment until that decision is resolved.
+- No OneSignal reminder-provider cutover is approved. FCM remains the scheduled
+  reminder default.
 
-### Issue #39 — OneSignal and manager reminders
+## Pilot Evidence Gate
 
-- OneSignal Web Push browser/subscription flow was manually validated on Safari
-  macOS, Chrome macOS, an installed iPhone PWA, and Samsung/Chrome.
-- The OneSignal dashboard integration uses Custom Code. Firebase Auth UID is
-  the OneSignal External ID for manager targeting.
-- A Safari content blocker was a confirmed prior OneSignal SDK failure cause;
-  browser diagnostics and bounded failure states now exist.
-- Scheduled manager reminders still use **FCM as the runtime default**.
-- A provider-neutral, hardened OneSignal server transport is implemented:
-  exactly one provider handles one claimed logical reminder; it never
-  automatically falls back from an ambiguous OneSignal attempt to FCM.
-- The provider-independent Firestore claim prevents cross-provider duplicate
-  sends. OneSignal REST handling has a bounded timeout and conservative
-  `UNKNOWN`/ambiguous outcomes.
-- OneSignal reminder cutover has **not** happened. Do not imply production
-  server-side OneSignal configuration or cutover without fresh evidence.
-- Production explicitly runs `MANAGER_REMINDER_PROVIDER=fcm`; no OneSignal REST
-  secret is configured or required for the scheduled-reminder path.
+Pilot learning/adoption, not feature count, is the optimization target
+([DEC-040](DECISIONS.md#dec-040--pilot-evidence-gate)). Build
+now for a real production blocker, a direct repeated Gabi workflow need, or a
+validated requirement with a bounded implementation. For hypotheses, run the
+cheapest useful experiment first; park speculative expansion until real-use
+evidence supports it. Keep necessary privacy/security boundaries; do not weaken
+them to ship faster, and do not add proactive hardening without a concrete
+failure or risk.
 
-Recent commits:
+An implementation review does not validate a product rule. Track
+**implemented**, **deployed**, **validated by Gabi**, and **proven in real use**
+as distinct states.
 
-- `ea27900 feat(notifications): add OneSignal browser diagnostics (#39)`
-- `25cd53f feat(reminders): add hardened opt-in OneSignal transport (#39)`
+Manager page-load events remain useful diagnostics but do not measure adoption
+or product success. A minimal read-only Pilot Scorecard is planned, not
+implemented: weekly real Jobs created; upcoming-work coverage against Gabi's
+source; Offers sent/responded; Checklist Runs submitted; client reports
+generated and opened where measurable; and real Jobs completed. A safe existing
+session count may be included only if available without expanding data
+collection. No analytics platform is needed; a read-only script/admin summary
+is sufficient.
 
-At the Issue #39 validation checkpoint: 152 unit tests and 8 emulator-backed
-E2E tests passed; build and diff checks passed.
+Experiment before building persistent Cleaner Hub/My Jobs, owner-as-customer or
+report-value assumptions, iCal versus AI intake, and deeper team-Job execution.
+Park advanced financial/payroll and invoice/payment architecture,
+payout-provider research, marketplace/network, broad AI assistant, and
+speculative integrations.
 
-### Issue #40 — Dashboard scroll-to-top
+Current evidence priorities:
 
-- Dashboard reuses the existing safe-area-aware `ScrollToTopButton` after the
-  existing approximately 400px scroll threshold and smooth-scroll behavior.
-- Local Mac browser validation passed.
-- Commit: `0b7819c feat(dashboard): add scroll-to-top control (#40)`.
-- Production and iPhone validation remain pending until that commit is deployed.
+1. Capture the real photo failure and complete one observed real cleaning.
+2. Reconcile upcoming work and agree the pilot exit criterion with Gabi.
+3. Resolve the required-cleaner start policy and Gabi's reminder-delivery
+   validation.
+4. Test the owner-report hypothesis and gather only the scorecard signals
+   needed to evaluate adoption.
 
-### Issue #42 — Cleaning Checklist Preview
+## Fresh-session resume
 
-- A shareable Firebase Hosting **preview channel** exposes the isolated
-  `/checklist-preview` route. It is not a live-Hosting release.
-- The design partner opened and tested the preview on mobile. The first
-  validated feedback is incorporated: the checklist now has **28 items**;
-  the under-bed/furniture check has localized **Photo required** guidance; and
-  separate interior and exterior cigarette-butt checks were added.
-- The validated global checklist definition is **v1 with 28 items**. Property
-  checklist configuration is optional; an unconfigured Property receives v1,
-  while approved cleaner-facing additions, inventory, photo requirements, and
-  instructions can be resolved from `Property.checklistSettings`.
-- `d25fc75 feat(checklist): add property-aware checklist run foundation (#42)`
-  established immutable resolved checklist/configuration snapshots, so later
-  Property edits do not alter historical Checklist Runs or reports.
-- `693aafe feat(checklist): persist manager-created checklist runs (#42)` adds
-  manager-authorized `createChecklistRun`. It transactionally creates or
-  returns one initial `DRAFT` Run beneath its Job, preventing accidental retry
-  duplicates without overwriting an existing Run.
-- Phase 5A adds a monotonic `checklistContextRevision` foundation:
-  missing legacy values read as `0`; archive/restore, Property, schedule,
-  cleaner/Assignment, and eligibility-context changes advance it atomically so
-  an earlier cleaner capability cannot survive a changed context.
-- `79918ec feat(checklist): add secure cleaner capability (#42)` adds Phase
-  5B locally: managers can create/open a persisted `DRAFT` Run and issue,
-  rotate, or revoke one cleaner capability per Run. The server stores only a
-  token hash; the expiring token is revalidated against the Job, Run, cleaner,
-  and context revision on every `/checklist?t=…` read. That route exposes only
-  the frozen cleaner-facing projection. It is not deployed yet.
-- Phase 5C.1 locally adds one server-owned mutable cleaner draft per Run. A
-  missing draft reads as virtual revision `0`; capability-authorized patches
-  validate only frozen item IDs and use optimistic revisions plus idempotent
-  receipts. Direct browser access remains denied, and managers receive a safe
-  read projection with answers, notes, timestamps, and progress. It is not
-  deployed yet.
-- Phase 5C.2 locally adds the mobile cleaner editing UI on the existing
-  `/checklist?t=…` capability route. It renders only the frozen Run projection,
-  autosaves sparse answers and notes through the existing server mutation API,
-  and reports saved, saving, offline-pending, conflict, and unavailable states.
-  A small bounded local recovery record uses a capability hash rather than the
-  bearer token and retries the same mutation ID after an uncertain response.
-  It is not deployed yet.
-- Phase 5C.3 locally hardens that pilot autosave path with bounded public
-  requests, terminal explicit conflict choices, and a non-blocking local
-  recovery-storage warning. Managers can manually refresh only the latest
-  acknowledged draft progress; no polling, realtime sync, submission, or
-  evidence upload is added. It is not deployed yet.
-- Phase 5C.4 locally adds one capability-authorized `READY_FOR_REVIEW` handoff
-  for the existing Run. It freezes the latest acknowledged draft as read-only
-  through an idempotent Run-state transition. An active manager may then
-  explicitly approve the reviewed Run to complete an eligible Job exactly once;
-  this writes only the existing Job completion timestamp/status and context
-  revision, never payment or payout state. It is not deployed yet.
-- Phase 5D.1 locally adds one real, capability-authorized evidence photo for
-  the frozen `living-belongings` requirement. While a Run is `DRAFT`, the
-  cleaner can take or select one JPEG, PNG, or WebP image (up to 5 MB). The
-  server derives the Storage path, persists only safe metadata, and rechecks
-  the capability/Job/Run context; direct browser Firestore and Storage access
-  remains denied. The photo is read-only after `READY_FOR_REVIEW` and is
-  retrievable only through the cleaner capability or active-manager callable.
-  It is not deployed yet. HEIC/HEIF conversion is intentionally unsupported.
-- This change locally adds a manager-created client report capability for a
-  `READY_FOR_REVIEW` Run. The manager can create, copy/open, replace, or revoke
-  one seven-day link per Run. The public page is read-only and uses only the
-  frozen Run snapshots/definition, the locked saved draft revision, and saved
-  required photo; no live Property defaults are used. It excludes prices,
-  payouts, access data, internal notes, private contact data, IDs, and token
-  metadata. Links are manually shared; this report feature is not deployed by
-  this change.
-- A 2026-09-24 review-handoff correction distinguishes incomplete frozen
-  checklist/inventory/photo requirements from invalid capabilities. Validation
-  feedback preserves the editable draft; a valid handoff is shown only after
-  the server confirms the persisted `READY_FOR_REVIEW` state. Commit `d4a98f6`
-  is deployed; the real incident still needs a successful real-user retest, and
-  the earlier photo-upload failure remains unverified.
-- A 2026-09-24 visibility pass locally adds a post-attempt missing-requirements
-  summary and field markers on the cleaner page; only server-confirmed evidence
-  satisfies the photo requirement. The public projection adds only the safe
-  assigned-cleaner display name and does not claim who holds the link. Manager
-  Run detail now summarizes answers, restock, unanswered items, and notes before
-  the full results; it keeps save/review times visible and puts IDs/revisions in
-  closed-by-default Technical details. DRAFT explains that report/approval
-  actions await cleaner submission. This visibility pass is included in the
-  published `c3536e6` baseline.
-- The current implementation adds a post-commit FCM manager notification for
-  the first successful DRAFT-to-READY_FOR_REVIEW handoff. The Run transaction
-  creates one stable, hash-identified delivery record; a separate Firestore
-  trigger claims it once, rechecks active manager membership for eligible
-  devices, and sends generic EN/PT/ES copy to the authenticated app home. FCM
-  acceptance does not prove display on a device. After an initial Eventarc
-  service-agent permission-propagation failure, the targeted deployment from
-  `9455ff9` succeeded: `notifyManagersChecklistReadyForReview` is ACTIVE with
-  the intended Firestore document-created filter on the Run's
-  `managerNotificationDeliveries` subcollection, `retry: false`, and a
-  60-second timeout. `publicChecklist` was then updated from the same commit.
-  Hosting, Rules, Storage, indexes, and scheduled reminders were not deployed.
-  App smoke returned HTTP 200 and a synthetic invalid checklist token returned
-  404. No real handoff or push was triggered, so phone delivery is unverified.
-- Public cleaner Offers now carry an optional manager-confirmed
-  `offeredCompensation` snapshot. The manager's copyable WhatsApp message and
-  `/offer/:token` show that same amount, or an explicit “Amount not set / To be
-  agreed” state. Only pre-snapshot legacy single-cleaner Offers may fall back
-  to Job `cleanerPayout`; schema-v2 Job totals are never treated as per-cleaner
-  compensation. Interest/decline and manager-controlled Assignment behavior are
-  unchanged. Commit `d8a67d5` was deployed on 2026-09-24 to the `publicOffer`
-  Function and live Hosting. HTTPS returned 200; the hosted build marker and
-  JS/CSS asset hashes matched the approved build; a synthetic unknown Offer
-  token returned 404. No real Offer link or response was tested, and no
-  operational record was changed.
-- Cleaner review submission and explicit manager approval/Job completion exist
-  in the current implementation. Automatic email/WhatsApp delivery does not.
-- The preferred future workflow is: a manager manually shares a secure
-  checklist link; a cleaner completes it; the submission persists in
-  CleanFlow; the manager views or receives its report; and an optional email
-  can later reach a client or property owner.
-- Phase 5B local validation passed with 180 unit tests, 22 authorization
-  emulator tests, 8 E2E tests, and a production build.
-
-### Issue #36 — real-data import preparation
-
-- The real Notion export has two underlying source tables, each exported in
-  multiple variants. The richer canonical datasets contain a Property Directory
-  with **43 properties / 3 Company values** and Operations with **269 rows**.
-- The first pilot-week reconciliation window (Sep 18–24) narrows to **3
-  Clients, 6 Properties, 4 Cleaner labels, and 6 Jobs**, including **1
-  unassigned Job**. Historical Jobs are deferred.
-- No real import has occurred. Experimental read-only import-preview work is
-  preserved only in local `stash@{0}: issue-36-import-preview-wip`; neither
-  the real Notion export nor real source data is in that stash or the
-  repository.
-
-### Issue #27 — Astra audit evidence
-
-- Read-only Astra Runs A, D, and E completed. Their findings are preserved as
-  candidate audit evidence in Issue #27; they have not yet been consolidated
-  into an approved implementation plan.
-- The P0 manager-authorization boundary is live. Direct manager access requires
-  an active organization `MANAGER` membership; the approved pilot memberships
-  were provisioned before release. The deployed scope includes `submitFeedback`,
-  `registerManagerPushDevice`, `publicOffer`, and both scheduled manager
-  reminder Functions.
-
-## Important current invariants and decisions
-
-- GitHub Issues are the execution backlog and actionable work record; repository
-  docs hold durable product and technical truth.
-- This file is the canonical lightweight operational checkpoint. A Google Drive
-  copy may be human-readable context, but is not canonical.
-- FCM remains the manager-reminder default until a deliberate controlled
-  OneSignal cutover.
-- Never dual-send one logical manager reminder through FCM and OneSignal.
-- Firebase Auth UID maps to OneSignal External ID. Do not persist raw OneSignal
-  browser push tokens in Firestore for server targeting.
-- An ambiguous OneSignal outcome must not trigger automatic FCM fallback.
-- Preserve pilot safety: gradual real use, the spreadsheet in parallel, explicit
-  manager actions, and no silent production-data repair.
-
-## Known limitations and pending validation
-
-- Four approved overnight Gabi pilot changes are merged to `main` and are
-  included in the current Hosting release from source commit `30f8624`:
-  - Cleaner photo guidance names JPEG, PNG, and WebP support; HEIC/HEIF remains
-    unsupported. The real-device photo-upload failure remains unresolved.
-  - Cleaner directory and offer selection support local name search while
-    preserving selections; no server search was added.
-  - The new Job Detail edit action on `main` covers guest name and notes only;
-    completed/archived Jobs remain read-only.
-  - Assigned-cleaner reminder content is previewed before manual copy and uses
-    only the exact linked Property. Cleaner instructions may appear; parking,
-    access instructions, and key/code details remain manager-preview/manual-
-    copy only and require explicit opt-in. Nothing is sent automatically.
-- Cleaner reconfirmation/reminder policy after a schedule change remains open.
-- The authenticated manager shell was not opened during the 2026-09-26
-  deployment smoke checks to avoid a possible push-device registration refresh.
-- The OneSignal manager audience currently derives from active
-  `managerPushDevices`; a manager with only OneSignal and no valid active device
-  record is not yet included.
-- OneSignal server transport still needs staged production configuration,
-  and controlled cutover validation.
-- FCM retirement is neither decided nor completed.
-- Issue #40 needs real installed-iPhone validation after the live deployment.
-
-## Next actions
-
-1. Review and deploy **Issue #42 Phases 5B–5D.1** when approved; then validate
-   this single-photo pilot flow on a real phone before adding any broader
-   evidence requirements.
-2. Wait for further design-partner feedback on Issue #42.
-3. Reconcile the six first-week Jobs for Issue #36 before any approved import.
-4. Finish remaining Astra security/reliability audits if useful.
-5. Consolidate audit findings before creating implementation work.
-
-## Development workflow
-
-- **ChatGPT:** orchestration, product/architecture decisions, review of Codex
-  results, and focused prompt construction.
-- **Codex Direct:** default for small or medium coherent engineering slices.
-- **Maestri:** use only when two or more genuinely independent tracks reduce
-  work; do not use it merely for sophistication.
-
-Use Terra Medium for clear bounded work and Terra High for integrations,
-backend/frontend boundaries, data/security work, or difficult debugging.
-Reserve maximum effort for exceptional architecture, debugging, or a
-Madrugada Run.
-
-Permanent instructions belong in `AGENTS.md`,
-[CODEX_GUIDELINES.md](CODEX_GUIDELINES.md), and
-[AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md). Task prompts should
-contain only the task-specific delta. Inspect first when the architecture or
-root cause is uncertain; implement directly when both are known.
-
-Quality gates for meaningful changes: `npm test`, `npm run test:e2e` when
-warranted or for substantial changes, `npm run build`, and `git diff --check`.
-Use human/device validation when behavior is mobile-, browser-, or
-platform-specific.
-
-## How to resume CleanFlow in a fresh session
-
-1. Read this file.
-2. Read the relevant active GitHub Issue(s).
-3. Read only the source-of-truth documents relevant to that task.
-4. Prefer newer evidence and checkpoints over old chat memory.
-5. Do not reopen a verified decision unless new evidence contradicts it.
-6. After a meaningful milestone, update the Issue and this checkpoint when the
-   operational state changes.
+1. Read this checkpoint, then the active GitHub Issue.
+2. Read only the relevant source-of-truth docs and current implementation.
+3. Prefer current code, deployment records, and recent pilot evidence over
+   stale issue text or chat memory.
+4. Preserve `.maestri/`, the Issue #36 import-preview stash, and local real
+   export files. Do not access or alter production unless explicitly scoped.

@@ -136,14 +136,17 @@ one Cleaner's work. Aggregate state must remain distinct from per-Cleaner
 execution. `WAITING_FOR_QA` is an optional future review concept, not the
 normal design-partner pilot completion gate.
 
-**Current required team size:** new schema-version-2 Jobs explicitly persist
-`requiredCleanerCount`, defaulting to `1`; the pilot bound is `1`–`4`. An
-existing Job without the field, including a legacy Job, reads as `1`. There is
-no bulk migration. Only an active manager may change the count on a non-archived
-pre-start Job, and not below its active Assignment count. Capacity and the
-transition to `IN_PROGRESS` are checked transactionally against active
-Assignment records. Legacy singular-cleaner Jobs count as one and do not gain
-synthetic Assignment documents.
+**Required team size implementation on `main` (not yet deployed):** new
+schema-version-2 Jobs explicitly persist `requiredCleanerCount`, defaulting to
+`1`; the implementation bounds it to `1`–`4`. An existing Job without the
+field, including a legacy Job, reads as `1`; there is no bulk migration. Only
+an active manager may change the count on a non-archived pre-start Job, and not
+below its active Assignment count. The implementation checks capacity and
+blocks transition to `IN_PROGRESS` transactionally against active Assignment
+records. Legacy singular-cleaner Jobs count as one and do not gain synthetic
+Assignment documents. The hard start gate is awaiting pilot-policy validation;
+see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)
+before deployment.
 
 **Phase 5A checklist foundation:** missing `checklistContextRevision` means
 legacy revision `0`. Context-changing Job or Assignment mutations advance it

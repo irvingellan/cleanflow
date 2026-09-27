@@ -587,7 +587,7 @@ future OneSignal-only manager registry remains deferred.
 ## DEC-036 — Organization membership is the pilot manager authorization boundary
 
 Date: 2026-09-19
-Status: Accepted, pending production provisioning and rules deployment
+Status: Accepted; deployed to the controlled pilot
 
 An active Manager membership at
 `organizations/{organizationId}/members/{uid}` is required for direct manager
@@ -610,9 +610,9 @@ general authenticated access.
 ## DEC-037 — Checklist capabilities bind to a monotonic Job context revision
 
 Date: 2026-09-20
-Status: Accepted; server-issued cleaner capability is implemented locally pending review/deployment
+Status: Accepted; capability and cleaner draft/review path are deployed to the controlled pilot
 
-Future cleaner checklist capabilities must bind to a Job's
+Each cleaner checklist capability binds to its Job's
 `checklistContextRevision`. Missing legacy fields mean revision `0`; a context
 change advances the value exactly once and never resets it. The initial eligible
 execution set is `ASSIGNED` and `IN_PROGRESS`, so movement within that set does
@@ -621,8 +621,8 @@ not invalidate the same capability context.
 Property reassociation, schedule changes, archive/restore, legacy or v2 cleaner
 identity changes, and Assignment create/remove/activity changes advance the
 parent Job revision atomically. Price, payout, payment, notes, provenance, and
-checklist answers do not. This preserves a small future capability boundary
-without prematurely implementing tokens, submissions, or photo handling.
+checklist answers do not. This prevents a stale capability from becoming valid
+again after an A→B→A context change.
 
 Phase 5B uses one fixed, server-owned capability record beneath the initial
 Checklist Run. A manager receives a new opaque 32-byte token only at issue or
@@ -631,8 +631,10 @@ revision, cleaner scope, expiry, and revocation state. Reissuing replaces the
 single active hash, so an earlier link cannot be resurrected. Public reads are
 Function-mediated, revalidate the immutable Run, Job archive/eligibility,
 assignment scope, expiry, and revision on every request, and expose only the
-allowlisted frozen cleaner snapshot. Submission, evidence, and delivery remain
-separate later phases.
+allowlisted frozen cleaner snapshot. Cleaner draft persistence, evidence,
+review handoff, manager approval, and manager notification are separate
+implemented workflows; production use of a link does not prove the complete
+photo-backed journey reliable.
 
 Cleaner draft edits remain server-owned and receipt-idempotent. The browser may
 retain a small local recovery record, but a newer server revision enters an
@@ -664,7 +666,7 @@ remain deferred.
 ## DEC-038 — Client reports are read-only views of a locked Checklist Run
 
 Date: 2026-09-23
-Status: Accepted; local implementation pending release review
+Status: Accepted; report-link path is deployed to the controlled pilot; real client use is not yet proven
 
 A manager may create a client-facing report only after its Checklist Run reaches
 `READY_FOR_REVIEW`. The report must be derived from the Run's immutable
@@ -687,22 +689,24 @@ client/cleaner private contact data, prices, payouts, Firebase IDs, storage
 paths, or capability metadata. Link possession grants read access only to this
 report; it does not create a client account or authorize checklist edits.
 Managers share links manually. Email/WhatsApp integration, PDF generation,
-client portals, Job completion, and payment changes remain separate and are not
-implemented by this decision.
+client portals, and automatic email/WhatsApp remain out of scope. Report
+creation/opening is read-only: it does not complete the Job or change payment;
+manager approval/completion is a separate workflow.
 
 ---
 
 ## DEC-039 — Enforce a bounded required cleaner count per Job
 
 Date: 2026-09-26
-Status: Accepted; implementation committed on `main`, not deployed
+Status: Implementation committed and tested on `main`; not deployed; hard-start policy awaits Gabi validation
 
-`requiredCleanerCount` means the number of active Cleaner Assignments needed
-before a Job may start. Newly created Assignment-aware Jobs persist an explicit
-default of `1`; the initial pilot control is bounded to integers `1` through
-`4`. Missing values on existing Jobs, including legacy Jobs, read as `1`; do
-not bulk-migrate records. Legacy singular-cleaner Jobs continue to use their
-existing cleaner fields and must not receive synthetic Assignment records.
+The implementation treats `requiredCleanerCount` as the number of active
+Cleaner Assignments needed before a Job may start. Newly created
+Assignment-aware Jobs persist an explicit default of `1`; the control is
+bounded to integers `1` through `4`. Missing values on existing Jobs, including
+legacy Jobs, read as `1`; do not bulk-migrate records. Legacy singular-cleaner
+Jobs continue to use their existing cleaner fields and must not receive
+synthetic Assignment records.
 
 Offer selection and interest remain independent of capacity. A manager may
 offer to more cleaners than required, and extra `INTERESTED` Offers remain
@@ -714,3 +718,31 @@ cannot directly mutate Assignment records, the roster/count projection, the
 schema-version discriminator, or start a Job. These changes do not divide or
 rewrite Offer compensation, alter payment/payout state, or advance individual
 Assignment execution; the Job remains the overall lifecycle owner.
+
+The technical implementation passed review (`KEEP AS-IS`) but is not deployed.
+Whether the hard full-team start gate matches pilot policy is **OPEN**. Before
+deployment, ask Gabi: “If a cleaning needs 3 cleaners and only 2 are
+available/show up, should CleanFlow block starting the service, or warn you and
+allow a manager override?” Do not deploy this behavior through a broad release
+until that policy is confirmed and any required code adjustment is reviewed.
+
+---
+
+## DEC-040 — Pilot Evidence Gate
+
+Date: 2026-09-26
+Status: Accepted operating rule
+
+During the Gabi pilot, optimize for learning and adoption, not feature count.
+Implement a real blocker, a repeated direct workflow need, or a validated
+bounded requirement. For hypotheses, prefer the cheapest useful experiment;
+park speculative expansion until real-use evidence supports it. Preserve
+necessary privacy/security boundaries, but do not add proactive hardening
+without a concrete failure or risk.
+
+Keep **implemented**, **deployed**, **validated by Gabi**, and **proven in real
+use** distinct. A technical review does not validate the underlying product
+policy. Page-load telemetry is diagnostic, not an adoption metric; a minimal
+read-only Pilot Scorecard may summarize real Jobs, upcoming-work coverage,
+Offers, submitted Checklists, client reports/opening where measurable, and Job
+completion. It does not require an analytics platform.
