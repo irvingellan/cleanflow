@@ -110,13 +110,18 @@ An implementation review does not validate a product rule. Track
 as distinct states.
 
 Manager page-load events remain useful diagnostics but do not measure adoption
-or product success. A minimal read-only Pilot Scorecard is planned, not
-implemented: weekly real Jobs created; upcoming-work coverage against Gabi's
-source; Offers sent/responded; Checklist Runs submitted; client reports
-generated and opened where measurable; and real Jobs completed. A safe existing
-session count may be included only if available without expanding data
-collection. No analytics platform is needed; a read-only script/admin summary
-is sufficient.
+or product success. Pilot Evidence V0 is available as the one-cleaning
+[observation checklist](PILOT_OBSERVATION_CHECKLIST.md) and the local,
+read-only `scripts/pilotScorecard.mjs` aggregate command. Example:
+`node scripts/pilotScorecard.mjs --project <project-id> --from YYYY-MM-DD --to YYYY-MM-DD [--expected-jobs N] [--allow-production-read]`.
+It includes only Jobs with explicit `dataProvenance: REAL`; absent/UNKNOWN and
+DEMO Jobs are excluded. Timestamp events use UTC dates, while `scheduledDate`
+uses its stored date-only value. Completion requires `completedAt`; older
+completed Jobs without it cannot be dated. Report opens are not recorded, and
+report-link replacement history is not fully measurable. The command was not
+run against production while implementing this slice; it performs reads only
+and requires the existing Application Default Credentials plus an explicit
+production-read acknowledgement for `clean-flow-prototipo`.
 
 Experiment before building persistent Cleaner Hub/My Jobs, owner-as-customer or
 report-value assumptions, iCal versus AI intake, and deeper team-Job execution.
