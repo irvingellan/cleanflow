@@ -71,6 +71,13 @@ WhatsApp
 → CleanFlow mobile web
 → structured workflow
 
+For the current manager pilot, a safe Cleaner phone may be used for a
+`wa.me` click-to-chat link that prefills the existing reviewed Offer or
+assigned-reminder text. The manager still reviews and manually taps Send in
+WhatsApp. This creates no sent/delivery state and does not authorize automatic
+messages. Sensitive reminder access fields require the existing explicit
+manager opt-in; client-report sharing is not included in this handoff.
+
 ---
 
 ## DEC-005 — Manager and cleaner experiences differ

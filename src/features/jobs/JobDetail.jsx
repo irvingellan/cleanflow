@@ -9,7 +9,7 @@ import {
   StateCard,
 } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
-import { getCleanerNamesById } from "../cleaners/cleanerService.js";
+import { getCleanerContactsById } from "../cleaners/cleanerService.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { formatIssueCategory } from "../issues/issuePresentation.js";
 import {
@@ -42,6 +42,7 @@ import {
   getOfferCompensationSuggestion,
   parseOfferCompensationInput,
 } from "./offerCompensation.js";
+import { buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
 
 export function JobDetail({
   job,
@@ -97,6 +98,7 @@ export function JobDetail({
 }) {
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
+  const [resolvedCleanerPhones, setResolvedCleanerPhones] = useState({});
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
   const [removingAssignmentId, setRemovingAssignmentId] = useState(null);
@@ -206,7 +208,11 @@ export function JobDetail({
   const knownCleanerNames = Object.fromEntries(
     knownCleaners.map((cleaner) => [cleaner.id, cleaner.name]),
   );
+  const knownCleanerPhones = Object.fromEntries(
+    knownCleaners.map((cleaner) => [cleaner.id, cleaner.phone]),
+  );
   const cleanerNamesById = { ...resolvedCleanerNames, ...knownCleanerNames };
+  const cleanerPhonesById = { ...resolvedCleanerPhones, ...knownCleanerPhones };
   const unresolvedCleanerIds = [
     job.assignedCleanerId,
     ...activeAssignments.map((assignment) => assignment.cleanerId),
@@ -277,6 +283,9 @@ export function JobDetail({
       translate,
     })
     : "";
+  const reminderWhatsAppUrl = reminderPreview
+    ? buildWhatsAppHandoffUrl(cleanerPhonesById[reminderPreview.cleanerId], reminderPreviewMessage)
+    : null;
   const canRescheduleByState = ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus)
     && !job.archivedAt;
   const hasChecklistScheduleLock = Boolean(checklistRun);
@@ -297,27 +306,34 @@ export function JobDetail({
 
     if (!cleanerLookupKey) {
       setResolvedCleanerNames({});
+      setResolvedCleanerPhones({});
       return () => {
         isCurrent = false;
       };
     }
 
-    async function loadCleanerNames() {
+    async function loadCleanerContacts() {
       try {
-        // Keep immutable job/offer snapshots as fallbacks while showing current Cleaner names.
-        const cleanerNames = await getCleanerNamesById(unresolvedCleanerIds);
+        // Resolve only the manager-facing identity/contact fields needed for a handoff.
+        const cleanerContacts = await getCleanerContactsById(unresolvedCleanerIds);
 
         if (isCurrent) {
-          setResolvedCleanerNames(cleanerNames);
+          setResolvedCleanerNames(Object.fromEntries(
+            Object.entries(cleanerContacts).map(([id, contact]) => [id, contact.name]),
+          ));
+          setResolvedCleanerPhones(Object.fromEntries(
+            Object.entries(cleanerContacts).map(([id, contact]) => [id, contact.phone]),
+          ));
         }
       } catch {
         if (isCurrent) {
           setResolvedCleanerNames({});
+          setResolvedCleanerPhones({});
         }
       }
     }
 
-    loadCleanerNames();
+    loadCleanerContacts();
 
     return () => {
       isCurrent = false;
@@ -601,25 +617,29 @@ export function JobDetail({
     }
   }
 
+  function offerMessageFor(offer, cleanerName) {
+    if (!publicOfferLink?.url || publicOfferLink.offerId !== offer.id) return null;
+    return buildCleanerOfferMessage({
+      cleanerName,
+      propertyName: job.propertyName || translate("properties.unnamed"),
+      scheduledDate: job.scheduledDate,
+      scheduledStart: job.scheduledStart,
+      offeredCompensation: publicOfferLink.offeredCompensation ?? null,
+      publicUrl: publicOfferLink.url,
+      language,
+      translate,
+    });
+  }
+
   async function copyOfferMessage(offer, cleanerName) {
-    if (!publicOfferLink?.url || publicOfferLink.offerId !== offer.id) {
-      return;
-    }
+    const message = offerMessageFor(offer, cleanerName);
+    if (!message) return;
 
     setOfferMessageCopyErrorId(null);
     setCopiedOfferMessageId(null);
 
     try {
-      await copyCleanerReminderMessage(buildCleanerOfferMessage({
-        cleanerName,
-        propertyName: job.propertyName || translate("properties.unnamed"),
-        scheduledDate: job.scheduledDate,
-        scheduledStart: job.scheduledStart,
-        offeredCompensation: publicOfferLink.offeredCompensation ?? null,
-        publicUrl: publicOfferLink.url,
-        language,
-        translate,
-      }));
+      await copyCleanerReminderMessage(message);
       setCopiedOfferMessageId(offer.id);
     } catch {
       setOfferMessageCopyErrorId(offer.id);
@@ -1428,6 +1448,7 @@ export function JobDetail({
             <strong>{translate("jobs.reminderPreviewMessage")}</strong>
             <pre>{reminderPreviewMessage}</pre>
           </div>
+          <p className="form-hint">{translate("whatsapp.manualSendNote")}</p>
 
           {!reminderCleanerStillAssigned && (
             <p className="form-error" role="alert">
@@ -1438,16 +1459,31 @@ export function JobDetail({
             <p className="form-error" role="alert">{translate("jobs.copyMessageError")}</p>
           )}
 
-          <button
-            className="button button--primary"
-            type="button"
-            disabled={!reminderCleanerStillAssigned || isCopyingReminder}
-            onClick={copyReminderMessage}
-          >
-            {isCopyingReminder
-              ? translate("jobs.reminderCopying")
-              : translate("jobs.reminderCopyNow")}
-          </button>
+          <div className="job-reminder-preview__actions">
+            {reminderWhatsAppUrl && reminderCleanerStillAssigned && (
+              <a
+                className="button button--primary"
+                href={reminderWhatsAppUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {translate("whatsapp.openInWhatsApp")}
+              </a>
+            )}
+            <button
+              className="button"
+              type="button"
+              disabled={!reminderCleanerStillAssigned || isCopyingReminder}
+              onClick={copyReminderMessage}
+            >
+              {isCopyingReminder
+                ? translate("jobs.reminderCopying")
+                : translate("jobs.reminderCopyNow")}
+            </button>
+          </div>
+          {!reminderWhatsAppUrl && (
+            <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
+          )}
         </section>
       )}
 
@@ -1662,6 +1698,11 @@ export function JobDetail({
                   : ["OFFERED", "ASSIGNED"].includes(job.operationalStatus));
               const compensationSuggestion = getOfferCompensationSuggestion(job, offer);
               const isEditingOfferCompensation = editingOfferCompensationFor === offer.id;
+              const offerMessage = offerMessageFor(offer, offerCleanerName);
+              const offerWhatsAppUrl = buildWhatsAppHandoffUrl(
+                cleanerPhonesById[offer.cleanerId],
+                offerMessage,
+              );
 
               return (
                 <article key={offer.id} className="offer-status-item">
@@ -1783,15 +1824,31 @@ export function JobDetail({
                           ? formatPrice(publicOfferLink.offeredCompensation, translate, language)
                           : translate("publicOffer.amountNotSet")}
                       </p>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => copyOfferMessage(offer, offerCleanerName)}
-                      >
-                        {copiedOfferMessageId === offer.id
-                          ? translate("offers.offerMessageCopied")
-                          : translate("offers.copyOfferMessage")}
-                      </button>
+                      <div className="offer-message-actions">
+                        {offerWhatsAppUrl && (
+                          <a
+                            className="button button--primary"
+                            href={offerWhatsAppUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {translate("whatsapp.openInWhatsApp")}
+                          </a>
+                        )}
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={() => copyOfferMessage(offer, offerCleanerName)}
+                        >
+                          {copiedOfferMessageId === offer.id
+                            ? translate("offers.offerMessageCopied")
+                            : translate("offers.copyOfferMessage")}
+                        </button>
+                      </div>
+                      {!offerWhatsAppUrl && (
+                        <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
+                      )}
+                      <p className="form-hint">{translate("whatsapp.manualSendNote")}</p>
                       {!hasValue(publicOfferLink.offeredCompensation) && (
                         <p className="offer-compensation-warning" role="status">
                           {translate("offers.amountNotSetWarning")}

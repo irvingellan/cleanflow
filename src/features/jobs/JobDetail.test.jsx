@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { JobDetail } from "./JobDetail.jsx";
 
+const cleanerService = vi.hoisted(() => ({ getCleanerContactsById: vi.fn().mockResolvedValue({}) }));
+
+vi.mock("../cleaners/cleanerService.js", () => ({
+  getCleanerContactsById: cleanerService.getCleanerContactsById,
+}));
+
 function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {}, property = null) {
   const noOp = vi.fn();
   const { offers = [], ...jobOverrides } = overrides;
@@ -17,7 +23,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
           ...jobOverrides,
         }}
         property={property}
-        knownCleaners={[]}
+        knownCleaners={checklist.knownCleaners || []}
         offers={offers}
         isLoadingOffers={false}
         hasOffersError={false}
@@ -280,7 +286,7 @@ describe("JobDetail lifecycle actions", () => {
       notes: "Internal manager note",
       clientPrice: 350,
       cleanerPayout: 200,
-    }, {}, {}, {
+    }, {}, { knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "19495551234" }] }, {
       id: "property-1",
       garageParking: "Garage entrance",
       cleanerInstructions: "Please reset the thermostat.",
@@ -314,6 +320,9 @@ describe("JobDetail lifecycle actions", () => {
     expect(message).not.toHaveTextContent("350");
     expect(message).not.toHaveTextContent("200");
 
+    const whatsappLink = within(preview).getByRole("link", { name: "Open in WhatsApp" });
+    expect(new URL(whatsappLink.href).searchParams.get("text")).toBe(message.textContent);
+
     fireEvent.click(within(preview).getByRole("checkbox", {
       name: "Include these sensitive access details in the copied message",
     }));
@@ -322,12 +331,12 @@ describe("JobDetail lifecycle actions", () => {
     expect(confirmedMessage).toHaveTextContent("Garage entrance");
     expect(confirmedMessage).toHaveTextContent("Use side door code 8877");
     expect(confirmedMessage).toHaveTextContent("Lockbox key 3921");
+    expect(new URL(whatsappLink.href).searchParams.get("text")).toBe(confirmedMessage.textContent);
 
     fireEvent.click(within(preview).getByRole("button", { name: "Copy reminder" }));
 
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Hi Ana! 😊"));
-    });
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0][0]).toBe(confirmedMessage.textContent);
     expect(writeText.mock.calls[0][0]).toContain("Time: 10:30");
     expect(writeText.mock.calls[0][0]).toContain("Use side door code 8877");
     expect(writeText.mock.calls[0][0]).not.toContain("Private street address");
@@ -339,6 +348,29 @@ describe("JobDetail lifecycle actions", () => {
       configurable: true,
       value: originalClipboard,
     });
+  });
+
+  it.each([
+    ["en", "Open in WhatsApp", "WhatsApp opens with a prefilled draft."],
+    ["pt", "Abrir no WhatsApp", "O WhatsApp abrirá uma mensagem preenchida."],
+    ["es", "Abrir en WhatsApp", "WhatsApp abrirá un borrador con el mensaje."],
+  ])("localizes the WhatsApp handoff in %s", (language, actionLabel, note) => {
+    const previousLanguage = window.localStorage.getItem("cleanflow-language");
+    window.localStorage.setItem("cleanflow-language", language);
+    const { unmount } = renderJobDetail("ASSIGNED", {
+      assignedCleanerId: "cleaner-a",
+      assignedCleanerName: "Ana",
+      scheduledDate: "2026-09-08",
+    }, {}, { knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "+19495551234" }] });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /Ana/ }));
+      expect(screen.getByRole("link", { name: actionLabel })).toBeVisible();
+      expect(screen.getByText(new RegExp(note))).toBeVisible();
+    } finally {
+      unmount();
+      if (previousLanguage === null) window.localStorage.removeItem("cleanflow-language");
+      else window.localStorage.setItem("cleanflow-language", previousLanguage);
+    }
   });
 
   it("uses only the active assigned cleaner and exact linked Property for schema-v2 reminders", () => {
@@ -556,10 +588,12 @@ describe("JobDetail lifecycle actions", () => {
       "OFFERED",
       {
         schemaVersion: 1,
+        propertyId: "property-1",
         scheduledDate: "2026-09-25",
         scheduledStart: "10:30",
         clientPrice: 400,
         cleanerPayout: 160,
+        notes: "Private manager note",
         offers: [
           { id: "pending-offer", cleanerId: "cleaner-pending", cleanerName: "Ana", status: "PENDING" },
           { id: "interested-offer", cleanerId: "cleaner-interested", cleanerName: "Beatriz", status: "INTERESTED" },
@@ -567,6 +601,13 @@ describe("JobDetail lifecycle actions", () => {
         ],
       },
       { onCreatePublicOfferLink },
+      { knownCleaners: [{ id: "cleaner-pending", name: "Ana", phone: "+1 (949) 555-1234" }] },
+      {
+        id: "property-1",
+        address: "Private property address",
+        accessInstructions: "Private entry information",
+        keyCodeInfo: "Private key code",
+      },
     );
 
     const pendingOffer = screen.getByText("Ana").closest("article");
@@ -591,16 +632,65 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByText("Interested")).toBeVisible();
     expect(screen.getByText("Not available")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Simulate offer" })).not.toBeInTheDocument();
+    const whatsappLink = within(pendingOffer).getByRole("link", { name: "Open in WhatsApp" });
+    expect(whatsappLink).toHaveAttribute("target", "_blank");
+    expect(whatsappLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(new URL(whatsappLink.href).pathname).toBe("/19495551234");
     fireEvent.click(screen.getByRole("button", { name: "Copy offer message" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText.mock.calls[0][0]).toContain("Offered compensation: $125.00");
-    expect(writeText.mock.calls[0][0]).toContain("https://cleanflow.example/offer/test-token");
-    expect(writeText.mock.calls[0][0]).not.toContain("$400.00");
+    const copiedMessage = writeText.mock.calls[0][0];
+    expect(copiedMessage).toContain("Offered compensation: $125.00");
+    expect(copiedMessage).toContain("https://cleanflow.example/offer/test-token");
+    expect(new URL(whatsappLink.href).searchParams.get("text")).toBe(copiedMessage);
+    expect(copiedMessage).not.toContain("$400.00");
+    expect(copiedMessage).not.toContain("$160.00");
+    expect(copiedMessage).not.toContain("$240.00");
+    expect(copiedMessage).not.toContain("Beatriz");
+    expect(copiedMessage).not.toContain("Private manager note");
+    expect(copiedMessage).not.toContain("Private property address");
+    expect(copiedMessage).not.toContain("Private entry information");
+    expect(copiedMessage).not.toContain("Private key code");
     expect(screen.getByRole("button", { name: "Offer message copied" })).toBeVisible();
+    expect(onCreatePublicOfferLink).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Create public link" }));
     expect(screen.getByLabelText("Offered compensation (USD)")).toHaveValue(125);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
+  it("keeps Copy available and explains when a cleaner phone cannot make a safe WhatsApp target", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const onCreatePublicOfferLink = vi.fn().mockResolvedValue({
+      url: "https://cleanflow.example/offer/synthetic-no-phone",
+      offeredCompensation: 125,
+    });
+    renderJobDetail("OFFERED", {
+      offers: [{ id: "pending", cleanerId: "cleaner-a", cleanerName: "Ana", status: "PENDING" }],
+    }, { onCreatePublicOfferLink }, {
+      knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "9495551234" }],
+    });
+
+    const offer = screen.getByText("Ana").closest("article");
+    fireEvent.click(within(offer).getByRole("button", { name: "Create public link" }));
+    fireEvent.click(within(offer).getByRole("button", { name: "Create public link" }));
+    await waitFor(() => expect(onCreatePublicOfferLink).toHaveBeenCalledOnce());
+
+    expect(within(offer).queryByRole("link", { name: "Open in WhatsApp" })).not.toBeInTheDocument();
+    expect(within(offer).getByText("Add a valid international WhatsApp phone number for this Cleaner.")).toBeVisible();
+    fireEvent.click(within(offer).getByRole("button", { name: "Copy offer message" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0][0]).toContain("https://cleanflow.example/offer/synthetic-no-phone");
+    expect(onCreatePublicOfferLink).toHaveBeenCalledOnce();
 
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -632,6 +722,7 @@ describe("JobDetail lifecycle actions", () => {
         ],
       },
       { onCreatePublicOfferLink },
+      { knownCleaners: [{ id: "cleaner-v2", name: "Ana", phone: "+19495551234" }] },
     );
 
     const pendingOffer = screen.getByText("Ana").closest("article");
@@ -651,6 +742,8 @@ describe("JobDetail lifecycle actions", () => {
     expect(writeText.mock.calls[0][0]).toContain("Amount not set / To be agreed");
     expect(writeText.mock.calls[0][0]).not.toContain("$600.00");
     expect(writeText.mock.calls[0][0]).not.toContain("$900.00");
+    const v2WhatsAppLink = screen.getByRole("link", { name: "Open in WhatsApp" });
+    expect(new URL(v2WhatsAppLink.href).searchParams.get("text")).toBe(writeText.mock.calls[0][0]);
     expect(screen.getByText("Amount not set. The cleaner will see ‘Amount not set / To be agreed.’")).toBeVisible();
 
     Object.defineProperty(navigator, "clipboard", {
@@ -893,7 +986,10 @@ describe("JobDetail lifecycle actions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
     expect(writeText).not.toHaveBeenCalled();
-    expect(screen.getByRole("region", { name: "Review reminder for Ana" })).toBeVisible();
+    const reminderPreview = screen.getByRole("region", { name: "Review reminder for Ana" });
+    expect(reminderPreview).toBeVisible();
+    expect(within(reminderPreview).queryByRole("link", { name: "Open in WhatsApp" })).not.toBeInTheDocument();
+    expect(within(reminderPreview).getByText("Add a valid international WhatsApp phone number for this Cleaner.")).toBeVisible();
     expect(screen.queryByRole("region", { name: "Review reminder for Beatriz" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Copy reminder" }));
 

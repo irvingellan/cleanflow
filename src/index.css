@@ -2739,6 +2739,22 @@ button.summary-card {
   font: inherit;
 }
 
+.job-reminder-preview__actions,
+.offer-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.job-reminder-preview__actions .button,
+.offer-message-actions .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  text-align: center;
+}
+
 .job-checklist,
 .checklist-run__section {
   display: grid;
@@ -3610,7 +3626,8 @@ button.summary-card {
 
 .public-offer-link-actions .offer-compensation-warning,
 .public-offer-link-actions .form-error,
-.public-offer-link-actions .offer-compensation-summary {
+.public-offer-link-actions .offer-compensation-summary,
+.public-offer-link-actions > .form-hint {
   grid-column: 1 / -1;
 }
 
