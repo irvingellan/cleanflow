@@ -27,9 +27,7 @@ import {
   maximumGuestNameLength,
   getJobGrossMargin,
   getAssignedCleanerIds,
-  getRequiredCleanerCount,
   isAssignmentAwareJob,
-  maximumRequiredCleanerCount,
   optionalJobPrice,
 } from "./jobCompatibility.js";
 import {
@@ -85,7 +83,6 @@ export function JobDetail({
   onStartCleaning,
   onCompleteCleaning,
   onUpdatePrices,
-  onUpdateRequiredCleanerCount,
   onUpdateDetails,
   onUpdateSchedule,
   onSimulateAssignedCleaner,
@@ -117,7 +114,7 @@ export function JobDetail({
   const [copiedOfferMessageId, setCopiedOfferMessageId] = useState(null);
   const [offerMessageCopyErrorId, setOfferMessageCopyErrorId] = useState(null);
   const [isStartingCleaning, setIsStartingCleaning] = useState(false);
-  const [startCleaningError, setStartCleaningError] = useState("");
+  const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
   const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
   const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
   const [isEditingPrices, setIsEditingPrices] = useState(false);
@@ -145,11 +142,6 @@ export function JobDetail({
   const [jobScheduleSaveError, setJobScheduleSaveError] = useState("");
   const [hasSavedJobSchedule, setHasSavedJobSchedule] = useState(false);
   const [scheduleCommunicationMayBeStale, setScheduleCommunicationMayBeStale] = useState(false);
-  const [isEditingRequiredCleanerCount, setIsEditingRequiredCleanerCount] = useState(false);
-  const [requiredCleanerCountInput, setRequiredCleanerCountInput] = useState(String(getRequiredCleanerCount(job)));
-  const [isSavingRequiredCleanerCount, setIsSavingRequiredCleanerCount] = useState(false);
-  const [requiredCleanerCountError, setRequiredCleanerCountError] = useState("");
-  const [requiredCleanerCountSaved, setRequiredCleanerCountSaved] = useState(false);
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const [reminderPreview, setReminderPreview] = useState(null);
@@ -166,14 +158,6 @@ export function JobDetail({
   const hasAssignmentAcknowledgment = activeAssignments.some(
     (assignment) => getAssignmentAcknowledgmentState(assignment, offers),
   );
-  const requiredCleanerCount = getRequiredCleanerCount(job);
-  const assignedCleanerCount = isAssignmentAware
-    ? activeAssignments.length
-    : (job.assignedCleanerId || job.assignedCleanerName ? 1 : 0);
-  const teamComplete = assignedCleanerCount >= requiredCleanerCount;
-  const canEditRequiredCleanerCount = isAssignmentAware
-    && !job.archivedAt
-    && ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus);
   const linkedProperty = property?.id === job.propertyId ? property : null;
   const sensitivePropertyDetails = [
     ["jobs.reminderParking", linkedProperty?.garageParking],
@@ -196,7 +180,6 @@ export function JobDetail({
   const grossMargin = getJobGrossMargin(job);
   const canEditRoster =
     isAssignmentAware &&
-    !job.archivedAt &&
     ["OFFERED", "ASSIGNED"].includes(job.operationalStatus);
   const canManageOffers = isAssignmentAware
     ? canManageAssignmentAwareOffers(job)
@@ -323,13 +306,6 @@ export function JobDetail({
       isCurrent = false;
     };
   }, [cleanerLookupKey]);
-
-  useEffect(() => {
-    setRequiredCleanerCountInput(String(getRequiredCleanerCount(job)));
-    setIsEditingRequiredCleanerCount(false);
-    setRequiredCleanerCountError("");
-    setRequiredCleanerCountSaved(false);
-  }, [job.id, job.requiredCleanerCount]);
 
   useEffect(() => {
     setPriceValues({
@@ -522,11 +498,11 @@ export function JobDetail({
     try {
       await onAssignCleaner(offer);
     } catch (error) {
-      setAssignmentError(error?.details?.reason === "team-full"
-        ? translate("jobs.teamFull")
-        : error.code === "job-already-assigned"
+      setAssignmentError(
+        error.code === "job-already-assigned"
           ? translate("offers.alreadyAssigned")
-          : translate("offers.assignmentError"));
+          : translate("offers.assignmentError"),
+      );
     } finally {
       setAssigningCleanerId(null);
     }
@@ -628,42 +604,14 @@ export function JobDetail({
 
   async function startCleaning() {
     setIsStartingCleaning(true);
-    setStartCleaningError("");
+    setHasStartCleaningError(false);
 
     try {
       await onStartCleaning();
-    } catch (error) {
-      setStartCleaningError(error?.details?.reason === "team-understaffed"
-        ? translate("jobs.startNeedsMoreCleaners", {
-          required: error.details.requiredCleanerCount,
-          assigned: error.details.assignedCount,
-        })
-        : translate("jobs.startCleaningError"));
+    } catch {
+      setHasStartCleaningError(true);
     } finally {
       setIsStartingCleaning(false);
-    }
-  }
-
-  async function saveRequiredCleanerCount(event) {
-    event.preventDefault();
-    const nextCount = Number(requiredCleanerCountInput);
-    if (!Number.isSafeInteger(nextCount) || nextCount < 1 || nextCount > maximumRequiredCleanerCount) {
-      setRequiredCleanerCountError(translate("jobs.requiredCleanerCountInvalid", { maximum: maximumRequiredCleanerCount }));
-      return;
-    }
-    setIsSavingRequiredCleanerCount(true);
-    setRequiredCleanerCountError("");
-    setRequiredCleanerCountSaved(false);
-    try {
-      await onUpdateRequiredCleanerCount(nextCount);
-      setIsEditingRequiredCleanerCount(false);
-      setRequiredCleanerCountSaved(true);
-    } catch (error) {
-      setRequiredCleanerCountError(error?.details?.reason === "below-assigned-count"
-        ? translate("jobs.requiredCleanerCountBelowAssigned", { assigned: error.details.assignedCount })
-        : translate("jobs.requiredCleanerCountSaveError"));
-    } finally {
-      setIsSavingRequiredCleanerCount(false);
     }
   }
 
@@ -774,17 +722,6 @@ export function JobDetail({
           value={formatOperationalStatus(job.operationalStatus, translate)}
         />
         <DetailItem
-          label={translate("jobs.requiredCleanerCount")}
-          value={requiredCleanerCount}
-        />
-        <DetailItem
-          label={translate("jobs.assignedOfRequired")}
-          value={translate("jobs.assignedOfRequiredValue", {
-            assigned: assignedCleanerCount,
-            required: requiredCleanerCount,
-          })}
-        />
-        <DetailItem
           label={translate("jobs.clientPrice")}
           value={hasValue(job.clientPrice)
             ? formatPrice(job.clientPrice, translate, language)
@@ -830,65 +767,6 @@ export function JobDetail({
           <DetailItem label={translate("jobs.createdTime")} value={createdAt} />
         )}
       </dl>
-
-      {teamComplete && (
-        <p className="form-success" role="status">{translate("jobs.teamComplete")}</p>
-      )}
-      {isAssignmentAware && isLoadingAssignments && (
-        <p className="form-hint">{translate("jobs.rosterLoading")}</p>
-      )}
-      {canEditRequiredCleanerCount && !isEditingRequiredCleanerCount && (
-        <button
-          className="button"
-          type="button"
-          onClick={() => {
-            setRequiredCleanerCountInput(String(requiredCleanerCount));
-            setRequiredCleanerCountError("");
-            setIsEditingRequiredCleanerCount(true);
-          }}
-        >
-          {translate("jobs.editRequiredCleanerCount")}
-        </button>
-      )}
-      {requiredCleanerCountSaved && (
-        <p className="form-success" role="status">{translate("jobs.requiredCleanerCountSaved")}</p>
-      )}
-      {isEditingRequiredCleanerCount && (
-        <form className="cleaning-form" noValidate onSubmit={saveRequiredCleanerCount}>
-          <label>
-            {translate("jobs.requiredCleanerCount")}
-            <input
-              type="number"
-              name="requiredCleanerCount"
-              min="1"
-              max={maximumRequiredCleanerCount}
-              step="1"
-              inputMode="numeric"
-              value={requiredCleanerCountInput}
-              onChange={(event) => setRequiredCleanerCountInput(event.target.value)}
-              disabled={isSavingRequiredCleanerCount}
-            />
-          </label>
-          {requiredCleanerCountError && <p className="form-error" role="alert">{requiredCleanerCountError}</p>}
-          <div className="button-row">
-            <button
-              className="button"
-              type="button"
-              disabled={isSavingRequiredCleanerCount}
-              onClick={() => {
-                setIsEditingRequiredCleanerCount(false);
-                setRequiredCleanerCountInput(String(requiredCleanerCount));
-                setRequiredCleanerCountError("");
-              }}
-            >
-              {translate("common.cancel")}
-            </button>
-            <button className="button button--primary" type="submit" disabled={isSavingRequiredCleanerCount}>
-              {isSavingRequiredCleanerCount ? translate("jobs.savingRequiredCleanerCount") : translate("jobs.saveRequiredCleanerCount")}
-            </button>
-          </div>
-        </form>
-      )}
 
       <section className="job-details-edit" aria-label={translate("jobs.editDetails")}>
         {!isEditingJobDetails && (
@@ -1153,7 +1031,7 @@ export function JobDetail({
         />
       </section>
 
-      {(job.operationalStatus === "ASSIGNED" ||
+      {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
         isInProgress ||
         isCompleted) && (
         <section
@@ -1173,22 +1051,11 @@ export function JobDetail({
             </p>
           )}
           {job.operationalStatus === "ASSIGNED" && (
-            <>
-              {isAssignmentAware && assignedCleanerCount < requiredCleanerCount && (
-                <p className="form-hint" role="status">
-                  {translate("jobs.startNeedsMoreCleaners", {
-                    required: requiredCleanerCount,
-                    assigned: assignedCleanerCount,
-                  })}
-                </p>
-              )}
             <div className="button-row job-execution__actions">
               <button
                 className="button button--primary"
                 type="button"
-                disabled={isStartingCleaning || (isAssignmentAware && (
-                  isLoadingAssignments || hasAssignmentsError || assignedCleanerCount < requiredCleanerCount
-                ))}
+                disabled={isStartingCleaning}
                 onClick={startCleaning}
               >
                 {isStartingCleaning
@@ -1196,9 +1063,8 @@ export function JobDetail({
                   : translate("jobs.startCleaning")}
               </button>
             </div>
-            </>
           )}
-          {!isAssignmentAware && isInProgress && (
+          {isInProgress && (
             <div className="button-row job-execution__actions">
               <button
                 className="button button--primary"
@@ -1212,8 +1078,10 @@ export function JobDetail({
               </button>
             </div>
           )}
-          {startCleaningError && (
-            <p className="form-error" role="alert">{startCleaningError}</p>
+          {hasStartCleaningError && (
+            <p className="form-error" role="alert">
+              {translate("jobs.startCleaningError")}
+            </p>
           )}
           {hasCompleteCleaningError && (
             <p className="form-error" role="alert">
@@ -1249,16 +1117,13 @@ export function JobDetail({
           <div className="assignment-roster__header">
             <div>
               <h3 id="assigned-cleaners-title">{translate("jobs.assignedCleaners")}</h3>
-              <span>{translate("jobs.assignedOfRequiredValue", {
-                assigned: assignedCleanerCount,
-                required: requiredCleanerCount,
-              })}</span>
+              <span>
+                {assignedCleanerIds.length === 1
+                  ? translate("jobs.cleanerAssignedOne", { count: assignedCleanerIds.length })
+                  : translate("jobs.cleanersAssignedMany", { count: assignedCleanerIds.length })}
+              </span>
             </div>
           </div>
-
-          {!isLoadingAssignments && !hasAssignmentsError && teamComplete && (
-            <p className="form-hint" role="status">{translate("jobs.teamFull")}</p>
-          )}
 
           {isLoadingAssignments && (
             <StateCard message={translate("jobs.rosterLoading")} status="status" />
@@ -1697,7 +1562,6 @@ export function JobDetail({
                       {offer.status === "INTERESTED" &&
                         (isAssignmentAware
                           ? canEditRoster && !assignedCleanerIds.includes(offer.cleanerId)
-                            && !teamComplete && !isLoadingAssignments && !hasAssignmentsError
                           : !isAssigned) && (
                         <button
                           className="button button--primary"

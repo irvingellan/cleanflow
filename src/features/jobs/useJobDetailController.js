@@ -17,7 +17,6 @@ import {
   getJobAssignments,
   removeAssignment,
   replaceAssignment,
-  updateRequiredCleanerCount,
 } from "./assignmentService.js";
 import { isAssignmentAwareJob } from "./jobCompatibility.js";
 import {
@@ -305,7 +304,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
   async function removeCleanerAssignment(assignmentId) {
     const updatedJob = await updateJob((job) =>
-      removeAssignment(job.id, assignmentId),
+      removeAssignment(job.id, assignmentId, actorUid),
     );
 
     if (updatedJob) {
@@ -316,21 +315,13 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
   async function replaceCleanerAssignment(assignmentId, replacementOfferId) {
     const updatedJob = await updateJob((job) =>
-      replaceAssignment(job.id, assignmentId, replacementOfferId),
+      replaceAssignment(job.id, assignmentId, replacementOfferId, actorUid),
     );
 
     if (updatedJob) {
       await refreshAssignments(updatedJob);
       await refreshChecklistCapability(updatedJob);
     }
-  }
-
-  async function saveRequiredCleanerCount(requiredCleanerCount) {
-    const updatedJob = await updateJob((job) =>
-      updateRequiredCleanerCount(job.id, requiredCleanerCount),
-    );
-    if (updatedJob) await refreshAssignments(updatedJob);
-    return updatedJob;
   }
 
   async function startCleaning() {
@@ -558,7 +549,6 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       assignCleaner,
       removeCleanerAssignment,
       replaceCleanerAssignment,
-      saveRequiredCleanerCount,
       startCleaning,
       completeCleaning,
       approveChecklistRun,

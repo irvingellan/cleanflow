@@ -114,8 +114,6 @@ Conceptual fields include:
   schedule audit history;
 - `checklistContextRevision`: a monotonic cleaner-capability invalidation value;
 - overall operational status;
-- `requiredCleanerCount` for Assignment-aware Jobs: integer `1`–`4`, default
-  `1` on newly created Jobs;
 - Job-effective instructions, checklist/evidence references, and notes;
 - client pricing model and resolved client charge;
 - assignment summary suitable for manager queries;
@@ -136,17 +134,9 @@ one Cleaner's work. Aggregate state must remain distinct from per-Cleaner
 execution. `WAITING_FOR_QA` is an optional future review concept, not the
 normal design-partner pilot completion gate.
 
-**Required team size implementation on `main` (not yet deployed):** new
-schema-version-2 Jobs explicitly persist `requiredCleanerCount`, defaulting to
-`1`; the implementation bounds it to `1`–`4`. An existing Job without the
-field, including a legacy Job, reads as `1`; there is no bulk migration. Only
-an active manager may change the count on a non-archived pre-start Job, and not
-below its active Assignment count. The implementation checks capacity and
-blocks transition to `IN_PROGRESS` transactionally against active Assignment
-records. Legacy singular-cleaner Jobs count as one and do not gain synthetic
-Assignment documents. The hard start gate is awaiting pilot-policy validation;
-see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)
-before deployment.
+**Required team size is on PRODUCT HOLD:** `b4b35bf` and its model/tests are
+preserved on `hold/required-cleaner-count-2026-09-27`, not in deployable main
+or production. See [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job).
 
 **Phase 5A checklist foundation:** missing `checklistContextRevision` means
 legacy revision `0`. Context-changing Job or Assignment mutations advance it

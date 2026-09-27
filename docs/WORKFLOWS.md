@@ -52,22 +52,12 @@ start/completion controls. Removed/replaced, archived, expired, or otherwise
 ineligible links cannot acknowledge. Legacy records without a safe Offer-to-
 Assignment relationship are not retrofitted.
 
-**Required cleaner count implementation on `main` (not deployed):** new
-Assignment-aware Jobs start with an explicit `requiredCleanerCount` of `1`,
-bounded to `1`–`4`. Missing values on existing Jobs read as `1`; no migration
-is required. Sending Offers and receiving interest remains independent of this
-number, so interested Offers remain unchanged when the team is full. An active
-manager may edit the count only while a non-archived Job is `UNASSIGNED`,
-`OFFERED`, or `ASSIGNED`, and cannot lower it below the current active
-Assignment count. Manager Assignment, removal, replacement, count changes, and
-the Job start capacity check use server transactions; direct browser
-roster/count/start writes are denied. A full roster blocks further Assignments
-without changing other Offers. The current implementation blocks `IN_PROGRESS`
-until the required number of Assignments is active, but this hard start policy
-awaits Gabi's validation before deployment; see
-[DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job).
-A legacy singular-cleaner Job reads as one and retains its existing direct-
-cleaner compatibility path without a synthetic Assignment.
+**PRODUCT HOLD:** the bounded required-cleaner-count/capacity/start-gate
+implementation is preserved on `hold/required-cleaner-count-2026-09-27`,
+not in deployable main or production. Assignment roster behavior remains on
+the existing manager-authorized, revision-protected path without this capacity
+gate. The block-versus-warning policy awaits Gabi;
+see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job).
 
 **CURRENT public Offer handoff:** before creating or replacing a pending
 cleaner's public link, the manager confirms that cleaner's offered amount. The

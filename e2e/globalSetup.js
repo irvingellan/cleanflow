@@ -80,7 +80,6 @@ export default async function seedE2eFixtures() {
   const teamCleanerA = { ...cleaner, name: "E2E Team Cleaner A" };
   const teamCleanerB = { ...cleaner, name: "E2E Team Cleaner B" };
   const teamCleanerC = { ...cleaner, name: "E2E Team Cleaner C" };
-  const teamCleanerD = { ...cleaner, name: "E2E Team Cleaner D" };
   const client = {
     name: "E2E Linked Client",
     active: true,
@@ -95,7 +94,6 @@ export default async function seedE2eFixtures() {
     ["e2e-completed-property", "E2E Completed Property"],
     ["e2e-team-property", "E2E Team Property"],
     ["e2e-v2-offer-property", "E2E V2 Offer Property"],
-    ["e2e-capacity-property", "E2E Capacity Property"],
   ].map(([id, name]) => [id, {
     name,
     clientName: "E2E Test Client",
@@ -183,7 +181,6 @@ export default async function seedE2eFixtures() {
       {
         ...sharedJobData,
         schemaVersion: 2,
-        requiredCleanerCount: 2,
         propertyId: "e2e-team-property",
         propertyName: "E2E Team Property",
         scheduledDate: localDateKey(2),
@@ -198,26 +195,10 @@ export default async function seedE2eFixtures() {
       {
         ...sharedJobData,
         schemaVersion: 2,
-        requiredCleanerCount: 2,
         propertyId: "e2e-v2-offer-property",
         propertyName: "E2E V2 Offer Property",
         scheduledDate: localDateKey(3),
         operationalStatus: "UNASSIGNED",
-        assignedCleanerIds: [],
-        checklistContextRevision: 0,
-      },
-    ],
-    [
-      "e2e-capacity-job",
-      {
-        ...sharedJobData,
-        schemaVersion: 2,
-        requiredCleanerCount: 3,
-        propertyId: "e2e-capacity-property",
-        propertyName: "E2E Capacity Property",
-        scheduledDate: localDateKey(4),
-        operationalStatus: "OFFERED",
-        offeredAt: now,
         assignedCleanerIds: [],
         checklistContextRevision: 0,
       },
@@ -230,7 +211,6 @@ export default async function seedE2eFixtures() {
   batch.set(organization.collection("cleaners").doc("e2e-team-cleaner-a"), teamCleanerA);
   batch.set(organization.collection("cleaners").doc("e2e-team-cleaner-b"), teamCleanerB);
   batch.set(organization.collection("cleaners").doc("e2e-team-cleaner-c"), teamCleanerC);
-  batch.set(organization.collection("cleaners").doc("e2e-team-cleaner-d"), teamCleanerD);
   batch.set(organization.collection("clients").doc("e2e-linked-client"), client);
   properties.forEach(([propertyId, property]) => {
     batch.set(organization.collection("properties").doc(propertyId), property);
@@ -262,19 +242,6 @@ export default async function seedE2eFixtures() {
     status: "DECLINED",
     createdAt: now,
     respondedAt: now,
-  });
-  const capacityOffers = organization.collection("jobs").doc("e2e-capacity-job").collection("offers");
-  [teamCleanerA, teamCleanerB, teamCleanerC, teamCleanerD].forEach((capacityCleaner, index) => {
-    const cleanerId = "e2e-team-cleaner-" + String.fromCharCode(97 + index);
-    batch.set(capacityOffers.doc(cleanerId), {
-      jobId: "e2e-capacity-job",
-      cleanerId,
-      cleanerName: capacityCleaner.name,
-      status: "INTERESTED",
-      offeredCompensation: 100 + index,
-      createdAt: now,
-      respondedAt: now,
-    });
   });
   await batch.commit();
 }

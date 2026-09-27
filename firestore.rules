@@ -56,19 +56,6 @@ service cloud.firestore {
           || checklistContextRevision(request.resource.data) == 0);
     }
 
-    function validRequiredCleanerCountCreate() {
-      return ('schemaVersion' in request.resource.data
-          && request.resource.data.schemaVersion is int
-          && request.resource.data.schemaVersion >= 2)
-        ? ('requiredCleanerCount' in request.resource.data
-          && request.resource.data.requiredCleanerCount is int
-          && request.resource.data.requiredCleanerCount >= 1
-          && request.resource.data.requiredCleanerCount <= 4)
-        : (!('requiredCleanerCount' in request.resource.data)
-          || (request.resource.data.requiredCleanerCount is int
-            && request.resource.data.requiredCleanerCount == 1));
-    }
-
     function validJobChecklistContextRevisionUpdate() {
       return hasValidChecklistContextRevision(request.resource.data)
         && (jobChecklistContextChanged()
@@ -84,15 +71,17 @@ service cloud.firestore {
         .hasAny(['scheduledDate', 'scheduledStart', 'scheduleRevision']);
     }
 
-    function jobTeamFieldsUnchanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['requiredCleanerCount', 'assignedCleanerIds', 'schemaVersion']);
+    function assignmentParentRevisionAdvanced(orgId, jobId) {
+      let jobPath = /databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId);
+      return exists(jobPath)
+        && getAfter(jobPath).data.checklistContextRevision is int
+        && getAfter(jobPath).data.checklistContextRevision
+          == checklistContextRevision(get(jobPath).data) + 1;
     }
 
-    function jobCannotStartFromBrowser() {
-      return !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['operationalStatus'])
-        || request.resource.data.operationalStatus != 'IN_PROGRESS';
+    function assignmentCleanerContextChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['cleanerId', 'isActive']);
     }
 
     function validManagerPageLoadConnection(data) {
@@ -159,15 +148,12 @@ service cloud.firestore {
           && activeManager(orgId)
           || (collectionName == 'jobs'
             && activeManager(orgId)
-            && validJobChecklistContextRevisionCreate()
-            && validRequiredCleanerCountCreate());
+            && validJobChecklistContextRevisionCreate());
         allow update: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && jobScheduleUnchanged()
-            && jobTeamFieldsUnchanged()
-            && jobCannotStartFromBrowser()
             && validJobChecklistContextRevisionUpdate());
       }
 
@@ -179,8 +165,18 @@ service cloud.firestore {
       }
 
       match /jobs/{jobId}/assignments/{assignmentId} {
-        // Roster writes must go through manager-authorized transactional Functions.
-        allow create, update, delete: if false;
+        // Attendance acknowledgment is server-owned, independent of roster edits.
+        allow create: if activeManager(orgId)
+          && !request.resource.data.keys()
+            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId'])
+          && assignmentParentRevisionAdvanced(orgId, jobId);
+        allow delete: if activeManager(orgId)
+          && assignmentParentRevisionAdvanced(orgId, jobId);
+        allow update: if activeManager(orgId)
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId'])
+          && (!assignmentCleanerContextChanged()
+            || assignmentParentRevisionAdvanced(orgId, jobId));
       }
     }
 

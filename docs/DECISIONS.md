@@ -364,6 +364,8 @@ Assignment. The Function revalidates the capability and exact active
 Offer-to-Assignment relationship. This is an operational acknowledgment, not
 identity verification, a lifecycle state, an Offer response, a start gate, or
 a payment signal. Legacy Jobs without that relationship are not retrofitted.
+The two acknowledgment fields remain server-owned in Rules; ordinary manager
+roster writes keep their existing atomic checklist-context revision guard.
 
 The public projection may include only the snapshotted `offeredCompensation` for
 the linked Cleaner. A pre-snapshot legacy Offer may use its single-cleaner Job
@@ -706,7 +708,12 @@ manager approval/completion is a separate workflow.
 ## DEC-039 — Enforce a bounded required cleaner count per Job
 
 Date: 2026-09-26
-Status: Implementation committed and tested on `main`; not deployed; hard-start policy awaits Gabi validation
+Status: PRODUCT HOLD; implemented/tested and preserved outside deployable main; not deployed; policy awaits Gabi validation
+
+The exact implementation commit `b4b35bf` and its tests remain on
+`hold/required-cleaner-count-2026-09-27`. Deployable main has reverted its
+runtime/UI, callable Functions, and capacity/start Rules. The decision is not
+rejected; the following describes the held implementation, not current runtime.
 
 The implementation treats `requiredCleanerCount` as the number of active
 Cleaner Assignments needed before a Job may start. Newly created

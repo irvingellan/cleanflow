@@ -39,9 +39,10 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   separately. Page-load telemetry is diagnostic only, not an adoption metric.
 - OneSignal remains a frozen experiment. Do not resume cutover or delete its
   existing browser integration unless a concrete FCM limitation is observed.
-- `b4b35bf` adds required-cleaner-count behavior on `main`; it is tested but
-  **not deployed**. Deployment is held pending Gabi's answer about the hard
-  full-team start gate (see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)).
+- Required-cleaner-count implementation `b4b35bf` is preserved on
+  `hold/required-cleaner-count-2026-09-27`, tested but **not deployed** and
+  removed from deployable main. Its hard full-team start policy awaits Gabi
+  (see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)).
 
 ## Real-use evidence
 
@@ -91,12 +92,13 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
 
 ## Deployment holds
 
-- **Required cleaner count (`b4b35bf`):** implemented and tested on `main`,
-  reviewed **KEEP AS-IS** technically, but not deployed. Ask Gabi: “If a
+- **Required cleaner count (`b4b35bf`):** implemented/tested and preserved on
+  `hold/required-cleaner-count-2026-09-27`, not in deployable main or production.
+  Reviewed **KEEP AS-IS** technically. Ask Gabi: “If a
   cleaning needs 3 cleaners and only 2 are available/show up, should CleanFlow
   block starting the service, or warn you and allow a manager override?” The
-  hard-block policy is awaiting her validation. Do not include this feature in
-  a broad deployment until that decision is resolved.
+  hard-block policy is awaiting her validation, not rejected. Do not reintegrate
+  it until that decision and any needed adjustment are reviewed.
 - No OneSignal reminder-provider cutover is approved. FCM remains the scheduled
   reminder default.
 
