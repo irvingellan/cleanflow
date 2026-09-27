@@ -1,7 +1,9 @@
 # CleanFlow — Current State
 
 - **Updated:** 2026-09-27
-- **Repository:** `main`; use the current Git checkout/log as the source revision.
+- **Repository checkout:** `feature/whatsapp-deep-link-2026-09-27`, based on
+  `main` at `c5b3f84`; this feature branch is not merged. Use the current Git
+  checkout/log for the exact source revision.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
 
@@ -43,6 +45,14 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   `hold/required-cleaner-count-2026-09-27`, tested but **not deployed** and
   removed from deployable main. Its hard full-team start policy awaits Gabi
   (see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)).
+
+## Current branch work
+
+The WhatsApp click-to-chat handoff is implemented on this branch for
+manager-created Cleaner Offers and assigned-cleaner reminder previews. It uses
+the existing reviewed message text, opens a prefilled draft for the manager to
+manually send, and creates no sent/delivery state. It is not merged, deployed,
+or yet validated by Gabi. No WhatsApp API or automatic sending is involved.
 
 ## Real-use evidence
 

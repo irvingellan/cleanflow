@@ -39,7 +39,7 @@ function assertValidProfileEnums({ teamType, preferredPaymentMethod }) {
   }
 }
 
-export async function getCleanerNamesById(cleanerIds) {
+export async function getCleanerContactsById(cleanerIds) {
   const uniqueCleanerIds = [...new Set(cleanerIds.filter(Boolean))];
   const cleanerIdBatches = Array.from(
     { length: Math.ceil(uniqueCleanerIds.length / cleanerLookupBatchSize) },
@@ -64,9 +64,19 @@ export async function getCleanerNamesById(cleanerIds) {
     snapshots.flatMap((snapshot) =>
       snapshot.docs.map((cleanerSnapshot) => [
         cleanerSnapshot.id,
-        cleanerSnapshot.data().name,
+        {
+          name: cleanerSnapshot.data().name,
+          phone: cleanerSnapshot.data().phone,
+        },
       ]),
     ),
+  );
+}
+
+export async function getCleanerNamesById(cleanerIds) {
+  const contacts = await getCleanerContactsById(cleanerIds);
+  return Object.fromEntries(
+    Object.entries(contacts).map(([cleanerId, contact]) => [cleanerId, contact.name]),
   );
 }
 

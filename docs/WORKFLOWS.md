@@ -68,6 +68,13 @@ no amount snapshot may fall back to its legacy Job payout; Assignment-aware Job
 totals are not divided or treated as individual compensation. Interest/decline
 and manager-controlled Assignment behavior are unchanged.
 
+Where the manager has a Cleaner phone that can be safely interpreted as an
+international number, **Open in WhatsApp** opens the same Offer message used by
+Copy, prefilled for the manager to review and manually send. A missing or
+ambiguous number leaves Copy available and explains that a valid international
+WhatsApp number is needed. Opening WhatsApp is not evidence that a message was
+sent; CleanFlow records no sent/delivered/read state.
+
 ## Normal and team Job execution
 
 **CURRENT:** most Jobs use one Cleaner. Legacy Jobs use one assigned-Cleaner
@@ -314,6 +321,12 @@ manually into WhatsApp. Manager push summaries run at 19:00 America/Los_Angeles
 for tomorrow's Jobs and 07:00 America/Los_Angeles for today's Jobs. They contain
 counts only, use the current Job schedule, skip archived/non-operational Jobs,
 and send no push when the target date has no operational Jobs.
+
+The assigned-cleaner reminder preview may also open its exact visible message in
+WhatsApp when the assigned Cleaner's number is safe to target. Sensitive
+parking/access/key details remain excluded unless the manager explicitly opts
+in within that preview. The Copy fallback remains available; opening WhatsApp
+does not record a send or delivery.
 
 **VALIDATED REQUIREMENT / PLANNED:** later reminders may include:
 
