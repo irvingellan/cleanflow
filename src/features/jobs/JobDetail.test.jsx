@@ -303,7 +303,7 @@ describe("JobDetail lifecycle actions", () => {
       defaultClientPrice: 600,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare message" }));
     expect(writeText).not.toHaveBeenCalled();
 
     const preview = screen.getByRole("region", { name: "Review reminder for Ana" });
@@ -357,19 +357,23 @@ describe("JobDetail lifecycle actions", () => {
   });
 
   it.each([
-    ["en", "Open in WhatsApp", "WhatsApp opens with a prefilled draft."],
-    ["pt", "Abrir no WhatsApp", "O WhatsApp abrirá uma mensagem preenchida."],
-    ["es", "Abrir en WhatsApp", "WhatsApp abrirá un borrador con el mensaje."],
-  ])("localizes the WhatsApp handoff in %s", (language, actionLabel, note) => {
+    ["en", "Prepare message", "Review reminder for Ana", "Open in WhatsApp", "WhatsApp opens with a prefilled draft."],
+    ["pt", "Preparar mensagem", "Revisar lembrete para Ana", "Abrir no WhatsApp", "O WhatsApp abrirá uma mensagem preenchida."],
+    ["es", "Preparar mensaje", "Revisar recordatorio para Ana", "Abrir en WhatsApp", "WhatsApp abrirá un borrador con el mensaje."],
+  ])("localizes the assigned-cleaner message action in %s", (language, prepareLabel, previewTitle, actionLabel, note) => {
     const previousLanguage = window.localStorage.getItem("cleanflow-language");
     window.localStorage.setItem("cleanflow-language", language);
     const { unmount } = renderJobDetail("ASSIGNED", {
-      assignedCleanerId: "cleaner-a",
-      assignedCleanerName: "Ana",
+      schemaVersion: 2,
+      assignedCleanerIds: ["cleaner-a"],
       scheduledDate: "2026-09-08",
-    }, {}, { knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "+19495551234" }] });
+    }, {}, {
+      knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "+19495551234" }],
+      assignments: [{ id: "assignment-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Ana", isActive: true, executionStatus: "ASSIGNED" }],
+    });
     try {
-      fireEvent.click(screen.getByRole("button", { name: /Ana/ }));
+      fireEvent.click(screen.getByRole("button", { name: prepareLabel }));
+      expect(screen.getByRole("region", { name: previewTitle })).toBeVisible();
       expect(screen.getByRole("link", { name: actionLabel })).toBeVisible();
       expect(screen.getByText(new RegExp(note))).toBeVisible();
     } finally {
@@ -397,7 +401,7 @@ describe("JobDetail lifecycle actions", () => {
       keyCodeInfo: "Must not be included",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare message" }));
 
     expect(screen.getByRole("region", { name: "Review reminder for Ana" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Copy reminder" })).toBeEnabled();
@@ -1059,7 +1063,7 @@ describe("JobDetail lifecycle actions", () => {
       </TranslationProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy message for Ana" }));
+    fireEvent.click(within(screen.getByText("Ana").closest("article")).getByRole("button", { name: "Prepare message" }));
     expect(writeText).not.toHaveBeenCalled();
     const reminderPreview = screen.getByRole("region", { name: "Review reminder for Ana" });
     expect(reminderPreview).toBeVisible();

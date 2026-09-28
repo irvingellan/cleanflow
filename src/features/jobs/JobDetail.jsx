@@ -1160,7 +1160,7 @@ export function JobDetail({
           >
             {copiedCleanerId === (job.assignedCleanerId || "legacy-assigned-cleaner")
               ? translate("jobs.messageCopied")
-              : translate("jobs.copyMessageForCleaner", { cleaner: assignedCleanerName })}
+              : translate("jobs.prepareCleanerMessage")}
           </button>
         </section>
       )}
@@ -1222,9 +1222,7 @@ export function JobDetail({
                         >
                           {copiedCleanerId === assignment.cleanerId
                             ? translate("jobs.messageCopied")
-                            : translate("jobs.copyMessageForCleaner", {
-                              cleaner: assignmentCleanerName,
-                            })}
+                            : translate("jobs.prepareCleanerMessage")}
                         </button>
                       </div>
                     )}
