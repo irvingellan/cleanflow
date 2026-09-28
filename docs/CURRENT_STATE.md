@@ -1,10 +1,9 @@
 # CleanFlow — Current State
 
 - **Updated:** 2026-09-28
-- **Repository:** `main` remains the release source of truth; the combined
-  photo-diagnostics and Cleaner-language changes are being validated on
-  `integration/photo-diagnostics-cleaner-language-2026-09-28` and are not yet
-  deployed.
+- **Repository:** `main` remains the release source of truth. The combined
+  photo-diagnostics and Cleaner-language release is on `main` at `766883b`
+  and was deployed to production on 2026-09-28.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
 
@@ -61,12 +60,13 @@ non-mutating smoke checks. Gabi/cleaner acknowledgment and actual WhatsApp
 launch/manual-send behavior remain unvalidated. No WhatsApp API or automatic
 sending is involved.
 
-The Cleaner preferred-language boundary is implemented on the integration
-branch, not yet merged to `main` or deployed. Generated Offer/reminder text and
-the initial public Offer/Checklist locale use the allowlisted Cleaner
-preference, defaulting to English when missing or invalid; manager UI language
-remains independent. Public projections include only the language code, and
-Property free text remains verbatim.
+The Cleaner preferred-language boundary is deployed with `publicOffer`,
+`publicChecklist`, and Hosting from `766883b` (2026-09-28), awaiting real
+Gabi/cleaner validation. Generated Offer/reminder text and initial public
+Offer/Checklist locale use only the allowlisted Cleaner preference, falling
+back to English when missing or invalid; manager UI language remains
+independent. Public projections include only the language code, and Property
+free text remains verbatim.
 
 ## Real-use evidence
 
@@ -80,8 +80,9 @@ Property free text remains verbatim.
   real use, but not proof of a reliable complete journey.
 - The cleaner checklist supports JPEG, PNG, and WebP up to the current 5 MB
   limit; HEIC/HEIF is unsupported and the UI explains the supported formats.
-  The real mobile photo-upload failure has not been diagnosed. Do not claim
-  resizing or retry guidance resolved it.
+  Token-free photo failure diagnostics are deployed, but the real mobile
+  photo-upload failure remains unresolved. Do not claim resizing, retry
+  guidance, or diagnostics resolved it.
 - Irving's scheduled FCM receipt is confirmed; Gabi's reminder delivery remains
   a separate device/registration validation question.
 - Astra read-only Runs A, D, and E and the Project X-Ray review are candidate
@@ -94,10 +95,10 @@ Property free text remains verbatim.
   observe one real cleaning through saved checklist, required evidence,
   manager review, report use, and completion. Until then, the full pilot flow
   is not proven reliable.
-- The photo diagnostic correlates bounded browser and server outcomes without
-  checklist tokens or file contents. It cannot deliver a diagnostic while the
-  browser is offline; it does not establish the cause of the real upload
-  failure until deployed and observed.
+- Photo diagnostics correlate bounded browser/server stages and outcomes
+  without checklist tokens or file contents. Browser-side evidence cannot be
+  delivered while offline, and no real failure has yet been captured after
+  this deployment; the cause remains unknown.
 - Reduce double entry by reconciling upcoming work against Gabi's authoritative
   source. Define an explicit pilot exit criterion with her; do not assume the
   parallel-use period ends automatically.

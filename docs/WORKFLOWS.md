@@ -75,13 +75,13 @@ ambiguous number leaves Copy available and explains that a valid international
 WhatsApp number is needed. Opening WhatsApp is not evidence that a message was
 sent; CleanFlow records no sent/delivered/read state.
 
-**IMPLEMENTED, NOT YET DEPLOYED:** system-generated Offer messages use the
+**CURRENT (DEPLOYED 2026-09-28):** system-generated Offer messages use the
 target Cleaner's `preferredLanguage`, independently of manager UI language.
 The public Offer initially uses that same allowlisted language; its language
 selector remains a local override. Missing or unsupported preferences fall
 back to English. Cleaner contact projections include only name, phone, and
 preferred language for manager handoffs; the public projection exposes only
-the language code.
+the language code. Gabi/cleaner real-use validation is still pending.
 
 ## Normal and team Job execution
 
@@ -150,6 +150,15 @@ This is evidence collection only, not Assignment completion, email delivery,
 or a generic photo system. After `READY_FOR_REVIEW`, an active manager may
 explicitly approve the reviewed Run to complete its eligible Job; that manager
 action does not mark payment or payout as paid.
+
+**Photo failure evidence V1 is deployed (2026-09-28):** the public checklist
+records allowlisted browser and server upload stages, coarse file type/size,
+outcome, and random correlation IDs. A success is recorded only after the
+server confirms saved evidence. Diagnostics exclude bearer tokens, filenames,
+photo bytes, storage paths, checklist answers, and Property/Client data; they
+do not write operational records. Browser-side diagnostics may not arrive
+while offline. This evidence has not yet identified the real mobile upload
+failure, which remains unresolved.
 
 ## Client cleaning report
 
@@ -335,13 +344,14 @@ parking/access/key details remain excluded unless the manager explicitly opts
 in within that preview. The Copy fallback remains available; opening WhatsApp
 does not record a send or delivery.
 
-**IMPLEMENTED, NOT YET DEPLOYED:** the reminder's system-generated text and
+**CURRENT (DEPLOYED 2026-09-28):** the reminder's system-generated text and
 date formatting use the assigned Cleaner's allowlisted `preferredLanguage`,
 not the manager UI language. A manager-facing label identifies the message
 language. Property instructions and explicitly opted-in access text remain
 verbatim, so a message may contain more than one language. The public Checklist
 uses the capability-scoped Cleaner's preferred language as its initial locale;
-the selector is page-local and does not update the Cleaner record.
+the selector is page-local and does not update the Cleaner record. Real
+Gabi/cleaner validation remains pending.
 
 **VALIDATED REQUIREMENT / PLANNED:** later reminders may include:
 
