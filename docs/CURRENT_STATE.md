@@ -1,7 +1,9 @@
 # CleanFlow — Current State
 
-- **Updated:** 2026-09-27
-- **Repository:** `main`; use the current Git checkout/log for the exact source revision.
+- **Updated:** 2026-09-28
+- **Repository:** `main` remains the release source of truth; photo-upload
+  diagnostic work is on `feature/checklist-photo-diagnostics-2026-09-28` and
+  is not merged or deployed.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
 
@@ -84,6 +86,10 @@ sending is involved.
   observe one real cleaning through saved checklist, required evidence,
   manager review, report use, and completion. Until then, the full pilot flow
   is not proven reliable.
+- The feature-branch photo diagnostic correlates bounded browser and server
+  outcomes without checklist tokens or file contents. It cannot deliver a
+  diagnostic while the browser is offline; it does not establish the cause of
+  the real upload failure until reviewed, merged, deployed, and observed.
 - Reduce double entry by reconciling upcoming work against Gabi's authoritative
   source. Define an explicit pilot exit criterion with her; do not assume the
   parallel-use period ends automatically.

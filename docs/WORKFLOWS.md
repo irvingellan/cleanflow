@@ -145,7 +145,7 @@ action does not mark payment or payout as paid.
 
 ## Client cleaning report
 
-**CURRENT local implementation:** once the Checklist Run is
+**CURRENT deployed pilot flow:** once the Checklist Run is
 `READY_FOR_REVIEW`, an active manager can create a client report link, copy/open
 the newly issued link, replace it, or revoke it. The single report capability
 expires after seven days. The client opens a mobile-friendly, read-only page
@@ -169,9 +169,9 @@ Cleaner saves checklist, inventory, notes, and required photo
 → client opens a read-only report without an account
 ```
 
-Automatic email/WhatsApp delivery, a client account/portal, PDF generation,
-manager approval, and Job completion remain out of scope. The report-link
-implementation is local until its release is separately approved and deployed.
+Automatic email/WhatsApp delivery, a client account/portal, and PDF generation
+remain out of scope. Manager approval and Job completion are separate explicit
+manager actions; creating or opening a report does not trigger either action.
 
 **PLANNED:** future aggregate execution derivation must retain the distinction
 between Job and Assignment state. Any `WAITING_FOR_QA` state is optional and
@@ -254,8 +254,7 @@ payment processing are not currently implemented.
 
 ## Rescheduling workflow
 
-**VALIDATED REQUIREMENT / CURRENTLY IMPLEMENTED ON AN ISOLATED FEATURE BRANCH
-(NOT MERGED OR DEPLOYED):**
+**CURRENT deployed pilot flow:**
 
 ```text
 Manager changes Job schedule

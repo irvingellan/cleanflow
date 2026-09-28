@@ -20,7 +20,13 @@ import {
 } from "./devCenterAuthorization.js";
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
-import { normalizePublicChecklistLoadDiagnostic } from "./publicChecklistDiagnostics.js";
+import {
+  buildPublicChecklistPhotoUploadServerEvent,
+  normalizePublicChecklistLoadDiagnostic,
+  normalizePublicChecklistPhotoUploadDiagnostic,
+  publicChecklistPhotoFileType,
+  publicChecklistPhotoSizeBucket,
+} from "./publicChecklistDiagnostics.js";
 import { processChecklistReviewNotification } from "./checklistReviewNotifications.js";
 import { authorizedManagerDevices, requireOrganizationManager } from "./managerAuthorization.js";
 import {
@@ -336,6 +342,17 @@ function sendPublicError(response, status, error, diagnostics = null, requiremen
     ...(diagnostics ? { diagnostics } : {}),
     ...(requirements ? { requirements } : {}),
   });
+}
+
+function publicChecklistPhotoErrorCategory(error, stage) {
+  if (stage === "storage-write") return "storage_write_failed";
+  if (stage === "metadata-write") return "metadata_write_failed";
+  if (stage === "server-validation") {
+    if (error?.code === "already-exists") return "evidence_exists";
+    if (error?.code === "not-found" || error?.code === "failed-precondition") return "capability_unavailable";
+    if (error?.code === "invalid-argument") return "validation_rejected";
+  }
+  return "unknown";
 }
 
 function isAssignmentAwareJobData(jobData) {
@@ -1285,7 +1302,33 @@ export const publicChecklist = onRequest(
     let requestStage = "capability-resolution";
     let capabilityStartedAt = null;
     let capabilityDiagnostics = null;
+    let photoUploadStartedAt = null;
+    let photoUploadContext = null;
     try {
+      if (request.method === "POST" && request.body?.action === "PHOTO_UPLOAD_DIAGNOSTIC") {
+        const diagnostic = normalizePublicChecklistPhotoUploadDiagnostic(
+          request.body?.diagnostic,
+          request.get("user-agent") || "",
+        );
+        if (!diagnostic) {
+          sendPublicError(response, 400, "invalid_diagnostic");
+          return;
+        }
+        logger.info("Public checklist photo upload diagnostic.", diagnostic);
+        configureResponse(response);
+        response.status(204).end();
+        return;
+      }
+      if (request.method === "PUT") {
+        requestStage = "evidence-upload";
+        photoUploadStartedAt = Date.now();
+        photoUploadContext = {
+          sessionId: request.get("X-CleanFlow-Checklist-Session"),
+          requestId: request.get("X-CleanFlow-Checklist-Request"),
+          fileType: publicChecklistPhotoFileType(request.get("Content-Type")),
+          sizeBucket: publicChecklistPhotoSizeBucket(request.rawBody?.length),
+        };
+      }
       if (request.method === "POST" && request.body?.action === "LOAD_DIAGNOSTIC") {
         const diagnostic = normalizePublicChecklistLoadDiagnostic(
           request.body?.diagnostic,
@@ -1303,6 +1346,15 @@ export const publicChecklist = onRequest(
 
       const token = ["GET", "PUT"].includes(request.method) ? request.query.token : request.body?.token;
       if (!validToken(token)) {
+        if (request.method === "PUT" && photoUploadContext && photoUploadStartedAt !== null) {
+          logger.info("Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
+            ...photoUploadContext,
+            result: "error",
+            durationMs: Date.now() - photoUploadStartedAt,
+            stage: "server-validation",
+            errorCode: "capability_unavailable",
+          }, request.get("user-agent") || ""));
+        }
         sendPublicError(response, 404, "checklist_not_found");
         return;
       }
@@ -1332,7 +1384,6 @@ export const publicChecklist = onRequest(
         return;
       }
       if (request.method === "PUT") {
-        requestStage = "evidence-upload";
         const result = await uploadPublicChecklistEvidence(db, {
           organizationId,
           tokenHash: hashToken(token),
@@ -1340,6 +1391,12 @@ export const publicChecklist = onRequest(
           contentType: request.get("Content-Type")?.split(";")[0]?.trim().toLowerCase(),
           bytes: request.rawBody,
         });
+        logger.info("Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
+          ...photoUploadContext,
+          result: "success",
+          durationMs: Date.now() - photoUploadStartedAt,
+          stage: "server-confirmed",
+        }, request.get("user-agent") || ""));
         configureResponse(response);
         response.status(200).json(result);
         return;
@@ -1402,6 +1459,17 @@ export const publicChecklist = onRequest(
         : 404;
       sendPublicError(response, status, status === 410 ? "checklist_unavailable" : "checklist_not_found", diagnostics);
     } catch (error) {
+      if (requestStage === "evidence-upload" && photoUploadContext && photoUploadStartedAt !== null) {
+        const diagnosticStage = ["server-validation", "storage-write", "metadata-write"].includes(error?.checklistPhotoDiagnosticStage)
+          ? error.checklistPhotoDiagnosticStage : "unknown";
+        logger.info("Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
+          ...photoUploadContext,
+          result: "error",
+          durationMs: Date.now() - photoUploadStartedAt,
+          stage: diagnosticStage,
+          errorCode: publicChecklistPhotoErrorCategory(error, diagnosticStage),
+        }, request.get("user-agent") || ""));
+      }
       const sessionId = request.get("X-CleanFlow-Checklist-Session");
       const errorCode = ["invalid-argument", "not-found", "failed-precondition", "already-exists", "aborted", "unavailable", "deadline-exceeded"].includes(error?.code)
         ? error.code : "internal";

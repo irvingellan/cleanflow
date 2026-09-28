@@ -37,6 +37,22 @@ function evidenceReference(database, organizationId, jobId, runId, requirementId
     .doc(requirementId);
 }
 
+function markPhotoDiagnosticStage(error, stage) {
+  const safeError = error && typeof error === "object" ? error : new Error("Checklist photo request failed.");
+  try {
+    Object.defineProperty(safeError, "checklistPhotoDiagnosticStage", {
+      value: stage,
+      configurable: true,
+      enumerable: false,
+    });
+  } catch { /* stage metadata is diagnostic only */ }
+  return safeError;
+}
+
+function validationOrUnknownStage(error) {
+  return error instanceof HttpsError ? "server-validation" : "unknown";
+}
+
 function detectImage(buffer) {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return { contentType: "image/jpeg", extension: "jpg" };
@@ -126,19 +142,30 @@ export async function uploadPublicChecklistEvidence(database, {
   now = new Date(),
   storage = getStorage(),
 }) {
-  const image = normalizeImageUpload({ contentType, bytes });
-  const initial = await resolveActiveCapability(database, { organizationId, tokenHash, now });
+  let image;
+  try {
+    image = normalizeImageUpload({ contentType, bytes });
+  } catch (error) {
+    throw markPhotoDiagnosticStage(error, "server-validation");
+  }
+
+  let initial;
+  try {
+    initial = await resolveActiveCapability(database, { organizationId, tokenHash, now });
+  } catch (error) {
+    throw markPhotoDiagnosticStage(error, validationOrUnknownStage(error));
+  }
   if (initial.run.status !== "DRAFT") {
-    throw new HttpsError("failed-precondition", "Checklist Run is no longer editable.");
+    throw markPhotoDiagnosticStage(new HttpsError("failed-precondition", "Checklist Run is no longer editable."), "server-validation");
   }
   if (!isPilotChecklistPhotoRequirement(initial.run, requirementId)) {
-    throw new HttpsError("invalid-argument", "Checklist photo requirement is invalid.");
+    throw markPhotoDiagnosticStage(new HttpsError("invalid-argument", "Checklist photo requirement is invalid."), "server-validation");
   }
   if (initial.evidence) {
     if (initial.evidence.contentHash === image.contentHash && initial.evidence.status === "SAVED") {
       return { duplicate: true, evidence: projectChecklistEvidence(initial.evidence) };
     }
-    throw new HttpsError("already-exists", "A checklist photo is already saved for this requirement.");
+    throw markPhotoDiagnosticStage(new HttpsError("already-exists", "A checklist photo is already saved for this requirement."), "server-validation");
   }
 
   const storagePath = evidenceStoragePath({
@@ -166,47 +193,53 @@ export async function uploadPublicChecklistEvidence(database, {
     } catch (error) {
       // A matching deterministic object can be the prior attempt whose HTTP
       // response was lost. Firestore remains the source of truth below.
-      if (error?.code !== 412 && error?.code !== "412") throw error;
+      if (error?.code !== 412 && error?.code !== "412") throw markPhotoDiagnosticStage(error, "storage-write");
     }
 
-    const finalized = await database.runTransaction(async (transaction) => {
-      const [capabilitySnapshot, jobSnapshot, runSnapshot, evidenceSnapshot] = await Promise.all([
-        transaction.get(initial.capabilityRef), transaction.get(initial.jobRef),
-        transaction.get(initial.runRef), transaction.get(initial.evidenceRef),
-      ]);
-      if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) {
-        throw new HttpsError("not-found", "Checklist capability not found.");
-      }
-      const capability = capabilitySnapshot.data();
-      const job = jobSnapshot.data();
-      const run = runSnapshot.data();
-      if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, job, run, now) !== "ACTIVE") {
-        throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
-      }
-      if (run.status !== "DRAFT") throw new HttpsError("failed-precondition", "Checklist Run is no longer editable.");
-      if (!isPilotChecklistPhotoRequirement(run, requirementId)) {
-        throw new HttpsError("invalid-argument", "Checklist photo requirement is invalid.");
-      }
-      if (evidenceSnapshot.exists) {
-        const evidence = evidenceSnapshot.data();
-        if (evidence.contentHash === image.contentHash && evidence.status === "SAVED") {
-          return { duplicate: true, evidence: projectChecklistEvidence(evidence) };
+    let finalized;
+    try {
+      finalized = await database.runTransaction(async (transaction) => {
+        const [capabilitySnapshot, jobSnapshot, runSnapshot, evidenceSnapshot] = await Promise.all([
+          transaction.get(initial.capabilityRef), transaction.get(initial.jobRef),
+          transaction.get(initial.runRef), transaction.get(initial.evidenceRef),
+        ]);
+        if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) {
+          throw new HttpsError("not-found", "Checklist capability not found.");
         }
-        throw new HttpsError("already-exists", "A checklist photo is already saved for this requirement.");
-      }
-      const evidence = {
-        status: "SAVED",
-        runId: initial.location.runId,
-        requirementId,
-        storagePath,
-        contentHash: image.contentHash,
-        contentType: image.contentType,
-        sizeBytes: bytes.length,
-        createdAt: FieldValue.serverTimestamp(),
-      };
-      transaction.create(initial.evidenceRef, evidence);
-      return { duplicate: false, evidence: projectChecklistEvidence(evidence) };
-    });
+        const capability = capabilitySnapshot.data();
+        const job = jobSnapshot.data();
+        const run = runSnapshot.data();
+        if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, job, run, now) !== "ACTIVE") {
+          throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
+        }
+        if (run.status !== "DRAFT") throw new HttpsError("failed-precondition", "Checklist Run is no longer editable.");
+        if (!isPilotChecklistPhotoRequirement(run, requirementId)) {
+          throw new HttpsError("invalid-argument", "Checklist photo requirement is invalid.");
+        }
+        if (evidenceSnapshot.exists) {
+          const evidence = evidenceSnapshot.data();
+          if (evidence.contentHash === image.contentHash && evidence.status === "SAVED") {
+            return { duplicate: true, evidence: projectChecklistEvidence(evidence) };
+          }
+          throw new HttpsError("already-exists", "A checklist photo is already saved for this requirement.");
+        }
+        const evidence = {
+          status: "SAVED",
+          runId: initial.location.runId,
+          requirementId,
+          storagePath,
+          contentHash: image.contentHash,
+          contentType: image.contentType,
+          sizeBytes: bytes.length,
+          createdAt: FieldValue.serverTimestamp(),
+        };
+        transaction.create(initial.evidenceRef, evidence);
+        return { duplicate: false, evidence: projectChecklistEvidence(evidence) };
+      });
+    } catch (error) {
+      const stage = validationOrUnknownStage(error) === "server-validation" ? "server-validation" : "metadata-write";
+      throw markPhotoDiagnosticStage(error, stage);
+    }
     return finalized;
   } catch (error) {
     // A failed final authorization/context check must not leave a newly-created
