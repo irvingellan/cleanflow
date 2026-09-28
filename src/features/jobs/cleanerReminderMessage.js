@@ -33,9 +33,9 @@ export function buildCleanerReminderMessage({
   lines.push(`📍 ${translate("jobs.reminderProperty", { property: propertyName })}`);
 
   const cleanerInstructions = typeof propertyDetails?.cleanerInstructions === "string"
-    ? propertyDetails.cleanerInstructions.trim()
+    ? propertyDetails.cleanerInstructions
     : "";
-  if (cleanerInstructions) {
+  if (cleanerInstructions.trim()) {
     lines.push(translate("jobs.reminderInstructions", { instructions: cleanerInstructions }));
   }
 
@@ -49,7 +49,7 @@ export function buildCleanerReminderMessage({
     if (sensitiveDetails.length > 0) {
       lines.push("", translate("jobs.reminderSensitiveAccessHeading"));
       for (const [key, value] of sensitiveDetails) {
-        lines.push(translate(key, { details: value.trim() }));
+        lines.push(translate(key, { details: value }));
       }
     }
   }

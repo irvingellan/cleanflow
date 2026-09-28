@@ -10,8 +10,12 @@ export const cleanerProfileLimits = {
   paymentContact: 160,
 };
 
-function normalizedCleanerLanguage(language) {
+export function normalizeCleanerPreferredLanguage(language) {
   return supportedCleanerLanguages.includes(language) ? language : "en";
+}
+
+function formPreferredLanguage(language) {
+  return supportedCleanerLanguages.includes(language) ? language : "";
 }
 
 function normalizedCleanerText(value) {
@@ -26,11 +30,11 @@ export function normalizeCleanerPhone(phone) {
   return phone.trim().replace(/[\s()-]/g, "");
 }
 
-export function createEmptyCleanerForm(defaultPreferredLanguage) {
+export function createEmptyCleanerForm() {
   return {
     name: "",
     phone: "",
-    preferredLanguage: normalizedCleanerLanguage(defaultPreferredLanguage),
+    preferredLanguage: "",
     active: true,
     cityOrRegion: "",
     teamType: "",
@@ -41,17 +45,15 @@ export function createEmptyCleanerForm(defaultPreferredLanguage) {
 }
 
 /** Legacy Cleaner documents may omit operational profile fields; forms normalize them safely. */
-export function cleanerToForm(cleaner, defaultPreferredLanguage) {
+export function cleanerToForm(cleaner) {
   if (!cleaner) {
-    return createEmptyCleanerForm(defaultPreferredLanguage);
+    return createEmptyCleanerForm();
   }
 
   return {
     name: normalizedCleanerText(cleaner.name),
     phone: normalizedCleanerText(cleaner.phone),
-    preferredLanguage: normalizedCleanerLanguage(
-      cleaner.preferredLanguage || defaultPreferredLanguage,
-    ),
+    preferredLanguage: formPreferredLanguage(cleaner.preferredLanguage),
     active: typeof cleaner.active === "boolean" ? cleaner.active : true,
     cityOrRegion: normalizedCleanerText(cleaner.cityOrRegion),
     teamType: normalizedCleanerProfileOption(

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
 import {
   checklistCapabilityState,
+  loadPublicChecklistCapability,
   projectChecklistCapabilityForManager,
 } from "./checklistCapabilityService.js";
 
@@ -32,5 +33,81 @@ describe("Checklist capability state", () => {
     expect(summary).toEqual(expect.objectContaining({ state: "ACTIVE", cleanerId: "cleaner-a" }));
     expect(JSON.stringify(summary)).not.toContain("secret");
     expect(JSON.stringify(summary)).not.toContain("job");
+  });
+});
+
+describe("public checklist language projection", () => {
+  it("reads only the capability-scoped Cleaner language and keeps profile contact fields private", async () => {
+    const tokenHash = "safe-hash";
+    const capabilityPath = "organizations/org-a/jobs/job-a/checklistRuns/initial/checklistCapabilities/active";
+    const capability = {
+      status: "ACTIVE",
+      tokenHash,
+      cleanerId: "cleaner-a",
+      contextRevision: 0,
+      expiresAt: Timestamp.fromMillis(now.getTime() + 60_000),
+    };
+    const job = {
+      operationalStatus: "ASSIGNED",
+      assignedCleanerId: "cleaner-a",
+      assignedCleanerName: "Ana",
+      checklistContextRevision: 0,
+      propertyName: "Safe Property",
+      scheduledDate: "2026-09-20",
+    };
+    const run = {
+      status: "DRAFT",
+      propertySnapshot: { propertyName: "Safe Property" },
+      jobSnapshot: { scheduledDate: "2026-09-20" },
+      resolvedDefinition: { sections: [], inventoryItems: [], requiredPhotoTypes: [] },
+    };
+    const cleaner = {
+      preferredLanguage: "es",
+      phone: "private phone",
+      email: "private email",
+      internalNotes: "private notes",
+    };
+    const dataByPath = new Map([
+      [capabilityPath, capability],
+      ["organizations/org-a/jobs/job-a", job],
+      ["organizations/org-a/jobs/job-a/checklistRuns/initial", run],
+      ["organizations/org-a/jobs/job-a/checklistRuns/initial/drafts/current", null],
+      ["organizations/org-a/cleaners/cleaner-a", cleaner],
+    ]);
+    const reference = (path) => ({
+      path,
+      collection: (name) => ({
+        doc: (id) => reference(`${path}/${name}/${id}`),
+        where: () => ({ collectionPath: `${path}/${name}` }),
+      }),
+    });
+    const database = {
+      collectionGroup: () => ({
+        where: () => ({
+          limit: () => ({
+            get: async () => ({ size: 1, docs: [{ ref: reference(capabilityPath) }] }),
+          }),
+        }),
+      }),
+      doc: reference,
+      runTransaction: async (callback) => callback({
+        get: async (ref) => {
+          const data = dataByPath.get(ref.path);
+          return { exists: data !== undefined && data !== null, data: () => data };
+        },
+      }),
+    };
+
+    const result = await loadPublicChecklistCapability(database, {
+      organizationId: "org-a",
+      tokenHash,
+      now,
+    });
+
+    expect(result.checklist.preferredLanguage).toBe("es");
+    expect(result.checklist.assignedCleanerName).toBe("Ana");
+    expect(JSON.stringify(result.checklist)).not.toContain("private phone");
+    expect(JSON.stringify(result.checklist)).not.toContain("private email");
+    expect(JSON.stringify(result.checklist)).not.toContain("private notes");
   });
 });

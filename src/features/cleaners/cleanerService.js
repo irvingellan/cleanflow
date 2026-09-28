@@ -67,6 +67,7 @@ export async function getCleanerContactsById(cleanerIds) {
         {
           name: cleanerSnapshot.data().name,
           phone: cleanerSnapshot.data().phone,
+          preferredLanguage: cleanerSnapshot.data().preferredLanguage,
         },
       ]),
     ),

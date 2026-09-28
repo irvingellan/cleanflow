@@ -250,9 +250,18 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
       const name = job.assignedCleanerName;
       assignedCleanerName = typeof name === "string" ? name.trim().slice(0, 120) || null : null;
     }
+    const cleanerSnapshot = await transaction.get(
+      database.doc(`organizations/${organizationId}/cleaners/${capability.cleanerId}`),
+    );
+    const assignedCleanerPreferredLanguage = cleanerSnapshot.exists
+      ? cleanerSnapshot.data().preferredLanguage
+      : null;
     return {
       state: "active",
-      checklist: projectChecklistRunForCleaner(runSnapshot.data(), { assignedCleanerName }),
+      checklist: projectChecklistRunForCleaner(runSnapshot.data(), {
+        assignedCleanerName,
+        assignedCleanerPreferredLanguage,
+      }),
       draft: projectChecklistDraftForRead(
         runSnapshot.data(), draftSnapshot.exists ? draftSnapshot.data() : null,
       ),

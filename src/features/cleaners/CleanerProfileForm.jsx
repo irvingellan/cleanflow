@@ -14,7 +14,6 @@ import {
 
 export function CleanerProfileForm({
   cleaner,
-  defaultPreferredLanguage,
   onBack,
   onSave,
   onSaved,
@@ -22,16 +21,16 @@ export function CleanerProfileForm({
   const { translate } = useTranslation();
   const isEditing = Boolean(cleaner);
   const [formValues, setFormValues] = useState(() =>
-    cleanerToForm(cleaner, defaultPreferredLanguage),
+    cleanerToForm(cleaner),
   );
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
   useEffect(() => {
-    setFormValues(cleanerToForm(cleaner, defaultPreferredLanguage));
+    setFormValues(cleanerToForm(cleaner));
     setFormError("");
     setIsSaving(false);
-  }, [cleaner, defaultPreferredLanguage]);
+  }, [cleaner]);
 
   function updateField(event) {
     const { name, value, checked, type } = event.target;
@@ -168,6 +167,7 @@ export function CleanerProfileForm({
             onChange={updateField}
             required
           >
+            <option value="" disabled>{translate("cleaners.preferredLanguageRequired")}</option>
             <option value="en">{translate("language.english")}</option>
             <option value="pt">{translate("language.portuguese")}</option>
             <option value="es">{translate("language.spanish")}</option>

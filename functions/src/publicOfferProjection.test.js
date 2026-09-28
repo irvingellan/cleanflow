@@ -15,11 +15,12 @@ describe("public offer projection", () => {
     const result = publicOfferResult(availableOffer(), {
       operationalStatus: "OFFERED",
       cleanerPayout: 150,
-    });
+    }, { cleanerPreferredLanguage: "pt" });
 
     expect(result.offer).toMatchObject({
       offeredCompensation: 150,
       cleanerPayout: 150,
+      preferredLanguage: "pt",
       status: "PENDING",
     });
   });
@@ -56,11 +57,29 @@ describe("public offer projection", () => {
     expect(Object.keys(snapshotted.offer).sort()).toEqual([
       "assignmentAcknowledgment",
       "offeredCompensation",
+      "preferredLanguage",
       "propertyName",
       "scheduledDate",
       "scheduledStart",
       "status",
     ].sort());
+  });
+
+  it.each([
+    ["en", "en"],
+    ["pt", "pt"],
+    ["es", "es"],
+    [undefined, "en"],
+    ["fr", "en"],
+  ])("allowlists the public cleaner language and falls back to English for %s", (language, expected) => {
+    const result = publicOfferResult(availableOffer(), {
+      operationalStatus: "OFFERED",
+    }, { cleanerPreferredLanguage: language });
+
+    expect(result.offer.preferredLanguage).toBe(expected);
+    expect(result.offer).not.toHaveProperty("cleanerId");
+    expect(result.offer).not.toHaveProperty("phone");
+    expect(result.offer).not.toHaveProperty("email");
   });
 
   it("shows an explicit unset amount for v2 Offers instead of treating a Job total as per-cleaner pay", () => {

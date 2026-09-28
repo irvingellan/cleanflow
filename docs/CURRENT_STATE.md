@@ -1,6 +1,6 @@
 # CleanFlow — Current State
 
-- **Updated:** 2026-09-27
+- **Updated:** 2026-09-28
 - **Repository:** `main`; use the current Git checkout/log for the exact source revision.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
@@ -57,6 +57,13 @@ invalid-token behavior, Function ACTIVE state, and build/asset hashes passed
 non-mutating smoke checks. Gabi/cleaner acknowledgment and actual WhatsApp
 launch/manual-send behavior remain unvalidated. No WhatsApp API or automatic
 sending is involved.
+
+The Cleaner preferred-language boundary is implemented on
+`feature/cleaner-language-boundary-2026-09-28`, not yet merged to `main` or
+deployed. Generated Offer/reminder text and the initial public Offer/Checklist
+locale use the allowlisted Cleaner preference, defaulting to English when
+missing or invalid; manager UI language remains independent. Public projections
+include only the language code, and Property free text remains verbatim.
 
 ## Real-use evidence
 

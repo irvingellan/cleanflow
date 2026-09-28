@@ -162,6 +162,21 @@ describe("PublicChecklistPage", () => {
     expect(screen.getByText("Cleaner responsable: Ana Example")).toBeVisible();
   });
 
+  it("starts in the Cleaner preferred language without changing the manager's saved UI language", async () => {
+    window.localStorage.setItem("cleanflow-language", "en");
+    getPublicChecklist.mockResolvedValue({
+      checklist: { ...frozenChecklist, preferredLanguage: "pt" },
+      draft: createDraft(),
+    });
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Checklist de limpeza" })).toBeVisible();
+    expect(screen.getByLabelText("Idioma")).toHaveValue("pt");
+    fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "es" } });
+    expect(screen.getByRole("heading", { name: "Checklist de limpieza" })).toBeVisible();
+    expect(window.localStorage.getItem("cleanflow-language")).toBe("en");
+  });
+
   it("shows one mobile-safe required-photo control", async () => {
     const { container } = renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });

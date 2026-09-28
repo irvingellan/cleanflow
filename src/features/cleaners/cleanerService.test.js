@@ -33,15 +33,16 @@ describe("Cleaner contact lookup for manager handoff", () => {
         data: () => ({
           name: "Ana",
           phone: "+19495551234",
+          preferredLanguage: "pt",
           paymentContact: "must not escape this lookup",
         }),
       }],
     });
   });
 
-  it("returns only name and phone for referenced cleaners", async () => {
+  it("returns only name, phone, and preferred language for referenced cleaners", async () => {
     await expect(getCleanerContactsById(["cleaner-a", "cleaner-a", null])).resolves.toEqual({
-      "cleaner-a": { name: "Ana", phone: "+19495551234" },
+      "cleaner-a": { name: "Ana", phone: "+19495551234", preferredLanguage: "pt" },
     });
     expect(firestore.where).toHaveBeenCalledWith("__name__", "in", ["cleaner-a"]);
   });

@@ -411,6 +411,7 @@ export function usePublicChecklistDraft(token) {
         // The successful handoff response may omit this already-safe server
         // projection field; retain it for the confirmation view.
         assignedCleanerName: result.checklist.assignedCleanerName ?? current?.assignedCleanerName ?? null,
+        preferredLanguage: result.checklist.preferredLanguage ?? current?.preferredLanguage ?? null,
       }));
       setVisibleDraft(result.draft);
       setHasRecoveryWarning(false);

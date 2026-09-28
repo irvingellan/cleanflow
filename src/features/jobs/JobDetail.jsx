@@ -10,6 +10,7 @@ import {
 } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
+import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { formatIssueCategory } from "../issues/issuePresentation.js";
 import {
@@ -19,7 +20,7 @@ import {
   formatPrice,
   hasValue,
 } from "../../lib/presentation.js";
-import { useTranslation } from "../../i18n/translations.js";
+import { translateInLanguage, useTranslation } from "../../i18n/translations.js";
 import { ChecklistCapabilityControls } from "../checklists/ChecklistCapabilityControls.jsx";
 import {
   canManageAssignmentAwareOffers,
@@ -97,6 +98,7 @@ export function JobDetail({
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
   const [resolvedCleanerPhones, setResolvedCleanerPhones] = useState({});
+  const [resolvedCleanerLanguages, setResolvedCleanerLanguages] = useState({});
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
   const [removingAssignmentId, setRemovingAssignmentId] = useState(null);
@@ -197,8 +199,22 @@ export function JobDetail({
   const knownCleanerPhones = Object.fromEntries(
     knownCleaners.map((cleaner) => [cleaner.id, cleaner.phone]),
   );
+  const knownCleanerLanguages = Object.fromEntries(
+    knownCleaners.map((cleaner) => [cleaner.id, cleaner.preferredLanguage]),
+  );
   const cleanerNamesById = { ...resolvedCleanerNames, ...knownCleanerNames };
   const cleanerPhonesById = { ...resolvedCleanerPhones, ...knownCleanerPhones };
+  const cleanerLanguagesById = { ...resolvedCleanerLanguages, ...knownCleanerLanguages };
+  const cleanerLanguageFor = (cleanerId) =>
+    normalizeCleanerPreferredLanguage(cleanerLanguagesById[cleanerId]);
+  const cleanerLanguageLabelFor = (cleanerId) =>
+    translate(
+      `cleanerLanguage.${{
+        en: "english",
+        pt: "portuguese",
+        es: "spanish",
+      }[cleanerLanguageFor(cleanerId)]}`,
+    );
   const unresolvedCleanerIds = [
     job.assignedCleanerId,
     ...activeAssignments.map((assignment) => assignment.cleanerId),
@@ -274,8 +290,12 @@ export function JobDetail({
       propertyDetails: linkedProperty,
       includeSensitiveAccess: reminderPreview.includeSensitiveAccess,
       assignmentOfferUrl: reminderPreviewOfferUrl,
-      language,
-      translate,
+      language: cleanerLanguageFor(reminderPreview.cleanerId),
+      translate: (key, replacements) => translateInLanguage(
+        cleanerLanguageFor(reminderPreview.cleanerId),
+        key,
+        replacements,
+      ),
     })
     : "";
   const reminderWhatsAppUrl = reminderPreview
@@ -316,6 +336,7 @@ export function JobDetail({
     if (!cleanerLookupKey) {
       setResolvedCleanerNames({});
       setResolvedCleanerPhones({});
+      setResolvedCleanerLanguages({});
       return () => {
         isCurrent = false;
       };
@@ -333,11 +354,15 @@ export function JobDetail({
           setResolvedCleanerPhones(Object.fromEntries(
             Object.entries(cleanerContacts).map(([id, contact]) => [id, contact.phone]),
           ));
+          setResolvedCleanerLanguages(Object.fromEntries(
+            Object.entries(cleanerContacts).map(([id, contact]) => [id, contact.preferredLanguage]),
+          ));
         }
       } catch {
         if (isCurrent) {
           setResolvedCleanerNames({});
           setResolvedCleanerPhones({});
+          setResolvedCleanerLanguages({});
         }
       }
     }
@@ -628,8 +653,12 @@ export function JobDetail({
       scheduledStart: job.scheduledStart,
       offeredCompensation: publicOfferLink.offeredCompensation ?? null,
       publicUrl: publicOfferLink.url,
-      language,
-      translate,
+      language: cleanerLanguageFor(offer.cleanerId),
+      translate: (key, replacements) => translateInLanguage(
+        cleanerLanguageFor(offer.cleanerId),
+        key,
+        replacements,
+      ),
     });
   }
 
@@ -1342,6 +1371,12 @@ export function JobDetail({
 
           <div className="job-reminder-preview__message">
             <strong>{translate("jobs.reminderPreviewMessage")}</strong>
+            <p className="form-hint">
+              {translate("jobs.messageForCleanerLanguage", {
+                cleaner: reminderPreview.cleanerName,
+                language: cleanerLanguageLabelFor(reminderPreview.cleanerId),
+              })}
+            </p>
             <pre>{reminderPreviewMessage}</pre>
           </div>
           <p className="form-hint">{translate("whatsapp.manualSendNote")}</p>
@@ -1724,6 +1759,12 @@ export function JobDetail({
                         {hasValue(publicOfferLink.offeredCompensation)
                           ? formatPrice(publicOfferLink.offeredCompensation, translate, language)
                           : translate("publicOffer.amountNotSet")}
+                      </p>
+                      <p className="form-hint">
+                        {translate("jobs.messageForCleanerLanguage", {
+                          cleaner: offerCleanerName,
+                          language: cleanerLanguageLabelFor(offer.cleanerId),
+                        })}
                       </p>
                       <div className="offer-message-actions">
                         {offerWhatsAppUrl && (

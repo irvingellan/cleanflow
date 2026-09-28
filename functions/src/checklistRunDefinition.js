@@ -3,6 +3,7 @@ import { globalChecklistDefinition } from "./checklistDefinition.js";
 const allowedItemKeys = ["id", "label", "requiresPhoto", "canBeNotApplicable"];
 const allowedInventoryKeys = ["id", "label"];
 const allowedPhotoTypeKeys = ["id", "label", "maximum"];
+const supportedCleanerLanguages = new Set(["en", "pt", "es"]);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -129,7 +130,10 @@ export function buildChecklistRunSnapshot({ job, property }) {
   };
 }
 
-export function projectChecklistRunForCleaner(checklistRun, { assignedCleanerName = null } = {}) {
+export function projectChecklistRunForCleaner(checklistRun, {
+  assignedCleanerName = null,
+  assignedCleanerPreferredLanguage = null,
+} = {}) {
   const snapshot = checklistRun?.resolvedDefinition || {};
   const readyForReviewAt = checklistRun?.readyForReviewAt?.toDate?.()?.toISOString() || null;
   const safeAssignedCleanerName = typeof assignedCleanerName === "string"
@@ -144,6 +148,9 @@ export function projectChecklistRunForCleaner(checklistRun, { assignedCleanerNam
     scheduledDate: checklistRun?.jobSnapshot?.scheduledDate || null,
     scheduledStart: checklistRun?.jobSnapshot?.scheduledStart || null,
     assignedCleanerName: safeAssignedCleanerName,
+    preferredLanguage: supportedCleanerLanguages.has(assignedCleanerPreferredLanguage)
+      ? assignedCleanerPreferredLanguage
+      : null,
     sections: clone(snapshot.sections || []),
     inventoryItems: clone(snapshot.inventoryItems || []),
     requiredPhotoTypes: clone(snapshot.requiredPhotoTypes || []),

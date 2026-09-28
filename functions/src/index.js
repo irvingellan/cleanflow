@@ -84,6 +84,7 @@ if (getApps().length === 0) {
 const db = getFirestore();
 const organizationId = "cleanflow-demo";
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
+const supportedCleanerLanguages = new Set(["en", "pt", "es"]);
 const githubFeedbackToken = defineSecret("GITHUB_FEEDBACK_TOKEN");
 const githubFeedbackRepository = "irvingellan/cleanflow";
 const feedbackMessageLimit = 3000;
@@ -393,7 +394,10 @@ async function offerReferenceForTokenHash(tokenHash) {
   return jobReferenceFromOffer(offerDocument) ? offerDocument : null;
 }
 
-export function publicOfferResult(offerData, jobData, { assignmentAcknowledgment = null } = {}) {
+export function publicOfferResult(offerData, jobData, {
+  assignmentAcknowledgment = null,
+  cleanerPreferredLanguage = null,
+} = {}) {
   const state = offerState(offerData, jobData, new Date());
 
   if (state !== "available") {
@@ -405,6 +409,9 @@ export function publicOfferResult(offerData, jobData, { assignmentAcknowledgment
     scheduledDate: jobData.scheduledDate || null,
     scheduledStart: jobData.scheduledStart || null,
     status: offerData.status,
+    preferredLanguage: supportedCleanerLanguages.has(cleanerPreferredLanguage)
+      ? cleanerPreferredLanguage
+      : "en",
   };
 
   // The per-cleaner Offer snapshot is authoritative. Versionless/v1 Offers
@@ -469,15 +476,26 @@ async function loadPublicOffer(token) {
   }
 
   const jobData = jobSnapshot.data();
-  const assignmentAcknowledgment = await loadPublicOfferAssignmentAcknowledgment(db, {
-    organizationId,
-    jobId: jobDocument.id,
-    job: jobData,
-    offerId: offerDocument.id,
-    offer: offerData,
-    tokenHash,
+  const cleanerReference = validChecklistCleanerId(offerData.cleanerId)
+    ? db.collection("organizations").doc(organizationId).collection("cleaners").doc(offerData.cleanerId)
+    : null;
+  const [assignmentAcknowledgment, cleanerSnapshot] = await Promise.all([
+    loadPublicOfferAssignmentAcknowledgment(db, {
+      organizationId,
+      jobId: jobDocument.id,
+      job: jobData,
+      offerId: offerDocument.id,
+      offer: offerData,
+      tokenHash,
+    }),
+    cleanerReference ? cleanerReference.get() : Promise.resolve(null),
+  ]);
+  return publicOfferResult(offerData, jobData, {
+    assignmentAcknowledgment,
+    cleanerPreferredLanguage: cleanerSnapshot?.exists
+      ? cleanerSnapshot.data().preferredLanguage
+      : null,
   });
-  return publicOfferResult(offerData, jobData, { assignmentAcknowledgment });
 }
 
 function optionalContextValue(value, maximumLength) {
