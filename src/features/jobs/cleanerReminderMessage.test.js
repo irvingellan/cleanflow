@@ -179,6 +179,26 @@ describe("cleaner reminder message", () => {
     expect(confirmedMessage).toContain("Lockbox key 3921.");
   });
 
+  it("does not translate or rewrite Property free text", () => {
+    const originalInstructions = "  RESET thermostat exactly as shown.  ";
+    const originalParking = "  Gate note: leave the placard visible.  ";
+    const message = buildCleanerReminderMessage({
+      cleanerName: "Ana",
+      propertyName: "Harbor View Condo",
+      scheduledDate: "2026-09-08",
+      propertyDetails: {
+        cleanerInstructions: originalInstructions,
+        garageParking: originalParking,
+      },
+      includeSensitiveAccess: true,
+      language: "pt",
+      translate,
+    });
+
+    expect(message).toContain(`Cleaner instructions: ${originalInstructions}`);
+    expect(message).toContain(`Parking / garage: ${originalParking}`);
+  });
+
   it("copies the prepared message through the browser clipboard", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = navigator.clipboard;

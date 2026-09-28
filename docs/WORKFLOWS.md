@@ -75,6 +75,14 @@ ambiguous number leaves Copy available and explains that a valid international
 WhatsApp number is needed. Opening WhatsApp is not evidence that a message was
 sent; CleanFlow records no sent/delivered/read state.
 
+**IMPLEMENTED, NOT YET DEPLOYED:** system-generated Offer messages use the
+target Cleaner's `preferredLanguage`, independently of manager UI language.
+The public Offer initially uses that same allowlisted language; its language
+selector remains a local override. Missing or unsupported preferences fall
+back to English. Cleaner contact projections include only name, phone, and
+preferred language for manager handoffs; the public projection exposes only
+the language code.
+
 ## Normal and team Job execution
 
 **CURRENT:** most Jobs use one Cleaner. Legacy Jobs use one assigned-Cleaner
@@ -326,6 +334,14 @@ WhatsApp when the assigned Cleaner's number is safe to target. Sensitive
 parking/access/key details remain excluded unless the manager explicitly opts
 in within that preview. The Copy fallback remains available; opening WhatsApp
 does not record a send or delivery.
+
+**IMPLEMENTED, NOT YET DEPLOYED:** the reminder's system-generated text and
+date formatting use the assigned Cleaner's allowlisted `preferredLanguage`,
+not the manager UI language. A manager-facing label identifies the message
+language. Property instructions and explicitly opted-in access text remain
+verbatim, so a message may contain more than one language. The public Checklist
+uses the capability-scoped Cleaner's preferred language as its initial locale;
+the selector is page-local and does not update the Cleaner record.
 
 **VALIDATED REQUIREMENT / PLANNED:** later reminders may include:
 

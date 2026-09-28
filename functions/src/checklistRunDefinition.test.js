@@ -14,7 +14,10 @@ describe("cleaner checklist Property projection", () => {
       },
     });
 
-    const projection = projectChecklistRunForCleaner(snapshot, { assignedCleanerName: "Ana Example" });
+    const projection = projectChecklistRunForCleaner(snapshot, {
+      assignedCleanerName: "Ana Example",
+      assignedCleanerPreferredLanguage: "pt",
+    });
     const serializedProjection = JSON.stringify(projection);
 
     expect(serializedProjection).not.toContain("keyCodeInfo");
@@ -22,6 +25,7 @@ describe("cleaner checklist Property projection", () => {
     expect(serializedProjection).not.toContain("manager-only");
     expect(projection.cleanerInstructions).toBe("Clean the patio.");
     expect(projection.assignedCleanerName).toBe("Ana Example");
+    expect(projection.preferredLanguage).toBe("pt");
     expect(serializedProjection).not.toContain("email");
     expect(serializedProjection).not.toContain("Cleaner Run Raw Record");
   });
@@ -31,5 +35,22 @@ describe("cleaner checklist Property projection", () => {
     expect(projectChecklistRunForCleaner(snapshot, { assignedCleanerName: ` ${"A".repeat(140)} ` }).assignedCleanerName)
       .toHaveLength(120);
     expect(projectChecklistRunForCleaner(snapshot, { assignedCleanerName: "   " }).assignedCleanerName).toBeNull();
+  });
+
+  it.each([["en"], ["pt"], ["es"]])("projects only the supported preferred language %s", (language) => {
+    const snapshot = buildChecklistRunSnapshot({ job: {}, property: {} });
+    const projection = projectChecklistRunForCleaner(snapshot, {
+      assignedCleanerPreferredLanguage: language,
+    });
+    expect(projection.preferredLanguage).toBe(language);
+    expect(Object.keys(projection)).not.toContain("cleanerPhone");
+    expect(Object.keys(projection)).not.toContain("cleanerEmail");
+  });
+
+  it.each([[undefined], ["fr"], ["pt-BR"]])("omits missing or unsupported preferred language %s", (language) => {
+    const snapshot = buildChecklistRunSnapshot({ job: {}, property: {} });
+    expect(projectChecklistRunForCleaner(snapshot, {
+      assignedCleanerPreferredLanguage: language,
+    }).preferredLanguage).toBeNull();
   });
 });

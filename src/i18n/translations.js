@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, createElement, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 const languageStorageKey = "cleanflow-language";
 const TranslationContext = createContext(null);
@@ -8,6 +8,12 @@ export const languageOptions = [
   { code: "pt", label: "Português" },
   { code: "es", label: "Español" },
 ];
+
+const supportedLanguages = new Set(languageOptions.map(({ code }) => code));
+
+export function normalizeTranslationLanguage(language) {
+  return supportedLanguages.has(language) ? language : "en";
+}
 
 const messages = {
   en: {
@@ -1553,6 +1559,10 @@ Object.assign(messages.en, {
   "jobs.reminderKeyCodeInfo": "Key / code info: {details}",
   "jobs.reminderPreviewTitle": "Review reminder for {cleaner}",
   "jobs.reminderPreviewMessage": "Message to copy",
+  "jobs.messageForCleanerLanguage": "Message for {cleaner} · {language}",
+  "cleanerLanguage.english": "English",
+  "cleanerLanguage.portuguese": "Portuguese",
+  "cleanerLanguage.spanish": "Spanish",
   "jobs.reminderSensitiveAccessTitle": "Property access details — private",
   "jobs.reminderSensitiveAccessWarning": "Review the recipient before including these details. They will be copied into the message.",
   "jobs.reminderIncludeSensitiveAccess": "Include these sensitive access details in the copied message",
@@ -1595,6 +1605,10 @@ Object.assign(messages.pt, {
   "jobs.reminderKeyCodeInfo": "Informações de chave / código: {details}",
   "jobs.reminderPreviewTitle": "Revisar lembrete para {cleaner}",
   "jobs.reminderPreviewMessage": "Mensagem para copiar",
+  "jobs.messageForCleanerLanguage": "Mensagem para {cleaner} · {language}",
+  "cleanerLanguage.english": "Inglês",
+  "cleanerLanguage.portuguese": "Português",
+  "cleanerLanguage.spanish": "Espanhol",
   "jobs.reminderSensitiveAccessTitle": "Informações de acesso da propriedade — privadas",
   "jobs.reminderSensitiveAccessWarning": "Confira o destinatário antes de incluir estas informações. Elas serão copiadas para a mensagem.",
   "jobs.reminderIncludeSensitiveAccess": "Incluir estas informações sensíveis de acesso na mensagem copiada",
@@ -1637,6 +1651,10 @@ Object.assign(messages.es, {
   "jobs.reminderKeyCodeInfo": "Información de llave / código: {details}",
   "jobs.reminderPreviewTitle": "Revisar recordatorio para {cleaner}",
   "jobs.reminderPreviewMessage": "Mensaje para copiar",
+  "jobs.messageForCleanerLanguage": "Mensaje para {cleaner} · {language}",
+  "cleanerLanguage.english": "Inglés",
+  "cleanerLanguage.portuguese": "Portugués",
+  "cleanerLanguage.spanish": "Español",
   "jobs.reminderSensitiveAccessTitle": "Información de acceso a la propiedad — privada",
   "jobs.reminderSensitiveAccessWarning": "Revisa el destinatario antes de incluir estos datos. Se copiarán en el mensaje.",
   "jobs.reminderIncludeSensitiveAccess": "Incluir estos datos sensibles de acceso en el mensaje copiado",
@@ -1694,6 +1712,35 @@ Object.assign(messages.es, {
   "jobs.reminderCleanFlowConfirmation": "Confirma que asistirás mediante tu enlace de CleanFlow: {url}",
 });
 
+export function translateInLanguage(language, key, replacements = {}) {
+  const safeLanguage = normalizeTranslationLanguage(language);
+  const message = messages[safeLanguage][key] || messages.en[key] || key;
+  return Object.entries(replacements).reduce(
+    (result, [replacementKey, replacementValue]) => result.replaceAll(`{${replacementKey}}`, String(replacementValue)),
+    message,
+  );
+}
+
+/** Public cleaner pages keep their locale local to the page, not the manager's saved UI preference. */
+export function usePublicTranslation(preferredLanguage) {
+  const [selectedLanguage, setSelectedLanguage] = useState(null);
+  const userSelectedLanguageRef = useRef(false);
+  const language = userSelectedLanguageRef.current && selectedLanguage
+    ? selectedLanguage
+    : normalizeTranslationLanguage(preferredLanguage);
+
+  const setLanguage = (nextLanguage) => {
+    userSelectedLanguageRef.current = true;
+    setSelectedLanguage(normalizeTranslationLanguage(nextLanguage));
+  };
+  const translate = useMemo(
+    () => (key, replacements = {}) => translateInLanguage(language, key, replacements),
+    [language],
+  );
+
+  return { language, setLanguage, translate };
+}
+
 function getInitialLanguage() {
   if (typeof window === "undefined") return "en";
 
@@ -1709,13 +1756,7 @@ export function TranslationProvider({ children }) {
   }, [language]);
 
   const value = useMemo(() => {
-    function translate(key, replacements = {}) {
-      const message = messages[language][key] || messages.en[key] || key;
-      return Object.entries(replacements).reduce(
-        (result, [replacementKey, replacementValue]) => result.replaceAll(`{${replacementKey}}`, String(replacementValue)),
-        message,
-      );
-    }
+    const translate = (key, replacements = {}) => translateInLanguage(language, key, replacements);
 
     return { language, setLanguage, translate };
   }, [language]);

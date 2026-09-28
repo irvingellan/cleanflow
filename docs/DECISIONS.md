@@ -121,6 +121,14 @@ Likely initial languages:
 
 Static interface translation and AI translation of user-generated content are separate concerns.
 
+For Cleaner-facing pilot flows, the Cleaner record's allowlisted
+`preferredLanguage` (`en`, `pt`, or `es`) controls system-generated messages
+and the initial locale of public Offer/Checklist pages. Manager UI language is
+independent. Missing or unsupported legacy values fall back to English without
+a data migration; public-page language changes remain local and do not update
+the Cleaner record. Manager-entered Property text is included verbatim, never
+automatically translated.
+
 ---
 
 ## DEC-007 — Issues are separate from job operational status

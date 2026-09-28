@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
-import { languageOptions, useTranslation } from "../../i18n/translations.js";
+import { languageOptions, usePublicTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
 import { checklistSaveStates, usePublicChecklistDraft } from "./usePublicChecklistDraft.js";
 import {
@@ -279,7 +279,6 @@ function SaveStatus({ saveState, hasRecoveryWarning, isResolvingConflict, onSave
 
 /** The only public editing surface; all mutations remain capability-gated HTTP calls. */
 export function PublicChecklistPage({ token }) {
-  const { language, setLanguage, translate } = useTranslation();
   const routeOpenedAtRef = useRef(globalThis.performance?.now?.() ?? Date.now());
   const diagnosticSessionRef = useRef(getPublicChecklistSessionId());
   const diagnosticRecordedRef = useRef(false);
@@ -301,6 +300,7 @@ export function PublicChecklistPage({ token }) {
     submitForManagerReview,
     retryLoad,
   } = usePublicChecklistDraft(token);
+  const { language, setLanguage, translate } = usePublicTranslation(checklist?.preferredLanguage);
   const fieldTargetsRef = useRef(new Map());
   const [hasAttemptedValidation, setHasAttemptedValidation] = useState(false);
   const [confirmedEvidenceIds, setConfirmedEvidenceIds] = useState(() => new Set());

@@ -1470,6 +1470,7 @@ test("current public Offer link acknowledges only its active Assignment without 
     scheduledDate: null,
     scheduledStart: null,
     status: "INTERESTED",
+    preferredLanguage: "en",
     offeredCompensation: 125,
     assignmentAcknowledgment: "AWAITING_CONFIRMATION",
   });

@@ -383,6 +383,107 @@ describe("JobDetail lifecycle actions", () => {
     }
   });
 
+  it("builds the assigned-cleaner reminder in the Cleaner language while keeping preview controls in manager English", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    window.localStorage.setItem("cleanflow-language", "en");
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2,
+      propertyId: "property-1",
+      propertyName: "Harbor View Condo",
+      assignedCleanerIds: ["cleaner-a"],
+      scheduledDate: "2026-09-08",
+      scheduledStart: "10:30",
+    }, {}, {
+      knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "+19495551234", preferredLanguage: "pt" }],
+      assignments: [{ id: "assignment-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Ana", isActive: true, executionStatus: "ASSIGNED" }],
+    }, {
+      id: "property-1",
+      cleanerInstructions: "Reinicie o termostato.",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Prepare message" }));
+    const preview = screen.getByRole("region", { name: "Review reminder for Ana" });
+    expect(within(preview).getByText("Message for Ana · Portuguese")).toBeVisible();
+    const message = within(preview).getByText(/Olá Ana! 😊/);
+    expect(message).toHaveTextContent("Data:");
+    expect(message).toHaveTextContent("Reinicie o termostato.");
+    const whatsappLink = within(preview).getByRole("link", { name: "Open in WhatsApp" });
+    expect(new URL(whatsappLink.href).searchParams.get("text")).toBe(message.textContent);
+    fireEvent.click(within(preview).getByRole("button", { name: "Copy reminder" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0][0]).toBe(message.textContent);
+    expect(screen.getByRole("button", { name: "Message copied" })).toBeVisible();
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
+  it.each([
+    ["en", "pt", "Olá, Ana!", "Message for Ana · Portuguese", "Copy offer message"],
+    ["pt", "en", "Hi Ana,", "Mensagem para Ana · Inglês", "Copiar mensagem da oferta"],
+    ["en", "es", "Hola, Ana:", "Message for Ana · Spanish", "Copy offer message"],
+  ])("uses %s manager UI with %s Cleaner preference for the Offer message", async (
+    managerLanguage,
+    cleanerLanguage,
+    expectedGreeting,
+    expectedContext,
+    managerCopyLabel,
+  ) => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    window.localStorage.setItem("cleanflow-language", managerLanguage);
+    const onCreatePublicOfferLink = vi.fn().mockResolvedValue({
+      url: "https://cleanflow.example/offer/target-language",
+      offeredCompensation: 125,
+    });
+
+    renderJobDetail("OFFERED", {
+      schemaVersion: 1,
+      scheduledDate: "2026-09-08",
+      cleanerPayout: 125,
+      offers: [{ id: "offer-a", cleanerId: "cleaner-a", cleanerName: "Ana", status: "PENDING" }],
+    }, { onCreatePublicOfferLink }, {
+      knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "+19495551234", preferredLanguage: cleanerLanguage }],
+    });
+
+    fireEvent.click(screen.getByRole("button", {
+      name: managerLanguage === "pt" ? "Criar link público" : "Create public link",
+    }));
+    fireEvent.click(screen.getByRole("button", {
+      name: managerLanguage === "pt" ? "Criar link público" : "Create public link",
+    }));
+    await waitFor(() => expect(onCreatePublicOfferLink).toHaveBeenCalledOnce());
+
+    expect(screen.getByText(expectedContext)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: managerCopyLabel }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0][0]).toContain(expectedGreeting);
+    expect(writeText.mock.calls[0][0]).toMatch(/125/);
+    const whatsappLink = screen.getByRole("link", {
+      name: managerLanguage === "pt" ? "Abrir no WhatsApp" : "Open in WhatsApp",
+    });
+    expect(new URL(whatsappLink.href).searchParams.get("text")).toBe(writeText.mock.calls[0][0]);
+    expect(screen.getByRole("button", {
+      name: managerLanguage === "pt" ? "Mensagem da oferta copiada" : "Offer message copied",
+    })).toBeVisible();
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
   it("uses only the active assigned cleaner and exact linked Property for schema-v2 reminders", () => {
     renderJobDetail("ASSIGNED", {
       schemaVersion: 2,

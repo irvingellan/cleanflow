@@ -59,7 +59,7 @@ import {
   getPublicOffer,
   respondToPublicOffer,
 } from "./features/public-offers/publicOfferService.js";
-import { languageOptions, useTranslation } from "./i18n/translations.js";
+import { languageOptions, usePublicTranslation, useTranslation } from "./i18n/translations.js";
 import { ThemeProvider, useTheme } from "./theme/theme.js";
 import { useManagerPageLoadTelemetry } from "./features/telemetry/useManagerPageLoadTelemetry.js";
 import { ManagerPageLoadDiagnostics } from "./features/telemetry/ManagerPageLoadDiagnostics.jsx";
@@ -205,8 +205,8 @@ function App() {
 }
 
 function PublicOfferPage({ token }) {
-  const { language, setLanguage, translate } = useTranslation();
   const [offer, setOffer] = useState(null);
+  const { language, setLanguage, translate } = usePublicTranslation(offer?.preferredLanguage);
   const [loadError, setLoadError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isResponding, setIsResponding] = useState(false);
@@ -305,7 +305,7 @@ function PublicOfferPage({ token }) {
             <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
             <h1 id="public-offer-page-title">{content.productName}</h1>
           </div>
-          <LanguageSelector language={language} onChange={setLanguage} />
+          <LanguageSelector language={language} onChange={setLanguage} translate={translate} />
         </header>
 
         {isLoading && <StateCard message={translate("publicOffer.loading")} status="status" />}
@@ -1143,7 +1143,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "cleaner-create" && (
           <CleanerProfileForm
             key="new-cleaner"
-            defaultPreferredLanguage={language}
             onBack={showCleaners}
             onSave={saveCleaner}
             onSaved={() => setView("cleaner-success")}
@@ -1154,7 +1153,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
           <CleanerProfileForm
             key={selectedCleaner.id}
             cleaner={selectedCleaner}
-            defaultPreferredLanguage={language}
             onBack={showCleanerDetail}
             onSave={saveCleaner}
             onSaved={() => setView("cleaner-success")}
@@ -1453,8 +1451,9 @@ function AuthenticationLayout({ children, language, onLanguageChange }) {
   );
 }
 
-function LanguageSelector({ language, onChange }) {
-  const { translate } = useTranslation();
+function LanguageSelector({ language, onChange, translate: localizedTranslate }) {
+  const { translate: managerTranslate } = useTranslation();
+  const translate = localizedTranslate || managerTranslate;
 
   return (
     <select

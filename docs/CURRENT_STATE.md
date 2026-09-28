@@ -1,9 +1,10 @@
 # CleanFlow — Current State
 
 - **Updated:** 2026-09-28
-- **Repository:** `main` remains the release source of truth; photo-upload
-  diagnostic work is on `feature/checklist-photo-diagnostics-2026-09-28` and
-  is not merged or deployed.
+- **Repository:** `main` remains the release source of truth; the combined
+  photo-diagnostics and Cleaner-language changes are being validated on
+  `integration/photo-diagnostics-cleaner-language-2026-09-28` and are not yet
+  deployed.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
 
@@ -60,6 +61,13 @@ non-mutating smoke checks. Gabi/cleaner acknowledgment and actual WhatsApp
 launch/manual-send behavior remain unvalidated. No WhatsApp API or automatic
 sending is involved.
 
+The Cleaner preferred-language boundary is implemented on the integration
+branch, not yet merged to `main` or deployed. Generated Offer/reminder text and
+the initial public Offer/Checklist locale use the allowlisted Cleaner
+preference, defaulting to English when missing or invalid; manager UI language
+remains independent. Public projections include only the language code, and
+Property free text remains verbatim.
+
 ## Real-use evidence
 
 - Gabi has created real Jobs in CleanFlow. Selected real Properties from her
@@ -86,10 +94,10 @@ sending is involved.
   observe one real cleaning through saved checklist, required evidence,
   manager review, report use, and completion. Until then, the full pilot flow
   is not proven reliable.
-- The feature-branch photo diagnostic correlates bounded browser and server
-  outcomes without checklist tokens or file contents. It cannot deliver a
-  diagnostic while the browser is offline; it does not establish the cause of
-  the real upload failure until reviewed, merged, deployed, and observed.
+- The photo diagnostic correlates bounded browser and server outcomes without
+  checklist tokens or file contents. It cannot deliver a diagnostic while the
+  browser is offline; it does not establish the cause of the real upload
+  failure until deployed and observed.
 - Reduce double entry by reconciling upcoming work against Gabi's authoritative
   source. Define an explicit pilot exit criterion with her; do not assume the
   parallel-use period ends automatically.
