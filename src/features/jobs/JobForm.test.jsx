@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
-import { CleaningSuccess, CreateCleaningForm } from "./JobForm.jsx";
+import { CreateCleaningForm } from "./JobForm.jsx";
 import { createJob } from "./jobService.js";
 
 vi.mock("./jobService.js", () => ({
@@ -236,26 +236,4 @@ describe("CreateCleaningForm", () => {
     expect(screen.getByRole("button", { name: "Create cleaning" })).toBeEnabled();
   });
 
-  it("shows the saved Job's date and time and opens that Job", () => {
-    const onViewJob = vi.fn();
-    render(
-      <TranslationProvider>
-        <CleaningSuccess
-          job={{
-            id: "job-1",
-            propertyName: "Pacific Beach Condo",
-            scheduledDate: "2026-09-01",
-            scheduledStart: "10:00",
-          }}
-          onBack={vi.fn()}
-          onViewJob={onViewJob}
-        />
-      </TranslationProvider>,
-    );
-
-    expect(screen.getByRole("heading", { name: "Service created" })).toBeVisible();
-    expect(screen.getByText(/Sep 1, 2026.*10:00/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "View service" }));
-    expect(onViewJob).toHaveBeenCalledTimes(1);
-  });
 });

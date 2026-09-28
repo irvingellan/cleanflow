@@ -3504,6 +3504,17 @@ button.summary-card {
   padding-top: 20px;
 }
 
+.job-detail__quick-action {
+  margin-bottom: 20px;
+}
+
+.offers-section__success {
+  margin: 0 0 14px;
+  color: var(--color-brand-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
 .offers-section__header {
   display: flex;
   align-items: center;

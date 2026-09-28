@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
 import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
@@ -49,6 +49,7 @@ export function JobDetail({
   offers,
   isLoadingOffers,
   hasOffersError,
+  offersCreatedCount = null,
   assignments,
   isLoadingAssignments,
   hasAssignmentsError,
@@ -148,6 +149,8 @@ export function JobDetail({
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const [reminderPreview, setReminderPreview] = useState(null);
   const [isCopyingReminder, setIsCopyingReminder] = useState(false);
+  const offersSectionRef = useRef(null);
+  const didFocusNewOffersRef = useRef(false);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
   const startedAt = formatCreatedAt(job.startedAt, language);
@@ -218,6 +221,15 @@ export function JobDetail({
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
+  const showTopOfferCta =
+    job.operationalStatus === "UNASSIGNED" &&
+    !job.archivedAt &&
+    !isAssigned &&
+    assignedCleanerIds.length === 0 &&
+    canOfferToCleaners &&
+    !isLoadingOffers &&
+    !hasOffersError &&
+    sortedOffers.length === 0;
   const sortedIssues = [...issues].sort((firstIssue, secondIssue) => {
     const firstCreatedAt = firstIssue.createdAt?.toMillis?.() || 0;
     const secondCreatedAt = secondIssue.createdAt?.toMillis?.() || 0;
@@ -269,6 +281,20 @@ export function JobDetail({
   const reminderWhatsAppUrl = reminderPreview
     ? buildWhatsAppHandoffUrl(cleanerPhonesById[reminderPreview.cleanerId], reminderPreviewMessage)
     : null;
+
+  useEffect(() => {
+    if (offersCreatedCount === null) {
+      didFocusNewOffersRef.current = false;
+      return;
+    }
+    if (didFocusNewOffersRef.current || isLoadingOffers || hasOffersError) return;
+
+    const offersSection = offersSectionRef.current;
+    if (!offersSection) return;
+    didFocusNewOffersRef.current = true;
+    offersSection.focus({ preventScroll: true });
+    offersSection.scrollIntoView?.({ block: "start", behavior: "auto" });
+  }, [offersCreatedCount, isLoadingOffers, hasOffersError]);
   const canRescheduleByState = ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus)
     && !job.archivedAt;
   const hasChecklistScheduleLock = Boolean(checklistRun);
@@ -715,6 +741,13 @@ export function JobDetail({
       <h2 id="job-detail-title" className="panel__title">
         {job.propertyName || translate("properties.unnamed")}
       </h2>
+      {showTopOfferCta && (
+        <div className="job-detail__quick-action">
+          <button className="button button--primary" type="button" onClick={onOfferToCleaners}>
+            {translate("offers.offerCleaningToCleaners")}
+          </button>
+        </div>
+      )}
       <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
       <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
@@ -1501,11 +1534,11 @@ export function JobDetail({
         )}
       </section>
 
-      <section className="offers-section" aria-labelledby="offers-title">
+      <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
         <div className="offers-section__header">
           <h3 id="offers-title">{translate("offers.title")}</h3>
           <div className="offers-section__actions">
-            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length === 0 && (
+            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length === 0 && !showTopOfferCta && (
               <button
                 className="button button--primary"
                 type="button"
@@ -1529,6 +1562,12 @@ export function JobDetail({
             </button>
           </div>
         </div>
+
+        {offersCreatedCount !== null && (
+          <p className="offers-section__success" role="status">
+            {translate("offers.createdReadyToShare", { count: offersCreatedCount })}
+          </p>
+        )}
 
         {isLoadingOffers && (
           <StateCard message={translate("offers.loading")} status="status" />

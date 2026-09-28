@@ -40,7 +40,7 @@ function renderOfferCleaners(onSent = vi.fn(), language = "en") {
 }
 
 describe("OfferCleaners name search", () => {
-  it("retains selections hidden by filtering and sends the selected cleaner records", async () => {
+  it("retains selections hidden by filtering and creates the selected cleaner offers", async () => {
     const user = userEvent.setup();
     const { onSent } = renderOfferCleaners();
 
@@ -54,7 +54,7 @@ describe("OfferCleaners name search", () => {
 
     expect(screen.getByLabelText("Ana")).toBeChecked();
     expect(screen.getByLabelText("Beatríz")).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "Send offers" }));
+    await user.click(screen.getByRole("button", { name: "Create offers" }));
 
     await waitFor(() => {
       expect(createJobOffers).toHaveBeenCalledWith({
@@ -71,18 +71,19 @@ describe("OfferCleaners name search", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Search cleaners by name" }), "nobody");
     expect(screen.getByText("No cleaners match this search.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Send offers" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create offers" })).toBeDisabled();
   });
 
   it.each([
-    ["pt", "Buscar cleaners por nome", "Nenhuma cleaner corresponde a esta busca."],
-    ["es", "Buscar cleaners por nombre", "Ninguna cleaner coincide con esta búsqueda."],
-  ])("localizes the offer-list search in %s", async (language, searchLabel, noMatch) => {
+    ["pt", "Buscar cleaners por nome", "Nenhuma cleaner corresponde a esta busca.", "Criar ofertas"],
+    ["es", "Buscar cleaners por nombre", "Ninguna cleaner coincide con esta búsqueda.", "Crear ofertas"],
+  ])("localizes the offer-list search and creation action in %s", async (language, searchLabel, noMatch, createLabel) => {
     const user = userEvent.setup();
     renderOfferCleaners(vi.fn(), language);
 
     const search = screen.getByRole("searchbox", { name: searchLabel });
     await user.type(search, "missing");
     expect(screen.getByText(noMatch)).toBeVisible();
+    expect(screen.getByRole("button", { name: createLabel })).toBeDisabled();
   });
 });

@@ -142,43 +142,6 @@ export function OfferCleaners({
   );
 }
 
-export function OffersSuccess({ count, onBackToJob, onBackToJobs }) {
-  const { translate } = useTranslation();
-
-  return (
-    <section
-      className="panel success-panel"
-      aria-labelledby="offers-success-title"
-    >
-      <span className="success-mark" aria-hidden="true">
-        ✓
-      </span>
-      <p className="eyebrow">{translate("offers.title")}</p>
-      <h2 id="offers-success-title" className="panel__title">
-        {translate("offers.sent")}
-      </h2>
-      <p className="success-panel__detail">
-        {translate(count === 1 ? "offers.receivedOne" : "offers.receivedMany", {
-          count,
-        })}
-      </p>
-
-      <div className="button-row">
-        <button
-          className="button button--primary"
-          type="button"
-          onClick={onBackToJob}
-        >
-          {translate("jobs.backToJob")}
-        </button>
-        <button className="button" type="button" onClick={onBackToJobs}>
-          {translate("jobs.backToJobs")}
-        </button>
-      </div>
-    </section>
-  );
-}
-
 export function CleanerOfferSimulation({ job, offer, onBackToJob }) {
   const { language, translate } = useTranslation();
   const [offerStatus, setOfferStatus] = useState(offer.status || "PENDING");

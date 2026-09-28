@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { BackButton } from "../../components/UiPrimitives.jsx";
-import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { maximumGuestNameLength, optionalJobPrice } from "./jobCompatibility.js";
 import { createJob } from "./jobService.js";
@@ -178,43 +177,6 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
           </button>
         </div>
       </form>
-    </section>
-  );
-}
-
-export function CleaningSuccess({ job, onBack, onViewJob }) {
-  const { language, translate } = useTranslation();
-
-  return (
-    <section className="panel success-panel" aria-labelledby="success-title">
-      <span className="success-mark" aria-hidden="true">
-        ✓
-      </span>
-      <p className="eyebrow">{translate("jobs.saved")}</p>
-      <h2 id="success-title" className="panel__title">
-        {translate("jobs.serviceCreated")}
-      </h2>
-      <p className="success-panel__detail">
-        {job.propertyName || translate("properties.unnamed")}
-      </p>
-      <p className="success-panel__date">
-        {[formatDate(job.scheduledDate, translate, language), job.scheduledStart]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
-
-      <div className="button-row">
-        <button
-          className="button button--primary"
-          type="button"
-          onClick={onViewJob}
-        >
-          {translate("jobs.viewService")}
-        </button>
-        <button className="button" type="button" onClick={onBack}>
-          {translate("jobs.backToProperties")}
-        </button>
-      </div>
     </section>
   );
 }

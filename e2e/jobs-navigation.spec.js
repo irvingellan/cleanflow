@@ -147,17 +147,24 @@ test("a v2 Job supports an additive manager roster before work starts", async ({
 });
 
 test("a v2 Job can offer, collect interest, and assign multiple cleaners before work starts", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", {
     name: "Jobs",
   }).click();
   await page.getByRole("button", { name: "View E2E V2 Offer Property" }).click();
 
+  const quickOfferAction = page.locator(".job-detail__quick-action");
+  await expect(quickOfferAction).toBeVisible();
+  expect((await quickOfferAction.boundingBox()).y).toBeLessThan(844);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.getByRole("button", { name: "Offer cleaning to cleaners" }).click();
   await page.getByLabel("E2E Team Cleaner A").check();
   await page.getByLabel("E2E Team Cleaner B").check();
-  await page.getByRole("button", { name: "Send offers" }).click();
-  await expect(page.getByRole("heading", { name: "Offers sent" })).toBeVisible();
-  await page.getByRole("button", { name: "Back to job", exact: true }).click();
+  await page.getByRole("button", { name: "Create offers" }).click();
+  await expect(page.getByRole("heading", { name: "E2E V2 Offer Property" })).toBeVisible();
+  await expect(page.locator(".offers-section__success")).toContainText("Offers created (2)");
+  await expect(page.getByRole("button", { name: "Create public link" }).first()).toBeVisible();
+  await expect(page.locator(".offers-section")).toBeInViewport();
 
   const offers = page.locator(".offer-status-item");
   await expect(page.getByRole("button", { name: "Simulate offer" })).toHaveCount(0);
@@ -239,9 +246,8 @@ test("a manager-created Job keeps optional guest context from a linked Property"
   await page.getByRole("textbox", { name: "Scheduled time" }).fill("10:00");
   await page.getByLabel("Guest name (optional)").fill("E2E Guest");
   await page.getByRole("button", { name: "Create cleaning" }).click();
-  await expect(page.getByRole("heading", { name: "Service created" })).toBeVisible();
-
-  await page.getByRole("button", { name: "View service" }).click();
+  await expect(page.getByRole("heading", { name: "E2E Client Property" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Service created" })).toHaveCount(0);
   await expect(page.getByText("E2E Guest")).toBeVisible();
   await expect(page.getByText("10:00")).toBeVisible();
 });

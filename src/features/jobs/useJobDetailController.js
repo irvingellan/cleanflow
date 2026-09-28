@@ -68,7 +68,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const [availableCleaners, setAvailableCleaners] = useState([]);
   const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
   const [hasCleanerError, setHasCleanerError] = useState(false);
-  const [offersSentCount, setOffersSentCount] = useState(null);
+  const [offersCreatedCount, setOffersCreatedCount] = useState(null);
   const checklistRunCreateInFlight = useRef(false);
   const checklistCapabilityInFlight = useRef(false);
   const checklistRunRequestId = useRef(0);
@@ -237,6 +237,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
   function openJob(job) {
     selectedJobIdRef.current = job.id;
+    setOffersCreatedCount(null);
     setSelectedJob(job);
     setDetailData({
       ...emptyDetailData(),
@@ -501,9 +502,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }
   }
 
-  function recordOffersSent(count, updatedJob) {
+  function recordOffersCreated(count, updatedJob) {
     updateSelectedJob(updatedJob);
-    setOffersSentCount(count);
+    setOffersCreatedCount(count);
   }
 
   return {
@@ -537,12 +538,12 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       refreshChecklistCapability,
     },
     offerFlow: {
-      offersSentCount,
+      offersCreatedCount,
       availableCleaners,
       isLoadingCleaners,
       hasCleanerError,
-      clearOffersSentCount: () => setOffersSentCount(null),
-      recordOffersSent,
+      clearOffersCreatedCount: () => setOffersCreatedCount(null),
+      recordOffersCreated,
       createCleanerOfferLink,
     },
     actions: {

@@ -11,7 +11,13 @@ vi.mock("../cleaners/cleanerService.js", () => ({
 
 function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {}, property = null) {
   const noOp = vi.fn();
-  const { offers = [], ...jobOverrides } = overrides;
+  const {
+    offers = [],
+    offersCreatedCount = null,
+    isLoadingOffers = false,
+    hasOffersError = false,
+    ...jobOverrides
+  } = overrides;
 
   return render(
     <TranslationProvider>
@@ -25,8 +31,9 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         property={property}
         knownCleaners={checklist.knownCleaners || []}
         offers={offers}
-        isLoadingOffers={false}
-        hasOffersError={false}
+        isLoadingOffers={isLoadingOffers}
+        hasOffersError={hasOffersError}
+        offersCreatedCount={offersCreatedCount}
         assignments={checklist.assignments || []}
         isLoadingAssignments={false}
         hasAssignmentsError={false}
@@ -556,9 +563,11 @@ describe("JobDetail lifecycle actions", () => {
       { onOfferToCleaners },
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Offer cleaning to cleaners" }),
-    );
+    const offerButton = screen.getByRole("button", { name: "Offer cleaning to cleaners" });
+    expect(offerButton).toHaveClass("button--primary");
+    expect(offerButton.closest(".job-detail__quick-action")).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: "Offer cleaning to cleaners" })).toHaveLength(1);
+    fireEvent.click(offerButton);
 
     expect(onOfferToCleaners).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Refresh offers" })).toBeVisible();
@@ -570,6 +579,71 @@ describe("JobDetail lifecycle actions", () => {
     expect(
       screen.getByRole("button", { name: "Offer cleaning to cleaners" }),
     ).toBeVisible();
+  });
+
+  it.each([
+    { reason: "offers are loading", status: "UNASSIGNED", overrides: { isLoadingOffers: true } },
+    { reason: "offers failed to load", status: "UNASSIGNED", overrides: { hasOffersError: true } },
+    { reason: "an Offer exists", status: "UNASSIGNED", overrides: { offers: [{ id: "offer-a", cleanerId: "cleaner-a", status: "PENDING" }] } },
+    { reason: "the Job is archived", status: "UNASSIGNED", overrides: { archivedAt: { seconds: 1 } } },
+    { reason: "the Job is already offered", status: "OFFERED", overrides: {} },
+  ])("hides the top Offer shortcut when $reason", ({ status, overrides }) => {
+    renderJobDetail(status, overrides);
+    expect(document.querySelector(".job-detail__quick-action")).not.toBeInTheDocument();
+  });
+
+  it("announces created Offers and focuses their section once after loading", () => {
+    const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollIntoView",
+    );
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const props = {
+      job: { id: "job-1", propertyName: "Pacific Beach Condo", operationalStatus: "OFFERED" },
+      knownCleaners: [],
+      offers: [{ id: "offer-a", cleanerId: "cleaner-a", cleanerName: "Ana", status: "PENDING" }],
+      offersCreatedCount: 1,
+      hasOffersError: false,
+      assignments: [],
+      issues: [],
+      checklistCapability: { state: "NONE" },
+      onOfferToCleaners: vi.fn(),
+      onRefreshOffers: vi.fn(),
+    };
+    const detail = (isLoadingOffers) => (
+      <TranslationProvider>
+        <JobDetail {...props} isLoadingOffers={isLoadingOffers} />
+      </TranslationProvider>
+    );
+
+    try {
+      const { rerender } = render(detail(true));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      rerender(detail(false));
+      const offersSection = screen.getByRole("region", { name: "Offers" });
+      expect(within(offersSection).getByRole("status")).toHaveTextContent("1");
+      expect(offersSection).toHaveFocus();
+      expect(scrollIntoView).toHaveBeenCalledOnce();
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        block: "start",
+        behavior: "auto",
+      });
+
+      rerender(detail(false));
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
+      } else {
+        delete HTMLElement.prototype.scrollIntoView;
+      }
+    }
   });
 
   it("keeps real public-offer actions and response statuses without exposing simulation", async () => {
@@ -764,7 +838,7 @@ describe("JobDetail lifecycle actions", () => {
       { onOfferToCleaners, onRefreshOffers },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Send to more cleaners" }));
+    fireEvent.click(screen.getByRole("button", { name: "Offer to more cleaners" }));
     fireEvent.click(screen.getByRole("button", { name: "Refresh offers" }));
 
     expect(onOfferToCleaners).toHaveBeenCalledTimes(1);
@@ -778,7 +852,7 @@ describe("JobDetail lifecycle actions", () => {
       screen.queryByRole("button", { name: "Offer cleaning to cleaners" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Send to more cleaners" }),
+      screen.queryByRole("button", { name: "Offer to more cleaners" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh offers" })).toBeVisible();
   });
@@ -802,7 +876,7 @@ describe("JobDetail lifecycle actions", () => {
 
     expect(screen.queryByRole("button", { name: /start cleaning/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /complete cleaning/i })).not.toBeInTheDocument();
-    expect(screen.getByText("No offers sent yet.")).toBeVisible();
+    expect(screen.getByText("No offers created yet.")).toBeVisible();
     expect(screen.getByText("No issues reported.")).toBeVisible();
     expect(screen.queryByText("common.notProvided")).not.toBeInTheDocument();
   });

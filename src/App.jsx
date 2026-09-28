@@ -40,7 +40,7 @@ import { useDashboardController } from "./features/dashboard/useDashboardControl
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
 import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
-import { CleaningSuccess, CreateCleaningForm } from "./features/jobs/JobForm.jsx";
+import { CreateCleaningForm } from "./features/jobs/JobForm.jsx";
 import { JobsPage } from "./features/jobs/JobsPage.jsx";
 import {
   createJobListFilters,
@@ -53,7 +53,6 @@ import {
   IssueForm,
   IssueSuccess,
   OfferCleaners,
-  OffersSuccess,
 } from "./features/jobs/JobWorkflowViews.jsx";
 import {
   acknowledgePublicOfferAssignment,
@@ -412,7 +411,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
   const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
-  const [createdJob, setCreatedJob] = useState(null);
   const [showExcludedRecords, setShowExcludedRecords] = useState(false);
   const devCenterController = useDevCenterController({ view });
   const canManageExcludedRecords = devCenterController.access.authorized;
@@ -488,12 +486,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       refreshChecklistCapability,
     },
     offerFlow: {
-      offersSentCount,
+      offersCreatedCount,
       availableCleaners: cleaners,
       isLoadingCleaners,
       hasCleanerError,
-      clearOffersSentCount,
-      recordOffersSent,
+      clearOffersCreatedCount,
+      recordOffersCreated,
       createCleanerOfferLink,
     },
     actions: {
@@ -617,8 +615,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     clearProperty();
     clearClient();
     closeJobDetail();
-    setCreatedJob(null);
-    clearOffersSentCount();
+    clearOffersCreatedCount();
     setView("property-list");
   }
 
@@ -660,7 +657,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setActiveSection("jobs");
     clearProperty();
     closeJobDetail();
-    clearOffersSentCount();
+    clearOffersCreatedCount();
     resetJobPagination();
     setJobListFilters(createJobListFilters(filters));
     setView("job-list");
@@ -689,7 +686,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setActiveSection("jobs");
     clearProperty();
     closeJobDetail();
-    clearOffersSentCount();
+    clearOffersCreatedCount();
     setView("job-list");
   }
 
@@ -847,11 +844,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function showOfferCleaners() {
-    clearOffersSentCount();
+    clearOffersCreatedCount();
     setView("offer-cleaners");
   }
 
   function openAssignedCleanerJob() {
+    clearOffersCreatedCount();
     setView("cleaner-job");
   }
 
@@ -863,11 +861,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   async function createAndOpenChecklistRun() {
     const checklistRun = await createJobChecklistRun();
     if (checklistRun) {
+      clearOffersCreatedCount();
       setView("checklist-run");
     }
   }
 
   function openChecklistRun() {
+    clearOffersCreatedCount();
     setView("checklist-run");
   }
 
@@ -1054,18 +1054,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
           <CreateCleaningForm
             property={selectedProperty}
             onBack={() => setView("property-detail")}
-            onCreated={(job) => {
-              setCreatedJob(job);
-              setView("create-success");
-            }}
-          />
-        )}
-
-        {view === "create-success" && createdJob && (
-          <CleaningSuccess
-            job={createdJob}
-            onBack={showProperties}
-            onViewJob={() => openJob(createdJob)}
+            onCreated={openJob}
           />
         )}
 
@@ -1243,6 +1232,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             job={selectedJob}
             property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
             knownCleaners={directoryCleaners}
+            offersCreatedCount={offersCreatedCount}
             offers={jobOffers}
             isLoadingOffers={isLoadingOffers}
             hasOffersError={hasOffersError}
@@ -1323,17 +1313,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasError={hasCleanerError}
             onBack={returnToJobDetail}
             onSent={(count, updatedJob) => {
-              recordOffersSent(count, updatedJob);
-              setView("offers-success");
+              recordOffersCreated(count, updatedJob);
+              returnToJobDetail();
             }}
-          />
-        )}
-
-        {view === "offers-success" && selectedJob && offersSentCount !== null && (
-          <OffersSuccess
-            count={offersSentCount}
-            onBackToJob={returnToJobDetail}
-            onBackToJobs={showJobs}
           />
         )}
 
