@@ -105,6 +105,7 @@ describe("public checklist photo diagnostic allowlist", () => {
     ["bytes", { bytes: "image bytes" }],
     ["property data", { propertyName: "private property" }],
     ["storage path", { storagePath: "private/path" }],
+    ["preferred language", { preferredLanguage: "es" }],
   ])("rejects an unexpected %s field", (_label, extra) => {
     expect(normalizePublicChecklistPhotoUploadDiagnostic({ ...validPhotoEvent, ...extra })).toBeNull();
   });

@@ -9,18 +9,23 @@ const mocks = vi.hoisted(() => ({
   savePublicChecklistDraft: vi.fn(),
   uploadPublicChecklistEvidence: vi.fn(),
   recordPublicChecklistLoadDiagnostic: vi.fn(),
+  realUploadPublicChecklistEvidence: null,
 }));
 const {
   getPublicChecklist, readyPublicChecklistForReview, savePublicChecklistDraft, uploadPublicChecklistEvidence,
 } = mocks;
 
-vi.mock("./checklistCapabilityService.js", async (importOriginal) => ({
-  ...(await importOriginal()),
-  getPublicChecklist: mocks.getPublicChecklist,
-  readyPublicChecklistForReview: mocks.readyPublicChecklistForReview,
-  savePublicChecklistDraft: mocks.savePublicChecklistDraft,
-  uploadPublicChecklistEvidence: mocks.uploadPublicChecklistEvidence,
-}));
+vi.mock("./checklistCapabilityService.js", async (importOriginal) => {
+  const original = await importOriginal();
+  mocks.realUploadPublicChecklistEvidence = original.uploadPublicChecklistEvidence;
+  return {
+    ...original,
+    getPublicChecklist: mocks.getPublicChecklist,
+    readyPublicChecklistForReview: mocks.readyPublicChecklistForReview,
+    savePublicChecklistDraft: mocks.savePublicChecklistDraft,
+    uploadPublicChecklistEvidence: mocks.uploadPublicChecklistEvidence,
+  };
+});
 
 vi.mock("./publicChecklistLoadDiagnostics.js", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -175,6 +180,69 @@ describe("PublicChecklistPage", () => {
     fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "es" } });
     expect(screen.getByRole("heading", { name: "Checklist de limpieza" })).toBeVisible();
     expect(window.localStorage.getItem("cleanflow-language")).toBe("en");
+  });
+
+  it("keeps Portuguese photo success server-confirmed while diagnostics stay language-neutral", async () => {
+    window.localStorage.setItem("cleanflow-language", "en");
+    getPublicChecklist.mockResolvedValue({
+      checklist: { ...frozenChecklist, preferredLanguage: "pt" },
+      draft: createDraft(),
+    });
+    const fetchMock = vi.fn((_path, init) => init.method === "PUT"
+      ? Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] }),
+      })
+      : Promise.resolve({ ok: true, status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:photo"), revokeObjectURL: vi.fn() });
+    uploadPublicChecklistEvidence.mockImplementation((request) => mocks.realUploadPublicChecklistEvidence(request));
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Checklist de limpeza" })).toBeVisible();
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "cleaning.jpg", { type: "image/jpeg" });
+    const [cameraInput] = document.querySelectorAll('input[type="file"]');
+    fireEvent.change(cameraInput, { target: { files: [file] } });
+    expect(await screen.findByText("Foto salva")).toBeVisible();
+
+    const photoDiagnostic = JSON.parse(fetchMock.mock.calls
+      .find(([, init]) => init.method === "POST")[1].body);
+    expect(photoDiagnostic).toMatchObject({
+      action: "PHOTO_UPLOAD_DIAGNOSTIC",
+      diagnostic: { result: "success", stage: "server-confirmed", fileType: "jpeg" },
+    });
+    expect(photoDiagnostic.diagnostic).not.toHaveProperty("preferredLanguage");
+    expect(JSON.stringify(photoDiagnostic)).not.toContain("opaque-capability-token");
+    expect(JSON.stringify(photoDiagnostic)).not.toContain("cleaning.jpg");
+    expect(window.localStorage.getItem("cleanflow-language")).toBe("en");
+  });
+
+  it("shows an unsupported photo error in Spanish while photo diagnostics contain no language", async () => {
+    getPublicChecklist.mockResolvedValue({
+      checklist: { ...frozenChecklist, preferredLanguage: "es" },
+      draft: createDraft(),
+    });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal("fetch", fetchMock);
+    uploadPublicChecklistEvidence.mockImplementation((request) => mocks.realUploadPublicChecklistEvidence(request));
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Checklist de limpieza" })).toBeVisible();
+    const file = new File([new Uint8Array([0, 0, 0, 0, 102, 116, 121, 112])], "photo.heic", { type: "image/heic" });
+    const [cameraInput] = document.querySelectorAll('input[type="file"]');
+    fireEvent.change(cameraInput, { target: { files: [file] } });
+
+    expect(await screen.findByText("Usa una imagen JPEG, PNG o WebP. Las fotos HEIC/HEIF aún no son compatibles.")).toBeVisible();
+    const photoDiagnostic = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(photoDiagnostic).toMatchObject({
+      action: "PHOTO_UPLOAD_DIAGNOSTIC",
+      diagnostic: { result: "error", stage: "preflight", fileType: "heic", errorCode: "unsupported_type" },
+    });
+    expect(photoDiagnostic.diagnostic).not.toHaveProperty("preferredLanguage");
+    expect(fetchMock.mock.calls.some(([, init]) => init.method === "PUT")).toBe(false);
+    expect(JSON.stringify(photoDiagnostic)).not.toContain("opaque-capability-token");
+    expect(JSON.stringify(photoDiagnostic)).not.toContain("photo.heic");
   });
 
   it("shows one mobile-safe required-photo control", async () => {
