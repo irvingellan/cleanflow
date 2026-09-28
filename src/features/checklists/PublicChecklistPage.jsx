@@ -45,12 +45,14 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
   const [state, setState] = useState(evidence ? "SAVED" : "IDLE");
   const [retryFile, setRetryFile] = useState(null);
   const [error, setError] = useState(null);
+  const [diagnosticCode, setDiagnosticCode] = useState(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState(null);
 
   useEffect(() => {
     if (evidence) {
       setState("SAVED");
       setError(null);
+      setDiagnosticCode(null);
     }
   }, [evidence]);
 
@@ -62,6 +64,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
     if (!file || disabled || state === "UPLOADING") return;
     setState("UPLOADING");
     setError(null);
+    setDiagnosticCode(null);
     setRetryFile(file);
     try {
       const result = await uploadPublicChecklistEvidence({ token, requirementId: item.id, file });
@@ -77,6 +80,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
     } catch (uploadError) {
       setState("FAILED");
       setError(uploadError?.code || "checklist_photo_unavailable");
+      setDiagnosticCode(uploadError?.diagnosticCode || null);
     }
   };
 
@@ -120,6 +124,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
             : error === "checklist_photo_invalid_type"
               ? "checklists.photoUnsupportedType"
               : "checklists.photoUploadFailed")}</p>
+          {diagnosticCode && <small>{translate("checklists.photoDiagnosticCode", { code: diagnosticCode })}</small>}
           {retryFile && <button className="button button--small" type="button" onClick={() => upload(retryFile)}>{translate("checklists.retryPhoto")}</button>}
         </div>
       )}

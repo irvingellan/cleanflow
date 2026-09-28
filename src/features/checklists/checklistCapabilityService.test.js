@@ -36,7 +36,7 @@ describe("public checklist requests", () => {
 
   it("lets the cleaner retry the identical image after network and server failures", async () => {
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "photo.jpg", { type: "image/jpeg" });
-    const fetchMock = vi.fn()
+    const putRequest = vi.fn()
       .mockRejectedValueOnce(new TypeError("Network is unavailable"))
       .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ error: "checklist_photo_unavailable" }) })
       .mockResolvedValueOnce({
@@ -44,6 +44,9 @@ describe("public checklist requests", () => {
         status: 200,
         json: async () => ({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] }),
       });
+    const fetchMock = vi.fn((input, init) => init.method === "PUT"
+      ? putRequest(input, init)
+      : Promise.resolve({ ok: true, status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
     const request = { token: "opaque-token", requirementId: "living-belongings", file };
 
@@ -53,26 +56,109 @@ describe("public checklist requests", () => {
       evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    for (const [, init] of fetchMock.mock.calls) {
+    expect(putRequest).toHaveBeenCalledTimes(3);
+    for (const [, init] of putRequest.mock.calls) {
       expect(init).toMatchObject({ method: "PUT", credentials: "omit", body: file });
       expect(init.headers).toMatchObject({ "Content-Type": "image/jpeg", "X-CleanFlow-Checklist-Item": "living-belongings" });
+      expect(init.headers["X-CleanFlow-Checklist-Session"]).toMatch(/^[a-f0-9]{36}$/i);
+      expect(init.headers["X-CleanFlow-Checklist-Request"]).toMatch(/^[a-f0-9]{36}$/i);
     }
+    expect(fetchMock.mock.calls.some(([, init]) => init.method === "POST")).toBe(true);
+    const photoDiagnostics = fetchMock.mock.calls
+      .filter(([, init]) => init.method === "POST")
+      .map(([, init]) => JSON.parse(init.body))
+      .filter(({ action }) => action === "PHOTO_UPLOAD_DIAGNOSTIC");
+    expect(photoDiagnostics).toHaveLength(3);
+    expect(photoDiagnostics.map(({ diagnostic }) => ({ result: diagnostic.result, stage: diagnostic.stage, errorCode: diagnostic.errorCode }))).toEqual([
+      { result: "error", stage: "request", errorCode: "network" },
+      { result: "error", stage: "request", errorCode: "server_rejected" },
+      { result: "success", stage: "server-confirmed", errorCode: null },
+    ]);
+    expect(JSON.stringify(photoDiagnostics)).not.toContain("opaque-token");
+    expect(JSON.stringify(photoDiagnostics)).not.toContain("photo.jpg");
+  });
+
+  it("records unsupported HEIC in local preflight without uploading or changing the friendly error", async () => {
+    const file = new File([new Uint8Array([0, 0, 0, 0])], "camera.heic", { type: "image/heic" });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadPublicChecklistEvidence({ token: "opaque-token", requirementId: "living-belongings", file }))
+      .rejects.toMatchObject({ code: "checklist_photo_invalid_type", diagnosticCode: expect.stringMatching(/^[A-F0-9]{8}$/) });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/public-checklist");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toMatchObject({
+      action: "PHOTO_UPLOAD_DIAGNOSTIC",
+      diagnostic: { result: "error", stage: "preflight", fileType: "heic", errorCode: "unsupported_type" },
+    });
+    expect(init.body).not.toContain("opaque-token");
+    expect(init.body).not.toContain("camera.heic");
+  });
+
+  it("records oversized files as a size bucket only and never starts an upload", async () => {
+    const file = new File([new Uint8Array(maximumChecklistEvidenceSizeBytes + 1)], "large.jpg", { type: "image/jpeg" });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadPublicChecklistEvidence({ token: "opaque-token", requirementId: "living-belongings", file }))
+      .rejects.toMatchObject({ code: "checklist_photo_too_large" });
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(payload.diagnostic).toMatchObject({ result: "error", stage: "preflight", fileType: "jpeg", sizeBucket: "over_5mb", errorCode: "file_too_large" });
+    expect(JSON.stringify(payload)).not.toContain(String(file.size));
+    expect(JSON.stringify(payload)).not.toContain("large.jpg");
+  });
+
+  it("records success only after the server response confirms this requirement is saved", async () => {
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "not-logged.jpg", { type: "image/jpeg" });
+    const fetchMock = vi.fn((_path, init) => init.method === "PUT"
+      ? Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] }),
+      })
+      : Promise.reject(new TypeError("diagnostics transport unavailable")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadPublicChecklistEvidence({ token: "opaque-token", requirementId: "living-belongings", file }))
+      .resolves.toMatchObject({ evidence: [{ requirementId: "living-belongings" }] });
+    const diagnosticRequest = fetchMock.mock.calls.find(([, init]) => init.method === "POST");
+    const payload = JSON.parse(diagnosticRequest[1].body);
+    expect(payload.diagnostic).toMatchObject({ result: "success", stage: "server-confirmed" });
+    expect(payload.diagnostic.requestId).toBe(fetchMock.mock.calls.find(([, init]) => init.method === "PUT")[1].headers["X-CleanFlow-Checklist-Request"]);
+    expect(JSON.stringify(payload)).not.toContain("opaque-token");
+    expect(JSON.stringify(payload)).not.toContain("not-logged.jpg");
+    expect(JSON.stringify(payload)).not.toContain("living-belongings");
+  });
+
+  it("does not report a malformed successful response as a saved photo", async () => {
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "photo.jpg", { type: "image/jpeg" });
+    const fetchMock = vi.fn((_path, init) => init.method === "PUT"
+      ? Promise.resolve({ ok: true, status: 200, json: async () => ({ evidence: [] }) })
+      : Promise.resolve({ ok: true, status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadPublicChecklistEvidence({ token: "opaque-token", requirementId: "living-belongings", file }))
+      .rejects.toMatchObject({ code: "checklist_response_invalid", stage: "response-parse" });
+    const event = JSON.parse(fetchMock.mock.calls.find(([, init]) => init.method === "POST")[1].body).diagnostic;
+    expect(event).toMatchObject({ result: "error", stage: "response-parse", errorCode: "response_invalid" });
   });
 
   it("bounds a photo upload request that does not settle", async () => {
     vi.useFakeTimers();
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "photo.jpg", { type: "image/jpeg" });
-    const fetchMock = vi.fn((_input, init) => new Promise((_resolve, reject) => {
-      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
-    }));
+    const fetchMock = vi.fn((_input, init) => init.method === "PUT"
+      ? new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      })
+      : Promise.resolve({ ok: true, status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const request = uploadPublicChecklistEvidence({ token: "opaque-token", requirementId: "living-belongings", file });
     const timeoutExpectation = expect(request).rejects.toMatchObject({ code: "checklist_request_timeout", stage: "request" });
     await vi.advanceTimersByTimeAsync(publicChecklistRequestTimeoutMilliseconds);
     await timeoutExpectation;
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PUT")).toHaveLength(1);
   });
 
   it("bounds a non-settling public read instead of leaving the cleaner loading indefinitely", async () => {

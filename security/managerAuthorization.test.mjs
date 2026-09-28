@@ -625,6 +625,17 @@ async function publicChecklistUpload(token, requirementId, bytes, contentType = 
   return response;
 }
 
+async function publicChecklistPhotoDiagnostic(diagnostic) {
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, end() { this.ended = true; return this; }, json(data) { this.body = data; return this; } };
+  await publicChecklist({
+    method: "POST",
+    query: {},
+    body: { action: "PHOTO_UPLOAD_DIAGNOSTIC", diagnostic },
+    get(header) { return header === "user-agent" ? "Mozilla/5.0 (iPhone) Version/17.0 Mobile Safari/604.1" : undefined; },
+  }, response);
+  return response;
+}
+
 async function saveRequiredChecklistPhoto(token) {
   const result = await publicChecklistUpload(token, "living-belongings", Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   assert.equal(result.code, 200);
@@ -965,6 +976,23 @@ test("capability-authorized DRAFT photo is server-scoped, idempotent, reloadable
   }
   await assertFails(account("manager").firestore().doc(evidencePath).get());
   await assertFails(account("manager").storage().ref(evidence.storagePath).getMetadata());
+});
+
+test("public photo diagnostics accept only token-free allowlisted events and do not write Firestore", async () => {
+  const before = (await admin.doc(`${root}/jobs/job`).get()).data();
+  const validDiagnostic = {
+    sessionId: "a".repeat(36), requestId: "b".repeat(36), result: "error", durationMs: 23,
+    fileType: "heic", sizeBucket: "1_to_3mb", stage: "preflight", errorCode: "unsupported_type",
+    deviceClass: "mobile",
+  };
+  const accepted = await publicChecklistPhotoDiagnostic(validDiagnostic);
+  assert.equal(accepted.code, 204);
+  assert.equal(accepted.headers["Cache-Control"], "no-store, private");
+
+  const rejected = await publicChecklistPhotoDiagnostic({ ...validDiagnostic, rawToken: "must-not-log" });
+  assert.equal(rejected.code, 400);
+  assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), before);
+  assert.equal((await admin.collection(`${root}/managerPageLoadEvents`).get()).size, 0);
 });
 
 test("checklist evidence rejects wrong requirement, bad image data, stale capability, and non-DRAFT writes", async () => {

@@ -1,6 +1,13 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../services/firebase/client.js";
-import { getPublicChecklistSessionId } from "./publicChecklistLoadDiagnostics.js";
+import {
+  buildPublicChecklistPhotoUploadDiagnostic,
+  createPublicChecklistDiagnosticId,
+  getPublicChecklistSessionId,
+  publicChecklistPhotoFileType,
+  publicChecklistPhotoSizeBucket,
+  recordPublicChecklistPhotoUploadDiagnostic,
+} from "./publicChecklistLoadDiagnostics.js";
 
 const getChecklistCapabilityCall = httpsCallable(functions, "getChecklistCapability");
 const issueChecklistCapabilityCall = httpsCallable(functions, "issueChecklistCapability");
@@ -11,13 +18,14 @@ export const maximumChecklistEvidenceSizeBytes = 5 * 1024 * 1024;
 export const acceptedChecklistEvidenceContentTypes = ["image/jpeg", "image/png", "image/webp"];
 
 export class PublicChecklistRequestError extends Error {
-  constructor(code, status, diagnostics = null, stage = "request", requirements = null) {
+  constructor(code, status, diagnostics = null, stage = "request", requirements = null, diagnosticCode = null) {
     super(code);
     this.code = code;
     this.status = status;
     this.diagnostics = diagnostics;
     this.stage = stage;
     this.requirements = requirements;
+    this.diagnosticCode = diagnosticCode;
   }
 }
 
@@ -130,24 +138,78 @@ export function validateChecklistEvidenceFile(file) {
 }
 
 export async function uploadPublicChecklistEvidence({ token, requirementId, file }) {
-  validateChecklistEvidenceFile(file);
-  const body = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type,
-      "X-CleanFlow-Checklist-Item": requirementId,
-      Accept: "application/json",
-    },
-    credentials: "omit",
-    body: file,
-  }, async (response) => {
-    let result = {};
-    try { result = await response.json(); } catch { /* response status maps to a safe generic error */ }
-    if (!response.ok) throw new PublicChecklistRequestError(result.error || "checklist_photo_unavailable", response.status);
-    return result;
-  });
-  if (!Array.isArray(body.evidence)) throw new PublicChecklistRequestError("checklist_photo_unavailable");
-  return body;
+  const startedAt = Date.now();
+  const sessionId = getPublicChecklistSessionId();
+  const requestId = createPublicChecklistDiagnosticId();
+  const diagnosticCode = requestId.slice(-8).toUpperCase();
+  const fileType = publicChecklistPhotoFileType(file?.type);
+  const sizeBucket = publicChecklistPhotoSizeBucket(file?.size);
+  const logPhotoDiagnostic = (result, stage, errorCode = null) => {
+    recordPublicChecklistPhotoUploadDiagnostic(buildPublicChecklistPhotoUploadDiagnostic({
+      sessionId,
+      requestId,
+      result,
+      durationMs: Date.now() - startedAt,
+      fileType,
+      sizeBucket,
+      stage,
+      errorCode,
+    }));
+  };
+
+  try {
+    validateChecklistEvidenceFile(file);
+  } catch (error) {
+    const errorCode = !file || file.size <= 0 ? "invalid_file"
+      : error?.code === "checklist_photo_invalid_type" ? "unsupported_type"
+        : error?.code === "checklist_photo_too_large" ? "file_too_large" : "invalid_file";
+    logPhotoDiagnostic("error", "preflight", errorCode);
+    error.diagnosticCode = diagnosticCode;
+    throw error;
+  }
+
+  try {
+    const body = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type,
+        "X-CleanFlow-Checklist-Item": requirementId,
+        "X-CleanFlow-Checklist-Session": sessionId,
+        "X-CleanFlow-Checklist-Request": requestId,
+        Accept: "application/json",
+      },
+      credentials: "omit",
+      body: file,
+    }, async (response) => {
+      let result = {};
+      try {
+        result = await response.json();
+      } catch {
+        if (response.ok) {
+          throw new PublicChecklistRequestError("checklist_response_invalid", response.status, null, "response-parse");
+        }
+      }
+      if (!response.ok) {
+        throw new PublicChecklistRequestError("checklist_photo_unavailable", response.status, null, "request");
+      }
+      return result;
+    });
+    if (!Array.isArray(body.evidence) || !body.evidence.some((saved) => saved.requirementId === requirementId)) {
+      throw new PublicChecklistRequestError("checklist_response_invalid", undefined, null, "response-parse");
+    }
+    logPhotoDiagnostic("success", "server-confirmed");
+    return body;
+  } catch (error) {
+    const stage = error?.code === "checklist_request_timeout" ? "timeout"
+      : error?.stage === "response-parse" ? "response-parse" : "request";
+    const errorCode = stage === "timeout" ? "timeout"
+      : stage === "response-parse" ? "response_invalid"
+        : error?.status ? "server_rejected"
+          : error instanceof TypeError ? "network" : "unknown";
+    logPhotoDiagnostic("error", stage, errorCode);
+    error.diagnosticCode = diagnosticCode;
+    throw error;
+  }
 }
 
 export async function savePublicChecklistDraft({ token, mutationId, baseRevision, changes }) {

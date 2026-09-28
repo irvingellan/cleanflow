@@ -221,7 +221,7 @@ describe("PublicChecklistPage", () => {
 
   it("keeps a failed selected file for an explicit retry", async () => {
     uploadPublicChecklistEvidence
-      .mockRejectedValueOnce({ code: "checklist_photo_unavailable" })
+      .mockRejectedValueOnce({ code: "checklist_photo_unavailable", diagnosticCode: "A1B2C3D4" })
       .mockResolvedValueOnce({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] });
     vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:photo"), revokeObjectURL: vi.fn() });
     renderPage();
@@ -230,9 +230,11 @@ describe("PublicChecklistPage", () => {
     const [cameraInput] = document.querySelectorAll('input[type="file"]');
     fireEvent.change(cameraInput, { target: { files: [file] } });
     expect(await screen.findByText("Photo could not be saved. Try again.")).toBeVisible();
+    expect(screen.getByText("Diagnostic code: A1B2C3D4")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Retry photo" }));
     await waitFor(() => expect(uploadPublicChecklistEvidence).toHaveBeenCalledTimes(2));
     expect(uploadPublicChecklistEvidence.mock.calls[1][0].file).toBe(file);
+    await waitFor(() => expect(screen.queryByText("Diagnostic code: A1B2C3D4")).not.toBeInTheDocument());
   });
 
   it("explains unsupported HEIC and keeps checklist answers and photo selection usable", async () => {
