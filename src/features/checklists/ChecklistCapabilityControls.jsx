@@ -77,7 +77,12 @@ export function ChecklistCapabilityControls({
           <p className="job-checklist__summary">
             {translate(`checklists.linkState${capability?.state || "NONE"}`)}
           </p>
-          {!canIssue && <p className="job-checklist__summary">{translate("checklists.linkNeedsAssignedCleaner")}</p>}
+          {canIssue && ["STALE", "REVOKED", "EXPIRED", "UNAVAILABLE"].includes(capability?.state) && <p className="job-checklist__summary">
+            {translate("checklists.linkRecoveryGuidance")}
+          </p>}
+          {!canIssue && <p className="job-checklist__summary">{translate(
+            cleanerIds.length ? "checklists.linkJobIneligible" : "checklists.linkNeedsAssignedCleaner",
+          )}</p>}
           {canIssue && (
             <div className="button-row">
               {cleanerIds.length > 1 && (

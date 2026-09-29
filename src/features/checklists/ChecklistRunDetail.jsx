@@ -109,7 +109,7 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
 /** Displays the server-projected manager summary, never a raw Property or Run. */
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
-  loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete,
+  loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete, onAbandonAndComplete,
 }) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
@@ -120,13 +120,23 @@ export function ChecklistRunDetail({
   const draft = checklistRun.draft;
   const lastSavedAt = formatRunCreatedAt(draft?.lastSavedAt, language);
   const readyForReviewAt = formatRunCreatedAt(checklistRun.readyForReviewAt, language);
+  const abandonedAt = formatRunCreatedAt(checklistRun.abandonedAt, language);
+  const isDraft = checklistRun.status === "DRAFT";
   const isReadyForReview = checklistRun.status === "READY_FOR_REVIEW";
+  const isAbandoned = checklistRun.status === "ABANDONED";
   const canApproveAndComplete = isReadyForReview
     && job.operationalStatus !== "COMPLETED"
     && typeof onApproveAndComplete === "function";
+  const canAbandonAndComplete = isDraft
+    && !job.archivedAt
+    && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus)
+    && typeof onAbandonAndComplete === "function";
   const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [hasCompletionError, setHasCompletionError] = useState(false);
+  const [isAbandonConfirmationVisible, setIsAbandonConfirmationVisible] = useState(false);
+  const [isAbandoning, setIsAbandoning] = useState(false);
+  const [hasAbandonError, setHasAbandonError] = useState(false);
   const evidence = checklistRun.evidence || [];
   const assignedCleanerName = assignedCleanerDisplayName(
     job,
@@ -151,6 +161,26 @@ export function ChecklistRunDetail({
     }
   }
 
+  async function abandonAndComplete() {
+    setIsAbandoning(true);
+    setHasAbandonError(false);
+    try {
+      await onAbandonAndComplete();
+      setIsAbandonConfirmationVisible(false);
+    } catch {
+      setHasAbandonError(true);
+    } finally {
+      setIsAbandoning(false);
+    }
+  }
+
+  const runDescriptionKey = isDraft ? "checklists.draftDescription"
+    : isReadyForReview ? "checklists.readyForReviewDescription"
+      : isAbandoned ? "checklists.abandonedDescription" : "checklists.unknownRunDescription";
+  const runStateKey = isDraft ? "checklists.draft"
+    : isReadyForReview ? "checklists.readyForReview"
+      : isAbandoned ? "checklists.abandoned" : "checklists.unknownRunState";
+
   return (
     <section className="panel checklist-run" aria-labelledby="checklist-run-title">
       <BackButton onClick={onBack} />
@@ -166,9 +196,12 @@ export function ChecklistRunDetail({
       {hasRefreshError && <StateCard message={translate("checklists.loadError")} status="alert" isError />}
 
       <StateCard
-        message={translate(isReadyForReview ? "checklists.readyForReviewDescription" : "checklists.draftDescription")}
+        message={translate(runDescriptionKey)}
         status="status"
       />
+      {isDraft && <p className="checklist-run__draft-action-note">
+        {translate(canAbandonAndComplete ? "checklists.draftCompletionGuidance" : "checklists.draftReviewGuidance")}
+      </p>}
 
       <dl className="detail-list checklist-run__details">
         <DetailItem
@@ -182,9 +215,10 @@ export function ChecklistRunDetail({
         <DetailItem label={translate("jobs.assignedCleaner")} value={assignedCleanerName} />
         <DetailItem
           label={translate("checklists.runState")}
-          value={translate(isReadyForReview ? "checklists.readyForReview" : "checklists.draft")}
+          value={translate(runStateKey)}
         />
         {readyForReviewAt && <DetailItem label={translate("checklists.sentForReviewAt")} value={readyForReviewAt} />}
+        {isAbandoned && abandonedAt && <DetailItem label={translate("checklists.abandonedAt")} value={abandonedAt} />}
         <DetailItem
           label={translate("checklists.itemCount")}
           value={translate("checklists.itemCountValue", { count: checklistRun.checklistItemCount })}
@@ -234,8 +268,14 @@ export function ChecklistRunDetail({
           <a className="button button--small button--secondary" href="#checklist-manager-actions">
             {translate("checklists.jumpToManagerActions")}
           </a>
+        ) : canAbandonAndComplete ? (
+          <a className="button button--small button--secondary" href="#checklist-manager-actions">
+            {translate("checklists.jumpToDraftCompletion")}
+          </a>
         ) : (
-          <p className="checklist-run__draft-action-note">{translate("checklists.draftActionsUnavailable")}</p>
+          <p className="checklist-run__draft-action-note">{translate(
+            isAbandoned ? "checklists.abandonedActionsUnavailable" : "checklists.draftActionsUnavailable",
+          )}</p>
         )}
       </section>
 
@@ -329,6 +369,32 @@ export function ChecklistRunDetail({
 
       <div id="checklist-manager-actions">
         {isReadyForReview && <ClientReportControls jobId={job.id} />}
+
+        {canAbandonAndComplete && (
+          <section className="checklist-run__section" aria-labelledby="checklist-abandon-title">
+            <h3 id="checklist-abandon-title">{translate("checklists.draftCompletion")}</h3>
+            {!isAbandonConfirmationVisible ? (
+              <button className="button" type="button" onClick={() => setIsAbandonConfirmationVisible(true)}>
+                {translate("checklists.abandonAndComplete")}
+              </button>
+            ) : (
+              <div className="completion-confirmation">
+                <p>{translate("checklists.abandonAndCompleteConfirmation")}</p>
+                <div className="button-row">
+                  <button className="button" type="button" disabled={isAbandoning}
+                    onClick={() => setIsAbandonConfirmationVisible(false)}>
+                    {translate("common.cancel")}
+                  </button>
+                  <button className="button button--primary" type="button" disabled={isAbandoning}
+                    onClick={abandonAndComplete}>
+                    {isAbandoning ? translate("checklists.abandoningAndCompleting") : translate("checklists.abandonAndComplete")}
+                  </button>
+                </div>
+              </div>
+            )}
+            {hasAbandonError && <p className="form-error" role="alert">{translate("checklists.abandonAndCompleteError")}</p>}
+          </section>
+        )}
 
         {canApproveAndComplete && (
           <section className="checklist-run__section" aria-labelledby="checklist-approval-title">

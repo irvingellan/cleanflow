@@ -3,6 +3,7 @@ import {
   createChecklistRun as createChecklistRunRequest,
   approveChecklistRun as approveChecklistRunRequest,
   completeJobWithoutChecklist as completeJobWithoutChecklistRequest,
+  abandonChecklistRunAndCompleteJob as abandonChecklistRunAndCompleteJobRequest,
   getChecklistRun,
 } from "../checklists/checklistRunService.js";
 import {
@@ -387,6 +388,18 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     });
   }
 
+  async function abandonChecklistRunAndCompleteJob() {
+    const updatedJob = await updateJob(async (job) => {
+      await abandonChecklistRunAndCompleteJobRequest(job.id);
+      return getJobById(job.id);
+    });
+    if (updatedJob) {
+      await refreshChecklistRun(updatedJob);
+      await refreshChecklistCapability(updatedJob);
+    }
+    return updatedJob;
+  }
+
   async function saveJobPrices(prices) {
     return updateJob((job) => updateJobPrices(job.id, prices));
   }
@@ -652,6 +665,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       startCleaning,
       completeCleaning,
       approveChecklistRun,
+      abandonChecklistRunAndCompleteJob,
       saveJobPrices,
       saveJobDetails,
       saveJobSchedule,

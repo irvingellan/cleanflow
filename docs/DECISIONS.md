@@ -793,11 +793,20 @@ not auto-assign from interest or impose the rejected full-team start gate.
 A checklist remains optional for Job completion. If no initial Checklist Run
 exists, an active manager may explicitly complete a non-archived `ASSIGNED` or
 `IN_PROGRESS` Job after confirmation. The server checks the Job and Run in one
-transaction, records `completedAt`, and advances checklist context. If a Run
-exists, the no-Run completion path is closed: its saved draft must reach
-`READY_FOR_REVIEW`, then the manager reviews and approves it through the
-existing Run path. A completed Job cannot create a new initial Run. Neither
-completion path marks client payment or Cleaner payout paid.
+transaction, records `completedAt`, and advances checklist context. This
+no-Run completion path remains closed whenever a Run exists. A completed Job
+cannot create a new initial Run. Completion does not mark client payment or
+Cleaner payout paid.
+
+**2026-09-29 pilot clarification (implemented locally, not yet deployed):** a
+saved `DRAFT` Run can be explicitly abandoned by an active manager when the
+service does not require a checklist. One server transaction marks the Run
+`ABANDONED`, revokes its active cleaner capability, and completes the eligible
+Job, preserving the draft, evidence, and history. This is not a Cleaner review
+submission. Once the Cleaner sends a Run to `READY_FOR_REVIEW`, abandonment is
+denied and the existing manager review/approval path remains required. A
+context-invalidated DRAFT link may instead be deliberately reissued for its
+assigned Cleaner without creating another Run or losing saved answers.
 
 An assigned-cleaner reminder may optionally bundle one current checklist link
 with the existing manager-reviewed message. Preparing the link creates a Draft

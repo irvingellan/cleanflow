@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getChecklistRun: vi.fn(),
   createChecklistRun: vi.fn(),
   completeJobWithoutChecklist: vi.fn(),
+  abandonChecklistRunAndCompleteJob: vi.fn(),
   getChecklistCapability: vi.fn(),
   issueChecklistCapability: vi.fn(),
   getJobById: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("../checklists/checklistRunService.js", () => ({
   getChecklistRun: mocks.getChecklistRun,
   createChecklistRun: mocks.createChecklistRun,
   completeJobWithoutChecklist: mocks.completeJobWithoutChecklist,
+  abandonChecklistRunAndCompleteJob: mocks.abandonChecklistRunAndCompleteJob,
   approveChecklistRun: vi.fn(),
 }));
 
@@ -242,6 +244,40 @@ describe("useJobDetailController manager fast path", () => {
     expect(returnedJob).toBe(persistedJob);
     expect(result.current.job).toBe(persistedJob);
     expect(onJobUpdated).toHaveBeenCalledExactlyOnceWith(persistedJob);
+  });
+
+  it("abandons a Draft through the server, then refreshes the authoritative Job and Run", async () => {
+    const completedJob = { ...job, operationalStatus: "COMPLETED", completedAt: "server-timestamp" };
+    const abandonedRun = { ...draftRun, status: "ABANDONED" };
+    mocks.abandonChecklistRunAndCompleteJob.mockResolvedValue({ completed: true, operationalStatus: "COMPLETED" });
+    mocks.getJobById.mockResolvedValue(completedJob);
+    mocks.getChecklistRun.mockResolvedValue(abandonedRun);
+    const { result, onJobUpdated } = openController();
+
+    await act(async () => {
+      await result.current.actions.abandonChecklistRunAndCompleteJob();
+    });
+
+    expect(mocks.abandonChecklistRunAndCompleteJob).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(mocks.getJobById).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(mocks.abandonChecklistRunAndCompleteJob.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.getJobById.mock.invocationCallOrder[0]);
+    expect(result.current.job).toBe(completedJob);
+    expect(result.current.detail.checklistRun).toEqual(abandonedRun);
+    expect(onJobUpdated).toHaveBeenCalledExactlyOnceWith(completedJob);
+  });
+
+  it("does not report draft abandonment or completion when the server rejects it", async () => {
+    mocks.abandonChecklistRunAndCompleteJob.mockRejectedValue(new Error("abandon failed"));
+    const { result, onJobUpdated } = openController();
+
+    await act(async () => {
+      await expect(result.current.actions.abandonChecklistRunAndCompleteJob()).rejects.toThrow("abandon failed");
+    });
+
+    expect(mocks.getJobById).not.toHaveBeenCalled();
+    expect(result.current.job).toEqual(job);
+    expect(onJobUpdated).not.toHaveBeenCalled();
   });
 
   it("does not report completion when the server callable fails", async () => {

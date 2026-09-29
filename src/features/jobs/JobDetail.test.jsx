@@ -569,7 +569,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(onCreateChecklistRun).toHaveBeenCalledTimes(1);
   });
 
-  it("uses Open checklist for an existing Run and exposes a creation error", () => {
+  it("labels Draft, review-ready, and abandoned Runs accurately and exposes a creation error", () => {
     const onOpenChecklistRun = vi.fn();
     const existingRun = {
       id: "initial",
@@ -586,8 +586,32 @@ describe("JobDetail lifecycle actions", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Create checklist" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open checklist" }));
+    expect(screen.getByText("Checklist in progress — waiting for the cleaner to send it for review.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "View checklist progress" }));
     expect(onOpenChecklistRun).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TranslationProvider><JobDetail
+        job={{ id: "job-1", propertyName: "Pacific Beach Condo", operationalStatus: "ASSIGNED" }}
+        knownCleaners={[]} offers={[]} assignments={[]} issues={[]}
+        checklistRun={{ ...existingRun, status: "READY_FOR_REVIEW" }}
+        onOpenChecklistRun={onOpenChecklistRun}
+      /></TranslationProvider>,
+    );
+    expect(screen.getByText("Checklist ready for manager review.")).toBeVisible();
+    expect(screen.getByText("The checklist is ready for manager review. Open it to approve and complete this service.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open checklist" })).toBeVisible();
+
+    rerender(
+      <TranslationProvider><JobDetail
+        job={{ id: "job-1", propertyName: "Pacific Beach Condo", operationalStatus: "COMPLETED" }}
+        knownCleaners={[]} offers={[]} assignments={[]} issues={[]}
+        checklistRun={{ ...existingRun, status: "ABANDONED" }}
+        onOpenChecklistRun={onOpenChecklistRun}
+      /></TranslationProvider>,
+    );
+    expect(screen.getByText("This checklist draft was abandoned when the service was completed.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "View abandoned checklist" })).toBeVisible();
 
     rerender(
       <TranslationProvider>
@@ -1020,7 +1044,7 @@ describe("JobDetail lifecycle actions", () => {
       run: { id: "initial", status: "DRAFT" },
     });
     expect(screen.queryByRole("button", { name: "Complete service" })).not.toBeInTheDocument();
-    expect(screen.getByText(/this service has a checklist/i)).toBeVisible();
+    expect(screen.getByText(/this service has a checklist in progress/i)).toBeVisible();
     unmount();
     renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-a"] }, {}, {
       hasLoadError: true,

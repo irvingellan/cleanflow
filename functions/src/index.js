@@ -54,7 +54,10 @@ import {
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { rescheduleJobForManager } from "./jobScheduleService.js";
 import { assignCleanerDirectlyForManager } from "./managerDirectAssignmentService.js";
-import { completeJobWithoutChecklistForManager } from "./jobCompletionService.js";
+import {
+  abandonChecklistRunAndCompleteJobForManager,
+  completeJobWithoutChecklistForManager,
+} from "./jobCompletionService.js";
 import {
   acknowledgePublicOfferAssignment,
   assignmentAcknowledgmentStates,
@@ -744,6 +747,24 @@ export const completeJobWithoutChecklist = onCall(
     }
 
     return completeJobWithoutChecklistForManager(db, { organizationId, jobId });
+  },
+);
+
+export const abandonChecklistRunAndCompleteJob = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) {
+      throw new HttpsError("invalid-argument", "Job completion request is invalid.");
+    }
+
+    return abandonChecklistRunAndCompleteJobForManager(db, {
+      organizationId,
+      jobId,
+      actorUid: request.auth.uid,
+    });
   },
 );
 
