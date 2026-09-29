@@ -1,9 +1,9 @@
 # CleanFlow — Current State
 
-- **Updated:** 2026-09-28
-- **Repository:** `main` remains the release source of truth. The combined
-  photo-diagnostics and Cleaner-language release is on `main` at `766883b`
-  and was deployed to production on 2026-09-28.
+- **Updated:** 2026-09-29
+- **Repository:** `main` remains the release source of truth. Manager Fast
+  Path V1 (`d2f9a98`) is deployed to Hosting; the earlier photo-diagnostics
+  and Cleaner-language release (`766883b`) remains deployed.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
 
@@ -21,6 +21,14 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   active organization `MANAGER` membership; the two pilot manager memberships
   were provisioned before release. The live manager smoke test passed and
   anonymous protected access was denied.
+- Manager Fast Path V1 is deployed to Hosting from `d2f9a98` (2026-09-29):
+  Jobs opens the existing creation form directly with local active-Property
+  name/address search, an editable 11:00 time default and Property price
+  suggestions; Property Directory has local search. The Job payout prefills an
+  editable Offer proposal, with manager confirmation required because it may
+  be a team total; an existing Offer snapshot remains authoritative. No
+  Functions or Rules changed. Gabi has not yet validated this faster flow on
+  her device.
 - Production release records confirm manager checklist review, report-link and
   completion paths; public cleaner checklist/offer paths; and the approved
   cleaner-offer compensation snapshot. This confirms availability, not that a
