@@ -20,12 +20,14 @@ export function ClientReportControls({
   const [hasLoadError, setHasLoadError] = useState(false);
   const [hasActionError, setHasActionError] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isReplaceConfirmationVisible, setIsReplaceConfirmationVisible] = useState(false);
 
   useEffect(() => {
     let current = true;
     setCapability({ state: "LOADING" });
     setReportUrl("");
     setHasLoadError(false);
+    setIsReplaceConfirmationVisible(false);
     getCapability(jobId).then((result) => {
       if (current) setCapability(result || { state: "NONE" });
     }).catch(() => {
@@ -42,6 +44,7 @@ export function ClientReportControls({
       setCapability(result.capability || { state: "NONE" });
       setReportUrl(result.url || "");
       setCopied(false);
+      setIsReplaceConfirmationVisible(false);
     } catch {
       setHasActionError(true);
     } finally {
@@ -56,6 +59,7 @@ export function ClientReportControls({
       setCapability(await revokeReport(jobId));
       setReportUrl("");
       setCopied(false);
+      setIsReplaceConfirmationVisible(false);
     } catch {
       setHasActionError(true);
     } finally {
@@ -85,6 +89,7 @@ export function ClientReportControls({
       {!hasLoadError && capability.state !== "LOADING" && (
         <p role="status">{translate("clientReport.state" + capability.state)}</p>
       )}
+      {active && !reportUrl && <p>{translate("clientReport.activeLinkHint")}</p>}
       {capability.state === "LOADING" && <StateCard message={translate("clientReport.loading")} status="status" />}
 
       {reportUrl && (
@@ -104,7 +109,7 @@ export function ClientReportControls({
             className={canCreate ? "button button--primary" : "button"}
             type="button"
             disabled={Boolean(action)}
-            onClick={() => createOrReplace(active)}
+            onClick={() => active ? setIsReplaceConfirmationVisible(true) : createOrReplace(false)}
           >
             {action === "create" ? translate("clientReport.creating") : translate(createLabel)}
           </button>
@@ -113,6 +118,19 @@ export function ClientReportControls({
               {action === "revoke" ? translate("clientReport.revoking") : translate("clientReport.revokeLink")}
             </button>
           )}
+        </div>
+      )}
+      {isReplaceConfirmationVisible && active && (
+        <div className="completion-confirmation">
+          <p role="alert">{translate("clientReport.replaceWarning")}</p>
+          <div className="button-row">
+            <button className="button" type="button" disabled={Boolean(action)} onClick={() => setIsReplaceConfirmationVisible(false)}>
+              {translate("clientReport.keepLink")}
+            </button>
+            <button className="button button--primary" type="button" disabled={Boolean(action)} onClick={() => createOrReplace(true)}>
+              {action === "create" ? translate("clientReport.creating") : translate("clientReport.confirmReplace")}
+            </button>
+          </div>
         </div>
       )}
       {hasActionError && <p className="form-error" role="alert">{translate("clientReport.actionError")}</p>}

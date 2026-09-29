@@ -80,6 +80,9 @@ the live HTML/JS matched the approved build in non-mutating smoke checks.
   is recorded. Only one checklist capability is active per Run. Issuing a link
   for another Cleaner or replacing an existing one invalidates the prior link,
   so this is a limitation for team Jobs, not a multi-cleaner checklist workflow.
+  Gabi confirmed that one assigned Cleaner can own the checklist on a two- or
+  three-Cleaner Job; simultaneous checklist editing is not needed for this
+  pilot ([DEC-042](DECISIONS.md#dec-042--one-assigned-cleaner-owns-the-pilot-checklist-on-team-jobs)).
 
 These behaviors still require Gabi/cleaner real-use validation. Deployment
 does not establish that the unresolved mobile photo failure or the complete
@@ -117,6 +120,11 @@ free text remains verbatim.
   either “none” or a completed migration.
 - Real cleaners have opened checklist links and entered checklist data. This is
   real use, but not proof of a reliable complete journey.
+- A reported client-report “no longer available” incident has no confirmed
+  cause: narrow reads found recent capabilities active and report requests
+  succeeding, but did not identify the failed client request. The report UI in
+  `main` now distinguishes permanently unavailable links (HTTP 404/410) from
+  retryable load failures and warns before replacing an active shared link.
 - The cleaner checklist supports JPEG, PNG, and WebP up to the current 5 MB
   limit; HEIC/HEIF is unsupported and the UI explains the supported formats.
   Token-free photo failure diagnostics are deployed, but the real mobile

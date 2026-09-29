@@ -805,5 +805,18 @@ Run if absent and issues a capability for that Cleaner. An existing active
 capability requires an explicit replacement warning; the older link is revoked
 when replaced. Only one link is active per Run, including team Jobs. The
 manager must copy the message or open WhatsApp and send it manually; link
-preparation or opening WhatsApp records no sent/delivered state. Multi-cleaner
-checklist participation needs its own future design.
+preparation or opening WhatsApp records no sent/delivered state. Simultaneous
+multi-cleaner checklist participation is not part of the pilot (DEC-042).
+
+---
+
+## DEC-042 — One assigned Cleaner owns the pilot checklist on team Jobs
+
+Date: 2026-09-29
+Status: Validated pilot policy; no model change
+
+For a Job with two or three assigned Cleaners, the manager may use one assigned
+Cleaner as the checklist-responsible person. The current one-active-Cleaner
+checklist capability per Run is acceptable for the pilot. Simultaneous
+multi-Cleaner checklist editing or access is not required. This does not change
+Assignment ownership, Job completion, or the identity limits of a bearer link.

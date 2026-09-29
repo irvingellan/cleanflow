@@ -27,28 +27,45 @@ export function PublicClientReportPage({ token }) {
   const { language, setLanguage, translate } = useTranslation();
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
+  const [errorKind, setErrorKind] = useState(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let current = true;
     setIsLoading(true);
-    setHasError(false);
+    setErrorKind(null);
     setReport(null);
     getPublicClientReport(token).then((result) => {
       if (current) setReport(result);
-    }).catch(() => {
-      if (current) setHasError(true);
+    }).catch((error) => {
+      if (current) setErrorKind(error?.retryable === false ? "permanent" : "retryable");
     }).finally(() => {
       if (current) setIsLoading(false);
     });
     return () => { current = false; };
-  }, [token]);
+  }, [token, attempt]);
 
   if (isLoading) {
     return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate("clientReport.loading")} status="status" /></section></main>;
   }
-  if (hasError || !report) {
-    return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate("clientReport.unavailable")} status="alert" isError /></section></main>;
+  if (errorKind || !report) {
+    const retryable = errorKind !== "permanent";
+    return (
+      <main className="public-offer-page checklist-public-page">
+        <section className="panel">
+          <StateCard
+            message={translate(retryable ? "clientReport.loadRetryable" : "clientReport.unavailable")}
+            status="alert"
+            isError
+          />
+          {retryable && (
+            <button className="button button--primary" type="button" onClick={() => setAttempt((value) => value + 1)}>
+              {translate("clientReport.retry")}
+            </button>
+          )}
+        </section>
+      </main>
+    );
   }
 
   return (

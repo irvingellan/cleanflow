@@ -8,9 +8,11 @@ const clientReportApiPath = "/api/client-report";
 export const clientReportRequestTimeoutMilliseconds = 15_000;
 
 export class ClientReportRequestError extends Error {
-  constructor(code) {
+  constructor(code, { retryable = true, status = null } = {}) {
     super(code);
     this.code = code;
+    this.retryable = retryable;
+    this.status = status;
   }
 }
 
@@ -48,26 +50,46 @@ export function publicClientReportPhotoUrl(token) {
 
 export async function getPublicClientReport(token) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), clientReportRequestTimeoutMilliseconds);
+  let timeout;
+  const deadline = new Promise((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new ClientReportRequestError("client_report_timeout"));
+    }, clientReportRequestTimeoutMilliseconds);
+  });
   try {
-    const response = await fetch(clientReportRequestUrl(token), {
-      headers: { Accept: "application/json" },
-      credentials: "omit",
-      cache: "no-store",
-      referrerPolicy: "no-referrer",
-      signal: controller.signal,
-    });
-    let body = {};
-    try { body = await response.json(); } catch { /* status is enough */ }
-    if (!response.ok || !body.report || typeof body.report !== "object") {
-      throw new ClientReportRequestError(body.error || "client_report_unavailable");
-    }
-    return body.report;
+    const request = (async () => {
+      const response = await fetch(clientReportRequestUrl(token), {
+        headers: { Accept: "application/json" },
+        credentials: "omit",
+        cache: "no-store",
+        referrerPolicy: "no-referrer",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new ClientReportRequestError("client_report_unavailable", {
+          retryable: response.status !== 404 && response.status !== 410,
+          status: response.status,
+        });
+      }
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        throw new ClientReportRequestError("client_report_response_invalid");
+      }
+      if (!body?.report || typeof body.report !== "object") {
+        throw new ClientReportRequestError("client_report_response_invalid");
+      }
+      return body.report;
+    })();
+    return await Promise.race([request, deadline]);
   } catch (error) {
+    if (controller.signal.aborted && error?.code !== "client_report_timeout") {
+      throw new ClientReportRequestError("client_report_timeout");
+    }
     if (error instanceof ClientReportRequestError) throw error;
-    throw new ClientReportRequestError(controller.signal.aborted
-      ? "client_report_timeout"
-      : "client_report_unavailable");
+    throw new ClientReportRequestError("client_report_unavailable");
   } finally {
     clearTimeout(timeout);
   }

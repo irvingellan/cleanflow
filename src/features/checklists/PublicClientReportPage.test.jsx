@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 
@@ -48,10 +48,26 @@ describe("PublicClientReportPage", () => {
   });
 
   it("shows a safe unavailable state for an invalid or revoked link", async () => {
-    getPublicClientReport.mockRejectedValue(new Error("unavailable"));
+    getPublicClientReport.mockRejectedValue({ retryable: false });
     renderPage("invalid");
 
     expect(await screen.findByText("This cleaning report is no longer available.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry after a temporary load failure and then shows the report", async () => {
+    getPublicClientReport.mockRejectedValueOnce({ retryable: true }).mockResolvedValueOnce({
+      titleKey: "clientReport.title",
+      propertyName: "Seaside House",
+      sections: [],
+    });
+    renderPage();
+
+    expect(await screen.findByText("The cleaning report could not load right now. Please try again.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "Cleaning report" })).toBeVisible();
+    await waitFor(() => expect(getPublicClientReport).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 });

@@ -38,7 +38,7 @@ describe("ClientReportControls", () => {
     expect(screen.getByRole("button", { name: "Report link copied" })).toBeVisible();
   });
 
-  it("rotates or revokes an existing report without retaining its prior URL", async () => {
+  it("warns and requires confirmation before replacing an already-shared link", async () => {
     const getCapability = vi.fn().mockResolvedValue({ state: "ACTIVE" });
     const issueReport = vi.fn().mockResolvedValue({
       created: true,
@@ -49,7 +49,17 @@ describe("ClientReportControls", () => {
     renderControls({ getCapability, issueReport, revokeReport });
 
     expect(await screen.findByText("A client report link is active.")).toBeVisible();
+    expect(screen.getByText(/The active link cannot be shown again here/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Copy report link" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open report" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Replace report link" }));
+    expect(screen.getByText(/already shared with the client will stop working immediately/)).toBeVisible();
+    expect(issueReport).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Keep current link" }));
+    expect(issueReport).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Replace and disable old link" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Replace report link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace and disable old link" }));
     await waitFor(() => expect(issueReport).toHaveBeenCalledWith("job-1", { replaceExisting: true }));
     expect(await screen.findByRole("link", { name: "Open report" })).toHaveAttribute(
       "href", "https://cleanflow.example/client-report?t=new-secret",
