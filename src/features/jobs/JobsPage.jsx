@@ -43,6 +43,7 @@ export function JobsPage({
   isLoading,
   hasError,
   onSelect,
+  onCreate,
   filters,
   cleaners,
   properties,
@@ -162,11 +163,18 @@ export function JobsPage({
 
   return (
     <section aria-labelledby="jobs-title">
-      <p className="eyebrow">{translate("navigation.jobs")}</p>
-      <h2 id="jobs-title" className="list-title">
-        {translate("jobs.title")}
-      </h2>
-      {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
+      <div className="directory-heading">
+        <div>
+          <p className="eyebrow">{translate("navigation.jobs")}</p>
+          <h2 id="jobs-title" className="list-title">
+            {translate("jobs.title")}
+          </h2>
+        </div>
+        <button className="button button--primary" type="button" onClick={onCreate}>
+          {translate("jobs.newService")}
+        </button>
+        {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
+      </div>
 
       <div className="job-filters" aria-label={translate("jobs.filters")}>
         <label className="job-filters__search">

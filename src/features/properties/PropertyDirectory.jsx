@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
 export function PropertyDirectory({ properties, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded }) {
-  const { translate } = useTranslation();
+  const { language, translate } = useTranslation();
+  const [search, setSearch] = useState("");
 
   if (isLoading) {
     return <StateCard message={translate("properties.loading")} status="status" />;
@@ -13,6 +15,13 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
   if (hasError) {
     return <StateCard message={translate("properties.error")} status="alert" isError />;
   }
+
+  const normalizedSearch = search.trim().toLocaleLowerCase(language);
+  const filteredProperties = properties.filter((property) =>
+    `${property.name || ""} ${property.address || ""}`
+      .toLocaleLowerCase(language)
+      .includes(normalizedSearch),
+  );
 
   return (
     <section aria-labelledby="properties-title">
@@ -32,30 +41,46 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
       {properties.length === 0 ? (
         <StateCard message={translate("properties.empty")} />
       ) : (
-        <div className="property-list">
-          {properties.map((property) => {
-            const propertyName = property.name || translate("properties.unnamed");
+        <>
+          <div className="cleaner-name-search">
+            <label htmlFor="property-directory-search">{translate("properties.search")}</label>
+            <input
+              id="property-directory-search"
+              type="search"
+              value={search}
+              placeholder={translate("properties.searchPlaceholder")}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          {filteredProperties.length === 0 ? (
+            <StateCard message={translate("properties.noMatchingSearch")} />
+          ) : (
+            <div className="property-list">
+              {filteredProperties.map((property) => {
+                const propertyName = property.name || translate("properties.unnamed");
 
-            return (
-              <button
-                key={property.id}
-                className="property-card"
-                type="button"
-                aria-label={translate("properties.view", { property: propertyName })}
-                onClick={() => onSelect(property)}
-              >
-                <span className="property-card__title">{propertyName}</span>
+                return (
+                  <button
+                    key={property.id}
+                    className="property-card"
+                    type="button"
+                    aria-label={translate("properties.view", { property: propertyName })}
+                    onClick={() => onSelect(property)}
+                  >
+                    <span className="property-card__title">{propertyName}</span>
 
-                <span className="property-card__label">
-                  <span className="status-dot" aria-hidden="true" />
-                  {translate("common.property")}
-                </span>
-                <DataProvenanceBadge record={property} />
-                {property.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
-              </button>
-            );
-          })}
-        </div>
+                    <span className="property-card__label">
+                      <span className="status-dot" aria-hidden="true" />
+                      {translate("common.property")}
+                    </span>
+                    <DataProvenanceBadge record={property} />
+                    {property.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
       <ScrollToTopButton />
     </section>

@@ -6,18 +6,25 @@ import {
 } from "./offerCompensation.js";
 
 describe("per-cleaner Offer compensation", () => {
-  it("uses a legacy single-cleaner Job payout only as a manager suggestion", () => {
+  it.each([
+    ["legacy", { cleanerPayout: 150 }],
+    ["assignment-aware", { schemaVersion: 2, cleanerPayout: 150 }],
+  ])("uses a %s Job payout only as a manager suggestion", (_schema, job) => {
     expect(getOfferCompensationSuggestion(
-      { cleanerPayout: 150 },
+      job,
       { status: "PENDING" },
-    )).toEqual({ value: "150", source: "legacy-job" });
+    )).toEqual({ value: "150", source: "job" });
   });
 
-  it("does not treat an assignment-aware Job payout as each cleaner's compensation", () => {
+  it("leaves missing Job payout blank and preserves an explicit zero", () => {
     expect(getOfferCompensationSuggestion(
-      { schemaVersion: 2, cleanerPayout: 500 },
+      { schemaVersion: 2 },
       { status: "PENDING" },
     )).toEqual({ value: "", source: "unset" });
+    expect(getOfferCompensationSuggestion(
+      { schemaVersion: 2, cleanerPayout: 0 },
+      { status: "PENDING" },
+    )).toEqual({ value: "0", source: "job" });
   });
 
   it("prefers the saved Offer snapshot over changed Job pricing", () => {
@@ -29,7 +36,7 @@ describe("per-cleaner Offer compensation", () => {
 
   it("preserves an explicitly unset Offer amount instead of falling back", () => {
     expect(getOfferCompensationSuggestion(
-      { cleanerPayout: 150 },
+      { schemaVersion: 2, cleanerPayout: 150 },
       { status: "PENDING", offeredCompensation: null },
     )).toEqual({ value: "", source: "offer" });
   });

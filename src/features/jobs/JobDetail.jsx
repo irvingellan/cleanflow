@@ -1709,8 +1709,8 @@ export function JobDetail({
                         />
                       </label>
                       <p className="offer-compensation-form__help">
-                        {compensationSuggestion.source === "legacy-job"
-                          ? translate("offers.legacyAmountSuggestion")
+                        {compensationSuggestion.source === "job"
+                          ? translate("offers.jobAmountSuggestion")
                           : translate("offers.amountHelper")}
                       </p>
                       {!offerCompensationInput.trim() && (

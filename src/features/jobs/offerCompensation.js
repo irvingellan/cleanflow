@@ -1,9 +1,9 @@
 import { formatDate, formatPrice, hasValue } from "../../lib/presentation.js";
-import { isAssignmentAwareJob, optionalJobPrice } from "./jobCompatibility.js";
+import { optionalJobPrice } from "./jobCompatibility.js";
 
 /**
- * An Offer owns the amount shown to its cleaner. A pre-assignment Job payout is
- * only an unambiguous suggestion for the older single-cleaner Job model.
+ * An Offer owns the amount shown to its cleaner. The Job payout only suggests
+ * an amount for the manager to confirm or edit before issuing that Offer's link.
  */
 export function getOfferCompensationSuggestion(job, offer) {
   if (Object.prototype.hasOwnProperty.call(offer || {}, "offeredCompensation")) {
@@ -14,11 +14,9 @@ export function getOfferCompensationSuggestion(job, offer) {
     };
   }
 
-  if (!isAssignmentAwareJob(job)) {
-    const amount = optionalJobPrice(job?.cleanerPayout);
-    if (amount !== undefined && amount !== null) {
-      return { value: String(amount), source: "legacy-job" };
-    }
+  const amount = optionalJobPrice(job?.cleanerPayout);
+  if (amount !== undefined && amount !== null) {
+    return { value: String(amount), source: "job" };
   }
 
   return { value: "", source: "unset" };

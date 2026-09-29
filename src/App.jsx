@@ -667,6 +667,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     showJobList();
   }
 
+  function showNewJob() {
+    setActiveSection("jobs");
+    clearProperty();
+    setView("create-cleaning");
+  }
+
   function showJobsWithFilter(filter) {
     showJobList(dashboardJobListFilters(filter));
   }
@@ -1050,10 +1056,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
           />
         )}
 
-        {view === "create-cleaning" && selectedProperty && (
+        {view === "create-cleaning" && (
           <CreateCleaningForm
             property={selectedProperty}
-            onBack={() => setView("property-detail")}
+            properties={properties}
+            isLoadingProperties={isLoadingProperties}
+            hasPropertyError={hasPropertyError}
+            onBack={selectedProperty ? () => setView("property-detail") : returnToJobs}
             onCreated={openJob}
           />
         )}
@@ -1064,6 +1073,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             isLoading={isLoadingJobs}
             hasError={hasJobError}
             onSelect={openJob}
+            onCreate={showNewJob}
             filters={jobListFilters}
             cleaners={jobFilterCleaners}
             properties={properties}

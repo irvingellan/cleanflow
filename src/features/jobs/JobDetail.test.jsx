@@ -876,7 +876,7 @@ describe("JobDetail lifecycle actions", () => {
     });
   });
 
-  it("keeps v2 Job totals out of per-cleaner offer suggestions and message when amount is unset", async () => {
+  it("uses a v2 Job payout as an editable proposal and copies only the confirmed Offer amount", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = navigator.clipboard;
     Object.defineProperty(navigator, "clipboard", {
@@ -885,7 +885,7 @@ describe("JobDetail lifecycle actions", () => {
     });
     const onCreatePublicOfferLink = vi.fn().mockResolvedValue({
       url: "https://cleanflow.example/offer/synthetic-v2",
-      offeredCompensation: null,
+      offeredCompensation: 125,
     });
 
     renderJobDetail(
@@ -905,29 +905,54 @@ describe("JobDetail lifecycle actions", () => {
 
     const pendingOffer = screen.getByText("Ana").closest("article");
     fireEvent.click(within(pendingOffer).getByRole("button", { name: "Create public link" }));
-    expect(screen.getByLabelText("Offered compensation (USD)")).toHaveValue(null);
-    expect(screen.getByRole("status")).toHaveTextContent("Amount not set");
+    expect(screen.getByLabelText("Offered compensation (USD)")).toHaveValue(600);
+    expect(onCreatePublicOfferLink).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Offered compensation (USD)"), {
+      target: { value: "125" },
+    });
     fireEvent.click(within(pendingOffer).getByRole("button", { name: "Create public link" }));
 
     await waitFor(() => {
       expect(onCreatePublicOfferLink).toHaveBeenCalledWith(
         expect.objectContaining({ id: "pending-v2" }),
-        null,
+        125,
       );
     });
     fireEvent.click(screen.getByRole("button", { name: "Copy offer message" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText.mock.calls[0][0]).toContain("Amount not set / To be agreed");
+    expect(writeText.mock.calls[0][0]).toContain("Offered compensation: $125.00");
     expect(writeText.mock.calls[0][0]).not.toContain("$600.00");
     expect(writeText.mock.calls[0][0]).not.toContain("$900.00");
     const v2WhatsAppLink = screen.getByRole("link", { name: "Open in WhatsApp" });
     expect(new URL(v2WhatsAppLink.href).searchParams.get("text")).toBe(writeText.mock.calls[0][0]);
-    expect(screen.getByText("Amount not set. The cleaner will see ‘Amount not set / To be agreed.’")).toBeVisible();
+    expect(screen.queryByText("Amount not set. The cleaner will see ‘Amount not set / To be agreed.’")).not.toBeInTheDocument();
 
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: originalClipboard,
     });
+  });
+
+  it("does not replace an explicitly unset v2 Offer snapshot with the Job payout", () => {
+    const onCreatePublicOfferLink = vi.fn();
+    renderJobDetail("OFFERED", {
+      schemaVersion: 2,
+      cleanerPayout: 600,
+      offers: [{
+        id: "pending-v2",
+        cleanerId: "cleaner-v2",
+        cleanerName: "Ana",
+        status: "PENDING",
+        offeredCompensation: null,
+      }],
+    }, { onCreatePublicOfferLink });
+
+    const pendingOffer = screen.getByText("Ana").closest("article");
+    fireEvent.click(within(pendingOffer).getByRole("button", { name: "Create public link" }));
+
+    expect(screen.getByLabelText("Offered compensation (USD)")).toHaveValue(null);
+    expect(screen.getByRole("status")).toHaveTextContent("Amount not set");
+    expect(onCreatePublicOfferLink).not.toHaveBeenCalled();
   });
 
   it("shows a secondary add-more action for an assignment-aware Job with offers", () => {

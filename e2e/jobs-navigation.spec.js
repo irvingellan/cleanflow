@@ -251,3 +251,57 @@ test("a manager-created Job keeps optional guest context from a linked Property"
   await expect(page.getByText("E2E Guest")).toBeVisible();
   await expect(page.getByText("10:00")).toBeVisible();
 });
+
+test("manager fast path creates a Job from Jobs and surfaces its Offer action on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", {
+    name: "Jobs",
+  }).click();
+  await expect(page.getByRole("heading", { name: "Cleaning jobs" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+  await page.getByRole("button", { name: "New service" }).click();
+  await expect(page.getByRole("heading", { name: "Create cleaning" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Property details" })).toHaveCount(0);
+
+  const form = page.locator(".cleaning-form");
+  const property = form.getByRole("combobox", { name: "Property" });
+  await form.getByRole("searchbox").fill("E2E Client Property");
+  await expect(property.locator("option")).toHaveCount(2);
+  await property.selectOption("e2e-client-property");
+  await expect(property).toHaveValue("e2e-client-property");
+  await expect(form.getByRole("textbox", { name: "Scheduled time" })).toHaveValue("11:00");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  const scheduledDate = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+  await form.getByRole("textbox", { name: "Date" }).fill(scheduledDate);
+  await form.getByRole("textbox", { name: "Notes" }).fill("E2E manager fast path");
+  await form.getByRole("button", { name: "Create cleaning" }).click();
+
+  await expect(page.getByText("Job details", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "E2E Client Property" })).toBeVisible();
+  const offerAction = page.locator(".job-detail__quick-action");
+  await expect(offerAction.getByRole("button", { name: "Offer cleaning to cleaners" })).toBeVisible();
+  expect((await offerAction.boundingBox()).y).toBeLessThan(844);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+  const createdJobs = await getE2eFirestore()
+    .collection("organizations")
+    .doc("cleanflow-demo")
+    .collection("jobs")
+    .where("notes", "==", "E2E manager fast path")
+    .get();
+  expect(createdJobs.size).toBe(1);
+  expect(createdJobs.docs[0].data()).toMatchObject({
+    propertyId: "e2e-client-property",
+    scheduledDate,
+    scheduledStart: "11:00",
+    operationalStatus: "UNASSIGNED",
+  });
+});

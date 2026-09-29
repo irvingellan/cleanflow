@@ -1712,6 +1712,42 @@ Object.assign(messages.es, {
   "jobs.reminderCleanFlowConfirmation": "Confirma que asistirás mediante tu enlace de CleanFlow: {url}",
 });
 
+Object.assign(messages.en, {
+  "jobs.newService": "New service",
+  "jobs.chooseProperty": "Choose property",
+  "jobs.propertyRequired": "Choose an active property.",
+  "jobs.noActiveProperties": "No active properties available.",
+  "jobs.propertyPriceHint": "Property prices are suggested when available. Edit them for this service only.",
+  "properties.search": "Search properties",
+  "properties.searchPlaceholder": "Search name or address",
+  "properties.noMatchingSearch": "No properties match this search.",
+  "offers.jobAmountSuggestion": "Suggested from this Job's cleaner payout. Confirm the individual amount before creating the link; it may cover a team.",
+});
+
+Object.assign(messages.pt, {
+  "jobs.newService": "Novo serviço",
+  "jobs.chooseProperty": "Escolher propriedade",
+  "jobs.propertyRequired": "Escolha uma propriedade ativa.",
+  "jobs.noActiveProperties": "Nenhuma propriedade ativa disponível.",
+  "jobs.propertyPriceHint": "Os preços da propriedade são sugeridos quando disponíveis. Edite apenas para este serviço.",
+  "properties.search": "Buscar propriedades",
+  "properties.searchPlaceholder": "Buscar nome ou endereço",
+  "properties.noMatchingSearch": "Nenhuma propriedade corresponde à busca.",
+  "offers.jobAmountSuggestion": "Sugestão do pagamento da cleaner neste serviço. Confirme o valor individual antes de criar o link; ele pode ser o total da equipe.",
+});
+
+Object.assign(messages.es, {
+  "jobs.newService": "Nuevo servicio",
+  "jobs.chooseProperty": "Elegir propiedad",
+  "jobs.propertyRequired": "Elige una propiedad activa.",
+  "jobs.noActiveProperties": "No hay propiedades activas disponibles.",
+  "jobs.propertyPriceHint": "Los precios de la propiedad se sugieren cuando están disponibles. Edítalos solo para este servicio.",
+  "properties.search": "Buscar propiedades",
+  "properties.searchPlaceholder": "Buscar nombre o dirección",
+  "properties.noMatchingSearch": "Ninguna propiedad coincide con la búsqueda.",
+  "offers.jobAmountSuggestion": "Sugerencia del pago de cleaner de este servicio. Confirma el importe individual antes de crear el enlace; podría ser el total del equipo.",
+});
+
 export function translateInLanguage(language, key, replacements = {}) {
   const safeLanguage = normalizeTranslationLanguage(language);
   const message = messages[safeLanguage][key] || messages.en[key] || key;

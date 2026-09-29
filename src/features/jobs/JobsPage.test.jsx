@@ -107,6 +107,32 @@ describe("sortJobWorklist", () => {
 });
 
 describe("JobsPage filters", () => {
+  it("opens the existing new-service flow directly from Jobs", async () => {
+    const onCreate = vi.fn();
+    render(
+      <TranslationProvider>
+        <JobsPage
+          jobs={jobs}
+          isLoading={false}
+          hasError={false}
+          onSelect={vi.fn()}
+          onCreate={onCreate}
+          filters={createJobListFilters()}
+          cleaners={[]}
+          properties={[]}
+          onFiltersChange={vi.fn()}
+          onClearFilters={vi.fn()}
+          hasMore={false}
+          isLoadingMore={false}
+          onLoadMore={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "New service" }));
+    expect(onCreate).toHaveBeenCalledOnce();
+  });
+
   it("shows the operational schedule, assigned cleaner name, and available job financials", () => {
     render(
       <TranslationProvider>

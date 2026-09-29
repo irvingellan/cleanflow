@@ -30,10 +30,12 @@ describe("CreateCleaningForm", () => {
       </TranslationProvider>,
     );
 
-    expect(screen.getByLabelText("Property")).toHaveValue("Pacific Beach Condo");
+    expect(screen.getByLabelText("Property")).toHaveValue("property-1");
+    expect(screen.getByRole("option", { name: "Pacific Beach Condo" })).toBeVisible();
     expect(screen.getByLabelText("Client")).toHaveValue("Carl");
     expect(screen.getByLabelText("Client price")).toHaveValue(350);
     expect(screen.getByLabelText("Cleaner payout")).toHaveValue(200);
+    expect(screen.getByLabelText("Scheduled time")).toHaveValue("11:00");
     expect(screen.getByDisplayValue("Unassigned")).toBeVisible();
     expect(screen.queryByLabelText("Cleaners needed")).not.toBeInTheDocument();
   });
@@ -132,6 +134,161 @@ describe("CreateCleaningForm", () => {
         cleanerPayout: 210,
       }));
     });
+  });
+
+  it("searches loaded active Properties by name or address and derives the selected Client and prices", async () => {
+    createJob.mockResolvedValue({ id: "job-direct" });
+    const properties = [
+      {
+        id: "property-ocean",
+        name: "Ocean House",
+        address: "12 Harbor Lane",
+        active: true,
+        clientId: "client-ocean",
+        clientName: "Ocean Client",
+        defaultClientPrice: 325,
+        defaultCleanerPrice: 175,
+      },
+      { id: "property-palm", name: "Palm Flat", active: true },
+      { id: "property-inactive", name: "Closed House", active: false },
+      { id: "property-archived", name: "Hidden House", active: true, archivedAt: true },
+    ];
+
+    render(
+      <TranslationProvider>
+        <CreateCleaningForm properties={properties} onBack={vi.fn()} onCreated={vi.fn()} />
+      </TranslationProvider>,
+    );
+
+    const propertySelect = screen.getByLabelText("Property");
+    expect(propertySelect).toHaveValue("");
+    expect(screen.getByLabelText("Client")).toHaveValue("");
+    expect(screen.getByLabelText("Client price")).toHaveValue(null);
+    expect(screen.getByLabelText("Cleaner payout")).toHaveValue(null);
+    expect(Array.from(propertySelect.options).map((option) => option.value)).toEqual([
+      "",
+      "property-ocean",
+      "property-palm",
+    ]);
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "pAlM" } });
+    expect(Array.from(propertySelect.options).map((option) => option.value)).toEqual([
+      "",
+      "property-palm",
+    ]);
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "HARBOR" } });
+    expect(Array.from(propertySelect.options).map((option) => option.value)).toEqual([
+      "",
+      "property-ocean",
+    ]);
+    fireEvent.change(propertySelect, { target: { value: "property-ocean" } });
+    expect(screen.getByLabelText("Client")).toHaveValue("Ocean Client");
+    expect(screen.getByLabelText("Client price")).toHaveValue(325);
+    expect(screen.getByLabelText("Cleaner payout")).toHaveValue(175);
+
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-15" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+
+    await waitFor(() => expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
+      propertyId: "property-ocean",
+      propertyName: "Ocean House",
+      clientId: "client-ocean",
+      clientName: "Ocean Client",
+      clientPrice: 325,
+      cleanerPayout: 175,
+      scheduledStart: "11:00",
+    })));
+  });
+
+  it("replaces per-Job prices only when the manager switches Property and keeps blanks blank", () => {
+    const firstProperty = {
+      id: "property-first",
+      name: "First House",
+      clientName: "First Client",
+      defaultClientPrice: 300,
+      defaultCleanerPrice: 150,
+    };
+    const secondProperty = {
+      id: "property-second",
+      name: "Second House",
+      clientName: "Second Client",
+      active: true,
+    };
+
+    render(
+      <TranslationProvider>
+        <CreateCleaningForm
+          property={firstProperty}
+          properties={[firstProperty, secondProperty]}
+          onBack={vi.fn()}
+          onCreated={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Client price"), { target: { value: "375" } });
+    fireEvent.change(screen.getByLabelText("Cleaner payout"), { target: { value: "210" } });
+    fireEvent.change(screen.getByLabelText("Property"), {
+      target: { value: "property-second" },
+    });
+
+    expect(screen.getByLabelText("Client")).toHaveValue("Second Client");
+    expect(screen.getByLabelText("Client price")).toHaveValue(null);
+    expect(screen.getByLabelText("Cleaner payout")).toHaveValue(null);
+    expect(screen.getByLabelText("Scheduled time")).toHaveValue("11:00");
+
+    fireEvent.change(screen.getByLabelText("Client price"), { target: { value: "420" } });
+    expect(screen.getByLabelText("Client price")).toHaveValue(420);
+    expect(secondProperty).not.toHaveProperty("defaultClientPrice");
+  });
+
+  it("requires a Property and waits for a loaded Property list on direct entry", () => {
+    const form = (props) => (
+      <TranslationProvider>
+        <CreateCleaningForm onBack={vi.fn()} onCreated={vi.fn()} {...props} />
+      </TranslationProvider>
+    );
+    const { rerender } = render(form({ isLoadingProperties: true }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading properties");
+    expect(screen.getByRole("button", { name: "Create cleaning" })).toBeDisabled();
+
+    rerender(form({ hasPropertyError: true }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to load properties");
+    expect(screen.getByRole("button", { name: "Create cleaning" })).toBeDisabled();
+
+    rerender(form({ properties: [{ id: "property-inactive", name: "Closed House", active: false }] }));
+    expect(screen.getByRole("status")).toBeVisible();
+    expect(Array.from(screen.getByLabelText("Property").options).map((option) => option.value))
+      .toEqual([""]);
+
+    rerender(form({ properties: [{ id: "property-active", name: "Active House", active: true }] }));
+    expect(screen.getByRole("button", { name: "Create cleaning" })).toBeEnabled();
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+    expect(screen.getByRole("alert")).toBeVisible();
+    expect(createJob).not.toHaveBeenCalled();
+  });
+
+  it("allows the 11:00 time to be changed or cleared before saving", async () => {
+    createJob.mockResolvedValue({ id: "job-no-time" });
+    render(
+      <TranslationProvider>
+        <CreateCleaningForm
+          property={{ id: "property-1", name: "Pacific Beach Condo" }}
+          onBack={vi.fn()}
+          onCreated={vi.fn()}
+        />
+      </TranslationProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-15" } });
+    fireEvent.change(screen.getByLabelText("Scheduled time"), { target: { value: "" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+
+    await waitFor(() => expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
+      scheduledStart: "",
+    })));
   });
 
   it("does not infer a client ID from a legacy Property client name", () => {

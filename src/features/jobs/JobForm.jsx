@@ -4,22 +4,58 @@ import { useTranslation } from "../../i18n/translations.js";
 import { maximumGuestNameLength, optionalJobPrice } from "./jobCompatibility.js";
 import { createJob } from "./jobService.js";
 
-export function CreateCleaningForm({ property, onBack, onCreated }) {
+export function CreateCleaningForm({
+  property = null,
+  properties = [],
+  isLoadingProperties = false,
+  hasPropertyError = false,
+  onBack,
+  onCreated,
+}) {
   const { translate } = useTranslation();
-  const propertyName = property.name ?? "";
-  const clientName = property.clientName ?? "";
-  const displayPropertyName = propertyName || translate("properties.unnamed");
-  const displayClientName = clientName || translate("common.notProvided");
+  const [selectedProperty, setSelectedProperty] = useState(property);
+  const [propertySearch, setPropertySearch] = useState("");
   const [formValues, setFormValues] = useState({
     scheduledDate: "",
-    scheduledStart: "",
-    clientPrice: property.defaultClientPrice ?? "",
-    cleanerPayout: property.defaultCleanerPrice ?? "",
+    scheduledStart: "11:00",
+    clientPrice: property?.defaultClientPrice ?? "",
+    cleanerPayout: property?.defaultCleanerPrice ?? "",
     guestName: "",
     notes: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const propertyName = selectedProperty?.name ?? "";
+  const clientName = selectedProperty?.clientName ?? "";
+  const availableProperties = properties.filter(
+    (candidate) => candidate.active !== false && !candidate.archivedAt,
+  );
+  const normalizedSearch = propertySearch.trim().toLocaleLowerCase();
+  const matchingProperties = availableProperties.filter((candidate) =>
+    `${candidate.name || ""} ${candidate.address || ""}`
+      .toLocaleLowerCase()
+      .includes(normalizedSearch),
+  );
+  const propertyOptions = selectedProperty &&
+    !matchingProperties.some((candidate) => candidate.id === selectedProperty.id)
+    ? [selectedProperty, ...matchingProperties]
+    : matchingProperties;
+
+  function selectProperty(event) {
+    const nextProperty = availableProperties.find(
+      (candidate) => candidate.id === event.target.value,
+    ) || null;
+    if (nextProperty?.id !== selectedProperty?.id) {
+      setSelectedProperty(nextProperty);
+      setFormValues((currentValues) => ({
+        ...currentValues,
+        clientPrice: nextProperty?.defaultClientPrice ?? "",
+        cleanerPayout: nextProperty?.defaultCleanerPrice ?? "",
+      }));
+    }
+    setPropertySearch("");
+    setSaveError("");
+  }
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -32,8 +68,12 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setIsSaving(true);
     setSaveError("");
+
+    if (!selectedProperty) {
+      setSaveError(translate("jobs.propertyRequired"));
+      return;
+    }
 
     const clientPrice = optionalJobPrice(formValues.clientPrice);
     const cleanerPayout = optionalJobPrice(formValues.cleanerPayout);
@@ -41,15 +81,15 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
 
     if (clientPrice === null || cleanerPayout === null) {
       setSaveError(translate("jobs.priceInvalid"));
-      setIsSaving(false);
       return;
     }
 
+    setIsSaving(true);
     try {
       const job = await createJob({
-        propertyId: property.id,
+        propertyId: selectedProperty.id,
         propertyName,
-        ...(property.clientId ? { clientId: property.clientId } : {}),
+        ...(selectedProperty.clientId ? { clientId: selectedProperty.clientId } : {}),
         clientName,
         scheduledDate: formValues.scheduledDate,
         scheduledStart: formValues.scheduledStart,
@@ -77,13 +117,55 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
 
       <form className="cleaning-form" noValidate onSubmit={handleSubmit}>
         <label>
-          {translate("common.property")}
-          <input type="text" value={displayPropertyName} readOnly />
+          {translate("properties.search")}
+          <input
+            type="search"
+            value={propertySearch}
+            placeholder={translate("properties.searchPlaceholder")}
+            onChange={(event) => setPropertySearch(event.target.value)}
+            disabled={isSaving || (isLoadingProperties && !selectedProperty)}
+          />
         </label>
 
         <label>
+          {translate("common.property")}
+          <select
+            name="propertyId"
+            value={selectedProperty?.id ?? ""}
+            onChange={selectProperty}
+            disabled={isSaving || (!selectedProperty && (isLoadingProperties || hasPropertyError))}
+            required
+          >
+            <option value="">{translate("jobs.chooseProperty")}</option>
+            {propertyOptions.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.name || translate("properties.unnamed")}
+                {candidate.address ? ` — ${candidate.address}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {!selectedProperty && isLoadingProperties && (
+          <p role="status">{translate("properties.loading")}</p>
+        )}
+        {!selectedProperty && hasPropertyError && (
+          <p role="alert">{translate("properties.error")}</p>
+        )}
+        {!selectedProperty && !isLoadingProperties && !hasPropertyError && availableProperties.length === 0 && (
+          <p role="status">{translate("jobs.noActiveProperties")}</p>
+        )}
+        {normalizedSearch && matchingProperties.length === 0 && availableProperties.length > 0 && (
+          <p>{translate("properties.noMatchingSearch")}</p>
+        )}
+
+        <label>
           {translate("common.client")}
-          <input type="text" value={displayClientName} readOnly />
+          <input
+            type="text"
+            value={selectedProperty ? clientName || translate("common.notProvided") : ""}
+            readOnly
+          />
         </label>
 
         <label>
@@ -134,6 +216,9 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
             />
           </label>
         </div>
+        {selectedProperty && (
+          <p className="form-helper">{translate("jobs.propertyPriceHint")}</p>
+        )}
 
         <label>
           {translate("jobs.guestName")}
@@ -171,7 +256,7 @@ export function CreateCleaningForm({ property, onBack, onCreated }) {
           <button
             className="button button--primary"
             type="submit"
-            disabled={isSaving}
+            disabled={isSaving || (!selectedProperty && (isLoadingProperties || hasPropertyError))}
           >
             {isSaving ? translate("jobs.creating") : translate("jobs.create")}
           </button>
