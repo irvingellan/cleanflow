@@ -761,6 +761,83 @@ h1 {
 .load-diagnostics__result--success { color: var(--color-success); }
 .load-diagnostics__uid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
+.load-diagnostics__visits {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 18px;
+}
+
+.load-diagnostics__visits h4 { margin: 0; color: var(--color-heading); }
+
+.load-diagnostics__visit-picker {
+  display: grid;
+  gap: 6px;
+  max-width: 440px;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.load-diagnostics__visit-picker select {
+  width: 100%;
+  border: 1px solid var(--color-input-border);
+  border-radius: 9px;
+  padding: 8px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.load-diagnostics__visit-details {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.load-diagnostics__waterfall {
+  display: grid;
+  gap: 10px;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.load-diagnostics__waterfall-row {
+  display: grid;
+  grid-template-columns: 150px minmax(180px, 1fr) 170px;
+  align-items: center;
+  gap: 12px;
+  min-width: 560px;
+  font-size: 0.8125rem;
+}
+
+.load-diagnostics__waterfall-label { display: grid; gap: 2px; }
+.load-diagnostics__waterfall-label small { color: var(--color-muted); }
+.load-diagnostics__waterfall-track {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--color-surface-subtle);
+}
+.load-diagnostics__waterfall-bar {
+  position: absolute;
+  top: 2px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--color-chart);
+}
+.load-diagnostics__waterfall-bar--error { background: var(--color-error-text); }
+.load-diagnostics__waterfall-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.load-diagnostics__waterfall-note {
+  margin: 3px 0 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
 @media (max-width: 640px) {
   .manager-load-diagnostics__heading { flex-direction: column; }
   .load-diagnostics__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }

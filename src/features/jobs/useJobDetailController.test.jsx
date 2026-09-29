@@ -12,6 +12,15 @@ const mocks = vi.hoisted(() => ({
   getCleaners: vi.fn(),
   getJobIssues: vi.fn(),
   getJobOffers: vi.fn(),
+  getJobAssignments: vi.fn(),
+  createManagerPageVisitId: vi.fn(),
+  createManagerOperationTracker: vi.fn(),
+  trackers: [],
+}));
+
+vi.mock("../telemetry/managerOperationTelemetryService.js", () => ({
+  createManagerPageVisitId: mocks.createManagerPageVisitId,
+  createManagerOperationTracker: mocks.createManagerOperationTracker,
 }));
 
 vi.mock("../checklists/checklistRunService.js", () => ({
@@ -42,6 +51,11 @@ vi.mock("./jobOfferService.js", () => ({
   createPublicOfferLink: vi.fn(),
 }));
 
+vi.mock("./assignmentService.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  getJobAssignments: mocks.getJobAssignments,
+}));
+
 vi.mock("./jobService.js", async (importOriginal) => ({
   ...(await importOriginal()),
   getJobById: mocks.getJobById,
@@ -56,6 +70,16 @@ beforeEach(() => {
   mocks.getCleaners.mockResolvedValue([]);
   mocks.getJobIssues.mockResolvedValue([]);
   mocks.getJobOffers.mockResolvedValue([]);
+  mocks.getJobAssignments.mockResolvedValue([]);
+  mocks.trackers.length = 0;
+  mocks.createManagerPageVisitId.mockImplementation(
+    () => `visit-${mocks.createManagerPageVisitId.mock.calls.length}`,
+  );
+  mocks.createManagerOperationTracker.mockImplementation((options) => {
+    const tracker = { options, track: vi.fn((_operation, task) => task()) };
+    mocks.trackers.push(tracker);
+    return tracker;
+  });
 });
 
 function deferred() {
@@ -91,6 +115,75 @@ describe("useJobDetailController checklist refresh", () => {
     await act(async () => { first.resolve({ id: "initial", property: { name: "Job A" } }); });
 
     expect(result.current.detail.checklistRun?.property?.name).toBe("Job B");
+  });
+});
+
+describe("useJobDetailController operation telemetry", () => {
+  const job = { id: "synthetic-job-1", schemaVersion: 2, operationalStatus: "ASSIGNED" };
+
+  it("tracks six independent initial reads in one visit and refreshes without serializing them", async () => {
+    const pending = Object.fromEntries(
+      ["offers", "issues", "assignments", "checklist-run", "checklist-capability", "cleaners"]
+        .map((operation) => [operation, deferred()]),
+    );
+    mocks.getJobOffers.mockReturnValue(pending.offers.promise);
+    mocks.getJobIssues.mockReturnValue(pending.issues.promise);
+    mocks.getJobAssignments.mockReturnValue(pending.assignments.promise);
+    mocks.getChecklistRun.mockReturnValue(pending["checklist-run"].promise);
+    mocks.getChecklistCapability.mockReturnValue(pending["checklist-capability"].promise);
+    mocks.getCleaners.mockReturnValue(pending.cleaners.promise);
+
+    const { result, rerender } = renderHook(({ view }) => useJobDetailController({
+      view, onJobUpdated: vi.fn(), actorUid: "manager-1",
+    }), { initialProps: { view: "dashboard" } });
+    act(() => result.current.openJob(job));
+    rerender({ view: "job-detail" });
+    await waitFor(() => expect(mocks.trackers).toHaveLength(1));
+    const tracker = mocks.trackers[0];
+    await waitFor(() => expect(tracker.track).toHaveBeenCalledTimes(6));
+    expect(tracker.options).toEqual({ uid: "manager-1", pageVisitId: "visit-1" });
+    expect(tracker.track.mock.calls.map(([operation]) => operation).sort()).toEqual([
+      "assignments", "checklist-capability", "checklist-run", "cleaners", "issues", "offers",
+    ]);
+    // All six requests started before any response was released.
+    expect(mocks.getJobOffers).toHaveBeenCalledOnce();
+    expect(mocks.getJobIssues).toHaveBeenCalledOnce();
+    expect(mocks.getJobAssignments).toHaveBeenCalledOnce();
+    expect(mocks.getChecklistRun).toHaveBeenCalledOnce();
+    expect(mocks.getChecklistCapability).toHaveBeenCalledOnce();
+    expect(mocks.getCleaners).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      pending.offers.resolve([]);
+      pending.issues.resolve([]);
+      pending.assignments.resolve([]);
+      pending["checklist-run"].resolve(null);
+      pending["checklist-capability"].resolve({ state: "NONE" });
+      pending.cleaners.resolve([]);
+      await Promise.all(Object.values(pending).map((entry) => entry.promise));
+    });
+    await act(async () => { await result.current.detail.refreshOffers(); });
+    expect(tracker.track.mock.calls.filter(([operation]) => operation === "offers")).toHaveLength(2);
+    expect(mocks.createManagerPageVisitId).toHaveBeenCalledOnce();
+  });
+
+  it("uses a fresh opaque visit after Job switch and does not instrument other views", async () => {
+    const { result, rerender } = renderHook(({ view }) => useJobDetailController({
+      view, onJobUpdated: vi.fn(), actorUid: "manager-1",
+    }), { initialProps: { view: "dashboard" } });
+    act(() => result.current.openJob(job));
+    rerender({ view: "job-detail" });
+    await waitFor(() => expect(mocks.trackers).toHaveLength(1));
+    act(() => result.current.openJob({ ...job, id: "synthetic-job-2" }));
+    await waitFor(() => expect(mocks.trackers).toHaveLength(2));
+    expect(mocks.trackers[1].options.pageVisitId).not.toBe(mocks.trackers[0].options.pageVisitId);
+    rerender({ view: "checklist-run" });
+    await act(async () => { await result.current.detail.refreshChecklistRun(); });
+    expect(mocks.trackers[1].track.mock.calls.filter(([operation]) => operation === "checklist-run"))
+      .toHaveLength(1);
+    rerender({ view: "job-detail" });
+    await waitFor(() => expect(mocks.trackers).toHaveLength(3));
+    expect(mocks.trackers[2].options.pageVisitId).not.toBe(mocks.trackers[1].options.pageVisitId);
   });
 });
 

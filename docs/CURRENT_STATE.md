@@ -217,6 +217,13 @@ run against production while implementing this slice; it performs reads only
 and requires the existing Application Default Credentials plus an explicit
 production-read acknowledgement for `clean-flow-prototipo`.
 
+Manager Async Operation Telemetry V2 (#45) is implemented but **not deployed**.
+It records six allowlisted Job Detail read operations per random page visit in
+append-only, manager-authorized diagnostics; the existing page-load events
+remain unchanged. The internal load-times view adds bounded operation summaries
+and a visit waterfall. These are latency diagnostics, not an adoption or formal
+time-to-actionable metric. Release requires Firestore Rules and Hosting only.
+
 Experiment before building persistent Cleaner Hub/My Jobs, owner-as-customer or
 report-value assumptions, iCal versus AI intake, and deeper team-Job execution.
 Park advanced financial/payroll and invoice/payment architecture,

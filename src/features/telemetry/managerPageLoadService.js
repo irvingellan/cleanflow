@@ -56,9 +56,8 @@ function boundedDuration(value) {
   return Math.max(0, Math.min(600_000, Math.round(Number(value) || 0)));
 }
 
-/** Builds a deliberately coarse, customer-data-free event for pilot latency comparison. */
-export function buildManagerPageLoadEvent({ page, durationMs, dataDurationMs, result, uid }, environment = globalThis) {
-  if (!allowedPages.has(page) || !["success", "error"].includes(result) || !uid) return null;
+/** Shared coarse environment metadata for manager diagnostics. */
+export function managerPageClientMetadata(environment = globalThis) {
   const navigator = environment.navigator || {};
   const window = environment.window || environment;
   const matchMedia = typeof window.matchMedia === "function" ? window.matchMedia.bind(window) : null;
@@ -66,11 +65,6 @@ export function buildManagerPageLoadEvent({ page, durationMs, dataDurationMs, re
   const connection = connectionSummary(navigator.connection);
 
   return {
-    page,
-    durationMs: boundedDuration(durationMs),
-    dataDurationMs: boundedDuration(dataDurationMs),
-    result,
-    uid,
     sessionId: storedIdentifier(environment.sessionStorage, sessionStorageKey, environment),
     deviceId: storedIdentifier(environment.localStorage, deviceStorageKey, environment),
     deviceClass: Number(window.innerWidth) < 768 ? "mobile" : "desktop",
@@ -83,6 +77,19 @@ export function buildManagerPageLoadEvent({ page, durationMs, dataDurationMs, re
     },
     appVersion,
     ...(connection ? { connection } : {}),
+  };
+}
+
+/** Builds a deliberately coarse, customer-data-free event for pilot latency comparison. */
+export function buildManagerPageLoadEvent({ page, durationMs, dataDurationMs, result, uid }, environment = globalThis) {
+  if (!allowedPages.has(page) || !["success", "error"].includes(result) || !uid) return null;
+  return {
+    page,
+    durationMs: boundedDuration(durationMs),
+    dataDurationMs: boundedDuration(dataDurationMs),
+    result,
+    uid,
+    ...managerPageClientMetadata(environment),
   };
 }
 

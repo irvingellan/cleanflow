@@ -65,4 +65,50 @@ describe("manager page-load diagnostics", () => {
     expect(durationSeverity(1000)).toBe("noticeable");
     expect(durationSeverity(3001)).toBe("slow");
   });
+
+  it("reads a bounded operation window and projects only timing metadata", async () => {
+    firestore.getDocs.mockResolvedValue({ docs: [{
+      id: "operation-1",
+      data: () => ({
+        page: "job-detail", operation: "offers", phase: "initial", pageVisitId: "visit-1",
+        startedAtMs: 1000, durationMs: 320, result: "success", uid: "manager-uid",
+        sessionId: "session-1", deviceId: "device-1", deviceClass: "mobile",
+        browser: "safari", platform: "ios", viewport: { width: 390, height: 844 },
+        appVersion: "v1", connection: { effectiveType: "4g" }, createdAt: "time",
+        jobId: "not-projected", propertyName: "not-projected", accessCode: "not-projected",
+      }),
+    }] });
+    const { getManagerOperationEvents } = await import("./managerPageLoadDiagnosticsService.js");
+    const [event] = await getManagerOperationEvents({ windowDays: 7, now: Date.UTC(2026, 8, 22) });
+
+    expect(firestore.collection).toHaveBeenCalledWith({}, "organizations", "cleanflow-demo", "managerOperationEvents");
+    expect(firestore.where).toHaveBeenCalledWith("createdAt", ">=", { cutoff: Date.UTC(2026, 8, 15) });
+    expect(firestore.orderBy).toHaveBeenCalledWith("createdAt", "desc");
+    expect(firestore.limit).toHaveBeenCalledWith(500);
+    expect(event).toMatchObject({ id: "operation-1", operation: "offers", pageVisitId: "visit-1", durationMs: 320 });
+    expect(event).not.toHaveProperty("jobId");
+    expect(event).not.toHaveProperty("propertyName");
+    expect(event).not.toHaveProperty("accessCode");
+  });
+
+  it("summarizes operation errors and groups parallel Job Detail work by visit", async () => {
+    const { groupRecentJobDetailVisits, summarizeManagerOperationEvents } = await import("./managerPageLoadDiagnosticsService.js");
+    const events = [
+      { id: "offers", page: "job-detail", operation: "offers", phase: "initial", pageVisitId: "visit-1", startedAtMs: 1000, durationMs: 400, result: "success", createdAt: "2026-09-22T12:00:01Z" },
+      { id: "issues", page: "job-detail", operation: "issues", phase: "initial", pageVisitId: "visit-1", startedAtMs: 1050, durationMs: 200, result: "error", createdAt: "2026-09-22T12:00:01Z" },
+      { id: "offers-2", page: "job-detail", operation: "offers", phase: "refresh", pageVisitId: "visit-2", startedAtMs: 2000, durationMs: 100, result: "error", createdAt: "2026-09-22T13:00:00Z" },
+      { id: "other-page", page: "jobs", operation: "offers", pageVisitId: "visit-3", startedAtMs: 3000, durationMs: 100, result: "success", createdAt: "2026-09-22T14:00:00Z" },
+      { id: "bad-clock", page: "job-detail", operation: "issues", pageVisitId: "visit-4", startedAtMs: null, durationMs: 100, result: "error" },
+    ];
+    const summary = summarizeManagerOperationEvents(events);
+    expect(summary.find((row) => row.operation === "offers")).toMatchObject({
+      eventCount: 3, errorCount: 1, averageMs: 200, p95Ms: 400, slowest: { id: "offers" },
+    });
+    expect(summary.find((row) => row.operation === "issues")).toMatchObject({ eventCount: 2, errorCount: 2 });
+
+    const visits = groupRecentJobDetailVisits(events);
+    expect(visits.map((visit) => visit.id)).toEqual(["visit-2", "visit-1"]);
+    expect(visits[1]).toMatchObject({ startedAtMs: 1000, endedAtMs: 1400, spanMs: 400 });
+    expect(visits[1].events.map((event) => event.id)).toEqual(["offers", "issues"]);
+  });
 });
