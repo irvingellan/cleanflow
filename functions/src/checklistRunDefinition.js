@@ -134,6 +134,10 @@ export function projectChecklistRunForCleaner(checklistRun, {
   assignedCleanerName = null,
   assignedCleanerPreferredLanguage = null,
 } = {}) {
+  // A terminal Run must never be presented as an editable Draft, even if this
+  // projection is called outside the usual capability-state guard.
+  if (checklistRun?.status === "ABANDONED") return { status: "ABANDONED" };
+
   const snapshot = checklistRun?.resolvedDefinition || {};
   const readyForReviewAt = checklistRun?.readyForReviewAt?.toDate?.()?.toISOString() || null;
   const safeAssignedCleanerName = typeof assignedCleanerName === "string"

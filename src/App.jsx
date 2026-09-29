@@ -502,6 +502,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       startCleaning,
       completeCleaning,
       approveChecklistRun,
+      abandonChecklistRunAndCompleteJob,
       saveJobPrices,
       saveJobDetails,
       saveJobSchedule,
@@ -1316,6 +1317,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             assignments={jobAssignments}
             onRefresh={() => refreshChecklistRun(selectedJob, { manual: true })}
             onApproveAndComplete={approveChecklistRun}
+            onAbandonAndComplete={abandonChecklistRunAndCompleteJob}
             onBack={() => setView("job-detail")}
           />
         )}

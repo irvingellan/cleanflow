@@ -212,6 +212,69 @@ describe("ChecklistRunDetail", () => {
     expect(screen.queryByRole("button", { name: "Approve and complete service" })).not.toBeInTheDocument();
   });
 
+  it("requires explicit confirmation before abandoning a Draft and completing the Job", async () => {
+    const onAbandonAndComplete = vi.fn().mockResolvedValue(undefined);
+    render(<TranslationProvider><ChecklistRunDetail
+      job={{ id: "job-1", operationalStatus: "IN_PROGRESS" }}
+      checklistRun={{ id: "initial", status: "DRAFT", checklistItemCount: 28, inventoryItemCount: 13 }}
+      onAbandonAndComplete={onAbandonAndComplete} onBack={vi.fn()}
+    /></TranslationProvider>);
+
+    expect(screen.getByText("This Checklist Run is a draft and has not been sent for manager review.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Abandon draft and complete service" }));
+    expect(screen.getByText(/This checklist contains saved progress/)).toHaveTextContent(
+      "Saved answers, evidence, and history remain available to the manager",
+    );
+    expect(onAbandonAndComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onAbandonAndComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Abandon draft and complete service" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandon draft and complete service" }));
+    await waitFor(() => expect(onAbandonAndComplete).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows a failed Draft abandonment and leaves the action available", async () => {
+    const onAbandonAndComplete = vi.fn().mockRejectedValue(new Error("server rejected"));
+    render(<TranslationProvider><ChecklistRunDetail
+      job={{ id: "job-1", operationalStatus: "ASSIGNED" }}
+      checklistRun={{ id: "initial", status: "DRAFT", checklistItemCount: 28, inventoryItemCount: 13 }}
+      onAbandonAndComplete={onAbandonAndComplete} onBack={vi.fn()}
+    /></TranslationProvider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Abandon draft and complete service" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abandon draft and complete service" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to complete with an abandoned draft.");
+    expect(screen.getByRole("button", { name: "Abandon draft and complete service" })).toBeEnabled();
+  });
+
+  it("labels an abandoned Run accurately and offers neither approval nor report issuance", () => {
+    renderChecklistRun({ status: "ABANDONED", abandonedAt: "2026-09-21T17:00:00.000Z" });
+    expect(screen.getByText("Abandoned")).toBeVisible();
+    expect(screen.getByText("Abandoned at")).toBeVisible();
+    expect(screen.getByText(/It was not sent for review or approved/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Approve and complete service" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create client report" })).not.toBeInTheDocument();
+  });
+
+  it("keeps saved answers and evidence visible after abandonment", async () => {
+    const loadEvidence = vi.fn().mockResolvedValue(new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }));
+    vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:abandoned-photo"), revokeObjectURL: vi.fn() });
+    render(<TranslationProvider><ChecklistRunDetail
+      job={{ id: "job-1", operationalStatus: "COMPLETED" }}
+      checklistRun={{
+        id: "initial", status: "ABANDONED", checklistItemCount: 1, inventoryItemCount: 0,
+        sections: [{ id: "bathrooms", title: "Bathroom", items: [{ id: "sink", label: "Sink", answer: "DONE" }] }],
+        evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }],
+      }}
+      loadEvidence={loadEvidence} onBack={vi.fn()}
+    /></TranslationProvider>);
+
+    expect(screen.getByText("Sink")).toBeVisible();
+    expect(screen.getByText("Done")).toBeVisible();
+    expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:abandoned-photo");
+    expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
+  });
+
   it("shows only a server-retrieved saved photo for the frozen requirement", async () => {
     const loadEvidence = vi.fn().mockResolvedValue(new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }));
     const createObjectUrl = vi.fn(() => "blob:manager-photo");

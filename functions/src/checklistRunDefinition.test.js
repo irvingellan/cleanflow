@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { buildChecklistRunSnapshot, projectChecklistRunForCleaner } from "./checklistRunDefinition.js";
 
 describe("cleaner checklist Property projection", () => {
+  it("does not project abandoned Run content as an editable Draft", () => {
+    const snapshot = buildChecklistRunSnapshot({
+      job: { scheduledDate: "2026-09-29" },
+      property: { name: "Example Property", checklistSettings: { cleanerInstructions: "Private instructions" } },
+    });
+
+    expect(projectChecklistRunForCleaner({ ...snapshot, status: "ABANDONED" }))
+      .toEqual({ status: "ABANDONED" });
+  });
+
   it("does not expose manager-only access fields", () => {
     const snapshot = buildChecklistRunSnapshot({
       job: { propertyId: "property-1", propertyName: "Example Property" },

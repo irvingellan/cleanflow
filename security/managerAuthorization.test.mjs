@@ -21,6 +21,7 @@ const {
   approveChecklistRun,
   assignCleanerDirectly,
   completeJobWithoutChecklist,
+  abandonChecklistRunAndCompleteJob,
   getChecklistRun,
   getChecklistCapability,
   getChecklistEvidence,
@@ -177,6 +178,76 @@ test("no-checklist completion callable is manager-only and refuses an existing R
     .update({ operationalStatus: "IN_PROGRESS", checklistContextRevision: 3 }));
   assert.deepEqual(await completeJobWithoutChecklist.run(request("manager", { jobId: "job" })),
     { completed: false, operationalStatus: "COMPLETED" });
+});
+
+test("explicit DRAFT abandonment is manager-only, preserves saved work, and revokes the cleaner link", async () => {
+  await seedEligibleChecklistJob();
+  const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
+  const jobRef = admin.doc(`${root}/jobs/job`);
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const draftRef = runRef.collection("drafts").doc("current");
+  const evidenceRef = runRef.collection("evidence").doc("living-belongings");
+  await draftRef.set({ revision: 1, checklistAnswers: { "living-belongings": "DONE" }, inventoryAnswers: { "hand-soap": "LOW" } });
+  await evidenceRef.set({ requirementId: "living-belongings", status: "SAVED" });
+  const beforeDraft = (await draftRef.get()).data();
+  const beforeEvidence = (await evidenceRef.get()).data();
+
+  for (const [uid, anonymous, code] of [
+    [null, false, "unauthenticated"],
+    ["anonymous-member", true, "unauthenticated"],
+    ["cleaner", false, "permission-denied"],
+    ["inactive", false, "permission-denied"],
+    ["other-manager", false, "permission-denied"],
+  ]) {
+    await assert.rejects(abandonChecklistRunAndCompleteJob.run(request(uid, { jobId: "job" }, anonymous)), { code });
+  }
+  await assertFails(account("manager").firestore().doc(runRef.path).update({ status: "ABANDONED" }));
+  assert.equal((await publicChecklistGet(issued.token)).code, 200);
+
+  const first = await abandonChecklistRunAndCompleteJob.run(request("manager", { jobId: "job" }));
+  assert.deepEqual(first, { completed: true, operationalStatus: "COMPLETED" });
+  const job = (await jobRef.get()).data();
+  const run = (await runRef.get()).data();
+  const capability = (await runRef.collection("checklistCapabilities").doc("active").get()).data();
+  assert.equal(job.operationalStatus, "COMPLETED");
+  assert.ok(job.completedAt);
+  assert.equal(job.checklistContextRevision, 2);
+  assert.equal(run.status, "ABANDONED");
+  assert.ok(run.abandonedAt);
+  assert.equal(run.abandonedByUid, "manager");
+  assert.equal(capability.status, "REVOKED");
+  assert.equal((await publicChecklistGet(issued.token)).code, 410);
+  assert.deepEqual((await draftRef.get()).data(), beforeDraft);
+  assert.deepEqual((await evidenceRef.get()).data(), beforeEvidence);
+  const { run: managerView } = await getChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(managerView.status, "ABANDONED");
+  assert.equal(managerView.draft.checklistAnswers["living-belongings"], "DONE");
+  assert.equal(managerView.draft.inventoryAnswers["hand-soap"], "LOW");
+  assert.equal(job.clientPrice, 999);
+
+  const completedAt = job.completedAt.toMillis();
+  const retry = await abandonChecklistRunAndCompleteJob.run(request("manager", { jobId: "job" }));
+  assert.deepEqual(retry, { completed: false, operationalStatus: "COMPLETED" });
+  assert.equal((await jobRef.get()).data().completedAt.toMillis(), completedAt);
+  assert.equal((await jobRef.get()).data().checklistContextRevision, 2);
+});
+
+test("READY and archived checklist Jobs cannot use DRAFT abandonment", async () => {
+  await seedEligibleChecklistJob();
+  const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
+  const jobRef = admin.doc(`${root}/jobs/job`);
+  await runRef.update({ status: "READY_FOR_REVIEW" });
+  await assert.rejects(abandonChecklistRunAndCompleteJob.run(request("manager", { jobId: "job" })),
+    { code: "failed-precondition" });
+  assert.equal((await jobRef.get()).data().operationalStatus, "ASSIGNED");
+  assert.equal((await runRef.get()).data().status, "READY_FOR_REVIEW");
+
+  await runRef.update({ status: "DRAFT" });
+  await jobRef.update({ archivedAt: Timestamp.now() });
+  await assert.rejects(abandonChecklistRunAndCompleteJob.run(request("manager", { jobId: "job" })),
+    { code: "failed-precondition" });
+  assert.equal((await jobRef.get()).data().operationalStatus, "ASSIGNED");
+  assert.equal((await runRef.get()).data().status, "DRAFT");
 });
 
 test("browser-created Jobs cannot begin with an arbitrary schedule revision", async () => {

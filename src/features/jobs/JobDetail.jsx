@@ -1163,7 +1163,11 @@ export function JobDetail({
           <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
           {!isLoadingChecklistRun && checklistRun && (
             <button className="button button--primary" type="button" onClick={onOpenChecklistRun}>
-              {translate("checklists.open")}
+              {translate(
+                checklistRun.status === "DRAFT" ? "checklists.viewDraftProgress"
+                  : checklistRun.status === "ABANDONED" ? "checklists.viewAbandonedRun"
+                    : "checklists.open",
+              )}
             </button>
           )}
           {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError
@@ -1195,7 +1199,12 @@ export function JobDetail({
           <p className="job-checklist__summary">{translate("checklists.noRun")}</p>
         )}
         {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-          <p className="job-checklist__summary">{translate("checklists.existingRun")}</p>
+          <p className="job-checklist__summary">{translate(
+            checklistRun.status === "DRAFT" ? "checklists.existingDraft"
+              : checklistRun.status === "READY_FOR_REVIEW" ? "checklists.existingRun"
+                : checklistRun.status === "ABANDONED" ? "checklists.existingAbandoned"
+                  : "checklists.existingRunUnknown",
+          )}</p>
         )}
         {hasCreateChecklistRunError && (
           <p className="form-error" role="alert">{translate("checklists.createError")}</p>
@@ -1225,7 +1234,11 @@ export function JobDetail({
             <p className="form-error" role="alert">{translate("jobs.completionChecklistUnavailable")}</p>
           )}
           {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-            <p className="form-hint">{translate("jobs.completionRequiresChecklistReview")}</p>
+            <p className="form-hint">{translate(
+              checklistRun.status === "DRAFT" ? "jobs.completionDraftOptions"
+                : checklistRun.status === "READY_FOR_REVIEW" ? "jobs.completionRequiresChecklistReview"
+                  : "jobs.completionChecklistUnavailable",
+            )}</p>
           )}
           {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
             <>

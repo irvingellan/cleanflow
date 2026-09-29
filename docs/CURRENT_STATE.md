@@ -88,6 +88,17 @@ These behaviors still require Gabi/cleaner real-use validation. Deployment
 does not establish that the unresolved mobile photo failure or the complete
 photo-backed journey is fixed.
 
+**Local follow-up pending release (2026-09-29):** real pilot evidence exposed
+a DRAFT manager-copy error and a stale cleaner capability after a same-Cleaner
+Assignment was removed and recreated. The saved Run remained DRAFT; the
+capability's context revision no longer matched the Job. The local
+`feature/checklist-lifecycle-recovery-2026-09-29` branch distinguishes DRAFT
+from READY, guides explicit link reissue without losing saved work, and allows
+a manager to explicitly abandon an optional DRAFT and complete the eligible
+Job while preserving draft/evidence/history.
+READY Runs still require normal review/approval. This follow-up has **not been
+deployed** and has not altered the real Run.
+
 ## Approved communication release
 
 The WhatsApp click-to-chat handoff is integrated into deployable main for

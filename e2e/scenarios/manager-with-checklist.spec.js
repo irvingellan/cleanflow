@@ -151,7 +151,7 @@ test("manager service with checklist reaches saved review, report, and completio
     });
 
     await step(88, "Review saved answers and evidence", async () => {
-      await page.locator(".job-checklist").getByRole("button", { name: "Open checklist" }).click();
+      await page.locator(".job-checklist").getByRole("button", { name: "View checklist progress" }).click();
       await page.getByRole("button", { name: "Refresh saved progress" }).click();
       await expect(page.getByText("The cleaner sent this saved checklist for manager review."))
         .toBeVisible();

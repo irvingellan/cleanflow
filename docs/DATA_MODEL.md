@@ -249,6 +249,14 @@ for the frozen under-bed/furniture requirement while its Checklist Run is
 does not change Job or Assignment lifecycle. Additional photo types, galleries,
 and client delivery remain separate future work.
 
+**Local pilot follow-up, not yet deployed (2026-09-29):** an optional initial
+`DRAFT` Run may become terminal `ABANDONED` through one manager-authorized
+transaction that also revokes its active cleaner capability and completes its
+eligible Job. The Run retains `abandonedAt`, `abandonedByUid`, and a fixed
+`abandonReason`; its frozen definition, draft answers, evidence, mutation
+receipts, and Job history are preserved. `READY_FOR_REVIEW` cannot use this
+path.
+
 ## Scheduling and reschedule history
 
 Frequent schedule changes are a validated workflow. The current bounded

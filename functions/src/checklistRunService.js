@@ -86,6 +86,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
       : "",
     createdAt: toIsoTimestamp(run?.createdAt),
     readyForReviewAt: toIsoTimestamp(run?.readyForReviewAt),
+    abandonedAt: toIsoTimestamp(run?.abandonedAt),
     draft: draftProjection,
     evidence: projectChecklistEvidence(evidence),
   };

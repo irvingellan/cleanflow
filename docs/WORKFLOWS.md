@@ -117,9 +117,13 @@ not a mandatory normal completion gate.
 manager can confirm completion of a non-archived `ASSIGNED` or `IN_PROGRESS`
 Job when no initial Checklist Run exists. A server transaction checks both
 records before recording `COMPLETED` and `completedAt`. If any initial Run
-exists, the no-Run shortcut is closed: the Cleaner submits the saved Run for
-review and the manager uses the existing approval path. A completed Job cannot
-start a new Run. Neither path completes payment or payout; see
+exists, the no-Run shortcut is closed. **Local follow-up, not yet deployed:**
+an active manager may explicitly abandon an optional `DRAFT` Run and complete
+an eligible Job in one transaction; saved draft/evidence/history remains and
+the cleaner link is revoked. A `READY_FOR_REVIEW` Run still requires the
+existing review/approval path; the manager cannot submit on the Cleaner’s
+behalf. A completed Job cannot start a new Run. Neither completion path marks
+payment or payout paid; see
 [DEC-041](DECISIONS.md#dec-041--manager-fast-path-v2-keeps-assignment-checklist-and-completion-explicit).
 
 ## Job lifecycle

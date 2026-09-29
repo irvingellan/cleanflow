@@ -4,6 +4,28 @@ import { TranslationProvider } from "../../i18n/translations.js";
 import { ChecklistCapabilityControls } from "./ChecklistCapabilityControls.jsx";
 
 describe("ChecklistCapabilityControls", () => {
+  it.each(["STALE", "REVOKED", "EXPIRED", "UNAVAILABLE"])("explains how to recover a %s cleaner link without automatic reissue", (state) => {
+    render(<TranslationProvider><ChecklistCapabilityControls
+      job={{ id: "job-a", schemaVersion: 2, operationalStatus: "ASSIGNED", assignedCleanerIds: ["cleaner-a"] }}
+      checklistRun={{ id: "initial", status: "DRAFT" }} capability={{ state }}
+      onIssue={vi.fn()} onRevoke={vi.fn()} onRefresh={vi.fn()}
+    /></TranslationProvider>);
+
+    expect(screen.getByText(/Confirm the current assignment, create a new cleaner link, and resend it/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create cleaner link" })).toBeVisible();
+  });
+
+  it("does not describe a never-issued link as stale", () => {
+    render(<TranslationProvider><ChecklistCapabilityControls
+      job={{ id: "job-a", schemaVersion: 2, operationalStatus: "ASSIGNED", assignedCleanerIds: ["cleaner-a"] }}
+      checklistRun={{ id: "initial", status: "DRAFT" }} capability={{ state: "NONE" }}
+      onIssue={vi.fn()} onRevoke={vi.fn()} onRefresh={vi.fn()}
+    /></TranslationProvider>);
+
+    expect(screen.getByText("No cleaner link has been created.")).toBeVisible();
+    expect(screen.queryByText(/Do not reuse the previous link/)).not.toBeInTheDocument();
+  });
+
   it("hides a locally issued URL after another action rotates its capability", async () => {
     const issued = { state: "ACTIVE", cleanerId: "cleaner-a", issuedAt: "2026-09-29T12:00:00Z" };
     const onIssue = vi.fn().mockResolvedValue({

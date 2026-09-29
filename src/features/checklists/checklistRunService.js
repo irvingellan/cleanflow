@@ -5,6 +5,7 @@ const createChecklistRunCall = httpsCallable(functions, "createChecklistRun");
 const getChecklistRunCall = httpsCallable(functions, "getChecklistRun");
 const approveChecklistRunCall = httpsCallable(functions, "approveChecklistRun");
 const completeJobWithoutChecklistCall = httpsCallable(functions, "completeJobWithoutChecklist");
+const abandonChecklistRunAndCompleteJobCall = httpsCallable(functions, "abandonChecklistRunAndCompleteJob");
 const getChecklistEvidenceCall = httpsCallable(functions, "getChecklistEvidence");
 
 export async function getChecklistRun(jobId) {
@@ -24,6 +25,11 @@ export async function approveChecklistRun(jobId) {
 
 export async function completeJobWithoutChecklist(jobId) {
   const result = await completeJobWithoutChecklistCall({ jobId });
+  return result.data;
+}
+
+export async function abandonChecklistRunAndCompleteJob(jobId) {
+  const result = await abandonChecklistRunAndCompleteJobCall({ jobId });
   return result.data;
 }
 
