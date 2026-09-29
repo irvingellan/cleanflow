@@ -820,3 +820,20 @@ Cleaner as the checklist-responsible person. The current one-active-Cleaner
 checklist capability per Run is acceptable for the pilot. Simultaneous
 multi-Cleaner checklist editing or access is not required. This does not change
 Assignment ownership, Job completion, or the identity limits of a bearer link.
+
+---
+
+## DEC-043 — Bounded manager operation diagnostics for Job Detail
+
+Date: 2026-09-29
+Status: Implemented on a feature branch; not deployed
+
+For the two-manager pilot, measure the six independent Job Detail reads with a
+shared wrapper and one random, non-operational page-visit identifier. Store
+only allowlisted coarse timing/result and existing session/device metadata in
+append-only, manager-authorized `managerOperationEvents`; never store record
+IDs, content, links, tokens, prices, or raw errors. Preserve existing page-load
+telemetry and parallel reads. The internal diagnostic view uses a bounded
+recent-event query and a simple visit waterfall; it is not a general tracing
+platform. Defer a formal time-to-actionable metric until its action gates are
+defined and observable without a misleading aggregate.

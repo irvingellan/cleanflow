@@ -32,6 +32,10 @@ import {
   restoreJob,
 } from "./jobService.js";
 import { rescheduleJob as rescheduleJobRequest } from "./jobScheduleService.js";
+import {
+  createManagerOperationTracker,
+  createManagerPageVisitId,
+} from "../telemetry/managerOperationTelemetryService.js";
 
 function emptyDetailData() {
   return {
@@ -78,6 +82,19 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const checklistCapabilityRequestId = useRef(0);
   const selectedJobIdRef = useRef(null);
   const selectedJobEpochRef = useRef(0);
+  const operationTrackerRef = useRef(null);
+
+  useEffect(() => {
+    operationTrackerRef.current = view === "job-detail" && selectedJob?.id && actorUid
+      ? createManagerOperationTracker({ uid: actorUid, pageVisitId: createManagerPageVisitId() })
+      : null;
+    return () => { operationTrackerRef.current = null; };
+  }, [actorUid, selectedJob?.id, view]);
+
+  function loadDetailOperation(operation, task) {
+    const tracker = operationTrackerRef.current;
+    return tracker ? tracker.track(operation, task) : task();
+  }
 
   async function refreshOffers() {
     if (!selectedJob) {
@@ -91,7 +108,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }));
 
     try {
-      const offers = await getJobOffers(selectedJob.id);
+      const offers = await loadDetailOperation("offers", () => getJobOffers(selectedJob.id));
       setDetailData((currentData) => ({ ...currentData, offers }));
     } catch {
       setDetailData((currentData) => ({ ...currentData, hasOffersError: true }));
@@ -112,7 +129,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }));
 
     try {
-      const issues = await getJobIssues(selectedJob.id);
+      const issues = await loadDetailOperation("issues", () => getJobIssues(selectedJob.id));
       setDetailData((currentData) => ({ ...currentData, issues }));
     } catch {
       setDetailData((currentData) => ({ ...currentData, hasIssuesError: true }));
@@ -134,7 +151,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }));
 
     try {
-      const assignments = await getJobAssignments(job.id);
+      const assignments = await loadDetailOperation("assignments", () => getJobAssignments(job.id));
       setDetailData((currentData) => ({ ...currentData, assignments }));
     } catch {
       setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
@@ -157,7 +174,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }));
 
     try {
-      const checklistRun = await getChecklistRun(job.id);
+      const checklistRun = await loadDetailOperation("checklist-run", () => getChecklistRun(job.id));
       if (requestId === checklistRunRequestId.current && selectedJobIdRef.current === job.id) {
         setDetailData((currentData) => ({ ...currentData, checklistRun }));
       }
@@ -182,7 +199,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       ...currentData, isLoadingChecklistCapability: true, hasChecklistCapabilityError: false,
     }));
     try {
-      const checklistCapability = await getChecklistCapability(job.id);
+      const checklistCapability = await loadDetailOperation(
+        "checklist-capability", () => getChecklistCapability(job.id),
+      );
       if (requestId === checklistCapabilityRequestId.current && selectedJobIdRef.current === job.id) {
         setDetailData((currentData) => ({ ...currentData, checklistCapability }));
       }
@@ -218,7 +237,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     async function loadCleaners() {
       try {
-        const cleaners = await getCleaners();
+        const cleaners = await loadDetailOperation("cleaners", () => getCleaners());
 
         if (isCurrent) {
           setAvailableCleaners(cleaners);

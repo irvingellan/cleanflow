@@ -530,6 +530,29 @@ function managerPageLoadEvent(uid = "manager") {
   };
 }
 
+function managerOperationEvent(overrides = {}) {
+  return {
+    page: "job-detail",
+    operation: "offers",
+    phase: "initial",
+    result: "success",
+    uid: "manager",
+    pageVisitId: "123e4567-e89b-42d3-a456-426614174000",
+    startedAtMs: Date.UTC(2026, 8, 29, 10),
+    durationMs: 120,
+    sessionId: "session-identifier-1",
+    deviceId: "device-identifier-1",
+    deviceClass: "mobile",
+    browser: "safari",
+    platform: "ios",
+    standalone: true,
+    viewport: { width: 390, height: 844 },
+    appVersion: "v0.9.3",
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
 test("manager page-load telemetry is readable by active managers and remains append-only", async () => {
   const managerDb = account("manager").firestore();
   const event = managerDb.doc(`${root}/managerPageLoadEvents/event-1`);
@@ -554,6 +577,75 @@ test("manager page-load telemetry is readable by active managers and remains app
     await assertFails(db.doc(`${root}/managerPageLoadEvents/event-1`).get());
     await assertFails(db.collection(`${root}/managerPageLoadEvents`).get());
   }
+});
+
+test("manager operation diagnostics are append-only and readable only to active managers", async () => {
+  const managerDb = account("manager").firestore();
+  const event = managerDb.doc(`${root}/managerOperationEvents/event-1`);
+  await assertSucceeds(event.set(managerOperationEvent({
+    operation: "checklist-run",
+    phase: "refresh",
+    result: "error",
+    connection: { effectiveType: "4g", rtt: 75, downlink: 10, saveData: false },
+  })));
+  await assertSucceeds(event.get());
+  await assertSucceeds(managerDb.collection(`${root}/managerOperationEvents`).get());
+  await assertFails(event.update({ durationMs: 1 }));
+  await assertFails(event.delete());
+
+  for (const [label, context] of [
+    ["outsider", account("outsider")],
+    ["signed-out", environment.unauthenticatedContext()],
+    ["anonymous-member", account("anonymous-member", true)],
+    ["other-organization manager", account("other-manager")],
+    ["inactive manager", account("inactive")],
+    ["cleaner", account("cleaner")],
+  ]) {
+    const db = context.firestore();
+    await assertFails(db.doc(`${root}/managerOperationEvents/${label}`).set(managerOperationEvent()));
+    await assertFails(db.doc(`${root}/managerOperationEvents/event-1`).get());
+    await assertFails(db.collection(`${root}/managerOperationEvents`).get());
+  }
+  await assertFails(managerDb.doc("organizations/other/managerOperationEvents/wrong-org")
+    .set(managerOperationEvent()));
+});
+
+test("manager operation event payload rejects spoofing, malformed fields, and customer content", async () => {
+  const managerDb = account("manager").firestore();
+  const invalidEvents = [
+    { page: "jobs" },
+    { operation: "payments" },
+    { phase: "retry" },
+    { result: "timeout" },
+    { uid: "outsider" },
+    { pageVisitId: "job-1" },
+    { pageVisitId: "x".repeat(65) },
+    { startedAtMs: "2026-09-29" },
+    { startedAtMs: 4102444800001 },
+    { durationMs: -1 },
+    { durationMs: 600001 },
+    { durationMs: "120" },
+    { sessionId: "s".repeat(129) },
+    { deviceId: "d".repeat(129) },
+    { deviceClass: "tablet" },
+    { browser: "unknown-browser" },
+    { platform: "unknown-platform" },
+    { standalone: "true" },
+    { viewport: { width: 10001, height: 844 } },
+    { connection: { effectiveType: "x".repeat(17) } },
+    { appVersion: "v".repeat(51) },
+    { appVersion: "raw error text" },
+    { createdAt: new Date("2026-09-29T00:00:00Z") },
+    { jobId: "job-1" },
+    { content: "private checklist content" },
+    { rawError: "private error detail" },
+  ];
+  for (const [index, changes] of invalidEvents.entries()) {
+    await assertFails(managerDb.doc(`${root}/managerOperationEvents/invalid-${index}`)
+      .set(managerOperationEvent(changes)));
+  }
+  const { pageVisitId: _omitted, ...missingPageVisitId } = managerOperationEvent();
+  await assertFails(managerDb.doc(`${root}/managerOperationEvents/missing-field`).set(missingPageVisitId));
 });
 
 test("server metadata, unknown subcollections and future checklist namespaces are default denied", async () => {
