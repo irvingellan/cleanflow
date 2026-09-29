@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createChecklistRun as createChecklistRunRequest,
   approveChecklistRun as approveChecklistRunRequest,
+  completeJobWithoutChecklist as completeJobWithoutChecklistRequest,
   getChecklistRun,
 } from "../checklists/checklistRunService.js";
 import {
@@ -14,6 +15,7 @@ import { getJobIssues, resolveIssue } from "../issues/issueService.js";
 import { createPublicOfferLink, getJobOffers } from "./jobOfferService.js";
 import {
   assignInterestedCleaner,
+  assignCleanerDirectly as assignCleanerDirectlyRequest,
   getJobAssignments,
   removeAssignment,
   replaceAssignment,
@@ -21,7 +23,7 @@ import {
 import { isAssignmentAwareJob } from "./jobCompatibility.js";
 import {
   assignCleanerToJob,
-  completeInProgressJob,
+  getJobById,
   startAssignedJob,
   updateJobPrices,
   updateJobDetails,
@@ -71,8 +73,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const [offersCreatedCount, setOffersCreatedCount] = useState(null);
   const checklistRunCreateInFlight = useRef(false);
   const checklistCapabilityInFlight = useRef(false);
+  const capabilityJobsInFlight = useRef(new Set());
   const checklistRunRequestId = useRef(0);
+  const checklistCapabilityRequestId = useRef(0);
   const selectedJobIdRef = useRef(null);
+  const selectedJobEpochRef = useRef(0);
 
   async function refreshOffers() {
     if (!selectedJob) {
@@ -172,16 +177,23 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
   async function refreshChecklistCapability(job = selectedJob) {
     if (!job) return;
+    const requestId = ++checklistCapabilityRequestId.current;
     setDetailData((currentData) => ({
       ...currentData, isLoadingChecklistCapability: true, hasChecklistCapabilityError: false,
     }));
     try {
       const checklistCapability = await getChecklistCapability(job.id);
-      setDetailData((currentData) => ({ ...currentData, checklistCapability }));
+      if (requestId === checklistCapabilityRequestId.current && selectedJobIdRef.current === job.id) {
+        setDetailData((currentData) => ({ ...currentData, checklistCapability }));
+      }
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasChecklistCapabilityError: true }));
+      if (requestId === checklistCapabilityRequestId.current && selectedJobIdRef.current === job.id) {
+        setDetailData((currentData) => ({ ...currentData, hasChecklistCapabilityError: true }));
+      }
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingChecklistCapability: false }));
+      if (requestId === checklistCapabilityRequestId.current && selectedJobIdRef.current === job.id) {
+        setDetailData((currentData) => ({ ...currentData, isLoadingChecklistCapability: false }));
+      }
     }
   }
 
@@ -196,7 +208,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }, [view, selectedJob]);
 
   useEffect(() => {
-    if (view !== "offer-cleaners") {
+    if (view !== "offer-cleaners" && view !== "job-detail") {
       return undefined;
     }
 
@@ -236,6 +248,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   function openJob(job) {
+    selectedJobEpochRef.current += 1;
+    checklistRunCreateInFlight.current = null;
+    checklistCapabilityInFlight.current = null;
+    checklistRunRequestId.current += 1;
+    checklistCapabilityRequestId.current += 1;
     selectedJobIdRef.current = job.id;
     setOffersCreatedCount(null);
     setSelectedJob(job);
@@ -250,10 +267,12 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   function closeJob() {
-    checklistRunCreateInFlight.current = false;
-    checklistCapabilityInFlight.current = false;
+    selectedJobEpochRef.current += 1;
+    checklistRunCreateInFlight.current = null;
+    checklistCapabilityInFlight.current = null;
     selectedJobIdRef.current = null;
     checklistRunRequestId.current += 1;
+    checklistCapabilityRequestId.current += 1;
     setSelectedJob(null);
     setDetailData(emptyDetailData());
   }
@@ -274,13 +293,24 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       return;
     }
 
+    const job = selectedJob;
+    const epoch = selectedJobEpochRef.current;
+
     try {
-      const updatedJob = await action(selectedJob);
-      updateSelectedJob(updatedJob);
-      return updatedJob;
+      const updatedJob = await action(job);
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === job.id) {
+        updateSelectedJob(updatedJob);
+        return updatedJob;
+      }
+      if (updatedJob) onJobUpdated(updatedJob);
+      return null;
     } catch (error) {
       if (error.job) {
-        updateSelectedJob(error.job);
+        if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === job.id) {
+          updateSelectedJob(error.job);
+        } else {
+          onJobUpdated(error.job);
+        }
       }
 
       throw error;
@@ -301,6 +331,16 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       await refreshAssignments(updatedJob);
     }
     if (updatedJob) await refreshChecklistCapability(updatedJob);
+  }
+
+  async function assignCleanerDirectly(cleanerId) {
+    const updatedJob = await updateJob((job) =>
+      assignCleanerDirectlyRequest(job.id, cleanerId));
+    if (updatedJob) {
+      await refreshAssignments(updatedJob);
+      await refreshChecklistCapability(updatedJob);
+    }
+    return updatedJob;
   }
 
   async function removeCleanerAssignment(assignmentId) {
@@ -332,7 +372,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   async function completeCleaning() {
-    const updatedJob = await updateJob((job) => completeInProgressJob(job.id));
+    const updatedJob = await updateJob(async (job) => {
+      await completeJobWithoutChecklistRequest(job.id);
+      return getJobById(job.id);
+    });
     if (updatedJob) await refreshChecklistCapability(updatedJob);
     return updatedJob;
   }
@@ -444,7 +487,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       return detailData.checklistRun;
     }
 
-    checklistRunCreateInFlight.current = true;
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const operation = Symbol("checklist-run-create");
+    checklistRunCreateInFlight.current = operation;
     setDetailData((currentData) => ({
       ...currentData,
       isCreatingChecklistRun: true,
@@ -452,53 +498,105 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }));
 
     try {
-      const checklistRun = await createChecklistRunRequest(selectedJob.id);
-      setDetailData((currentData) => ({ ...currentData, checklistRun }));
+      const checklistRun = await createChecklistRunRequest(jobId);
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, checklistRun }));
+      }
       return checklistRun;
     } catch (error) {
-      setDetailData((currentData) => ({ ...currentData, hasCreateChecklistRunError: true }));
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, hasCreateChecklistRunError: true }));
+      }
       throw error;
     } finally {
-      checklistRunCreateInFlight.current = false;
-      setDetailData((currentData) => ({ ...currentData, isCreatingChecklistRun: false }));
+      if (checklistRunCreateInFlight.current === operation) checklistRunCreateInFlight.current = null;
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, isCreatingChecklistRun: false }));
+      }
     }
   }
 
   async function issueChecklistCapability(cleanerId) {
-    if (!selectedJob || checklistCapabilityInFlight.current) return null;
-    checklistCapabilityInFlight.current = true;
+    return issueChecklistCapabilityWithState(cleanerId);
+  }
+
+  async function issueChecklistCapabilityWithState(cleanerId) {
+    if (!selectedJob || capabilityJobsInFlight.current.has(selectedJob.id)) return null;
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const operation = Symbol("checklist-capability-issue");
+    capabilityJobsInFlight.current.add(jobId);
+    checklistCapabilityInFlight.current = operation;
     setDetailData((currentData) => ({
       ...currentData, isIssuingChecklistCapability: true, hasIssueChecklistCapabilityError: false,
     }));
     try {
-      const result = await issueChecklistCapabilityRequest({ jobId: selectedJob.id, cleanerId });
-      setDetailData((currentData) => ({ ...currentData, checklistCapability: result.capability }));
-      return result.url;
+      const result = await issueChecklistCapabilityRequest({ jobId, cleanerId });
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, checklistCapability: result.capability }));
+      }
+      return result;
     } catch (error) {
-      setDetailData((currentData) => ({ ...currentData, hasIssueChecklistCapabilityError: true }));
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, hasIssueChecklistCapabilityError: true }));
+      }
       throw error;
     } finally {
-      checklistCapabilityInFlight.current = false;
-      setDetailData((currentData) => ({ ...currentData, isIssuingChecklistCapability: false }));
+      capabilityJobsInFlight.current.delete(jobId);
+      if (checklistCapabilityInFlight.current === operation) checklistCapabilityInFlight.current = null;
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, isIssuingChecklistCapability: false }));
+      }
     }
   }
 
+  async function prepareChecklistReminder(cleanerId) {
+    if (!selectedJob) throw new Error("No Job selected.");
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const run = detailData.checklistRun || await createChecklistRun();
+    if (selectedJobEpochRef.current !== epoch || selectedJobIdRef.current !== jobId) {
+      throw new Error("Job changed while preparing the reminder.");
+    }
+    if (run?.status !== "DRAFT") throw new Error("A Draft Checklist Run is required.");
+    const result = await issueChecklistCapabilityWithState(cleanerId);
+    if (selectedJobEpochRef.current !== epoch || selectedJobIdRef.current !== jobId) {
+      throw new Error("Job changed while preparing the reminder.");
+    }
+    if (!result?.url || result.capability?.state !== "ACTIVE"
+      || result.capability?.cleanerId !== cleanerId) {
+      throw new Error("Cleaner checklist link is unavailable.");
+    }
+    return result;
+  }
+
   async function revokeChecklistCapability() {
-    if (!selectedJob || checklistCapabilityInFlight.current) return null;
-    checklistCapabilityInFlight.current = true;
+    if (!selectedJob || capabilityJobsInFlight.current.has(selectedJob.id)) return null;
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const operation = Symbol("checklist-capability-revoke");
+    capabilityJobsInFlight.current.add(jobId);
+    checklistCapabilityInFlight.current = operation;
     setDetailData((currentData) => ({
       ...currentData, isRevokingChecklistCapability: true, hasRevokeChecklistCapabilityError: false,
     }));
     try {
-      const checklistCapability = await revokeChecklistCapabilityRequest(selectedJob.id);
-      setDetailData((currentData) => ({ ...currentData, checklistCapability }));
+      const checklistCapability = await revokeChecklistCapabilityRequest(jobId);
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, checklistCapability }));
+      }
       return checklistCapability;
     } catch (error) {
-      setDetailData((currentData) => ({ ...currentData, hasRevokeChecklistCapabilityError: true }));
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, hasRevokeChecklistCapabilityError: true }));
+      }
       throw error;
     } finally {
-      checklistCapabilityInFlight.current = false;
-      setDetailData((currentData) => ({ ...currentData, isRevokingChecklistCapability: false }));
+      capabilityJobsInFlight.current.delete(jobId);
+      if (checklistCapabilityInFlight.current === operation) checklistCapabilityInFlight.current = null;
+      if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
+        setDetailData((currentData) => ({ ...currentData, isRevokingChecklistCapability: false }));
+      }
     }
   }
 
@@ -548,6 +646,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     },
     actions: {
       assignCleaner,
+      assignCleanerDirectly,
       removeCleanerAssignment,
       replaceCleanerAssignment,
       startCleaning,
@@ -562,6 +661,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       resolveJobIssue,
       createChecklistRun,
       issueChecklistCapability,
+      prepareChecklistReminder,
       revokeChecklistCapability,
     },
     openJob,

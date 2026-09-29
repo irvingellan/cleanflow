@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assignmentRemovalJobUpdate,
   buildAssignmentCreateData,
+  canAssignCleanerDirectly,
   canAssignInterestedOffer,
   canEditAssignmentRoster,
   isActionableOffer,
@@ -50,11 +51,42 @@ describe("assignment roster compatibility rules", () => {
     expect(canAssignInterestedOffer(teamJob, { cleanerId: "cleaner-c", status: "DECLINED" })).toBe(false);
   });
 
+  it("offers direct assignment for active unassigned Cleaners before work starts", () => {
+    const cleaner = { id: "cleaner-c", name: "Sample Cleaner", active: true };
+    expect(canAssignCleanerDirectly({ ...teamJob, operationalStatus: "UNASSIGNED", assignedCleanerIds: [] }, cleaner)).toBe(true);
+    expect(canAssignCleanerDirectly({ ...teamJob, operationalStatus: "OFFERED" }, cleaner)).toBe(true);
+    expect(canAssignCleanerDirectly(teamJob, cleaner)).toBe(true);
+    expect(canAssignCleanerDirectly(teamJob, { ...cleaner, id: "cleaner-a" })).toBe(false);
+    expect(canAssignCleanerDirectly(teamJob, { ...cleaner, active: false })).toBe(false);
+    expect(canAssignCleanerDirectly(teamJob, { ...cleaner, archivedAt: "archive" })).toBe(false);
+    expect(canAssignCleanerDirectly({ ...teamJob, archivedAt: "archive" }, cleaner)).toBe(false);
+    expect(canAssignCleanerDirectly({ ...teamJob, operationalStatus: "IN_PROGRESS" }, cleaner)).toBe(false);
+    expect(canAssignCleanerDirectly({ ...teamJob, operationalStatus: "COMPLETED" }, cleaner)).toBe(false);
+    expect(canAssignCleanerDirectly({ ...teamJob, schemaVersion: 1 }, cleaner)).toBe(false);
+  });
+
   it("builds the replacement projection without retaining the removed cleaner", () => {
     expect(replacementCleanerIds(teamJob, "cleaner-a", "cleaner-c")).toEqual([
       "cleaner-c",
       "cleaner-b",
     ]);
+  });
+
+  it("keeps direct assignments compatible with removal and Offer-based replacement", () => {
+    const directlyAssignedJob = {
+      ...teamJob,
+      assignedCleanerIds: ["cleaner-a", "cleaner-b"],
+    };
+    const directAssignment = {
+      cleanerId: "cleaner-a",
+      source: "MANAGER_DIRECT",
+      isActive: true,
+    };
+
+    expect(assignmentRemovalJobUpdate(directlyAssignedJob, directAssignment.cleanerId, false))
+      .toEqual({ assignedCleanerIds: ["cleaner-b"], operationalStatus: "ASSIGNED" });
+    expect(replacementCleanerIds(directlyAssignedJob, directAssignment.cleanerId, "cleaner-c"))
+      .toEqual(["cleaner-c", "cleaner-b"]);
   });
 
   it("builds an assignment with the required Job and interested-offer snapshots only", () => {
@@ -75,6 +107,7 @@ describe("assignment roster compatibility rules", () => {
       jobId: "job-1",
       cleanerId: "cleaner-a",
       cleanerNameSnapshot: "Ana",
+      source: "OFFER",
       sourceOfferId: "offer-1",
       isActive: true,
       executionStatus: "ASSIGNED",

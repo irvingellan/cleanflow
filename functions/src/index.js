@@ -53,6 +53,8 @@ import {
 } from "./checklistEvidenceService.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { rescheduleJobForManager } from "./jobScheduleService.js";
+import { assignCleanerDirectlyForManager } from "./managerDirectAssignmentService.js";
+import { completeJobWithoutChecklistForManager } from "./jobCompletionService.js";
 import {
   acknowledgePublicOfferAssignment,
   assignmentAcknowledgmentStates,
@@ -708,6 +710,40 @@ export const approveChecklistRun = onCall(
     }
 
     return approveChecklistRunForManager(db, { organizationId, jobId });
+  },
+);
+
+export const assignCleanerDirectly = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+
+    const jobId = request.data?.jobId;
+    const cleanerId = request.data?.cleanerId;
+    if (!validChecklistRunJobId(jobId) || !validChecklistCleanerId(cleanerId)) {
+      throw new HttpsError("invalid-argument", "Direct Assignment request is invalid.");
+    }
+
+    return assignCleanerDirectlyForManager(db, {
+      organizationId,
+      jobId,
+      cleanerId,
+      actorUid: request.auth.uid,
+    });
+  },
+);
+
+export const completeJobWithoutChecklist = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) {
+      throw new HttpsError("invalid-argument", "Job completion request is invalid.");
+    }
+
+    return completeJobWithoutChecklistForManager(db, { organizationId, jobId });
   },
 );
 

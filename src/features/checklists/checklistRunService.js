@@ -4,6 +4,7 @@ import { functions } from "../../services/firebase/client.js";
 const createChecklistRunCall = httpsCallable(functions, "createChecklistRun");
 const getChecklistRunCall = httpsCallable(functions, "getChecklistRun");
 const approveChecklistRunCall = httpsCallable(functions, "approveChecklistRun");
+const completeJobWithoutChecklistCall = httpsCallable(functions, "completeJobWithoutChecklist");
 const getChecklistEvidenceCall = httpsCallable(functions, "getChecklistEvidence");
 
 export async function getChecklistRun(jobId) {
@@ -18,6 +19,11 @@ export async function createChecklistRun(jobId) {
 
 export async function approveChecklistRun(jobId) {
   const result = await approveChecklistRunCall({ jobId });
+  return result.data;
+}
+
+export async function completeJobWithoutChecklist(jobId) {
+  const result = await completeJobWithoutChecklistCall({ jobId });
   return result.data;
 }
 

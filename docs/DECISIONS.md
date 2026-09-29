@@ -723,12 +723,12 @@ manager approval/completion is a separate workflow.
 ## DEC-039 — Enforce a bounded required cleaner count per Job
 
 Date: 2026-09-26
-Status: PRODUCT HOLD; implemented/tested and preserved outside deployable main; not deployed; policy awaits Gabi validation
+Status: Rejected hard full-team start gate for the pilot; implementation held outside deployable main and not deployed
 
 The exact implementation commit `b4b35bf` and its tests remain on
 `hold/required-cleaner-count-2026-09-27`. Deployable main has reverted its
-runtime/UI, callable Functions, and capacity/start Rules. The decision is not
-rejected; the following describes the held implementation, not current runtime.
+runtime/UI, callable Functions, and capacity/start Rules. The following
+describes the held implementation, not current runtime or approved pilot policy.
 
 The implementation treats `requiredCleanerCount` as the number of active
 Cleaner Assignments needed before a Job may start. Newly created
@@ -749,12 +749,11 @@ schema-version discriminator, or start a Job. These changes do not divide or
 rewrite Offer compensation, alter payment/payout state, or advance individual
 Assignment execution; the Job remains the overall lifecycle owner.
 
-The technical implementation passed review (`KEEP AS-IS`) but is not deployed.
-Whether the hard full-team start gate matches pilot policy is **OPEN**. Before
-deployment, ask Gabi: “If a cleaning needs 3 cleaners and only 2 are
-available/show up, should CleanFlow block starting the service, or warn you and
-allow a manager override?” Do not deploy this behavior through a broad release
-until that policy is confirmed and any required code adjustment is reviewed.
+The technical implementation passed review (`KEEP AS-IS`) before Gabi's product
+decision, but Gabi rejected a hard block on starting until the full requested
+team is assigned. Do not reintegrate or deploy `b4b35bf` as-is. A possible
+nonblocking count or warning is a separate product/design decision; rejection
+of the hard gate does not approve a replacement implementation.
 
 ---
 
@@ -776,3 +775,35 @@ policy. Page-load telemetry is diagnostic, not an adoption metric; a minimal
 read-only Pilot Scorecard may summarize real Jobs, upcoming-work coverage,
 Offers, submitted Checklists, client reports/opening where measurable, and Job
 completion. It does not require an analytics platform.
+
+---
+
+## DEC-041 — Manager Fast Path V2 keeps Assignment, checklist, and completion explicit
+
+Date: 2026-09-29
+Status: Pilot workflow implemented on `feature/manager-fast-path-v2-2026-09-29`; not merged or deployed
+
+For a non-archived schema-v2 Job in `UNASSIGNED`, `OFFERED`, or `ASSIGNED`, an
+active organization manager may directly select an active Cleaner and create
+an Assignment without an Offer response. This does not change existing Offers
+or represent Cleaner acknowledgment. The manager action creates an auditable
+Assignment source and advances the Job's checklist context revision; it does
+not auto-assign from interest or impose the rejected full-team start gate.
+
+A checklist remains optional for Job completion. If no initial Checklist Run
+exists, an active manager may explicitly complete a non-archived `ASSIGNED` or
+`IN_PROGRESS` Job after confirmation. The server checks the Job and Run in one
+transaction, records `completedAt`, and advances checklist context. If a Run
+exists, the no-Run completion path is closed: its saved draft must reach
+`READY_FOR_REVIEW`, then the manager reviews and approves it through the
+existing Run path. A completed Job cannot create a new initial Run. Neither
+completion path marks client payment or Cleaner payout paid.
+
+An assigned-cleaner reminder may optionally bundle one current checklist link
+with the existing manager-reviewed message. Preparing the link creates a Draft
+Run if absent and issues a capability for that Cleaner. An existing active
+capability requires an explicit replacement warning; the older link is revoked
+when replaced. Only one link is active per Run, including team Jobs. The
+manager must copy the message or open WhatsApp and send it manually; link
+preparation or opening WhatsApp records no sent/delivered state. Multi-cleaner
+checklist participation needs its own future design.

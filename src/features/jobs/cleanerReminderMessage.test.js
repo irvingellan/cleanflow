@@ -19,6 +19,7 @@ function translate(key, replacements = {}) {
     "jobs.reminderKeyCodeInfo": "Key / code info: {details}",
     "jobs.reminderConfirmation": "Please confirm when you receive this. Thank you!",
     "jobs.reminderCleanFlowConfirmation": "Please confirm you'll be there through your CleanFlow link: {url}",
+    "jobs.reminderChecklistLink": "Cleaning checklist: {url}",
     "common.notProvided": "Not provided",
   };
 
@@ -77,6 +78,57 @@ describe("cleaner reminder message", () => {
       translate,
     });
     expect(withoutLink).toContain("Please confirm when you receive this. Thank you!");
+  });
+
+  it("adds the selected Cleaner's checklist link only when one is supplied", () => {
+    const details = {
+      cleanerName: "Ana",
+      propertyName: "Harbor View Condo",
+      scheduledDate: "2026-09-08",
+      language: "en",
+      translate,
+    };
+    const checklistUrl = "https://cleanflow.example/checklist?t=ana-token";
+    const withChecklist = buildCleanerReminderMessage({ ...details, checklistUrl });
+    const withoutChecklist = buildCleanerReminderMessage(details);
+
+    expect(withChecklist).toContain(`Cleaning checklist: ${checklistUrl}`);
+    expect(withChecklist).toContain("Please confirm when you receive this. Thank you!");
+    expect(withoutChecklist).toBe([
+      "Hi Ana! 😊",
+      "",
+      "Just a reminder about your cleaning:",
+      "",
+      "📅 Date: Sep 8, 2026",
+      "📍 Property: Harbor View Condo",
+      "",
+      "Please confirm when you receive this. Thank you!",
+    ].join("\n"));
+    expect(withoutChecklist).not.toContain(checklistUrl);
+  });
+
+  it("uses the supplied Cleaner-language translator for each separate reminder", () => {
+    const checklistLabels = { en: "Cleaning checklist", pt: "Checklist da limpeza", es: "Lista de limpieza" };
+    const makeReminder = (cleanerName, language, checklistUrl) => buildCleanerReminderMessage({
+      cleanerName,
+      propertyName: "Harbor View Condo",
+      scheduledDate: "2026-09-08",
+      checklistUrl,
+      language,
+      translate: (key, replacements) => key === "jobs.reminderChecklistLink"
+        ? `${checklistLabels[language]}: ${replacements.url}`
+        : translate(key, replacements),
+    });
+
+    const anaUrl = "https://cleanflow.example/checklist?t=ana-token";
+    const benUrl = "https://cleanflow.example/checklist?t=ben-token";
+    const ana = makeReminder("Ana", "pt", anaUrl);
+    const ben = makeReminder("Ben", "es", benUrl);
+
+    expect(ana).toContain(`Checklist da limpeza: ${anaUrl}`);
+    expect(ana).not.toContain(benUrl);
+    expect(ben).toContain(`Lista de limpieza: ${benUrl}`);
+    expect(ben).not.toContain(anaUrl);
   });
 
   it("reuses only a current unexpired link for the active Assignment's exact source Offer", () => {

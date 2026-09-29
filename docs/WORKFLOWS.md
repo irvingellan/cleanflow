@@ -28,6 +28,12 @@ manager retains assignment control.
 **CURRENT transition:** an Assignment-aware Job may retain one or more explicit
 manager-created Cleaner Assignments from interested Offers.
 
+**FEATURE BRANCH ONLY (Manager Fast Path V2; not merged or deployed):** a
+manager may also select an active Cleaner directly for a non-archived schema-v2
+Job before work starts. This creates an Assignment without an Offer or
+`INTERESTED` response, leaves other Offers unchanged, and does not record
+Cleaner attendance acknowledgment. The existing Offer route stays available.
+
 ```text
 Manager creates Job
 → Manager sends one or more Offers
@@ -52,12 +58,14 @@ start/completion controls. Removed/replaced, archived, expired, or otherwise
 ineligible links cannot acknowledge. Legacy records without a safe Offer-to-
 Assignment relationship are not retrofitted.
 
-**PRODUCT HOLD:** the bounded required-cleaner-count/capacity/start-gate
-implementation is preserved on `hold/required-cleaner-count-2026-09-27`,
-not in deployable main or production. Assignment roster behavior remains on
-the existing manager-authorized, revision-protected path without this capacity
-gate. The block-versus-warning policy awaits Gabi;
-see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job).
+**REJECTED PILOT POLICY / PRODUCT HOLD:** the bounded
+required-cleaner-count/capacity/start-gate implementation is preserved on
+`hold/required-cleaner-count-2026-09-27`, not in deployable main or production.
+Assignment roster behavior remains on the existing manager-authorized,
+revision-protected path without this capacity gate. Gabi rejected its hard
+full-team start block; a possible nonblocking count/warning remains a separate
+design decision; see
+[DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job).
 
 **CURRENT public Offer handoff:** before creating or replacing a pending
 cleaner's public link, the manager confirms that cleaner's offered amount. The
@@ -104,6 +112,15 @@ Job ASSIGNED
 One Cleaner finishing does not finish every other Assignment. Exact aggregate
 completion for a future execution model remains to be validated; manager QA is
 not a mandatory normal completion gate.
+
+**FEATURE BRANCH ONLY (Manager Fast Path V2; not merged or deployed):** a
+manager can confirm completion of a non-archived `ASSIGNED` or `IN_PROGRESS`
+Job when no initial Checklist Run exists. A server transaction checks both
+records before recording `COMPLETED` and `completedAt`. If any initial Run
+exists, the no-Run shortcut is closed: the Cleaner submits the saved Run for
+review and the manager uses the existing approval path. A completed Job cannot
+start a new Run. Neither path completes payment or payout; see
+[DEC-041](DECISIONS.md#dec-041--manager-fast-path-v2-keeps-assignment-checklist-and-completion-explicit).
 
 ## Job lifecycle
 
@@ -343,6 +360,16 @@ WhatsApp when the assigned Cleaner's number is safe to target. Sensitive
 parking/access/key details remain excluded unless the manager explicitly opts
 in within that preview. The Copy fallback remains available; opening WhatsApp
 does not record a send or delivery.
+
+**FEATURE BRANCH ONLY (Manager Fast Path V2; not merged or deployed):** the
+manager may opt to include a checklist link in that same reminder. Preparing
+the link creates a Draft Run if absent and issues a capability for the selected
+assigned Cleaner. Copy/Open in WhatsApp is available only while the prepared
+link is current for that Cleaner. Replacing an active capability requires an
+explicit warning and invalidates its previous link. Because each Run has only
+one active capability, this bundled handoff cannot give multiple team members
+simultaneously usable checklist links. It remains a manual send with no
+sent/delivered state.
 
 **CURRENT (DEPLOYED 2026-09-28):** the reminder's system-generated text and
 date formatting use the assigned Cleaner's allowlisted `preferredLanguage`,

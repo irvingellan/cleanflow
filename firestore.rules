@@ -66,6 +66,19 @@ service cloud.firestore {
             .hasAny(['checklistContextRevision']));
     }
 
+    // Completion is a server-owned action, including Jobs without a Checklist Run.
+    function browserJobDoesNotCreateCompletion() {
+      return !('operationalStatus' in request.resource.data)
+        || request.resource.data.operationalStatus != 'COMPLETED';
+    }
+
+    function browserJobKeepsCompletionState() {
+      return ('operationalStatus' in request.resource.data
+          && request.resource.data.operationalStatus == 'COMPLETED')
+        == ('operationalStatus' in resource.data
+          && resource.data.operationalStatus == 'COMPLETED');
+    }
+
     function jobScheduleUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['scheduledDate', 'scheduledStart', 'scheduleRevision']);
@@ -148,13 +161,17 @@ service cloud.firestore {
           && activeManager(orgId)
           || (collectionName == 'jobs'
             && activeManager(orgId)
-            && validJobChecklistContextRevisionCreate());
+            && validJobChecklistContextRevisionCreate()
+            && browserJobDoesNotCreateCompletion()
+            && !('completedAt' in request.resource.data));
         allow update: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && jobScheduleUnchanged()
-            && validJobChecklistContextRevisionUpdate());
+            && validJobChecklistContextRevisionUpdate()
+            && browserJobKeepsCompletionState()
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedAt']));
       }
 
       match /jobs/{jobId}/{collectionName}/{recordId} {

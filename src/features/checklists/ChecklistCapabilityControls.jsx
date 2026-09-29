@@ -22,29 +22,44 @@ export function ChecklistCapabilityControls({
     ? getAssignedCleanerIds(job)
     : (typeof job.assignedCleanerId === "string" && job.assignedCleanerId ? [job.assignedCleanerId] : []);
   const [cleanerId, setCleanerId] = useState(cleanerIds[0] || "");
-  const [newLink, setNewLink] = useState("");
+  const [newLink, setNewLink] = useState(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!cleanerIds.includes(cleanerId)) setCleanerId(cleanerIds[0] || "");
   }, [cleanerIds.join(",")]);
 
+  useEffect(() => {
+    setNewLink(null);
+    setCopied(false);
+  }, [job.id]);
+
   if (!checklistRun || checklistRun.status !== "DRAFT") return null;
 
   const active = capability?.state === "ACTIVE";
+  const currentNewLink = active && newLink?.issuedAt
+    && newLink.jobId === job.id
+    && newLink.issuedAt === capability?.issuedAt
+    && newLink.cleanerId === capability?.cleanerId
+    && newLink.cleanerId === cleanerId ? newLink.url : null;
   const canIssue = ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus) && cleanerIds.length > 0;
 
   async function createOrReplace() {
     try {
-      const url = await onIssue(cleanerId);
-      setNewLink(url || "");
+      const result = await onIssue(cleanerId);
+      setNewLink(result?.capability?.state === "ACTIVE"
+        && result.capability.cleanerId === cleanerId
+        && result.capability.issuedAt
+        ? { url: result.url, jobId: job.id, cleanerId, issuedAt: result.capability.issuedAt }
+        : null);
       setCopied(false);
     } catch { /* controller exposes a localized error state */ }
   }
 
   async function copyLink() {
+    if (!currentNewLink) return;
     try {
-      await navigator.clipboard.writeText(newLink);
+      await navigator.clipboard.writeText(currentNewLink);
       setCopied(true);
     } catch { setCopied(false); }
   }
@@ -68,7 +83,11 @@ export function ChecklistCapabilityControls({
               {cleanerIds.length > 1 && (
                 <label>
                   {translate("checklists.linkCleaner")}
-                  <select value={cleanerId} onChange={(event) => setCleanerId(event.target.value)}>
+                  <select value={cleanerId} onChange={(event) => {
+                    setCleanerId(event.target.value);
+                    setNewLink(null);
+                    setCopied(false);
+                  }}>
                     {cleanerIds.map((id) => <option key={id} value={id}>{id}</option>)}
                   </select>
                 </label>
@@ -81,7 +100,7 @@ export function ChecklistCapabilityControls({
               </button>}
             </div>
           )}
-          {newLink && <div className="button-row"><button className="button" type="button" onClick={copyLink}>{copied ? translate("checklists.linkCopied") : translate("checklists.copyLink")}</button></div>}
+          {currentNewLink && <div className="button-row"><button className="button" type="button" onClick={copyLink}>{copied ? translate("checklists.linkCopied") : translate("checklists.copyLink")}</button></div>}
           {hasIssueError && <p className="form-error" role="alert">{translate("checklists.linkCreateError")}</p>}
           {hasRevokeError && <p className="form-error" role="alert">{translate("checklists.linkRevokeError")}</p>}
         </>

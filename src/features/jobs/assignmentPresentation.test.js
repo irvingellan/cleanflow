@@ -72,6 +72,20 @@ describe("assignedCleanerSummary", () => {
 });
 
 describe("assignment acknowledgment presentation", () => {
+  it("shows manager-direct assignments truthfully without an Offer confirmation", () => {
+    const offers = [{ id: "offer-other", cleanerId: "cleaner-b", status: "INTERESTED" }];
+    expect(getAssignmentAcknowledgmentState({
+      cleanerId: "cleaner-a",
+      source: "MANAGER_DIRECT",
+      isActive: true,
+    }, offers)).toBe("ASSIGNED_DIRECTLY");
+    expect(getAssignmentAcknowledgmentState({
+      cleanerId: "cleaner-a",
+      source: "MANAGER_DIRECT",
+      isActive: false,
+    }, offers)).toBeNull();
+  });
+
   it("shows awaiting and confirmed only for an acknowledgment tied to its source Offer", () => {
     const offers = [{ id: "offer-a", cleanerId: "cleaner-a", status: "INTERESTED" }];
     expect(getAssignmentAcknowledgmentState({

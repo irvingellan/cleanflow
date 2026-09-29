@@ -8,7 +8,8 @@ import {
   serverTimestamp,
   where,
 } from "firebase/firestore";
-import { db } from "../../services/firebase/client.js";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../../services/firebase/client.js";
 import {
   getAssignedCleanerIds,
   isAssignmentAwareJob,
@@ -18,6 +19,7 @@ import { buildAssignmentChecklistContextRevisionUpdate } from "./checklistContex
 
 const organizationId = "cleanflow-demo";
 const assignmentSchemaVersion = 1;
+const assignCleanerDirectlyCall = httpsCallable(functions, "assignCleanerDirectly");
 
 function jobDocument(jobId) {
   return doc(db, "organizations", organizationId, "jobs", jobId);
@@ -67,6 +69,19 @@ export function canAssignInterestedOffer(job, offer) {
   );
 }
 
+export function canAssignCleanerDirectly(job, cleaner) {
+  return (
+    job?.schemaVersion === 2 &&
+    !job.archivedAt &&
+    ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus) &&
+    cleaner?.active === true &&
+    !cleaner.archivedAt &&
+    typeof cleaner.id === "string" &&
+    Boolean(cleaner.id.trim()) &&
+    !getAssignedCleanerIds(job).includes(cleaner.id)
+  );
+}
+
 export function replacementCleanerIds(job, previousCleanerId, replacementCleanerId) {
   return getAssignedCleanerIds(job).map((cleanerId) =>
     cleanerId === previousCleanerId ? replacementCleanerId : cleanerId,
@@ -98,6 +113,7 @@ export function buildAssignmentCreateData(job, offer) {
     jobId: job.id,
     cleanerId: offer.cleanerId,
     cleanerNameSnapshot: offer.cleanerName || "",
+    source: "OFFER",
     sourceOfferId: offer.id,
     isActive: true,
     executionStatus: "ASSIGNED",
@@ -174,6 +190,11 @@ export async function assignInterestedCleaner(jobId, offerId) {
   });
 
   return jobFromSnapshot(await getDoc(jobReference));
+}
+
+export async function assignCleanerDirectly(jobId, cleanerId) {
+  await assignCleanerDirectlyCall({ jobId, cleanerId });
+  return jobFromSnapshot(await getDoc(jobDocument(jobId)));
 }
 
 async function hasActionableOffers(jobId) {

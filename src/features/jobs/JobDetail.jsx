@@ -10,8 +10,10 @@ import {
 } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
+import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
+import { canAssignCleanerDirectly } from "./assignmentService.js";
 import { formatIssueCategory } from "../issues/issuePresentation.js";
 import {
   formatCreatedAt,
@@ -47,6 +49,9 @@ export function JobDetail({
   job,
   property,
   knownCleaners,
+  availableCleaners = [],
+  isLoadingCleaners = false,
+  hasCleanerError = false,
   offers,
   isLoadingOffers,
   hasOffersError,
@@ -78,9 +83,11 @@ export function JobDetail({
   onOpenChecklistRun,
   onRefreshChecklistCapability,
   onIssueChecklistCapability,
+  onPrepareChecklistReminder,
   onRevokeChecklistCapability,
   onCreatePublicOfferLink,
   onAssignCleaner,
+  onAssignCleanerDirectly,
   onRemoveAssignment,
   onReplaceAssignment,
   onStartCleaning,
@@ -101,6 +108,10 @@ export function JobDetail({
   const [resolvedCleanerLanguages, setResolvedCleanerLanguages] = useState({});
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
+  const [isDirectAssignmentOpen, setIsDirectAssignmentOpen] = useState(false);
+  const [directCleanerSearch, setDirectCleanerSearch] = useState("");
+  const [directCleanerId, setDirectCleanerId] = useState("");
+  const [isAssigningDirectly, setIsAssigningDirectly] = useState(false);
   const [removingAssignmentId, setRemovingAssignmentId] = useState(null);
   const [replacementTargetId, setReplacementTargetId] = useState(null);
   const [replacingAssignmentId, setReplacingAssignmentId] = useState(null);
@@ -122,6 +133,9 @@ export function JobDetail({
   const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
   const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
   const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
+  const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] = useState(false);
+  const [isPreparingReminderChecklist, setIsPreparingReminderChecklist] = useState(false);
+  const [hasReminderChecklistError, setHasReminderChecklistError] = useState(false);
   const [isEditingPrices, setIsEditingPrices] = useState(false);
   const [priceValues, setPriceValues] = useState(() => ({
     clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
@@ -152,6 +166,8 @@ export function JobDetail({
   const [reminderPreview, setReminderPreview] = useState(null);
   const [isCopyingReminder, setIsCopyingReminder] = useState(false);
   const offersSectionRef = useRef(null);
+  const currentJobIdRef = useRef(job.id);
+  currentJobIdRef.current = job.id;
   const didFocusNewOffersRef = useRef(false);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
@@ -163,7 +179,8 @@ export function JobDetail({
     (assignment) => assignment.isActive === true,
   );
   const hasAssignmentAcknowledgment = activeAssignments.some(
-    (assignment) => getAssignmentAcknowledgmentState(assignment, offers),
+    (assignment) => ["AWAITING_CONFIRMATION", "CONFIRMED"].includes(
+      getAssignmentAcknowledgmentState(assignment, offers)),
   );
   const linkedProperty = property?.id === job.propertyId ? property : null;
   const sensitivePropertyDetails = [
@@ -188,6 +205,12 @@ export function JobDetail({
   const canEditRoster =
     isAssignmentAware &&
     ["OFFERED", "ASSIGNED"].includes(job.operationalStatus);
+  const canDirectAssign = isAssignmentAware && !job.archivedAt
+    && ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus);
+  const directCleanerOptions = filterCleanersByName(
+    availableCleaners.filter((cleaner) => canAssignCleanerDirectly(job, cleaner)),
+    directCleanerSearch,
+  );
   const canManageOffers = isAssignmentAware
     ? canManageAssignmentAwareOffers(job)
     : !isCompleted;
@@ -268,6 +291,22 @@ export function JobDetail({
         (!job.assignedCleanerId && reminderPreview.cleanerId === "legacy-assigned-cleaner" && job.assignedCleanerName)
       )
     : false;
+  const reminderChecklistCapabilityCurrent = Boolean(reminderPreview?.includeChecklist
+    && reminderPreview.checklistUrl
+    && reminderPreview.checklistIssuedAt
+    && checklistRun?.status === "DRAFT"
+    && checklistCapability?.state === "ACTIVE"
+    && checklistCapability.cleanerId === reminderPreview.cleanerId
+    && checklistCapability.issuedAt
+    && checklistCapability.issuedAt === reminderPreview.checklistIssuedAt);
+  const reminderReadyToSend = Boolean(reminderCleanerStillAssigned
+    && (!reminderPreview?.includeChecklist || reminderChecklistCapabilityCurrent)
+    && !isPreparingReminderChecklist);
+  const canPrepareChecklistForReminder = Boolean(reminderCleanerStillAssigned
+    && reminderPreview?.cleanerId !== "legacy-assigned-cleaner"
+    && !isLoadingChecklistRun && !hasChecklistRunError
+    && (!checklistRun || checklistRun.status === "DRAFT")
+    && !isLoadingChecklistCapability && !hasChecklistCapabilityError);
   const reminderPreviewAssignment = reminderPreview?.assignmentId
     ? activeAssignments.find((assignment) => assignment.id === reminderPreview.assignmentId)
     : null;
@@ -290,6 +329,7 @@ export function JobDetail({
       propertyDetails: linkedProperty,
       includeSensitiveAccess: reminderPreview.includeSensitiveAccess,
       assignmentOfferUrl: reminderPreviewOfferUrl,
+      checklistUrl: reminderChecklistCapabilityCurrent ? reminderPreview.checklistUrl : null,
       language: cleanerLanguageFor(reminderPreview.cleanerId),
       translate: (key, replacements) => translateInLanguage(
         cleanerLanguageFor(reminderPreview.cleanerId),
@@ -298,7 +338,7 @@ export function JobDetail({
       ),
     })
     : "";
-  const reminderWhatsAppUrl = reminderPreview
+  const reminderWhatsAppUrl = reminderPreview && reminderReadyToSend
     ? buildWhatsAppHandoffUrl(cleanerPhonesById[reminderPreview.cleanerId], reminderPreviewMessage)
     : null;
 
@@ -416,6 +456,15 @@ export function JobDetail({
     setCopiedOfferMessageId(null);
     setReminderPreview(null);
     setIsCopyingReminder(false);
+    setIsPreparingReminderChecklist(false);
+    setHasReminderChecklistError(false);
+    setIsCompletionConfirmationVisible(false);
+    setIsCompletingCleaning(false);
+    setHasCompleteCleaningError(false);
+    setIsDirectAssignmentOpen(false);
+    setIsAssigningDirectly(false);
+    setDirectCleanerSearch("");
+    setDirectCleanerId("");
     setOfferMessageCopyErrorId(null);
   }, [job.id]);
 
@@ -575,6 +624,27 @@ export function JobDetail({
     }
   }
 
+  async function assignCleanerDirectly(event) {
+    event.preventDefault();
+    const cleaner = availableCleaners.find((candidate) => candidate.id === directCleanerId);
+    if (!canAssignCleanerDirectly(job, cleaner) || isAssigningDirectly) return;
+    setIsAssigningDirectly(true);
+    setAssignmentError(null);
+    const jobId = job.id;
+    try {
+      await onAssignCleanerDirectly(cleaner.id);
+      if (currentJobIdRef.current === jobId) {
+        setIsDirectAssignmentOpen(false);
+        setDirectCleanerId("");
+        setDirectCleanerSearch("");
+      }
+    } catch {
+      if (currentJobIdRef.current === jobId) setAssignmentError(translate("jobs.directAssignmentError"));
+    } finally {
+      if (currentJobIdRef.current === jobId) setIsAssigningDirectly(false);
+    }
+  }
+
   async function removeCleanerAssignment(assignmentId) {
     setRemovingAssignmentId(assignmentId);
     setAssignmentError(null);
@@ -691,25 +761,57 @@ export function JobDetail({
   }
 
   async function completeCleaning() {
+    const jobId = job.id;
     setIsCompletingCleaning(true);
     setHasCompleteCleaningError(false);
 
     try {
       await onCompleteCleaning();
+      if (currentJobIdRef.current === jobId) setIsCompletionConfirmationVisible(false);
     } catch {
-      setHasCompleteCleaningError(true);
+      if (currentJobIdRef.current === jobId) setHasCompleteCleaningError(true);
     } finally {
-      setIsCompletingCleaning(false);
+      if (currentJobIdRef.current === jobId) setIsCompletingCleaning(false);
     }
   }
 
   function openReminderPreview(cleanerId, cleanerName, assignmentId = null) {
     setCopyMessageErrorCleanerId(null);
-    setReminderPreview({ cleanerId, cleanerName, assignmentId, includeSensitiveAccess: false });
+    setHasReminderChecklistError(false);
+    setReminderPreview({
+      cleanerId, cleanerName, assignmentId, includeSensitiveAccess: false,
+      includeChecklist: false, checklistUrl: null, checklistIssuedAt: null,
+    });
+  }
+
+  async function prepareReminderChecklist() {
+    if (!reminderPreview?.includeChecklist || !canPrepareChecklistForReminder
+      || isPreparingReminderChecklist) return;
+    if (checklistCapability?.state === "ACTIVE"
+      && !window.confirm(translate("jobs.reminderReplaceChecklistWarning"))) return;
+    const cleanerId = reminderPreview.cleanerId;
+    const jobId = job.id;
+    setHasReminderChecklistError(false);
+    setIsPreparingReminderChecklist(true);
+    try {
+      const result = await onPrepareChecklistReminder(cleanerId);
+      if (!result?.url || result.capability?.cleanerId !== cleanerId) {
+        throw new Error("Checklist link was not issued for the selected Cleaner.");
+      }
+      if (currentJobIdRef.current === jobId) {
+        setReminderPreview((current) => current?.cleanerId === cleanerId
+          ? { ...current, checklistUrl: result.url, checklistIssuedAt: result.capability.issuedAt }
+          : current);
+      }
+    } catch {
+      if (currentJobIdRef.current === jobId) setHasReminderChecklistError(true);
+    } finally {
+      if (currentJobIdRef.current === jobId) setIsPreparingReminderChecklist(false);
+    }
   }
 
   async function copyReminderMessage() {
-    if (!reminderPreview || !reminderCleanerStillAssigned || isCopyingReminder) return;
+    if (!reminderPreview || !reminderReadyToSend || isCopyingReminder) return;
     setCopyMessageErrorCleanerId(null);
     setIsCopyingReminder(true);
     try {
@@ -1064,7 +1166,8 @@ export function JobDetail({
               {translate("checklists.open")}
             </button>
           )}
-          {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError && (
+          {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError
+            && !job.archivedAt && !isCompleted && (
             <button
               className="button button--primary"
               type="button"
@@ -1113,6 +1216,48 @@ export function JobDetail({
         />
       </section>
 
+      {!job.archivedAt && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus) && (
+        <section className="job-execution" aria-label={translate("jobs.completeService")}>
+          {isLoadingChecklistRun && (
+            <p className="form-hint">{translate("jobs.completionCheckingChecklist")}</p>
+          )}
+          {hasChecklistRunError && !isLoadingChecklistRun && (
+            <p className="form-error" role="alert">{translate("jobs.completionChecklistUnavailable")}</p>
+          )}
+          {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
+            <p className="form-hint">{translate("jobs.completionRequiresChecklistReview")}</p>
+          )}
+          {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
+            <>
+              {!isCompletionConfirmationVisible ? (
+                <button className="button button--primary" type="button"
+                  onClick={() => setIsCompletionConfirmationVisible(true)}>
+                  {translate("jobs.completeService")}
+                </button>
+              ) : (
+                <div>
+                  <p>{translate("jobs.completeWithoutChecklistConfirm")}</p>
+                  <div className="button-row">
+                    <button className="button" type="button" disabled={isCompletingCleaning}
+                      onClick={() => setIsCompletionConfirmationVisible(false)}>
+                      {translate("common.cancel")}
+                    </button>
+                    <button className="button button--primary" type="button"
+                      disabled={isCompletingCleaning} onClick={completeCleaning}>
+                      {isCompletingCleaning ? translate("jobs.completingCleaning")
+                        : translate("jobs.completeService")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          {hasCompleteCleaningError && (
+            <p className="form-error" role="alert">{translate("jobs.completeCleaningError")}</p>
+          )}
+        </section>
+      )}
+
       {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
         isInProgress ||
         isCompleted) && (
@@ -1146,28 +1291,9 @@ export function JobDetail({
               </button>
             </div>
           )}
-          {isInProgress && (
-            <div className="button-row job-execution__actions">
-              <button
-                className="button button--primary"
-                type="button"
-                disabled={isCompletingCleaning}
-                onClick={completeCleaning}
-              >
-                {isCompletingCleaning
-                  ? translate("jobs.completingCleaning")
-                  : translate("jobs.completeCleaning")}
-              </button>
-            </div>
-          )}
           {hasStartCleaningError && (
             <p className="form-error" role="alert">
               {translate("jobs.startCleaningError")}
-            </p>
-          )}
-          {hasCompleteCleaningError && (
-            <p className="form-error" role="alert">
-              {translate("jobs.completeCleaningError")}
             </p>
           )}
         </section>
@@ -1205,7 +1331,51 @@ export function JobDetail({
                   : translate("jobs.cleanersAssignedMany", { count: assignedCleanerIds.length })}
               </span>
             </div>
+            {canDirectAssign && (
+              <button className="button" type="button" onClick={() => setIsDirectAssignmentOpen((open) => !open)}>
+                {translate("jobs.assignCleanerDirectly")}
+              </button>
+            )}
           </div>
+
+          {canDirectAssign && isDirectAssignmentOpen && (
+            <form className="cleaning-form" onSubmit={assignCleanerDirectly}>
+              <p className="form-hint">{translate("jobs.directAssignmentExplanation")}</p>
+              {isLoadingCleaners && <StateCard message={translate("offers.loadingCleaners")} status="status" />}
+              {hasCleanerError && <StateCard message={translate("offers.cleanerError")} status="alert" isError />}
+              {!isLoadingCleaners && !hasCleanerError && (
+                <>
+                  <label className="cleaner-name-search">
+                    {translate("cleaners.search")}
+                    <input type="search" value={directCleanerSearch}
+                      onChange={(event) => setDirectCleanerSearch(event.target.value)} />
+                  </label>
+                  <label>
+                    {translate("jobs.assignedCleaner")}
+                    <select value={directCleanerId} onChange={(event) => setDirectCleanerId(event.target.value)}>
+                      <option value="">{translate("common.notProvided")}</option>
+                      {directCleanerOptions.map((cleaner) => (
+                        <option key={cleaner.id} value={cleaner.id}>{cleaner.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {directCleanerOptions.length === 0 && (
+                    <p className="form-hint">{translate("cleaners.searchNoResults")}</p>
+                  )}
+                  <div className="button-row">
+                    <button className="button" type="button" disabled={isAssigningDirectly}
+                      onClick={() => setIsDirectAssignmentOpen(false)}>{translate("common.cancel")}</button>
+                    <button className="button button--primary" type="submit"
+                      disabled={!directCleanerId || isAssigningDirectly || !canAssignCleanerDirectly(
+                        job, availableCleaners.find((cleaner) => cleaner.id === directCleanerId))}>
+                      {isAssigningDirectly ? translate("jobs.assigningCleanerDirectly")
+                        : translate("jobs.confirmDirectAssignment")}
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          )}
 
           {isLoadingAssignments && (
             <StateCard message={translate("jobs.rosterLoading")} status="status" />
@@ -1226,6 +1396,7 @@ export function JobDetail({
                   translate("common.notProvided"),
                 );
                 const isReplacing = replacementTargetId === assignment.id;
+                const acknowledgmentState = getAssignmentAcknowledgmentState(assignment, offers);
 
                 return (
                   <article key={assignment.id} className="assignment-roster__item">
@@ -1233,9 +1404,11 @@ export function JobDetail({
                     <span className="status-badge">
                       {formatOperationalStatus(assignment.executionStatus, translate)}
                     </span>
-                    {getAssignmentAcknowledgmentState(assignment, offers) && (
+                    {acknowledgmentState && (
                       <span className="status-badge" data-testid={`assignment-acknowledgment-${assignment.id}`}>
-                        {translate(getAssignmentAcknowledgmentState(assignment, offers) === "CONFIRMED"
+                        {translate(acknowledgmentState === "ASSIGNED_DIRECTLY"
+                          ? "jobs.assignmentAssignedDirectly"
+                          : acknowledgmentState === "CONFIRMED"
                           ? "jobs.assignmentConfirmationConfirmed"
                           : "jobs.assignmentConfirmationAwaiting")}
                       </span>
@@ -1369,6 +1542,47 @@ export function JobDetail({
             </div>
           )}
 
+          {reminderCleanerStillAssigned && (
+            <div className="job-reminder-preview__sensitive">
+              <label>
+                <input type="checkbox" checked={reminderPreview.includeChecklist}
+                  onChange={(event) => {
+                    setHasReminderChecklistError(false);
+                    setReminderPreview((current) => ({
+                      ...current, includeChecklist: event.target.checked,
+                      checklistUrl: null, checklistIssuedAt: null,
+                    }));
+                  }} />
+                {translate("jobs.reminderIncludeChecklist")}
+              </label>
+              {reminderPreview.includeChecklist && (
+                <>
+                  <p className="form-hint">{translate("jobs.reminderChecklistPreparationHint")}</p>
+                  {checklistCapability?.state === "ACTIVE" && !reminderChecklistCapabilityCurrent && (
+                    <p className="form-hint">{translate("jobs.reminderExistingChecklistLinkWarning")}</p>
+                  )}
+                  {canPrepareChecklistForReminder && !reminderChecklistCapabilityCurrent && (
+                    <button className="button" type="button"
+                      disabled={isPreparingReminderChecklist || isIssuingChecklistCapability || isCreatingChecklistRun}
+                      onClick={prepareReminderChecklist}>
+                      {isPreparingReminderChecklist ? translate("jobs.reminderPreparingChecklist")
+                        : translate("jobs.reminderPrepareChecklist")}
+                    </button>
+                  )}
+                  {!canPrepareChecklistForReminder && (
+                    <p className="form-error" role="alert">{translate("jobs.reminderChecklistUnavailable")}</p>
+                  )}
+                  {reminderChecklistCapabilityCurrent && (
+                    <p className="form-success" role="status">{translate("jobs.reminderChecklistReady")}</p>
+                  )}
+                  {hasReminderChecklistError && (
+                    <p className="form-error" role="alert">{translate("jobs.reminderChecklistError")}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <div className="job-reminder-preview__message">
             <strong>{translate("jobs.reminderPreviewMessage")}</strong>
             <p className="form-hint">
@@ -1391,7 +1605,7 @@ export function JobDetail({
           )}
 
           <div className="job-reminder-preview__actions">
-            {reminderWhatsAppUrl && reminderCleanerStillAssigned && (
+            {reminderWhatsAppUrl && reminderReadyToSend && (
               <a
                 className="button button--primary"
                 href={reminderWhatsAppUrl}
@@ -1404,7 +1618,7 @@ export function JobDetail({
             <button
               className="button"
               type="button"
-              disabled={!reminderCleanerStillAssigned || isCopyingReminder}
+              disabled={!reminderReadyToSend || isCopyingReminder}
               onClick={copyReminderMessage}
             >
               {isCopyingReminder
@@ -1412,7 +1626,7 @@ export function JobDetail({
                 : translate("jobs.reminderCopyNow")}
             </button>
           </div>
-          {!reminderWhatsAppUrl && (
+          {reminderReadyToSend && !reminderWhatsAppUrl && (
             <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
           )}
         </section>

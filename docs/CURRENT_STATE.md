@@ -51,8 +51,38 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   existing browser integration unless a concrete FCM limitation is observed.
 - Required-cleaner-count implementation `b4b35bf` is preserved on
   `hold/required-cleaner-count-2026-09-27`, tested but **not deployed** and
-  removed from deployable main. Its hard full-team start policy awaits Gabi
+  removed from deployable main. Gabi rejected its hard full-team start gate;
+  the held implementation is not approved for release
   (see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)).
+
+## Manager Fast Path V2 — feature branch only
+
+`feature/manager-fast-path-v2-2026-09-29` contains bounded manager workflow
+changes. It is **not merged into main or deployed**; the
+production baseline above remains the live behavior.
+
+- For an active schema-v2 Job before work starts, a manager can select an active
+  Cleaner and create an Assignment directly, without first sending an Offer or
+  waiting for an `INTERESTED` response. Existing Offer/interest/Assignment paths
+  remain available. Direct Assignment is visibly distinct from Offer-link
+  acknowledgment; it does not claim the Cleaner confirmed attendance.
+- A manager can explicitly complete an eligible `ASSIGNED` or `IN_PROGRESS`
+  Job without a checklist only when no initial Checklist Run exists. The
+  server checks the Job and Run together and records `completedAt`. Once any
+  Run exists, completion remains through saved checklist handoff, manager
+  review, and approval; the no-Run action cannot bypass it. Completed Jobs
+  cannot start a new Run. Completion does not mark payment or payout paid.
+- An assigned-cleaner reminder can optionally include a checklist link in the
+  same manager-reviewed message. Preparing it creates the initial Draft Run if
+  needed and issues a capability for the selected Cleaner before Copy or Open
+  in WhatsApp is enabled. The manager still sends manually; no delivery state
+  is recorded. Only one checklist capability is active per Run. Issuing a link
+  for another Cleaner or replacing an existing one invalidates the prior link,
+  so this is a limitation for team Jobs, not a multi-cleaner checklist workflow.
+
+These branch behaviors still require merge/release checks and Gabi/cleaner
+real-use validation. They do not establish that the unresolved mobile photo
+failure or the complete photo-backed journey is fixed.
 
 ## Approved communication release
 
@@ -131,11 +161,10 @@ free text remains verbatim.
 
 - **Required cleaner count (`b4b35bf`):** implemented/tested and preserved on
   `hold/required-cleaner-count-2026-09-27`, not in deployable main or production.
-  Reviewed **KEEP AS-IS** technically. Ask Gabi: “If a
-  cleaning needs 3 cleaners and only 2 are available/show up, should CleanFlow
-  block starting the service, or warn you and allow a manager override?” The
-  hard-block policy is awaiting her validation, not rejected. Do not reintegrate
-  it until that decision and any needed adjustment are reviewed.
+  Reviewed **KEEP AS-IS** technically before Gabi's product decision. Gabi
+  rejected the hard full-team start gate. Do not reintegrate or deploy this
+  held implementation as-is; any nonblocking team-capacity policy requires a
+  separate bounded design and review.
 - No OneSignal reminder-provider cutover is approved. FCM remains the scheduled
   reminder default.
 
@@ -178,8 +207,8 @@ Current evidence priorities:
 
 1. Capture the real photo failure and complete one observed real cleaning.
 2. Reconcile upcoming work and agree the pilot exit criterion with Gabi.
-3. Resolve the required-cleaner start policy and Gabi's reminder-delivery
-   validation.
+3. Validate Gabi's FCM reminder delivery and the V2 direct-assignment,
+   optional-checklist, and bundled-reminder workflow after an approved release.
 4. Test the owner-report hypothesis and gather only the scorecard signals
    needed to evaluate adoption.
 

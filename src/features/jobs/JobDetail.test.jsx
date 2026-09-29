@@ -30,6 +30,9 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         }}
         property={property}
         knownCleaners={checklist.knownCleaners || []}
+        availableCleaners={checklist.availableCleaners || []}
+        isLoadingCleaners={checklist.isLoadingCleaners || false}
+        hasCleanerError={checklist.hasCleanerError || false}
         offers={offers}
         isLoadingOffers={isLoadingOffers}
         hasOffersError={hasOffersError}
@@ -61,13 +64,15 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         onOpenChecklistRun={callbacks.onOpenChecklistRun || noOp}
         onRefreshChecklistCapability={callbacks.onRefreshChecklistCapability || noOp}
         onIssueChecklistCapability={callbacks.onIssueChecklistCapability || noOp}
+        onPrepareChecklistReminder={callbacks.onPrepareChecklistReminder || noOp}
         onRevokeChecklistCapability={callbacks.onRevokeChecklistCapability || noOp}
         onCreatePublicOfferLink={callbacks.onCreatePublicOfferLink || noOp}
         onAssignCleaner={noOp}
+        onAssignCleanerDirectly={callbacks.onAssignCleanerDirectly || noOp}
         onRemoveAssignment={noOp}
         onReplaceAssignment={noOp}
         onStartCleaning={noOp}
-        onCompleteCleaning={noOp}
+        onCompleteCleaning={callbacks.onCompleteCleaning || noOp}
         onUpdatePrices={callbacks.onUpdatePrices || noOp}
         onUpdateDetails={callbacks.onUpdateDetails || noOp}
         onUpdateSchedule={callbacks.onUpdateSchedule || noOp}
@@ -628,7 +633,11 @@ describe("JobDetail lifecycle actions", () => {
   it("creates, copies, replaces, and revokes a cleaner link only for an eligible Draft Run", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-    const onIssueChecklistCapability = vi.fn().mockResolvedValue("https://cleanflow.example/checklist?t=token");
+    const capability = { state: "NONE" };
+    const onIssueChecklistCapability = vi.fn().mockImplementation(async (cleanerId) => {
+      Object.assign(capability, { state: "ACTIVE", cleanerId, issuedAt: "2026-09-29T12:00:00Z" });
+      return { url: "https://cleanflow.example/checklist?t=token", capability: { ...capability } };
+    });
     const onRevokeChecklistCapability = vi.fn();
     renderJobDetail("ASSIGNED", {
       schemaVersion: 2,
@@ -636,14 +645,14 @@ describe("JobDetail lifecycle actions", () => {
       offers: [{ id: "offer-a", cleanerId: "cleaner-a", status: "INTERESTED" }],
     }, { onIssueChecklistCapability, onRevokeChecklistCapability }, {
       run: { id: "initial", status: "DRAFT", checklistItemCount: 28, inventoryItemCount: 13 },
-      capability: { state: "NONE" },
+      capability,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Create cleaner link" }));
     await waitFor(() => expect(onIssueChecklistCapability).toHaveBeenCalledWith("cleaner-a"));
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
     expect(writeText).toHaveBeenCalledWith("https://cleanflow.example/checklist?t=token");
-    expect(screen.queryByRole("button", { name: "Revoke link" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revoke link" })).toBeVisible();
   });
 
   it("shows a Checklist Run load error with a retry action", () => {
@@ -987,25 +996,169 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByRole("button", { name: "Refresh offers" })).toBeVisible();
   });
 
-  it("only offers Start cleaning for an assigned Job", () => {
+  it("keeps Start cleaning and offers no-checklist completion for an assigned Job", () => {
     renderJobDetail("ASSIGNED");
 
     expect(screen.getByRole("button", { name: /start cleaning/i })).toBeVisible();
-    expect(screen.queryByRole("button", { name: /complete cleaning/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Complete service" })).toBeVisible();
   });
 
-  it("only offers Complete cleaning for an in-progress Job", () => {
-    renderJobDetail("IN_PROGRESS");
+  it("confirms no-checklist completion for an in-progress Job", async () => {
+    const onCompleteCleaning = vi.fn().mockResolvedValue({ operationalStatus: "COMPLETED" });
+    renderJobDetail("IN_PROGRESS", {}, { onCompleteCleaning });
 
-    expect(screen.getByRole("button", { name: /complete cleaning/i })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Complete service" }));
+    expect(screen.getByText("This service has no checklist. Mark it completed?")).toBeVisible();
+    expect(onCompleteCleaning).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Complete service" }));
+    await waitFor(() => expect(onCompleteCleaning).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("button", { name: /start cleaning/i })).not.toBeInTheDocument();
+  });
+
+  it("never offers bypass completion while a Checklist Run exists or its status is unknown", () => {
+    const { unmount } = renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-a"] }, {}, {
+      run: { id: "initial", status: "DRAFT" },
+    });
+    expect(screen.queryByRole("button", { name: "Complete service" })).not.toBeInTheDocument();
+    expect(screen.getByText(/this service has a checklist/i)).toBeVisible();
+    unmount();
+    renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-a"] }, {}, {
+      hasLoadError: true,
+    });
+    expect(screen.queryByRole("button", { name: "Complete service" })).not.toBeInTheDocument();
+  });
+
+  it("assigns a searched active Cleaner directly without selecting an Offer", async () => {
+    const onAssignCleanerDirectly = vi.fn().mockResolvedValue({ operationalStatus: "ASSIGNED" });
+    renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] },
+      { onAssignCleanerDirectly }, {
+        availableCleaners: [
+          { id: "cleaner-a", name: "Ana", active: true },
+          { id: "cleaner-b", name: "Beatriz", active: true },
+          { id: "cleaner-c", name: "Clara", active: false },
+        ],
+      });
+    fireEvent.click(screen.getByRole("button", { name: "Assign cleaner" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search cleaners by name" }),
+      { target: { value: "bea" } });
+    expect(screen.getByRole("option", { name: "Beatriz" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "Clara" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Assigned cleaner" }),
+      { target: { value: "cleaner-b" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm assignment" }));
+    await waitFor(() => expect(onAssignCleanerDirectly).toHaveBeenCalledWith("cleaner-b"));
+  });
+
+  it("marks a manager-direct Assignment truthfully without claiming link acknowledgment", () => {
+    renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-a"] }, {}, {
+      assignments: [{ id: "assignment-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Ana",
+        source: "MANAGER_DIRECT", isActive: true, executionStatus: "ASSIGNED" }],
+    });
+    expect(screen.getByTestId("assignment-acknowledgment-assignment-a"))
+      .toHaveTextContent("Assigned directly");
+    expect(screen.queryByText(/link response does not verify/i)).not.toBeInTheDocument();
+  });
+
+  it("adds a selected Cleaner's checklist link only after explicit preparation and uses the same message for Copy and WhatsApp", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const capability = { state: "NONE" };
+    const url = "https://cleanflow.example/checklist?t=synthetic-token";
+    const onPrepareChecklistReminder = vi.fn().mockImplementation(async (cleanerId) => {
+      Object.assign(capability, { state: "ACTIVE", cleanerId, issuedAt: "2026-09-29T12:00:00Z" });
+      return { url, capability: { ...capability } };
+    });
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2, propertyId: "property-a", assignedCleanerIds: ["cleaner-a"],
+      scheduledDate: "2026-09-29",
+    }, { onPrepareChecklistReminder }, {
+      knownCleaners: [{ id: "cleaner-a", name: "Ana", phone: "+14155550123", preferredLanguage: "pt" }],
+      assignments: [{ id: "assignment-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Ana",
+        source: "MANAGER_DIRECT", isActive: true, executionStatus: "ASSIGNED" }],
+      capability,
+      run: { id: "initial", status: "DRAFT" },
+    }, { id: "property-a", keyCodeInfo: "private-code" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Prepare message" }));
+    expect(onPrepareChecklistReminder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include checklist link" }));
+    expect(screen.getByRole("button", { name: "Copy reminder" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "Open in WhatsApp" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare checklist link" }));
+    await waitFor(() => expect(onPrepareChecklistReminder).toHaveBeenCalledWith("cleaner-a"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copy reminder" })).toBeEnabled());
+    const whatsappLink = screen.getByRole("link", { name: "Open in WhatsApp" });
+    const message = screen.getByText(/Checklist da limpeza:/).textContent;
+    expect(message).toContain(url);
+    expect(message).not.toContain("private-code");
+    expect(decodeURIComponent(whatsappLink.getAttribute("href"))).toContain(message);
+    fireEvent.click(screen.getByRole("button", { name: "Copy reminder" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(message));
+  });
+
+  it("keeps handoff disabled after checklist preparation fails", async () => {
+    const onPrepareChecklistReminder = vi.fn().mockRejectedValue(new Error("unavailable"));
+    renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-a"] },
+      { onPrepareChecklistReminder }, {
+        knownCleaners: [{ id: "cleaner-a", name: "Ana" }],
+        assignments: [{ id: "assignment-a", cleanerId: "cleaner-a", isActive: true }],
+      });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare message" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include checklist link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare checklist link" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Nothing was sent"));
+    expect(screen.getByRole("button", { name: "Copy reminder" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "Open in WhatsApp" })).not.toBeInTheDocument();
+  });
+
+  it("does not enable a reminder link without a confirmed capability issuance identity", async () => {
+    const capability = { state: "NONE" };
+    const onPrepareChecklistReminder = vi.fn().mockImplementation(async (cleanerId) => {
+      Object.assign(capability, { state: "ACTIVE", cleanerId });
+      return { url: "https://cleanflow.example/checklist?t=synthetic-token", capability: { ...capability } };
+    });
+    renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-a"] },
+      { onPrepareChecklistReminder }, {
+        knownCleaners: [{ id: "cleaner-a", name: "Ana" }],
+        assignments: [{ id: "assignment-a", cleanerId: "cleaner-a", isActive: true }],
+        capability,
+        run: { id: "initial", status: "DRAFT" },
+      });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare message" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include checklist link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare checklist link" }));
+    await waitFor(() => expect(onPrepareChecklistReminder).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Copy reminder" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "Open in WhatsApp" })).not.toBeInTheDocument();
+  });
+
+  it("does not silently replace another assigned Cleaner's active checklist link", () => {
+    const onPrepareChecklistReminder = vi.fn();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-a", "cleaner-b"] },
+      { onPrepareChecklistReminder }, {
+        knownCleaners: [{ id: "cleaner-a", name: "Ana" }, { id: "cleaner-b", name: "Beatriz" }],
+        assignments: [
+          { id: "assignment-a", cleanerId: "cleaner-a", isActive: true },
+          { id: "assignment-b", cleanerId: "cleaner-b", isActive: true },
+        ],
+        capability: { state: "ACTIVE", cleanerId: "cleaner-a", issuedAt: "2026-09-29T12:00:00Z" },
+      });
+    fireEvent.click(within(screen.getByText("Beatriz").closest("article"))
+      .getByRole("button", { name: "Prepare message" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include checklist link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare checklist link" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(onPrepareChecklistReminder).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Copy reminder" })).toBeDisabled();
+    confirm.mockRestore();
   });
 
   it("shows no lifecycle mutation actions for a completed Job and handles optional data", () => {
     renderJobDetail("COMPLETED");
 
     expect(screen.queryByRole("button", { name: /start cleaning/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /complete cleaning/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Complete service" })).not.toBeInTheDocument();
     expect(screen.getByText("No offers created yet.")).toBeVisible();
     expect(screen.getByText("No issues reported.")).toBeVisible();
     expect(screen.queryByText("common.notProvided")).not.toBeInTheDocument();

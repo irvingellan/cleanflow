@@ -1748,6 +1748,78 @@ Object.assign(messages.es, {
   "offers.jobAmountSuggestion": "Sugerencia del pago de cleaner de este servicio. Confirma el importe individual antes de crear el enlace; podría ser el total del equipo.",
 });
 
+Object.assign(messages.en, {
+  "jobs.assignCleanerDirectly": "Assign cleaner",
+  "jobs.assigningCleanerDirectly": "Assigning…",
+  "jobs.confirmDirectAssignment": "Confirm assignment",
+  "jobs.directAssignmentExplanation": "Assign an active cleaner without an Offer or interest response.",
+  "jobs.directAssignmentError": "Unable to assign this cleaner. Refresh the Job and try again.",
+  "jobs.assignmentAssignedDirectly": "Assigned directly",
+  "jobs.completeService": "Complete service",
+  "jobs.completeWithoutChecklistConfirm": "This service has no checklist. Mark it completed?",
+  "jobs.completionCheckingChecklist": "Checking for a checklist before completion…",
+  "jobs.completionChecklistUnavailable": "Checklist status could not be verified. Retry before completing.",
+  "jobs.completionRequiresChecklistReview": "This service has a checklist. Wait for cleaner review, then approve it to complete.",
+  "jobs.reminderIncludeChecklist": "Include checklist link",
+  "jobs.reminderChecklistPreparationHint": "The checklist and cleaner link are created only when you prepare them below.",
+  "jobs.reminderExistingChecklistLinkWarning": "A new link will replace the current link, including any copy already shared.",
+  "jobs.reminderReplaceChecklistWarning": "Prepare a new checklist link? This permanently invalidates the current link, even if another cleaner is using it.",
+  "jobs.reminderPrepareChecklist": "Prepare checklist link",
+  "jobs.reminderPreparingChecklist": "Preparing checklist link…",
+  "jobs.reminderChecklistUnavailable": "A checklist link cannot be prepared for this cleaner or Run.",
+  "jobs.reminderChecklistReady": "Checklist link added to this message. Review before sending.",
+  "jobs.reminderChecklistError": "Checklist link could not be prepared. Nothing was sent; try again.",
+  "jobs.reminderChecklistLink": "Cleaning checklist: {url}",
+});
+
+Object.assign(messages.pt, {
+  "jobs.assignCleanerDirectly": "Atribuir cleaner",
+  "jobs.assigningCleanerDirectly": "Atribuindo…",
+  "jobs.confirmDirectAssignment": "Confirmar atribuição",
+  "jobs.directAssignmentExplanation": "Atribua uma cleaner ativa sem oferta ou resposta de interesse.",
+  "jobs.directAssignmentError": "Não foi possível atribuir esta cleaner. Atualize o serviço e tente novamente.",
+  "jobs.assignmentAssignedDirectly": "Atribuída diretamente",
+  "jobs.completeService": "Concluir serviço",
+  "jobs.completeWithoutChecklistConfirm": "Este serviço não tem checklist. Marcá-lo como concluído?",
+  "jobs.completionCheckingChecklist": "Verificando se existe checklist antes da conclusão…",
+  "jobs.completionChecklistUnavailable": "Não foi possível verificar o checklist. Tente novamente antes de concluir.",
+  "jobs.completionRequiresChecklistReview": "Este serviço tem checklist. Aguarde o envio para revisão e aprove para concluir.",
+  "jobs.reminderIncludeChecklist": "Incluir link do checklist",
+  "jobs.reminderChecklistPreparationHint": "O checklist e o link da cleaner só serão criados quando você os preparar abaixo.",
+  "jobs.reminderExistingChecklistLinkWarning": "Um novo link substituirá o atual, inclusive qualquer cópia já compartilhada.",
+  "jobs.reminderReplaceChecklistWarning": "Preparar um novo link? Isso invalida permanentemente o link atual, mesmo que outra cleaner esteja usando-o.",
+  "jobs.reminderPrepareChecklist": "Preparar link do checklist",
+  "jobs.reminderPreparingChecklist": "Preparando link do checklist…",
+  "jobs.reminderChecklistUnavailable": "Não é possível preparar um link para esta cleaner ou este checklist.",
+  "jobs.reminderChecklistReady": "Link do checklist incluído nesta mensagem. Revise antes de enviar.",
+  "jobs.reminderChecklistError": "Não foi possível preparar o link. Nada foi enviado; tente novamente.",
+  "jobs.reminderChecklistLink": "Checklist da limpeza: {url}",
+});
+
+Object.assign(messages.es, {
+  "jobs.assignCleanerDirectly": "Asignar cleaner",
+  "jobs.assigningCleanerDirectly": "Asignando…",
+  "jobs.confirmDirectAssignment": "Confirmar asignación",
+  "jobs.directAssignmentExplanation": "Asigna una cleaner activa sin oferta ni respuesta de interés.",
+  "jobs.directAssignmentError": "No se pudo asignar esta cleaner. Actualiza el servicio e inténtalo de nuevo.",
+  "jobs.assignmentAssignedDirectly": "Asignada directamente",
+  "jobs.completeService": "Completar servicio",
+  "jobs.completeWithoutChecklistConfirm": "Este servicio no tiene checklist. ¿Marcarlo como completado?",
+  "jobs.completionCheckingChecklist": "Verificando el checklist antes de completar…",
+  "jobs.completionChecklistUnavailable": "No se pudo verificar el checklist. Inténtalo de nuevo antes de completar.",
+  "jobs.completionRequiresChecklistReview": "Este servicio tiene checklist. Espera la revisión y apruébalo para completar.",
+  "jobs.reminderIncludeChecklist": "Incluir enlace del checklist",
+  "jobs.reminderChecklistPreparationHint": "El checklist y enlace solo se crean al prepararlos abajo.",
+  "jobs.reminderExistingChecklistLinkWarning": "Un enlace nuevo reemplazará el actual, incluso si ya se compartió.",
+  "jobs.reminderReplaceChecklistWarning": "¿Preparar un enlace nuevo? Esto invalida permanentemente el actual, aunque otra cleaner lo esté usando.",
+  "jobs.reminderPrepareChecklist": "Preparar enlace del checklist",
+  "jobs.reminderPreparingChecklist": "Preparando enlace del checklist…",
+  "jobs.reminderChecklistUnavailable": "No se puede preparar un enlace para esta cleaner o este checklist.",
+  "jobs.reminderChecklistReady": "Enlace del checklist añadido al mensaje. Revísalo antes de enviar.",
+  "jobs.reminderChecklistError": "No se pudo preparar el enlace. No se envió nada; inténtalo de nuevo.",
+  "jobs.reminderChecklistLink": "Checklist de limpieza: {url}",
+});
+
 export function translateInLanguage(language, key, replacements = {}) {
   const safeLanguage = normalizeTranslationLanguage(language);
   const message = messages[safeLanguage][key] || messages.en[key] || key;

@@ -35,6 +35,7 @@ export function assignedCleanerSummary(job, cleanerNamesById, translate, fallbac
 /** Link-based acknowledgment is operational only and remains attached to its source Offer. */
 export function getAssignmentAcknowledgmentState(assignment, offers = []) {
   if (assignment?.isActive !== true) return null;
+  if (assignment.source === "MANAGER_DIRECT") return "ASSIGNED_DIRECTLY";
   const sourceOfferId = assignment?.sourceOfferId;
   if (typeof sourceOfferId !== "string" || !sourceOfferId.trim()) return null;
   const sourceOffer = offers.find((offer) => offer.id === sourceOfferId

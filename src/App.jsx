@@ -496,6 +496,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     },
     actions: {
       assignCleaner,
+      assignCleanerDirectly,
       removeCleanerAssignment,
       replaceCleanerAssignment,
       startCleaning,
@@ -510,6 +511,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       restore: restoreJobRecord,
       createChecklistRun: createJobChecklistRun,
       issueChecklistCapability: issueJobChecklistCapability,
+      prepareChecklistReminder,
       revokeChecklistCapability: revokeJobChecklistCapability,
     },
     openJob: openJobDetail,
@@ -1240,6 +1242,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             job={selectedJob}
             property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
             knownCleaners={directoryCleaners}
+            availableCleaners={cleaners}
+            isLoadingCleaners={isLoadingCleaners}
+            hasCleanerError={hasCleanerError}
             offersCreatedCount={offersCreatedCount}
             offers={jobOffers}
             isLoadingOffers={isLoadingOffers}
@@ -1281,9 +1286,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOpenChecklistRun={openChecklistRun}
             onRefreshChecklistCapability={refreshChecklistCapability}
             onIssueChecklistCapability={issueJobChecklistCapability}
+            onPrepareChecklistReminder={prepareChecklistReminder}
             onRevokeChecklistCapability={revokeJobChecklistCapability}
             onCreatePublicOfferLink={createCleanerOfferLink}
             onAssignCleaner={assignCleaner}
+            onAssignCleanerDirectly={assignCleanerDirectly}
             onRemoveAssignment={removeCleanerAssignment}
             onReplaceAssignment={replaceCleanerAssignment}
             onStartCleaning={startCleaning}

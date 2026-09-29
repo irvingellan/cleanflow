@@ -133,6 +133,9 @@ export async function createChecklistRunForManager(database, { organizationId, j
     }
 
     const job = { id: jobSnapshot.id, ...jobSnapshot.data() };
+    if (job.archivedAt || job.operationalStatus === "COMPLETED") {
+      throw new HttpsError("failed-precondition", "Checklist cannot be started on an archived or completed Job.");
+    }
     if (!validChecklistRunJobId(job.propertyId)) {
       throw new HttpsError("failed-precondition", "Job needs a canonical Property before creating a checklist.");
     }

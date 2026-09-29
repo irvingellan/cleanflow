@@ -1,16 +1,60 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getChecklistRun: vi.fn(),
+  createChecklistRun: vi.fn(),
+  completeJobWithoutChecklist: vi.fn(),
+  getChecklistCapability: vi.fn(),
+  issueChecklistCapability: vi.fn(),
+  getJobById: vi.fn(),
+  getCleaners: vi.fn(),
+  getJobIssues: vi.fn(),
+  getJobOffers: vi.fn(),
 }));
 
 vi.mock("../checklists/checklistRunService.js", () => ({
   getChecklistRun: mocks.getChecklistRun,
-  createChecklistRun: vi.fn(),
+  createChecklistRun: mocks.createChecklistRun,
+  completeJobWithoutChecklist: mocks.completeJobWithoutChecklist,
+  approveChecklistRun: vi.fn(),
+}));
+
+vi.mock("../checklists/checklistCapabilityService.js", () => ({
+  getChecklistCapability: mocks.getChecklistCapability,
+  issueChecklistCapability: mocks.issueChecklistCapability,
+  revokeChecklistCapability: vi.fn(),
+}));
+
+vi.mock("../cleaners/cleanerService.js", () => ({
+  getCleaners: mocks.getCleaners,
+}));
+
+vi.mock("../issues/issueService.js", () => ({
+  getJobIssues: mocks.getJobIssues,
+  resolveIssue: vi.fn(),
+}));
+
+vi.mock("./jobOfferService.js", () => ({
+  getJobOffers: mocks.getJobOffers,
+  createPublicOfferLink: vi.fn(),
+}));
+
+vi.mock("./jobService.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  getJobById: mocks.getJobById,
 }));
 
 import { useJobDetailController } from "./useJobDetailController.js";
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.getChecklistRun.mockResolvedValue(null);
+  mocks.getChecklistCapability.mockResolvedValue({ state: "NONE" });
+  mocks.getCleaners.mockResolvedValue([]);
+  mocks.getJobIssues.mockResolvedValue([]);
+  mocks.getJobOffers.mockResolvedValue([]);
+});
 
 function deferred() {
   let resolve;
@@ -45,5 +89,247 @@ describe("useJobDetailController checklist refresh", () => {
     await act(async () => { first.resolve({ id: "initial", property: { name: "Job A" } }); });
 
     expect(result.current.detail.checklistRun?.property?.name).toBe("Job B");
+  });
+});
+
+describe("useJobDetailController manager fast path", () => {
+  const job = { id: "job-1", operationalStatus: "IN_PROGRESS" };
+  const draftRun = { id: "initial", status: "DRAFT" };
+  const issued = {
+    capability: { state: "ACTIVE", cleanerId: "cleaner-2" },
+    url: "https://example.test/checklist?t=fictional-token",
+  };
+
+  function openController(onJobUpdated = vi.fn(), view = "checklist-run") {
+    const hook = renderHook(() => useJobDetailController({
+      view,
+      onJobUpdated,
+      actorUid: "manager-1",
+    }));
+    act(() => hook.result.current.openJob(job));
+    return { ...hook, onJobUpdated };
+  }
+
+  it("creates a Draft only when the manager prepares a reminder, then issues for the selected cleaner", async () => {
+    const { result } = openController(vi.fn(), "job-detail");
+    await waitFor(() => expect(result.current.detail.isLoadingChecklistRun).toBe(false));
+    expect(mocks.getChecklistRun).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(result.current.detail.checklistRun).toBeNull();
+    expect(mocks.createChecklistRun).not.toHaveBeenCalled();
+    expect(mocks.issueChecklistCapability).not.toHaveBeenCalled();
+
+    mocks.createChecklistRun.mockResolvedValue(draftRun);
+    mocks.issueChecklistCapability.mockResolvedValue(issued);
+    let reminder;
+    await act(async () => {
+      reminder = await result.current.actions.prepareChecklistReminder("cleaner-2");
+    });
+
+    expect(mocks.createChecklistRun).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(mocks.issueChecklistCapability).toHaveBeenCalledExactlyOnceWith({
+      jobId: "job-1", cleanerId: "cleaner-2",
+    });
+    expect(mocks.createChecklistRun.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.issueChecklistCapability.mock.invocationCallOrder[0]);
+    expect(reminder).toEqual(issued);
+    expect(result.current.detail.checklistRun).toEqual(draftRun);
+  });
+
+  it("reuses an existing Draft Run when preparing a reminder", async () => {
+    mocks.getChecklistRun.mockResolvedValue(draftRun);
+    mocks.issueChecklistCapability.mockResolvedValue(issued);
+    const { result } = openController();
+    await act(async () => {
+      await result.current.detail.refreshChecklistRun(job);
+    });
+
+    let reminder;
+    await act(async () => {
+      reminder = await result.current.actions.prepareChecklistReminder("cleaner-2");
+    });
+
+    expect(mocks.createChecklistRun).not.toHaveBeenCalled();
+    expect(mocks.issueChecklistCapability).toHaveBeenCalledExactlyOnceWith({
+      jobId: "job-1", cleanerId: "cleaner-2",
+    });
+    expect(reminder).toEqual(issued);
+  });
+
+  it("does not issue a reminder for a Run that is no longer a Draft", async () => {
+    mocks.getChecklistRun.mockResolvedValue({ id: "initial", status: "READY_FOR_REVIEW" });
+    const { result } = openController();
+    await act(async () => {
+      await result.current.detail.refreshChecklistRun(job);
+    });
+
+    await act(async () => {
+      await expect(result.current.actions.prepareChecklistReminder("cleaner-2"))
+        .rejects.toThrow("A Draft Checklist Run is required.");
+    });
+
+    expect(mocks.createChecklistRun).not.toHaveBeenCalled();
+    expect(mocks.issueChecklistCapability).not.toHaveBeenCalled();
+  });
+
+  it("propagates Run creation failure without issuing a link or reporting success", async () => {
+    mocks.createChecklistRun.mockRejectedValue(new Error("create failed"));
+    const { result } = openController();
+
+    await act(async () => {
+      await expect(result.current.actions.prepareChecklistReminder("cleaner-2"))
+        .rejects.toThrow("create failed");
+    });
+
+    expect(mocks.issueChecklistCapability).not.toHaveBeenCalled();
+    expect(result.current.detail.checklistRun).toBeNull();
+    expect(result.current.detail.hasCreateChecklistRunError).toBe(true);
+  });
+
+  it("propagates capability issuance failure without reporting a reminder", async () => {
+    mocks.getChecklistRun.mockResolvedValue(draftRun);
+    mocks.issueChecklistCapability.mockRejectedValue(new Error("issue failed"));
+    const { result } = openController();
+    await act(async () => {
+      await result.current.detail.refreshChecklistRun(job);
+    });
+
+    await act(async () => {
+      await expect(result.current.actions.prepareChecklistReminder("cleaner-2"))
+        .rejects.toThrow("issue failed");
+    });
+
+    expect(mocks.createChecklistRun).not.toHaveBeenCalled();
+    expect(result.current.detail.hasIssueChecklistCapabilityError).toBe(true);
+    expect(result.current.detail.checklistCapability).toEqual({ state: "NONE" });
+  });
+
+  it("rejects an issued link that is not active for the selected cleaner", async () => {
+    mocks.getChecklistRun.mockResolvedValue(draftRun);
+    mocks.issueChecklistCapability.mockResolvedValue({
+      ...issued,
+      capability: { state: "ACTIVE", cleanerId: "another-cleaner" },
+    });
+    const { result } = openController();
+    await act(async () => {
+      await result.current.detail.refreshChecklistRun(job);
+    });
+
+    await act(async () => {
+      await expect(result.current.actions.prepareChecklistReminder("cleaner-2"))
+        .rejects.toThrow("Cleaner checklist link is unavailable.");
+    });
+  });
+
+  it("completes through the server and publishes the authoritative Job readback", async () => {
+    const persistedJob = {
+      ...job,
+      operationalStatus: "COMPLETED",
+      completedAt: "server-timestamp",
+    };
+    mocks.completeJobWithoutChecklist.mockResolvedValue({ operationalStatus: "COMPLETED" });
+    mocks.getJobById.mockResolvedValue(persistedJob);
+    const { result, onJobUpdated } = openController();
+
+    let returnedJob;
+    await act(async () => {
+      returnedJob = await result.current.actions.completeCleaning();
+    });
+
+    expect(mocks.completeJobWithoutChecklist).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(mocks.getJobById).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(mocks.completeJobWithoutChecklist.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.getJobById.mock.invocationCallOrder[0]);
+    expect(returnedJob).toBe(persistedJob);
+    expect(result.current.job).toBe(persistedJob);
+    expect(onJobUpdated).toHaveBeenCalledExactlyOnceWith(persistedJob);
+  });
+
+  it("does not report completion when the server callable fails", async () => {
+    mocks.completeJobWithoutChecklist.mockRejectedValue(new Error("completion failed"));
+    const { result, onJobUpdated } = openController();
+
+    await act(async () => {
+      await expect(result.current.actions.completeCleaning()).rejects.toThrow("completion failed");
+    });
+
+    expect(mocks.getJobById).not.toHaveBeenCalled();
+    expect(result.current.job).toEqual(job);
+    expect(onJobUpdated).not.toHaveBeenCalled();
+  });
+
+  it("does not invent a completed Job if the authoritative readback fails", async () => {
+    mocks.completeJobWithoutChecklist.mockResolvedValue({ operationalStatus: "COMPLETED" });
+    mocks.getJobById.mockRejectedValue(new Error("readback failed"));
+    const { result, onJobUpdated } = openController();
+
+    await act(async () => {
+      await expect(result.current.actions.completeCleaning()).rejects.toThrow("readback failed");
+    });
+
+    expect(result.current.job).toEqual(job);
+    expect(onJobUpdated).not.toHaveBeenCalled();
+  });
+
+  it("does not reselect an old Job when its completion finishes after a Job switch", async () => {
+    const pending = deferred();
+    mocks.completeJobWithoutChecklist.mockReturnValue(pending.promise);
+    mocks.getJobById.mockResolvedValue({ ...job, operationalStatus: "COMPLETED" });
+    const { result, onJobUpdated } = openController();
+    let completion;
+    act(() => { completion = result.current.actions.completeCleaning(); });
+    await waitFor(() => expect(mocks.completeJobWithoutChecklist).toHaveBeenCalledWith("job-1"));
+    const otherJob = { id: "job-2", operationalStatus: "ASSIGNED" };
+    act(() => result.current.openJob(otherJob));
+    await act(async () => { pending.resolve({ operationalStatus: "COMPLETED" }); await completion; });
+    expect(result.current.job).toEqual(otherJob);
+    expect(onJobUpdated).toHaveBeenCalledWith({ ...job, operationalStatus: "COMPLETED" });
+  });
+
+  it("does not let an old capability response clear a new Job's pending issue", async () => {
+    const first = deferred();
+    const second = deferred();
+    mocks.issueChecklistCapability.mockImplementation(({ jobId }) => jobId === "job-1"
+      ? first.promise : second.promise);
+    const { result } = openController();
+    let oldIssue;
+    act(() => { oldIssue = result.current.actions.issueChecklistCapability("cleaner-1"); });
+    await waitFor(() => expect(mocks.issueChecklistCapability).toHaveBeenCalledWith({
+      jobId: "job-1", cleanerId: "cleaner-1",
+    }));
+    act(() => result.current.openJob({ id: "job-2", operationalStatus: "ASSIGNED" }));
+    let newIssue;
+    act(() => { newIssue = result.current.actions.issueChecklistCapability("cleaner-2"); });
+    await waitFor(() => expect(result.current.detail.isIssuingChecklistCapability).toBe(true));
+    await act(async () => {
+      first.resolve({ capability: { state: "ACTIVE", cleanerId: "cleaner-1" }, url: "old-url" });
+      await oldIssue;
+    });
+    expect(result.current.job.id).toBe("job-2");
+    expect(result.current.detail.isIssuingChecklistCapability).toBe(true);
+    expect(result.current.detail.checklistCapability).toEqual({ state: "NONE" });
+    await act(async () => {
+      second.resolve({ capability: { state: "ACTIVE", cleanerId: "cleaner-2" }, url: "new-url" });
+      await newIssue;
+    });
+    expect(result.current.detail.checklistCapability.cleanerId).toBe("cleaner-2");
+    expect(result.current.detail.isIssuingChecklistCapability).toBe(false);
+  });
+
+  it("does not issue a second rotating capability for the same Job after reopening while pending", async () => {
+    const pending = deferred();
+    mocks.issueChecklistCapability.mockReturnValue(pending.promise);
+    const { result } = openController();
+    let first;
+    act(() => { first = result.current.actions.issueChecklistCapability("cleaner-1"); });
+    act(() => result.current.openJob({ ...job }));
+    let duplicate;
+    await act(async () => { duplicate = await result.current.actions.issueChecklistCapability("cleaner-1"); });
+    expect(duplicate).toBeNull();
+    expect(mocks.issueChecklistCapability).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      pending.resolve({ capability: { state: "ACTIVE", cleanerId: "cleaner-1" }, url: "old-url" });
+      await first;
+    });
+    expect(result.current.detail.checklistCapability).toEqual({ state: "NONE" });
   });
 });

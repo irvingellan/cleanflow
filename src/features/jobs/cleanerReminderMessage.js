@@ -13,6 +13,7 @@ export function buildCleanerReminderMessage({
   propertyDetails,
   includeSensitiveAccess = false,
   assignmentOfferUrl = null,
+  checklistUrl = null,
   language,
   translate,
 }) {
@@ -52,6 +53,10 @@ export function buildCleanerReminderMessage({
         lines.push(translate(key, { details: value }));
       }
     }
+  }
+
+  if (typeof checklistUrl === "string" && checklistUrl.trim()) {
+    lines.push("", translate("jobs.reminderChecklistLink", { url: checklistUrl }));
   }
 
   lines.push("", assignmentOfferUrl

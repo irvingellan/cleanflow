@@ -19,6 +19,8 @@ const { deleteField, serverTimestamp } = await import("firebase/firestore");
 const {
   createChecklistRun,
   approveChecklistRun,
+  assignCleanerDirectly,
+  completeJobWithoutChecklist,
   getChecklistRun,
   getChecklistCapability,
   getChecklistEvidence,
@@ -102,6 +104,79 @@ test("only an active manager can update Job price snapshots without changing che
 
   await assertSucceeds(managerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
   await assertFails(cleanerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
+});
+
+test("manager browser cannot complete a Job directly even with the correct context revision", async () => {
+  const jobs = account("manager").firestore().collection(`${root}/jobs`);
+  const job = jobs.doc("job");
+  await admin.doc(`${root}/jobs/job`).set({
+    organizationId: org,
+    operationalStatus: "ASSIGNED",
+    checklistContextRevision: 1,
+  });
+
+  await assertSucceeds(job.update({ operationalStatus: "IN_PROGRESS" }));
+  await assertFails(job.update({ operationalStatus: "COMPLETED", checklistContextRevision: 2 }));
+  const afterDeniedCompletion = (await admin.doc(`${root}/jobs/job`).get()).data();
+  assert.equal(afterDeniedCompletion.operationalStatus, "IN_PROGRESS");
+  assert.equal(afterDeniedCompletion.checklistContextRevision, 1);
+  await assertSucceeds(job.update({ notes: "Unrelated manager edit" }));
+  await assertFails(job.update({ completedAt: new Date() }));
+  await assertFails(jobs.doc("completed-on-create").set({
+    organizationId: org,
+    operationalStatus: "COMPLETED",
+    checklistContextRevision: 0,
+  }));
+  await assertFails(jobs.doc("timestamp-on-create").set({
+    organizationId: org,
+    operationalStatus: "ASSIGNED",
+    completedAt: new Date(),
+  }));
+});
+
+test("direct Assignment callable requires active manager and creates no Offer", async () => {
+  await admin.doc(`${root}/jobs/job`).set({
+    organizationId: org, schemaVersion: 2, operationalStatus: "UNASSIGNED",
+    assignedCleanerIds: [], checklistContextRevision: 0,
+  });
+  await admin.doc(`${root}/cleaners/cleaner-a`).set({ organizationId: org, name: "Example Cleaner", active: true });
+  const existingOffer = (await admin.doc(`${root}/jobs/job/offers/offer`).get()).data();
+  await assert.rejects(assignCleanerDirectly.run(request("cleaner", { jobId: "job", cleanerId: "cleaner-a" })),
+    { code: "permission-denied" });
+  await assert.rejects(assignCleanerDirectly.run(request("other-manager", { jobId: "job", cleanerId: "cleaner-a" })),
+    { code: "permission-denied" });
+  const result = await assignCleanerDirectly.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  assert.equal(result.operationalStatus, "ASSIGNED");
+  const job = (await admin.doc(`${root}/jobs/job`).get()).data();
+  assert.deepEqual(job.assignedCleanerIds, ["cleaner-a"]);
+  assert.equal(job.checklistContextRevision, 1);
+  const assignments = await admin.doc(`${root}/jobs/job`).collection("assignments")
+    .where("isActive", "==", true).get();
+  assert.equal(assignments.size, 1);
+  assert.equal(assignments.docs[0].data().source, "MANAGER_DIRECT");
+  assert.equal(assignments.docs[0].data().sourceOfferId, undefined);
+  assert.deepEqual((await admin.doc(`${root}/jobs/job/offers/offer`).get()).data(), existingOffer);
+});
+
+test("no-checklist completion callable is manager-only and refuses an existing Run", async () => {
+  const jobRef = admin.doc(`${root}/jobs/job`);
+  await jobRef.set({ organizationId: org, operationalStatus: "ASSIGNED", checklistContextRevision: 1 });
+  await assert.rejects(completeJobWithoutChecklist.run(request("cleaner", { jobId: "job" })),
+    { code: "permission-denied" });
+  await jobRef.collection("checklistRuns").doc("initial").set({ status: "DRAFT" });
+  await assert.rejects(completeJobWithoutChecklist.run(request("manager", { jobId: "job" })),
+    { code: "failed-precondition" });
+  assert.equal((await jobRef.get()).data().operationalStatus, "ASSIGNED");
+  await jobRef.collection("checklistRuns").doc("initial").delete();
+  assert.deepEqual(await completeJobWithoutChecklist.run(request("manager", { jobId: "job" })),
+    { completed: true, operationalStatus: "COMPLETED" });
+  assert.equal((await jobRef.get()).data().operationalStatus, "COMPLETED");
+  await assertFails(account("manager").firestore().doc(`${root}/jobs/job`)
+    .update({ completedAt: new Date("2026-09-29T00:00:00Z") }));
+  await assertFails(account("manager").firestore().doc(`${root}/jobs/job`)
+    .update({ operationalStatus: "IN_PROGRESS", checklistContextRevision: 3 }));
+  assert.deepEqual(await completeJobWithoutChecklist.run(request("manager", { jobId: "job" })),
+    { completed: false, operationalStatus: "COMPLETED" });
 });
 
 test("browser-created Jobs cannot begin with an arbitrary schedule revision", async () => {
