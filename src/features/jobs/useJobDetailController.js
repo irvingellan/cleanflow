@@ -413,8 +413,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       return getJobById(job.id);
     });
     if (updatedJob) {
-      await refreshChecklistRun(updatedJob);
-      await refreshChecklistCapability(updatedJob);
+      await Promise.all([
+        refreshChecklistRun(updatedJob),
+        refreshChecklistCapability(updatedJob),
+      ]);
     }
     return updatedJob;
   }

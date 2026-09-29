@@ -110,6 +110,13 @@ describe("managerOperationTelemetryService", () => {
     const event = firebase.addDoc.mock.calls[0][1];
     expect(event.result).toBe("error");
     expect(JSON.stringify(event)).not.toContain(originalError.message);
+
+    await expect(tracker.track("checklist-run", async () => ({ status: "ABANDONED" })))
+      .resolves.toEqual({ status: "ABANDONED" });
+    await expect(tracker.track("checklist-capability", async () => ({ state: "REVOKED" })))
+      .resolves.toEqual({ state: "REVOKED" });
+    await flushDiagnosticWrite();
+    expect(firebase.addDoc).toHaveBeenCalledTimes(3);
   });
 
   it("returns the original asynchronous result without waiting for diagnostic persistence", async () => {
@@ -125,6 +132,28 @@ describe("managerOperationTelemetryService", () => {
     expect(firebase.addDoc.mock.calls[0][1]).not.toHaveProperty("price");
     expect(firebase.addDoc.mock.calls[0][1]).not.toHaveProperty("cleanerId");
     finishWrite();
+  });
+
+  it("keeps a late read on its original visit after another Job visit begins", async () => {
+    let resolveFirst;
+    let resolveSecond;
+    const firstRead = new Promise((resolve) => { resolveFirst = resolve; });
+    const secondRead = new Promise((resolve) => { resolveSecond = resolve; });
+    const otherVisitId = "00000000-0000-4000-8000-000000000002";
+    const first = createManagerOperationTracker({ uid: "manager-uid", pageVisitId });
+    const second = createManagerOperationTracker({ uid: "manager-uid", pageVisitId: otherVisitId });
+
+    const firstResult = first.track("checklist-run", () => firstRead);
+    const secondResult = second.track("checklist-run", () => secondRead);
+    resolveSecond({ id: "private-job-b" });
+    await secondResult;
+    resolveFirst({ id: "private-job-a" });
+    await firstResult;
+    await flushDiagnosticWrite();
+
+    const events = firebase.addDoc.mock.calls.map(([, event]) => event);
+    expect(events.map((event) => event.pageVisitId)).toEqual([otherVisitId, pageVisitId]);
+    expect(JSON.stringify(events)).not.toMatch(/private-job|jobId/);
   });
 
   it("runs tasks but drops unknown operations, phases, and invalid visit IDs", async () => {

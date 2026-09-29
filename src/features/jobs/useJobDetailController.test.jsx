@@ -185,6 +185,68 @@ describe("useJobDetailController operation telemetry", () => {
     await waitFor(() => expect(mocks.trackers).toHaveLength(3));
     expect(mocks.trackers[2].options.pageVisitId).not.toBe(mocks.trackers[1].options.pageVisitId);
   });
+
+  it("loads a Draft and stale link in one visit, then reissues without creating another Run", async () => {
+    const draft = { id: "initial", status: "DRAFT" };
+    const stale = { state: "STALE", cleanerId: "cleaner-1" };
+    mocks.getChecklistRun.mockResolvedValue(draft);
+    mocks.getChecklistCapability.mockResolvedValue(stale);
+    const { result, rerender } = renderHook(({ view }) => useJobDetailController({
+      view, onJobUpdated: vi.fn(), actorUid: "manager-1",
+    }), { initialProps: { view: "dashboard" } });
+    act(() => result.current.openJob(job));
+    rerender({ view: "job-detail" });
+
+    await waitFor(() => expect(result.current.detail.checklistRun).toEqual(draft));
+    await waitFor(() => expect(result.current.detail.checklistCapability).toEqual(stale));
+    const tracker = mocks.trackers[0];
+    expect(tracker.track.mock.calls.map(([operation]) => operation)).toContain("checklist-run");
+    expect(tracker.track.mock.calls.map(([operation]) => operation)).toContain("checklist-capability");
+
+    const issued = { capability: { state: "ACTIVE", cleanerId: "cleaner-1" }, url: "synthetic-link" };
+    mocks.issueChecklistCapability.mockResolvedValue(issued);
+    await act(async () => {
+      await result.current.actions.issueChecklistCapability("cleaner-1");
+    });
+    expect(mocks.createChecklistRun).not.toHaveBeenCalled();
+    expect(result.current.detail.checklistRun).toEqual(draft);
+    expect(result.current.detail.checklistCapability).toEqual(issued.capability);
+  });
+
+  it("refreshes Run and capability in parallel after a confirmed Draft abandonment", async () => {
+    mocks.getChecklistRun.mockResolvedValue({ id: "initial", status: "DRAFT" });
+    mocks.getChecklistCapability.mockResolvedValue({ state: "ACTIVE" });
+    const { result, rerender } = renderHook(({ view }) => useJobDetailController({
+      view, onJobUpdated: vi.fn(), actorUid: "manager-1",
+    }), { initialProps: { view: "dashboard" } });
+    act(() => result.current.openJob(job));
+    rerender({ view: "job-detail" });
+    await waitFor(() => expect(result.current.detail.isLoadingChecklistRun).toBe(false));
+    await waitFor(() => expect(result.current.detail.isLoadingChecklistCapability).toBe(false));
+
+    const completedJob = { ...job, operationalStatus: "COMPLETED" };
+    const runRead = deferred();
+    const capabilityRead = deferred();
+    mocks.abandonChecklistRunAndCompleteJob.mockResolvedValue({ completed: true });
+    mocks.getJobById.mockResolvedValue(completedJob);
+    mocks.getChecklistRun.mockReturnValue(runRead.promise);
+    mocks.getChecklistCapability.mockReturnValue(capabilityRead.promise);
+    let completion;
+    act(() => { completion = result.current.actions.abandonChecklistRunAndCompleteJob(); });
+    await waitFor(() => expect(mocks.getChecklistRun.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(mocks.getChecklistCapability.mock.calls.length).toBeGreaterThan(1));
+    // A pending Run read must not hold up capability state or vice versa.
+    await act(async () => {
+      runRead.resolve({ id: "initial", status: "ABANDONED" });
+      capabilityRead.resolve({ state: "REVOKED" });
+      await completion;
+    });
+    expect(result.current.job).toEqual(completedJob);
+    expect(result.current.detail.checklistRun?.status).toBe("ABANDONED");
+    expect(result.current.detail.checklistCapability.state).toBe("REVOKED");
+    expect(mocks.trackers[0].track.mock.calls.map(([operation]) => operation))
+      .toEqual(expect.arrayContaining(["checklist-run", "checklist-capability"]));
+  });
 });
 
 describe("useJobDetailController manager fast path", () => {
