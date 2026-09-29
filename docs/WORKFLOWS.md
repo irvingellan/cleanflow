@@ -28,7 +28,7 @@ manager retains assignment control.
 **CURRENT transition:** an Assignment-aware Job may retain one or more explicit
 manager-created Cleaner Assignments from interested Offers.
 
-**FEATURE BRANCH ONLY (Manager Fast Path V2; not merged or deployed):** a
+**CURRENT (Manager Fast Path V2; deployed 2026-09-29):** a
 manager may also select an active Cleaner directly for a non-archived schema-v2
 Job before work starts. This creates an Assignment without an Offer or
 `INTERESTED` response, leaves other Offers unchanged, and does not record
@@ -113,7 +113,7 @@ One Cleaner finishing does not finish every other Assignment. Exact aggregate
 completion for a future execution model remains to be validated; manager QA is
 not a mandatory normal completion gate.
 
-**FEATURE BRANCH ONLY (Manager Fast Path V2; not merged or deployed):** a
+**CURRENT (Manager Fast Path V2; deployed 2026-09-29):** a
 manager can confirm completion of a non-archived `ASSIGNED` or `IN_PROGRESS`
 Job when no initial Checklist Run exists. A server transaction checks both
 records before recording `COMPLETED` and `completedAt`. If any initial Run
@@ -361,7 +361,7 @@ parking/access/key details remain excluded unless the manager explicitly opts
 in within that preview. The Copy fallback remains available; opening WhatsApp
 does not record a send or delivery.
 
-**FEATURE BRANCH ONLY (Manager Fast Path V2; not merged or deployed):** the
+**CURRENT (Manager Fast Path V2; deployed 2026-09-29):** the
 manager may opt to include a checklist link in that same reminder. Preparing
 the link creates a Draft Run if absent and issues a capability for the selected
 assigned Cleaner. Copy/Open in WhatsApp is available only while the prepared

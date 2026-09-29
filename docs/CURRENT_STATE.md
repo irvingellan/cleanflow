@@ -2,8 +2,8 @@
 
 - **Updated:** 2026-09-29
 - **Repository:** `main` remains the release source of truth. Manager Fast
-  Path V1 (`d2f9a98`) is deployed to Hosting; the earlier photo-diagnostics
-  and Cleaner-language release (`766883b`) remains deployed.
+  Path V2 (`5f14d63`) is deployed; the earlier photo-diagnostics and
+  Cleaner-language release (`766883b`) remains deployed.
 - **Production:** Firebase project `clean-flow-prototipo`; live app at
   <https://clean-flow-prototipo.web.app>.
 
@@ -55,11 +55,12 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   the held implementation is not approved for release
   (see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)).
 
-## Manager Fast Path V2 — feature branch only
+## Manager Fast Path V2 — deployed
 
-`feature/manager-fast-path-v2-2026-09-29` contains bounded manager workflow
-changes. It is **not merged into main or deployed**; the
-production baseline above remains the live behavior.
+`5f14d63` was integrated into `main` and deployed on 2026-09-29 with targeted
+`assignCleanerDirectly`, `completeJobWithoutChecklist`, and `createChecklistRun`
+Functions, Firestore Rules, and Hosting. The three Functions were ACTIVE, and
+the live HTML/JS matched the approved build in non-mutating smoke checks.
 
 - For an active schema-v2 Job before work starts, a manager can select an active
   Cleaner and create an Assignment directly, without first sending an Offer or
@@ -80,9 +81,9 @@ production baseline above remains the live behavior.
   for another Cleaner or replacing an existing one invalidates the prior link,
   so this is a limitation for team Jobs, not a multi-cleaner checklist workflow.
 
-These branch behaviors still require merge/release checks and Gabi/cleaner
-real-use validation. They do not establish that the unresolved mobile photo
-failure or the complete photo-backed journey is fixed.
+These behaviors still require Gabi/cleaner real-use validation. Deployment
+does not establish that the unresolved mobile photo failure or the complete
+photo-backed journey is fixed.
 
 ## Approved communication release
 

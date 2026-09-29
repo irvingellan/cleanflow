@@ -781,7 +781,7 @@ completion. It does not require an analytics platform.
 ## DEC-041 — Manager Fast Path V2 keeps Assignment, checklist, and completion explicit
 
 Date: 2026-09-29
-Status: Pilot workflow implemented on `feature/manager-fast-path-v2-2026-09-29`; not merged or deployed
+Status: Pilot workflow integrated into `main` at `5f14d63` and deployed on 2026-09-29; real-use validation pending
 
 For a non-archived schema-v2 Job in `UNASSIGNED`, `OFFERED`, or `ASSIGNED`, an
 active organization manager may directly select an active Cleaner and create
