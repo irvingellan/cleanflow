@@ -117,7 +117,7 @@ not a mandatory normal completion gate.
 manager can confirm completion of a non-archived `ASSIGNED` or `IN_PROGRESS`
 Job when no initial Checklist Run exists. A server transaction checks both
 records before recording `COMPLETED` and `completedAt`. If any initial Run
-exists, the no-Run shortcut is closed. **Local follow-up, not yet deployed:**
+exists, the no-Run shortcut is closed. **Deployed pilot follow-up:**
 an active manager may explicitly abandon an optional `DRAFT` Run and complete
 an eligible Job in one transaction; saved draft/evidence/history remains and
 the cleaner link is revoked. A `READY_FOR_REVIEW` Run still requires the

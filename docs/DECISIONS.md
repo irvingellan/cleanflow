@@ -798,7 +798,7 @@ no-Run completion path remains closed whenever a Run exists. A completed Job
 cannot create a new initial Run. Completion does not mark client payment or
 Cleaner payout paid.
 
-**2026-09-29 pilot clarification (implemented locally, not yet deployed):** a
+**2026-09-29 pilot clarification (deployed; real-use validation pending):** a
 saved `DRAFT` Run can be explicitly abandoned by an active manager when the
 service does not require a checklist. One server transaction marks the Run
 `ABANDONED`, revokes its active cleaner capability, and completes the eligible
@@ -835,7 +835,7 @@ Assignment ownership, Job completion, or the identity limits of a bearer link.
 ## DEC-043 — Bounded manager operation diagnostics for Job Detail
 
 Date: 2026-09-29
-Status: Implemented on a feature branch; not deployed
+Status: Deployed 2026-09-29; real-use validation pending
 
 For the two-manager pilot, measure the six independent Job Detail reads with a
 shared wrapper and one random, non-operational page-visit identifier. Store

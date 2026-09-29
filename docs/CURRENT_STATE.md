@@ -88,16 +88,15 @@ These behaviors still require Gabi/cleaner real-use validation. Deployment
 does not establish that the unresolved mobile photo failure or the complete
 photo-backed journey is fixed.
 
-**Local follow-up pending release (2026-09-29):** real pilot evidence exposed
+**Checklist recovery deployed (2026-09-29):** real pilot evidence exposed
 a DRAFT manager-copy error and a stale cleaner capability after a same-Cleaner
 Assignment was removed and recreated. The saved Run remained DRAFT; the
-capability's context revision no longer matched the Job. The local
-`feature/checklist-lifecycle-recovery-2026-09-29` branch distinguishes DRAFT
-from READY, guides explicit link reissue without losing saved work, and allows
-a manager to explicitly abandon an optional DRAFT and complete the eligible
-Job while preserving draft/evidence/history.
-READY Runs still require normal review/approval. This follow-up has **not been
-deployed** and has not altered the real Run.
+capability's context revision no longer matched the Job. The released flow
+distinguishes DRAFT from READY, guides explicit link reissue without losing
+saved work, and allows a manager to explicitly abandon an optional DRAFT and
+complete the eligible Job while preserving draft/evidence/history.
+READY Runs still require normal review/approval. The real incident Run was not
+altered during release; Gabi's device/workflow outcome remains unverified.
 
 ## Approved communication release
 
@@ -217,12 +216,13 @@ run against production while implementing this slice; it performs reads only
 and requires the existing Application Default Credentials plus an explicit
 production-read acknowledgement for `clean-flow-prototipo`.
 
-Manager Async Operation Telemetry V2 (#45) is implemented but **not deployed**.
+Manager Async Operation Telemetry V2 (#45) is deployed.
 It records six allowlisted Job Detail read operations per random page visit in
 append-only, manager-authorized diagnostics; the existing page-load events
 remain unchanged. The internal load-times view adds bounded operation summaries
 and a visit waterfall. These are latency diagnostics, not an adoption or formal
-time-to-actionable metric. Release requires Firestore Rules and Hosting only.
+time-to-actionable metric. Authenticated real-user recording has not yet been
+verified; deployment alone does not diagnose Gabi's loading experience.
 
 Experiment before building persistent Cleaner Hub/My Jobs, owner-as-customer or
 report-value assumptions, iCal versus AI intake, and deeper team-Job execution.
