@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { maximumChecklistEvidenceSizeBytes } from "./checklistEvidenceDefinition.js";
 import { normalizeImageUpload, uploadPublicChecklistEvidence } from "./checklistEvidenceService.js";
 
@@ -8,6 +9,28 @@ const imageFixtures = [
   ["image/webp", "webp", Buffer.from("RIFF0000WEBP", "ascii")],
 ];
 
+function jpegBytes(size) {
+  const bytes = Buffer.alloc(size);
+  Buffer.from([0xff, 0xd8, 0xff]).copy(bytes);
+  if (size >= 5) Buffer.from([0xff, 0xd9]).copy(bytes, size - 2);
+  return bytes;
+}
+
+const rejectedUploadFixtures = [
+  ["unsupported content type", "image/heic", Buffer.from("ftypheic"), "unsupported_content_type"],
+  ["missing content type", undefined, imageFixtures[0][2], "unsupported_content_type"],
+  ["undefined body", "image/jpeg", undefined, "invalid_body_type"],
+  ["Uint8Array body", "image/jpeg", new Uint8Array([0xff, 0xd8, 0xff]), "invalid_body_type"],
+  ["Buffer-like JSON body", "image/jpeg", { type: "Buffer", data: [0xff, 0xd8, 0xff] }, "invalid_body_type"],
+  ["empty body", "image/jpeg", Buffer.alloc(0), "empty_body"],
+  ["oversized body", "image/jpeg", jpegBytes(maximumChecklistEvidenceSizeBytes + 1), "file_too_large"],
+  ["truncated JPEG signature", "image/jpeg", Buffer.from([0xff, 0xd8]), "signature_unrecognized"],
+  ["random bytes", "image/jpeg", Buffer.from([0x01, 0x02, 0x03, 0x04]), "signature_unrecognized"],
+  ["missing JPEG expected signature byte", "image/jpeg", Buffer.from([0xff, 0xd8, 0x00]), "signature_unrecognized"],
+  ["JPEG declaration with PNG signature", "image/jpeg", imageFixtures[1][2], "signature_mismatch"],
+  ["PNG declaration with JPEG signature", "image/png", imageFixtures[0][2], "signature_mismatch"],
+];
+
 describe("checklist photo upload validation", () => {
   it.each(imageFixtures)("accepts a valid %s image signature", (contentType, extension, bytes) => {
     expect(normalizeImageUpload({ contentType, bytes })).toMatchObject({
@@ -15,6 +38,32 @@ describe("checklist photo upload validation", () => {
       extension,
       contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+  });
+
+  it.each([0.5, 2, 4])("preserves an accepted JPEG-signature payload of %s MiB", (megabytes) => {
+    const bytes = jpegBytes(megabytes * 1024 * 1024);
+    const result = normalizeImageUpload({ contentType: "image/jpeg", bytes });
+
+    expect(result).toMatchObject({
+      contentType: "image/jpeg",
+      extension: "jpg",
+      contentHash: createHash("sha256").update(bytes).digest("hex"),
+    });
+    expect(bytes.length).toBe(megabytes * 1024 * 1024);
+  });
+
+  it.each(rejectedUploadFixtures)("identifies %s using one non-enumerable safe reason", (_label, contentType, bytes, reason) => {
+    let thrown;
+    try {
+      normalizeImageUpload({ contentType, bytes });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject({ code: "invalid-argument", checklistPhotoValidationReason: reason });
+    expect(Object.getOwnPropertyDescriptor(thrown, "checklistPhotoValidationReason").enumerable).toBe(false);
+    expect(Object.keys(thrown)).not.toContain("checklistPhotoValidationReason");
+    expect(thrown.details).toBeUndefined();
   });
 
   it("rejects an oversized image before storage access", () => {
@@ -46,7 +95,7 @@ describe("checklist photo upload validation", () => {
   });
 });
 
-function createUploadDependencies({ save = async () => {}, transactionFailure = null, noCapability = false } = {}) {
+function createUploadDependencies({ save = vi.fn(async () => {}), transactionFailure = null, noCapability = false, beforeTransaction = null } = {}) {
   const organizationId = "cleanflow-demo";
   const stored = new Map();
   const evidencePath = `organizations/${organizationId}/jobs/job/checklistRuns/initial/evidence/living-belongings`;
@@ -71,21 +120,22 @@ function createUploadDependencies({ save = async () => {}, transactionFailure = 
     collection: (name) => ({ doc: (id) => ref(`${path}/${name}/${id}`) }),
   });
   const database = {
-    collectionGroup: () => ({ where: () => ({ limit: () => ({
+    collectionGroup: vi.fn(() => ({ where: () => ({ limit: () => ({
       get: async () => noCapability ? { size: 0, docs: [] } : { size: 1, docs: [{ ref: ref(capabilityPath) }] },
-    }) }) }),
+    }) }) })),
     doc: ref,
     runTransaction: async (callback) => {
       if (transactionFailure) throw transactionFailure;
+      beforeTransaction?.(records);
       return callback({
         get: async (document) => snapshot(document.path),
         create: (document, value) => records.set(document.path, value),
       });
     },
   };
-  const file = { save, delete: async () => {} };
-  const storage = { bucket: () => ({ file: () => file }) };
-  return { database, storage, records, evidencePath, file };
+  const file = { save, delete: vi.fn(async () => {}) };
+  const storage = { bucket: vi.fn(() => ({ file: () => file })) };
+  return { database, storage, records, evidencePath, capabilityPath, file };
 }
 
 const validJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
@@ -95,6 +145,18 @@ const uploadArgs = {
 };
 
 describe("checklist photo upload diagnostic stages", () => {
+  it.each(rejectedUploadFixtures)("rejects %s before any capability read or Storage access", async (_label, contentType, bytes, reason) => {
+    const { database, storage } = createUploadDependencies();
+
+    await expect(uploadPublicChecklistEvidence(database, { ...uploadArgs, contentType, bytes, storage }))
+      .rejects.toMatchObject({
+        code: "invalid-argument",
+        checklistPhotoDiagnosticStage: "server-validation",
+        checklistPhotoValidationReason: reason,
+      });
+    expect(database.collectionGroup).not.toHaveBeenCalled();
+    expect(storage.bucket).not.toHaveBeenCalled();
+  });
   it("marks a provider Storage failure without exposing its raw message", async () => {
     const { database, storage } = createUploadDependencies({
       save: async () => { throw Object.assign(new Error("bucket account detail"), { code: 403 }); },
@@ -127,6 +189,48 @@ describe("checklist photo upload diagnostic stages", () => {
   it("classifies a rejected capability as server validation rather than a Storage failure", async () => {
     const { database, storage } = createUploadDependencies({ noCapability: true });
     await expect(uploadPublicChecklistEvidence(database, { ...uploadArgs, storage }))
-      .rejects.toMatchObject({ checklistPhotoDiagnosticStage: "server-validation" });
+      .rejects.toMatchObject({ checklistPhotoDiagnosticStage: "server-validation", checklistPhotoValidationReason: "capability_unavailable" });
+    expect(storage.bucket).not.toHaveBeenCalled();
+  });
+
+  it("keeps a successful same-content retry idempotent without another Storage write", async () => {
+    const { database, storage, records, evidencePath, file } = createUploadDependencies();
+    const first = await uploadPublicChecklistEvidence(database, { ...uploadArgs, storage });
+    const storedEvidence = records.get(evidencePath);
+    const retry = await uploadPublicChecklistEvidence(database, { ...uploadArgs, storage });
+
+    expect(first.duplicate).toBe(false);
+    expect(retry).toEqual({ ...first, duplicate: true });
+    expect(records.get(evidencePath)).toBe(storedEvidence);
+    expect(file.save).toHaveBeenCalledTimes(1);
+    expect(file.save.mock.calls[0][0]).toBe(validJpeg);
+  });
+
+  it.each([
+    ["run_not_draft", (records) => { records.get("organizations/cleanflow-demo/jobs/job/checklistRuns/initial").status = "READY_FOR_REVIEW"; }],
+    ["invalid_requirement", (records) => { records.get("organizations/cleanflow-demo/jobs/job/checklistRuns/initial").resolvedDefinition.sections[0].items[0].requiresPhoto = false; }],
+    ["evidence_exists", (records) => { records.set("organizations/cleanflow-demo/jobs/job/checklistRuns/initial/evidence/living-belongings", { status: "SAVED", contentHash: "different-content" }); }],
+    ["capability_unavailable", (records) => { records.get("organizations/cleanflow-demo/jobs/job/checklistRuns/initial/checklistCapabilities/active").status = "REVOKED"; }],
+  ])("distinguishes initial %s without a Storage write", async (reason, changeContext) => {
+    const { database, storage, records } = createUploadDependencies();
+    changeContext(records);
+
+    await expect(uploadPublicChecklistEvidence(database, { ...uploadArgs, storage }))
+      .rejects.toMatchObject({ checklistPhotoDiagnosticStage: "server-validation", checklistPhotoValidationReason: reason });
+    expect(storage.bucket).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["run_not_draft", (records) => { records.get("organizations/cleanflow-demo/jobs/job/checklistRuns/initial").status = "READY_FOR_REVIEW"; }],
+    ["invalid_requirement", (records) => { records.get("organizations/cleanflow-demo/jobs/job/checklistRuns/initial").resolvedDefinition.sections[0].items[0].requiresPhoto = false; }],
+    ["evidence_exists", (records) => { records.set("organizations/cleanflow-demo/jobs/job/checklistRuns/initial/evidence/living-belongings", { status: "SAVED", contentHash: "different-content" }); }],
+    ["capability_unavailable", (records) => { records.get("organizations/cleanflow-demo/jobs/job/checklistRuns/initial/checklistCapabilities/active").status = "REVOKED"; }],
+  ])("preserves the final transaction %s rejection and cleans up the object", async (reason, beforeTransaction) => {
+    const { database, storage, file } = createUploadDependencies({ beforeTransaction });
+
+    await expect(uploadPublicChecklistEvidence(database, { ...uploadArgs, storage }))
+      .rejects.toMatchObject({ checklistPhotoDiagnosticStage: "server-validation", checklistPhotoValidationReason: reason });
+    expect(file.save).toHaveBeenCalledTimes(1);
+    expect(file.delete).toHaveBeenCalledWith({ ignoreNotFound: true });
   });
 });

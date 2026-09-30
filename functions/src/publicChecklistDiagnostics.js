@@ -28,6 +28,13 @@ const photoErrorCodes = new Set([
   "server_rejected", "response_invalid", "validation_rejected", "storage_write_failed",
   "metadata_write_failed", "capability_unavailable", "evidence_exists", "unknown",
 ]);
+// Server-owned branches only: body/signature reasons are distinct from later
+// capability/context checks. Browser diagnostics cannot supply this field.
+const photoValidationReasons = new Set([
+  "unsupported_content_type", "invalid_body_type", "empty_body", "file_too_large",
+  "signature_unrecognized", "signature_mismatch", "capability_unavailable",
+  "run_not_draft", "invalid_requirement", "evidence_exists",
+]);
 const photoAllowedFields = new Set([
   "sessionId", "requestId", "result", "durationMs", "fileType", "sizeBucket", "stage", "errorCode", "deviceClass",
 ]);
@@ -144,6 +151,7 @@ export function buildPublicChecklistPhotoUploadServerEvent({
   sizeBucket,
   stage,
   errorCode = null,
+  validationReason = null,
 }, userAgent = "") {
   const client = coarseChecklistClient(userAgent);
   return {
@@ -157,6 +165,8 @@ export function buildPublicChecklistPhotoUploadServerEvent({
     sizeBucket: photoSizeBuckets.has(sizeBucket) ? sizeBucket : "unknown",
     stage: photoStages.has(stage) ? stage : "unknown",
     errorCode: photoErrorCodes.has(errorCode) ? errorCode : null,
+    validationReason: result === "error" && stage === "server-validation" && photoValidationReasons.has(validationReason)
+      ? validationReason : null,
     ...client,
   };
 }

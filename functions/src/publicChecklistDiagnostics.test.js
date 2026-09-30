@@ -106,6 +106,8 @@ describe("public checklist photo diagnostic allowlist", () => {
     ["property data", { propertyName: "private property" }],
     ["storage path", { storagePath: "private/path" }],
     ["preferred language", { preferredLanguage: "es" }],
+    ["server validation reason", { validationReason: "empty_body" }],
+    ["server error metadata", { checklistPhotoValidationReason: "empty_body" }],
   ])("rejects an unexpected %s field", (_label, extra) => {
     expect(normalizePublicChecklistPhotoUploadDiagnostic({ ...validPhotoEvent, ...extra })).toBeNull();
   });
@@ -149,6 +151,7 @@ describe("public checklist photo diagnostic allowlist", () => {
       ...validPhotoEvent,
       result: "success",
       stage: "server-confirmed",
+      validationReason: null,
       errorCode: null,
     }, "Mozilla/5.0 (Linux; Android 14) Chrome/130.0");
     expect(event).toMatchObject({
@@ -164,5 +167,35 @@ describe("public checklist photo diagnostic allowlist", () => {
     });
     expect(JSON.stringify(event)).not.toContain("token");
     expect(JSON.stringify(event)).not.toContain("storagePath");
+  });
+
+  it.each([
+    "unsupported_content_type", "invalid_body_type", "empty_body", "file_too_large",
+    "signature_unrecognized", "signature_mismatch", "capability_unavailable",
+    "run_not_draft", "invalid_requirement", "evidence_exists",
+  ])("records only the exact server validation reason %s", (validationReason) => {
+    const event = buildPublicChecklistPhotoUploadServerEvent({
+      ...validPhotoEvent, stage: "server-validation", errorCode: "validation_rejected", validationReason,
+    });
+    expect(event.validationReason).toBe(validationReason);
+    expect(event.source).toBe("server");
+  });
+
+  it("drops arbitrary reason text, extra fields, and reasons outside a validation failure", () => {
+    const input = {
+      ...validPhotoEvent,
+      stage: "server-validation",
+      validationReason: "private image/path/token details",
+      filename: "private.jpg",
+      bytes: "private bytes",
+      token: "private bearer",
+    };
+    const event = buildPublicChecklistPhotoUploadServerEvent(input);
+    expect(event.validationReason).toBeNull();
+    expect(JSON.stringify(event)).not.toContain("private");
+    expect(buildPublicChecklistPhotoUploadServerEvent({ ...input, validationReason: "empty_body", result: "success" })
+      .validationReason).toBeNull();
+    expect(buildPublicChecklistPhotoUploadServerEvent({ ...input, validationReason: "empty_body", stage: "storage-write" })
+      .validationReason).toBeNull();
   });
 });

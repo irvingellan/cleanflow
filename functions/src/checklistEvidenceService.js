@@ -53,6 +53,15 @@ function validationOrUnknownStage(error) {
   return error instanceof HttpsError ? "server-validation" : "unknown";
 }
 
+function photoValidationError(code, message, reason) {
+  const error = new HttpsError(code, message);
+  Object.defineProperty(error, "checklistPhotoValidationReason", {
+    value: reason,
+    enumerable: false,
+  });
+  return error;
+}
+
 function detectImage(buffer) {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return { contentType: "image/jpeg", extension: "jpg" };
@@ -70,14 +79,23 @@ function detectImage(buffer) {
 
 export function normalizeImageUpload({ contentType, bytes }) {
   if (!supportedImageTypes.has(contentType)) {
-    throw new HttpsError("invalid-argument", "Choose a JPEG, PNG, or WebP image.");
+    throw photoValidationError("invalid-argument", "Choose a JPEG, PNG, or WebP image.", "unsupported_content_type");
   }
-  if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > maximumChecklistEvidenceSizeBytes) {
-    throw new HttpsError("invalid-argument", "Checklist photo is invalid or too large.");
+  if (!Buffer.isBuffer(bytes)) {
+    throw photoValidationError("invalid-argument", "Checklist photo is invalid or too large.", "invalid_body_type");
+  }
+  if (bytes.length === 0) {
+    throw photoValidationError("invalid-argument", "Checklist photo is invalid or too large.", "empty_body");
+  }
+  if (bytes.length > maximumChecklistEvidenceSizeBytes) {
+    throw photoValidationError("invalid-argument", "Checklist photo is invalid or too large.", "file_too_large");
   }
   const detected = detectImage(bytes);
-  if (!detected || detected.contentType !== contentType) {
-    throw new HttpsError("invalid-argument", "Checklist photo content does not match its image type.");
+  if (!detected) {
+    throw photoValidationError("invalid-argument", "Checklist photo content does not match its image type.", "signature_unrecognized");
+  }
+  if (detected.contentType !== contentType) {
+    throw photoValidationError("invalid-argument", "Checklist photo content does not match its image type.", "signature_mismatch");
   }
   return { ...detected, contentHash: createHash("sha256").update(bytes).digest("hex") };
 }
@@ -89,10 +107,10 @@ function evidenceStoragePath({ organizationId, jobId, runId, requirementId, cont
 async function resolveActiveCapability(database, { organizationId, tokenHash, now }) {
   const matches = await database.collectionGroup("checklistCapabilities")
     .where("tokenHash", "==", tokenHash).limit(2).get();
-  if (matches.size !== 1) throw new HttpsError("not-found", "Checklist capability not found.");
+  if (matches.size !== 1) throw photoValidationError("not-found", "Checklist capability not found.", "capability_unavailable");
   const capabilityRef = matches.docs[0].ref;
   const location = capabilityLocation(capabilityRef, organizationId);
-  if (!location) throw new HttpsError("not-found", "Checklist capability not found.");
+  if (!location) throw photoValidationError("not-found", "Checklist capability not found.", "capability_unavailable");
 
   const jobRef = database.doc(`organizations/${organizationId}/jobs/${location.jobId}`);
   const runRef = runReference(database, organizationId, location.jobId, location.runId);
@@ -103,13 +121,13 @@ async function resolveActiveCapability(database, { organizationId, tokenHash, no
     capabilityRef.get(), jobRef.get(), runRef.get(), evidenceRef.get(),
   ]);
   if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) {
-    throw new HttpsError("not-found", "Checklist capability not found.");
+    throw photoValidationError("not-found", "Checklist capability not found.", "capability_unavailable");
   }
   const capability = capabilitySnapshot.data();
   const job = jobSnapshot.data();
   const run = runSnapshot.data();
   if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, job, run, now) !== "ACTIVE") {
-    throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
+    throw photoValidationError("failed-precondition", "Checklist capability is no longer available.", "capability_unavailable");
   }
   return {
     capability,
@@ -156,16 +174,16 @@ export async function uploadPublicChecklistEvidence(database, {
     throw markPhotoDiagnosticStage(error, validationOrUnknownStage(error));
   }
   if (initial.run.status !== "DRAFT") {
-    throw markPhotoDiagnosticStage(new HttpsError("failed-precondition", "Checklist Run is no longer editable."), "server-validation");
+    throw markPhotoDiagnosticStage(photoValidationError("failed-precondition", "Checklist Run is no longer editable.", "run_not_draft"), "server-validation");
   }
   if (!isPilotChecklistPhotoRequirement(initial.run, requirementId)) {
-    throw markPhotoDiagnosticStage(new HttpsError("invalid-argument", "Checklist photo requirement is invalid."), "server-validation");
+    throw markPhotoDiagnosticStage(photoValidationError("invalid-argument", "Checklist photo requirement is invalid.", "invalid_requirement"), "server-validation");
   }
   if (initial.evidence) {
     if (initial.evidence.contentHash === image.contentHash && initial.evidence.status === "SAVED") {
       return { duplicate: true, evidence: projectChecklistEvidence(initial.evidence) };
     }
-    throw markPhotoDiagnosticStage(new HttpsError("already-exists", "A checklist photo is already saved for this requirement."), "server-validation");
+    throw markPhotoDiagnosticStage(photoValidationError("already-exists", "A checklist photo is already saved for this requirement.", "evidence_exists"), "server-validation");
   }
 
   const storagePath = evidenceStoragePath({
@@ -204,24 +222,24 @@ export async function uploadPublicChecklistEvidence(database, {
           transaction.get(initial.runRef), transaction.get(initial.evidenceRef),
         ]);
         if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) {
-          throw new HttpsError("not-found", "Checklist capability not found.");
+          throw photoValidationError("not-found", "Checklist capability not found.", "capability_unavailable");
         }
         const capability = capabilitySnapshot.data();
         const job = jobSnapshot.data();
         const run = runSnapshot.data();
         if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, job, run, now) !== "ACTIVE") {
-          throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
+          throw photoValidationError("failed-precondition", "Checklist capability is no longer available.", "capability_unavailable");
         }
-        if (run.status !== "DRAFT") throw new HttpsError("failed-precondition", "Checklist Run is no longer editable.");
+        if (run.status !== "DRAFT") throw photoValidationError("failed-precondition", "Checklist Run is no longer editable.", "run_not_draft");
         if (!isPilotChecklistPhotoRequirement(run, requirementId)) {
-          throw new HttpsError("invalid-argument", "Checklist photo requirement is invalid.");
+          throw photoValidationError("invalid-argument", "Checklist photo requirement is invalid.", "invalid_requirement");
         }
         if (evidenceSnapshot.exists) {
           const evidence = evidenceSnapshot.data();
           if (evidence.contentHash === image.contentHash && evidence.status === "SAVED") {
             return { duplicate: true, evidence: projectChecklistEvidence(evidence) };
           }
-          throw new HttpsError("already-exists", "A checklist photo is already saved for this requirement.");
+          throw photoValidationError("already-exists", "A checklist photo is already saved for this requirement.", "evidence_exists");
         }
         const evidence = {
           status: "SAVED",

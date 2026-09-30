@@ -1486,6 +1486,7 @@ export const publicChecklist = onRequest(
             durationMs: Date.now() - photoUploadStartedAt,
             stage: "server-validation",
             errorCode: "capability_unavailable",
+            validationReason: "capability_unavailable",
           }, request.get("user-agent") || ""));
         }
         sendPublicError(response, 404, "checklist_not_found");
@@ -1601,6 +1602,7 @@ export const publicChecklist = onRequest(
           durationMs: Date.now() - photoUploadStartedAt,
           stage: diagnosticStage,
           errorCode: publicChecklistPhotoErrorCategory(error, diagnosticStage),
+          validationReason: error?.checklistPhotoValidationReason,
         }, request.get("user-agent") || ""));
       }
       const sessionId = request.get("X-CleanFlow-Checklist-Session");

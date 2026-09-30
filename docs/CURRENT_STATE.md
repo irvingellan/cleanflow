@@ -178,6 +178,22 @@ unverified: entering the shell can automatically write notification health or
 refresh FCM registration, which the zero-production-write release forbade.
 No Functions, Rules, indexes, Storage, telemetry semantics, or #48 behavior changed.
 
+## Issue #50 — photo validation investigation (branch only)
+
+`feature/photo-validation-root-cause-2026-09-30` adds server-only allowlisted
+validation reasons to existing token-free photo diagnostics; it is **not
+deployed**. The two correlated iPhone failures declared JPEG/1–3 MB, reached
+the Function, and were rejected before Storage/metadata; their exact validation
+branch is still unknown. The server `up_to_1mb` bucket includes an empty body.
+The selected File is sent unchanged as a raw PUT and checked as `request.rawBody`.
+Synthetic camera/library roundtrips preserved all 2 MiB through mobile Chromium
+and local Firebase-emulator-equivalent parsing; WebKit was unavailable. No upload
+fix, resizing/conversion, or validation relaxation is justified yet. Validation
+passed 739 unit, three focused security and three photo browser tests, build,
+syntax and diff check. Next: review/deploy only `publicChecklist` diagnostics,
+then correlate the next explicitly authorized iPhone failure by its safe code
+to the precise body/signature or capability/context reason.
+
 ## Unresolved blockers / validation
 
 - Issue #48 manager-access recovery (`d5342e8`) is merged into `main` and
@@ -201,8 +217,9 @@ No Functions, Rules, indexes, Storage, telemetry semantics, or #48 behavior chan
   is not proven reliable.
 - Photo diagnostics correlate bounded browser/server stages and outcomes
   without checklist tokens or file contents. Browser-side evidence cannot be
-  delivered while offline, and no real failure has yet been captured after
-  this deployment; the cause remains unknown.
+  delivered while offline. Two captured iPhone requests failed server validation
+  before Storage; the precise branch and cause remain unknown until the #50
+  reason diagnostics are deployed and another real failure is captured.
 - Reduce double entry by reconciling upcoming work against Gabi's authoritative
   source. Define an explicit pilot exit criterion with her; do not assume the
   parallel-use period ends automatically.

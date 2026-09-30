@@ -1280,6 +1280,8 @@ test("public photo diagnostics accept only token-free allowlisted events and do 
 
   const rejected = await publicChecklistPhotoDiagnostic({ ...validDiagnostic, rawToken: "must-not-log" });
   assert.equal(rejected.code, 400);
+  const injectedReason = await publicChecklistPhotoDiagnostic({ ...validDiagnostic, validationReason: "empty_body" });
+  assert.equal(injectedReason.code, 400);
   assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), before);
   assert.equal((await admin.collection(`${root}/managerPageLoadEvents`).get()).size, 0);
 });
