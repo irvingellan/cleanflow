@@ -178,21 +178,32 @@ unverified: entering the shell can automatically write notification health or
 refresh FCM registration, which the zero-production-write release forbade.
 No Functions, Rules, indexes, Storage, telemetry semantics, or #48 behavior changed.
 
-## Issue #50 — photo validation investigation (branch only)
+## Issue #50 — photo validation diagnostics (deployed)
 
-`feature/photo-validation-root-cause-2026-09-30` adds server-only allowlisted
-validation reasons to existing token-free photo diagnostics; it is **not
-deployed**. The two correlated iPhone failures declared JPEG/1–3 MB, reached
-the Function, and were rejected before Storage/metadata; their exact validation
-branch is still unknown. The server `up_to_1mb` bucket includes an empty body.
-The selected File is sent unchanged as a raw PUT and checked as `request.rawBody`.
-Synthetic camera/library roundtrips preserved all 2 MiB through mobile Chromium
-and local Firebase-emulator-equivalent parsing; WebKit was unavailable. No upload
-fix, resizing/conversion, or validation relaxation is justified yet. Validation
-passed 739 unit, three focused security and three photo browser tests, build,
-syntax and diff check. Next: review/deploy only `publicChecklist` diagnostics,
-then correlate the next explicitly authorized iPhone failure by its safe code
-to the precise body/signature or capability/context reason.
+`bdd88e1` was fast-forwarded into `main` and released on 2026-09-30 to only
+`publicChecklist`, ACTIVE revision `publicchecklist-00007-qur`. Its deployment
+fingerprint matches the reviewed source; the other 28 Functions are unchanged.
+Token-free endpoint checks returned bounded 404s; app HTTPS returned 200.
+Server-only allowlisted reasons now distinguish body/type/signature failures
+from later capability/context rejection. Browser reason injection is denied;
+public errors, authorization, 5 MB limit, accepted formats and retry behavior
+are unchanged. No Hosting, Rules, indexes or Storage rules were deployed.
+
+The two correlated iPhone failures declared JPEG/1–3 MB and failed before
+Storage/metadata. **Root cause is NOT YET DETERMINED; no upload fix was deployed.**
+The server `up_to_1mb` bucket includes zero bytes. Synthetic camera/library
+roundtrips preserved all 2 MiB through mobile Chromium and local
+emulator-equivalent parsing, not production Safari. WebKit was unavailable.
+Release validation passed 146 focused, 739 unit, three focused security and
+three photo browser tests, build, syntax and diff check.
+
+Next real failure protocol (not executed): preserve its visible diagnostic code
+and approximate time; do not unnecessarily replace/revoke the link. With explicit
+read authorization, query only correlated bounded browser/server diagnostics,
+retrieve `validationReason`, distinguish body/signature from context failure,
+and only then design a fix. If the attempt succeeds, record non-reproduction,
+not an invented root cause. No production photo was uploaded or inspected
+during this release.
 
 ## Unresolved blockers / validation
 
@@ -218,8 +229,8 @@ to the precise body/signature or capability/context reason.
 - Photo diagnostics correlate bounded browser/server stages and outcomes
   without checklist tokens or file contents. Browser-side evidence cannot be
   delivered while offline. Two captured iPhone requests failed server validation
-  before Storage; the precise branch and cause remain unknown until the #50
-  reason diagnostics are deployed and another real failure is captured.
+  before Storage; the precise branch and cause remain unknown pending another
+  real capture with the now-deployed #50 reason diagnostics.
 - Reduce double entry by reconciling upcoming work against Gabi's authoritative
   source. Define an explicit pilot exit criterion with her; do not assume the
   parallel-use period ends automatically.
