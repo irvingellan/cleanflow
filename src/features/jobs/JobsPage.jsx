@@ -57,6 +57,8 @@ export function JobsPage({
   canManageExcluded,
   showExcluded,
   onToggleExcluded,
+  selectedJobId,
+  embedded = false,
 }) {
   const { language, translate } = useTranslation();
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
@@ -396,6 +398,7 @@ export function JobsPage({
                     job.propertyName || translate("properties.unnamed"),
                 })}
                 data-job-id={job.id}
+                aria-pressed={embedded ? selectedJobId === job.id : undefined}
                 ref={(element) => {
                   if (element) {
                     jobCardElements.current.set(job.id, element);
@@ -476,7 +479,7 @@ export function JobsPage({
           )}
         </>
       )}
-      <ScrollToTopButton />
+      {!embedded && <ScrollToTopButton />}
     </section>
   );
 }

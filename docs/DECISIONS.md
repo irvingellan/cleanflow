@@ -874,3 +874,22 @@ fallback. A test cannot accept arbitrary push copy, bearer tokens, or Job data.
 FCM acceptance is provider evidence only, never proof that a phone displayed
 the notification. Browser permission must be observed on that browser or via
 its latest reported snapshot; registration metadata alone cannot establish it.
+
+---
+
+## DEC-045 — Evaluate Operations Workspace as an isolated interaction experiment
+
+Date: 2026-09-30
+Status: Branch-only experiment; not merged or deployed
+
+Issue #51 evaluates a persistent Jobs list/detail/action composition with the
+existing controller, forms, services and authorization. `/workspace-preview`
+is restricted to explicit local emulator mode and an active manager membership;
+normal navigation stays the control. Next actions are presentation, not new
+lifecycle or permission rules. Short-action drawers/sheets retain selection;
+server mutations still require acknowledgement and stale responses cannot
+replace newer Job/query context. No new backend, state framework or telemetry
+schema is needed. Compare command/view/Back counts and synthetic scenarios
+honestly; desktop persistence is promising, but unchanged or extra taps and
+mobile/real-device limits must remain visible before any adoption decision.
+See [Operations Workspace V0](OPERATIONS_WORKSPACE_V0.md).

@@ -2153,6 +2153,58 @@ Object.assign(messages.es, {
   "devCenter.testFailed": "No se pudo confirmar si FCM aceptó la prueba. Revisa el registro antes de reintentar; no se verificó la visualización en el teléfono.",
 });
 
+Object.assign(messages.en, {
+  "workspace.title": "Operations workspace", "workspace.experimental": "EXPERIMENTAL",
+  "workspace.localOnly": "Local emulator experiment · synthetic data only",
+  "workspace.emulatorOnly": "This experimental workspace is available only with local Firebase emulators.",
+  "workspace.controlUi": "Open current manager UI", "workspace.selectedJob": "Selected service",
+  "workspace.backToServices": "Back to services", "workspace.jobSummary": "Job summary",
+  "workspace.nextAction": "Next action", "workspace.closePanel": "Close panel", "workspace.more": "More actions",
+  "workspace.selectJob": "Select a service to begin", "workspace.nextActionLoading": "Checking the current service context…",
+  "workspace.nextActionReadError": "Some context could not be loaded. Retry the affected section before acting.",
+  "workspace.nextActionUnassigned": "Choose a cleaner directly or prepare an offer.",
+  "workspace.nextActionAssigned": "Prepare the cleaner message or an optional checklist.",
+  "workspace.nextActionInProgress": "View the checklist, or use the existing completion action if no checklist exists.",
+  "workspace.nextActionArchived": "Archived service · view existing history only.",
+  "workspace.nextActionCompleted": "Completed service · review saved history and reports.",
+  "workspace.nextActionUnavailable": "No execution actions are available for this state.",
+  "workspace.history": "View saved context", "workspace.reviewChecklist": "Review checklist",
+});
+Object.assign(messages.pt, {
+  "workspace.title": "Área de operações", "workspace.experimental": "EXPERIMENTAL",
+  "workspace.localOnly": "Experimento local com emuladores · somente dados fictícios",
+  "workspace.emulatorOnly": "Esta área experimental está disponível somente com emuladores Firebase locais.",
+  "workspace.controlUi": "Abrir interface atual", "workspace.selectedJob": "Serviço selecionado",
+  "workspace.backToServices": "Voltar para serviços", "workspace.jobSummary": "Resumo do serviço",
+  "workspace.nextAction": "Próxima ação", "workspace.closePanel": "Fechar painel", "workspace.more": "Mais ações",
+  "workspace.selectJob": "Selecione um serviço para começar", "workspace.nextActionLoading": "Verificando o contexto atual do serviço…",
+  "workspace.nextActionReadError": "Parte do contexto não carregou. Tente atualizar a seção antes de agir.",
+  "workspace.nextActionUnassigned": "Escolha uma cleaner diretamente ou prepare uma oferta.",
+  "workspace.nextActionAssigned": "Prepare a mensagem para a cleaner ou um checklist opcional.",
+  "workspace.nextActionInProgress": "Veja o checklist ou use a conclusão existente se não houver checklist.",
+  "workspace.nextActionArchived": "Serviço arquivado · consulte somente o histórico existente.",
+  "workspace.nextActionCompleted": "Serviço concluído · consulte o histórico e os relatórios salvos.",
+  "workspace.nextActionUnavailable": "Não há ações de execução disponíveis neste estado.",
+  "workspace.history": "Ver contexto salvo", "workspace.reviewChecklist": "Revisar checklist",
+});
+Object.assign(messages.es, {
+  "workspace.title": "Espacio de operaciones", "workspace.experimental": "EXPERIMENTAL",
+  "workspace.localOnly": "Experimento local con emuladores · solo datos ficticios",
+  "workspace.emulatorOnly": "Este espacio experimental solo está disponible con emuladores Firebase locales.",
+  "workspace.controlUi": "Abrir interfaz actual", "workspace.selectedJob": "Servicio seleccionado",
+  "workspace.backToServices": "Volver a servicios", "workspace.jobSummary": "Resumen del servicio",
+  "workspace.nextAction": "Próxima acción", "workspace.closePanel": "Cerrar panel", "workspace.more": "Más acciones",
+  "workspace.selectJob": "Selecciona un servicio para comenzar", "workspace.nextActionLoading": "Verificando el contexto actual del servicio…",
+  "workspace.nextActionReadError": "Parte del contexto no se pudo cargar. Actualiza la sección antes de actuar.",
+  "workspace.nextActionUnassigned": "Elige una cleaner directamente o prepara una oferta.",
+  "workspace.nextActionAssigned": "Prepara el mensaje para la cleaner o un checklist opcional.",
+  "workspace.nextActionInProgress": "Consulta el checklist o usa la finalización existente si no hay checklist.",
+  "workspace.nextActionArchived": "Servicio archivado · consulta solo el historial existente.",
+  "workspace.nextActionCompleted": "Servicio completado · consulta el historial y los informes guardados.",
+  "workspace.nextActionUnavailable": "No hay acciones de ejecución disponibles en este estado.",
+  "workspace.history": "Ver contexto guardado", "workspace.reviewChecklist": "Revisar checklist",
+});
+
 export function translateInLanguage(language, key, replacements = {}) {
   const safeLanguage = normalizeTranslationLanguage(language);
   const message = messages[safeLanguage][key] || messages.en[key] || key;

@@ -31,6 +31,7 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
   const [pageCursors, setPageCursors] = useState(initialPageCursors);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const queryGeneration = useRef(0);
   const previousViewRef = useRef(view);
   const isEnteringJobList =
     view === "job-list" && previousViewRef.current !== "job-list";
@@ -38,6 +39,8 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
 
   useEffect(() => {
     previousViewRef.current = view;
+    queryGeneration.current += 1;
+    setIsLoadingMore(false);
 
     if (view !== "job-list") {
       return undefined;
@@ -79,21 +82,25 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
 
     return () => {
       isCurrent = false;
+      queryGeneration.current += 1;
     };
   }, [view, filters.status, filters.datePreset, includeArchived]);
 
   async function loadMore() {
+    const generation = queryGeneration.current;
     setIsLoadingMore(true);
 
     try {
       const loadedJobPage = await getJobs(filters, { ...pageCursors, includeArchived });
-      setJobs((currentJobs) => mergeJobs(currentJobs, loadedJobPage.jobs));
-      setPageCursors(loadedJobPage.nextPageCursors);
-      setHasMore(loadedJobPage.hasMore);
+      if (generation === queryGeneration.current) {
+        setJobs((currentJobs) => mergeJobs(currentJobs, loadedJobPage.jobs));
+        setPageCursors(loadedJobPage.nextPageCursors);
+        setHasMore(loadedJobPage.hasMore);
+      }
     } catch {
-      setHasError(true);
+      if (generation === queryGeneration.current) setHasError(true);
     } finally {
-      setIsLoadingMore(false);
+      if (generation === queryGeneration.current) setIsLoadingMore(false);
     }
   }
 
@@ -112,6 +119,10 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
     setJobs((currentJobs) => currentJobs.filter((job) => job.id !== jobId));
   }
 
+  function upsertJob(updatedJob) {
+    setJobs((currentJobs) => mergeJobs(currentJobs, [updatedJob]));
+  }
+
   return {
     jobs,
     isLoading: isWorklistLoading,
@@ -125,5 +136,6 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
     loadMore,
     replaceJob,
     removeJob,
+    upsertJob,
   };
 }

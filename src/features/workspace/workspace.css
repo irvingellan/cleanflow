@@ -1,0 +1,77 @@
+.operations-workspace {
+  width: min(100%, 1900px);
+  margin: 0 auto;
+  padding: 24px;
+  --workspace-action-height: 180px;
+}
+.workspace-header { display: flex; gap: 24px; align-items: start; justify-content: space-between; margin-bottom: 24px; }
+.workspace-header h1 { margin: 4px 0 8px; }
+.workspace-header p { margin: 0; }
+.workspace-header label { display: flex; gap: 8px; align-items: center; }
+.workspace-grid { display: grid; grid-template-columns: minmax(290px, 360px) minmax(0, 1fr) minmax(230px, 290px); gap: 24px; align-items: start; }
+.workspace-grid > *, .workspace-action-panel, .workspace-action-panel * { min-width: 0; overflow-wrap: anywhere; }
+.workspace-job-list { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow-y: auto; scrollbar-gutter: stable; padding: 4px 8px 16px 0; }
+.workspace-job-list .directory-heading { flex-wrap: wrap; }
+.workspace-job-list .job-list { grid-template-columns: 1fr; }
+.workspace-job-list .job-card { padding: 14px; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.workspace-job-list .job-card__summary { grid-column: 1 / -1; grid-row: 1; }
+.workspace-job-list .job-card__schedule { grid-column: 1; grid-row: 2; }
+.workspace-job-list .job-card .status-badge { grid-column: 2; grid-row: 2; }
+.workspace-job-list .job-card__prices { grid-column: 1 / -1; grid-row: 3; justify-items: start; }
+.workspace-job-list .job-card__provenance { grid-column: 2; grid-row: 4; justify-self: end; }
+.workspace-job-list .job-card[aria-pressed="true"] { outline: 2px solid var(--color-brand); outline-offset: -2px; background: var(--color-selected-bg); }
+.workspace-job-list .job-filters__quick-actions, .workspace-job-list .job-filter-chips { flex-wrap: wrap; }
+.workspace-job-list .job-filters__advanced { grid-template-columns: 1fr; }
+.workspace-job-list .job-filters { margin-bottom: 16px; }
+.workspace-job-list .list-title { font-size: 1.4rem; }
+.workspace-detail .panel { max-width: none; margin: 0; }
+.workspace-detail-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.workspace-mobile-guidance { display: none; }
+.workspace-next-actions { position: sticky; top: 16px; display: grid; gap: 10px; padding: 20px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); }
+.workspace-next-actions h2 { font-size: 1.1rem; margin: 0; }
+.workspace-next-actions p { margin: 0; }
+.workspace-more { margin-top: 8px; }
+.workspace-more summary { cursor: pointer; padding: 10px 0; min-height: 44px; align-content: center; }
+.workspace-more .button { margin: 8px 0; width: 100%; }
+.workspace-empty { padding: 48px 24px; text-align: center; }
+.workspace-backdrop { position: fixed; inset: 0; z-index: 70; border: 0; border-radius: 0; background: rgb(15 30 35 / 20%); cursor: default; }
+.workspace-action-panel { position: fixed; z-index: 71; right: 0; top: 0; bottom: 0; width: min(520px, 100%); padding: 24px; padding-bottom: max(24px, env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; background: var(--color-surface); box-shadow: -8px 0 30px rgb(15 30 35 / 12%); animation: workspace-panel-enter 140ms ease-out; }
+.workspace-action-panel[hidden], .operations-workspace [hidden] { display: none !important; }
+.workspace-action-panel > header { display: flex; gap: 12px; justify-content: space-between; align-items: start; margin-bottom: 24px; }
+.workspace-action-panel > header > div { flex: 1; }
+.workspace-action-panel > header > .button,
+.workspace-action-panel .job-reminder-preview__header > .button { flex-shrink: 0; white-space: nowrap; overflow-wrap: normal; }
+.workspace-action-panel h2 { margin: 0; font-size: 1.2rem; }
+.workspace-action-panel .panel { padding: 0; margin: 0; border: 0; box-shadow: none; }
+.workspace-action-panel .button-row { flex-wrap: wrap; }
+.workspace-action-panel .assignment-roster { margin-top: 0; }
+.workspace-action-panel .job-reminder-preview { margin: 0; }
+.workspace-action-panel select, .workspace-action-panel input, .workspace-action-panel textarea { max-width: 100%; }
+.operations-workspace .button, .operations-workspace select, .operations-workspace input { min-height: 44px; }
+.operations-workspace--panel-open .scroll-to-top-button { display: none; }
+@keyframes workspace-panel-enter { from { transform: translateX(16px); opacity: .8; } to { transform: translateX(0); opacity: 1; } }
+@media (max-width: 1250px) and (min-width: 1000px) {
+  .workspace-grid { grid-template-columns: 300px minmax(0, 1fr); }
+  .workspace-next-actions { grid-column: 2; position: static; grid-row: 1; }
+  .workspace-detail { grid-column: 2; grid-row: 2; }
+  .workspace-job-list { grid-row: 1 / span 2; }
+}
+@media (max-width: 999px) {
+  .operations-workspace { padding: 16px; }
+  .workspace-header { flex-wrap: wrap; gap: 12px; }
+  .workspace-header h1 { font-size: 1.5rem; }
+  .workspace-grid { display: block; }
+  .workspace-job-list { position: static; max-height: none; overflow: visible; padding: 0; }
+  .workspace-detail, .workspace-next-actions { display: none; }
+  .operations-workspace--selected .workspace-job-list { display: none; }
+  .operations-workspace--selected .workspace-detail { display: block; padding-bottom: var(--workspace-action-height); }
+  .workspace-mobile-guidance { display: block; margin: 0 0 16px; }
+  .operations-workspace--selected .workspace-next-actions { display: flex; flex-wrap: wrap; gap: 8px; position: fixed; z-index: 30; top: auto; bottom: 0; left: 0; right: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; max-height: 40dvh; overflow-y: auto; box-shadow: 0 -4px 16px rgb(15 30 35 / 8%); }
+  .workspace-next-actions h2, .workspace-next-actions .workspace-cleaner-context, .workspace-next-actions > p { display: none; }
+  .workspace-next-actions .workspace-more { margin: 0; flex-basis: 100%; }
+  .workspace-next-actions .workspace-more summary { padding: 4px 0; }
+  .workspace-next-actions > .button { flex: 1 1 auto; }
+  .operations-workspace--selected .scroll-to-top-button { bottom: calc(var(--workspace-action-height) + env(safe-area-inset-bottom) + 12px); }
+  .workspace-action-panel { top: auto; bottom: 0; width: 100%; max-height: 88dvh; border-radius: 20px 20px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) { .workspace-action-panel { animation: none; } }

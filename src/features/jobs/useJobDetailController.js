@@ -69,7 +69,7 @@ function emptyDetailData() {
  * Owns Job-detail data and mutations. It reports changed Jobs to the worklist
  * rather than duplicating Firestore state outside the Jobs feature.
  */
-export function useJobDetailController({ view, onJobUpdated, actorUid }) {
+export function useJobDetailController({ view, onJobUpdated, actorUid, cleanerSource }) {
   const [selectedJob, setSelectedJob] = useState(null);
   const [detailData, setDetailData] = useState(emptyDetailData);
   const [availableCleaners, setAvailableCleaners] = useState([]);
@@ -83,7 +83,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const checklistCapabilityRequestId = useRef(0);
   const selectedJobIdRef = useRef(null);
   const selectedJobEpochRef = useRef(0);
+  const detailRequestIds = useRef({ offers: 0, issues: 0, assignments: 0 });
   const operationTrackerRef = useRef(null);
+  const usesSharedCleaners = cleanerSource != null;
+  const renderSelectionEpoch = selectedJobEpochRef.current;
 
   useEffect(() => {
     operationTrackerRef.current = view === "job-detail" && selectedJob?.id && actorUid
@@ -97,10 +100,18 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return tracker ? tracker.track(operation, task) : task();
   }
 
+  function currentDetailRequest(operation, jobId) {
+    const requestId = ++detailRequestIds.current[operation];
+    const epoch = selectedJobEpochRef.current;
+    return () => detailRequestIds.current[operation] === requestId
+      && selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId;
+  }
+
   async function refreshOffers() {
-    if (!selectedJob) {
+    if (!selectedJob || selectedJob.id !== selectedJobIdRef.current) {
       return;
     }
+    const isCurrent = currentDetailRequest("offers", selectedJob.id);
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -110,18 +121,19 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     try {
       const offers = await loadDetailOperation("offers", () => getJobOffers(selectedJob.id));
-      setDetailData((currentData) => ({ ...currentData, offers }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, offers }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasOffersError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasOffersError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingOffers: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingOffers: false }));
     }
   }
 
   async function refreshIssues() {
-    if (!selectedJob) {
+    if (!selectedJob || selectedJob.id !== selectedJobIdRef.current) {
       return;
     }
+    const isCurrent = currentDetailRequest("issues", selectedJob.id);
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -131,15 +143,17 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     try {
       const issues = await loadDetailOperation("issues", () => getJobIssues(selectedJob.id));
-      setDetailData((currentData) => ({ ...currentData, issues }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, issues }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasIssuesError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasIssuesError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingIssues: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingIssues: false }));
     }
   }
 
   async function refreshAssignments(job = selectedJob) {
+    if (job?.id !== selectedJobIdRef.current) return;
+    const isCurrent = currentDetailRequest("assignments", job?.id);
     if (!job || !isAssignmentAwareJob(job)) {
       setDetailData((currentData) => ({ ...currentData, assignments: [] }));
       return;
@@ -153,16 +167,16 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     try {
       const assignments = await loadDetailOperation("assignments", () => getJobAssignments(job.id));
-      setDetailData((currentData) => ({ ...currentData, assignments }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, assignments }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingAssignments: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingAssignments: false }));
     }
   }
 
   async function refreshChecklistRun(job = selectedJob, { manual = false } = {}) {
-    if (!job) {
+    if (!job || job.id !== selectedJobIdRef.current) {
       return;
     }
 
@@ -194,7 +208,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   async function refreshChecklistCapability(job = selectedJob) {
-    if (!job) return;
+    if (!job || job.id !== selectedJobIdRef.current) return;
     const requestId = ++checklistCapabilityRequestId.current;
     setDetailData((currentData) => ({
       ...currentData, isLoadingChecklistCapability: true, hasChecklistCapabilityError: false,
@@ -228,6 +242,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }, [view, selectedJob]);
 
   useEffect(() => {
+    if (usesSharedCleaners) return undefined;
     if (view !== "offer-cleaners" && view !== "job-detail") {
       return undefined;
     }
@@ -259,7 +274,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return () => {
       isCurrent = false;
     };
-  }, [view]);
+  }, [view, usesSharedCleaners]);
 
   function updateSelectedJob(updatedJob) {
     selectedJobIdRef.current = updatedJob?.id || null;
@@ -430,22 +445,23 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   async function saveJobSchedule(schedule) {
-    if (!selectedJob) return null;
-    const job = selectedJob;
-    const result = await rescheduleJobRequest({ jobId: job.id, ...schedule });
-    const updatedJob = {
-      ...job,
-      scheduledDate: result.scheduledDate,
-      scheduleRevision: result.scheduleRevision,
-      checklistContextRevision: result.checklistContextRevision,
-    };
-    if (result.scheduledStart) {
-      updatedJob.scheduledStart = result.scheduledStart;
-    } else {
-      delete updatedJob.scheduledStart;
-    }
-    updateSelectedJob(updatedJob);
-    return { job: updatedJob, changed: result.changed };
+    let result;
+    const updatedJob = await updateJob(async (job) => {
+      result = await rescheduleJobRequest({ jobId: job.id, ...schedule });
+      const scheduledJob = {
+        ...job,
+        scheduledDate: result.scheduledDate,
+        scheduleRevision: result.scheduleRevision,
+        checklistContextRevision: result.checklistContextRevision,
+      };
+      if (result.scheduledStart) {
+        scheduledJob.scheduledStart = result.scheduledStart;
+      } else {
+        delete scheduledJob.scheduledStart;
+      }
+      return scheduledJob;
+    });
+    return updatedJob ? { job: updatedJob, changed: result.changed } : null;
   }
 
   async function saveDataProvenance(dataProvenance) {
@@ -456,19 +472,20 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   async function archive() {
-    if (!selectedJob) return;
-    await archiveJob(selectedJob.id, actorUid);
-    const archivedJob = { ...selectedJob, archivedAt: true };
-    updateSelectedJob(archivedJob);
-    await refreshChecklistCapability(archivedJob);
+    const archivedJob = await updateJob(async (job) => {
+      await archiveJob(job.id, actorUid);
+      return { ...job, archivedAt: true };
+    });
+    if (archivedJob) await refreshChecklistCapability(archivedJob);
+    return archivedJob;
   }
 
   async function restore() {
-    if (!selectedJob) return;
-    await restoreJob(selectedJob.id, actorUid);
-    const restored = { ...selectedJob, archivedAt: null };
-    updateSelectedJob(restored);
-    await refreshChecklistCapability(restored);
+    const restored = await updateJob(async (job) => {
+      await restoreJob(job.id, actorUid);
+      return { ...job, archivedAt: null };
+    });
+    if (restored) await refreshChecklistCapability(restored);
     return restored;
   }
 
@@ -476,22 +493,26 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     if (!selectedJob) {
       return;
     }
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const isCurrent = () => selectedJobEpochRef.current === epoch
+      && selectedJobIdRef.current === jobId;
 
     try {
       const resolvedIssue = await resolveIssue({
-        jobId: selectedJob.id,
+        jobId,
         issueId,
         resolutionNote,
       });
 
-      setDetailData((currentData) => ({
+      if (isCurrent()) setDetailData((currentData) => ({
         ...currentData,
         issues: currentData.issues.map((issue) =>
           issue.id === resolvedIssue.id ? resolvedIssue : issue,
         ),
       }));
     } catch (error) {
-      if (error.issue) {
+      if (error.issue && isCurrent()) {
         setDetailData((currentData) => ({
           ...currentData,
           issues: currentData.issues.map((issue) =>
@@ -635,6 +656,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   function recordOffersCreated(count, updatedJob) {
+    if (selectedJobIdRef.current !== updatedJob.id
+      || selectedJobEpochRef.current !== renderSelectionEpoch) {
+      onJobUpdated(updatedJob);
+      return;
+    }
     updateSelectedJob(updatedJob);
     setOffersCreatedCount(count);
   }
@@ -671,9 +697,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     },
     offerFlow: {
       offersCreatedCount,
-      availableCleaners,
-      isLoadingCleaners,
-      hasCleanerError,
+      availableCleaners: usesSharedCleaners ? cleanerSource.cleaners : availableCleaners,
+      isLoadingCleaners: usesSharedCleaners ? Boolean(cleanerSource.isLoading) : isLoadingCleaners,
+      hasCleanerError: usesSharedCleaners ? Boolean(cleanerSource.hasError) : hasCleanerError,
       clearOffersCreatedCount: () => setOffersCreatedCount(null),
       recordOffersCreated,
       createCleanerOfferLink,

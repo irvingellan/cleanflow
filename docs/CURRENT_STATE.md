@@ -205,6 +205,21 @@ and only then design a fix. If the attempt succeeds, record non-reproduction,
 not an invented root cause. No production photo was uploaded or inspected
 during this release.
 
+## Issue #51 — Operations Workspace V0 (branch-only experiment)
+
+On `feature/operations-workspace-v0-2026-09-30`, `/workspace-preview` composes the
+existing worklist, Job controller/forms and Checklist Run view into a persistent
+desktop master/detail/action surface and mobile detail layer with sheets. It
+requires explicit local emulator mode and active manager access; normal manager
+navigation and public routes are unchanged. State-aware actions are presentation
+only, with existing server authorization/lifecycle rules. Search/list context and
+stale-response guards are tested; no new backend or telemetry semantics were added.
+Validation passed 794 unit tests, 29 standard emulator E2E tests, desktop/mobile
+workspace scenarios, repeat-three FAST, mobile WATCH, build and diff check.
+See [experiment/comparison notes](OPERATIONS_WORKSPACE_V0.md). **Not merged into
+main, not deployed, and not validated by Gabi.** Real-device speed/usability and
+the unresolved photo issue are not proven by synthetic scenarios.
+
 ## Unresolved blockers / validation
 
 - Issue #48 manager-access recovery (`d5342e8`) is merged into `main` and

@@ -110,6 +110,7 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
   loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete, onAbandonAndComplete,
+  embedded = false,
 }) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
@@ -441,7 +442,7 @@ export function ChecklistRunDetail({
           {draft && <DetailItem label={translate("checklists.draftRevision")} value={draft.revision || 0} />}
         </dl>
       </details>
-      <ScrollToTopButton />
+      {!embedded && <ScrollToTopButton />}
     </section>
   );
 }

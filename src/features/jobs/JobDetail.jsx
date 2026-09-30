@@ -101,6 +101,7 @@ export function JobDetail({
   onArchive,
   onRestore,
   canRestore,
+  workspace = null,
 }) {
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
@@ -341,6 +342,23 @@ export function JobDetail({
   const reminderWhatsAppUrl = reminderPreview && reminderReadyToSend
     ? buildWhatsAppHandoffUrl(cleanerPhonesById[reminderPreview.cleanerId], reminderPreviewMessage)
     : null;
+
+  // Optional composition only: the control page keeps its existing inline UI.
+  const renderActionSection = (name, content) => workspace
+    ? workspace.renderSection(name, content)
+    : content;
+  useEffect(() => {
+    if (workspace?.action === "assign") setIsDirectAssignmentOpen(true);
+    if (workspace?.action === "reminder" && activeAssignments.length === 1) {
+      const assignment = activeAssignments[0];
+      openReminderPreview(assignment.cleanerId, currentCleanerName(
+        assignment.cleanerId, assignment.cleanerNameSnapshot, cleanerNamesById,
+        translate("common.notProvided"),
+      ), assignment.id);
+    } else if (workspace?.action === "reminder" && !isAssignmentAware && (job.assignedCleanerId || job.assignedCleanerName)) {
+      openReminderPreview(job.assignedCleanerId || "legacy-assigned-cleaner", assignedCleanerName);
+    }
+  }, [workspace?.action]);
 
   useEffect(() => {
     if (offersCreatedCount === null) {
@@ -776,6 +794,7 @@ export function JobDetail({
   }
 
   function openReminderPreview(cleanerId, cleanerName, assignmentId = null) {
+    workspace?.onAction("message");
     setCopyMessageErrorCleanerId(null);
     setHasReminderChecklistError(false);
     setReminderPreview({
@@ -866,7 +885,7 @@ export function JobDetail({
 
   return (
     <section className="panel" aria-labelledby="job-detail-title">
-      <BackButton onClick={onBack} />
+      {!workspace && <BackButton onClick={onBack} />}
 
       <p className="eyebrow">{translate("jobs.details")}</p>
       <h2 id="job-detail-title" className="panel__title">
@@ -879,8 +898,8 @@ export function JobDetail({
           </button>
         </div>
       )}
-      <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
-      <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
+      {!workspace && <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />}
+      {!workspace && <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />}
 
       <dl className="detail-list">
         <DetailItem
@@ -952,7 +971,7 @@ export function JobDetail({
         )}
       </dl>
 
-      <section className="job-details-edit" aria-label={translate("jobs.editDetails")}>
+      {renderActionSection("details", <section className="job-details-edit" aria-label={translate("jobs.editDetails")}>
         {!isEditingJobDetails && (
           <>
             <button
@@ -1018,9 +1037,9 @@ export function JobDetail({
             </div>
           </form>
         )}
-      </section>
+      </section>)}
 
-      <section className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
+      {renderActionSection("schedule", <section className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {!isEditingJobSchedule && (
           <button
             className="button"
@@ -1092,9 +1111,9 @@ export function JobDetail({
             </div>
           </form>
         )}
-      </section>
+      </section>)}
 
-      <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
+      {renderActionSection("prices", <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
         {!isEditingPrices && (
           <button className="button" type="button" onClick={startPriceEdit}>
             {translate("jobs.editPrices")}
@@ -1156,9 +1175,9 @@ export function JobDetail({
             </div>
           </form>
         )}
-      </section>
+      </section>)}
 
-      <section className="job-checklist" aria-labelledby="job-checklist-title">
+      {renderActionSection("checklist", <section className="job-checklist" aria-labelledby="job-checklist-title">
         <div className="issues-section__header">
           <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
           {!isLoadingChecklistRun && checklistRun && (
@@ -1223,10 +1242,10 @@ export function JobDetail({
           onIssue={onIssueChecklistCapability}
           onRevoke={onRevokeChecklistCapability}
         />
-      </section>
+      </section>)}
 
       {!job.archivedAt && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus) && (
-        <section className="job-execution" aria-label={translate("jobs.completeService")}>
+        renderActionSection("completion", <section className="job-execution" aria-label={translate("jobs.completeService")}>
           {isLoadingChecklistRun && (
             <p className="form-hint">{translate("jobs.completionCheckingChecklist")}</p>
           )}
@@ -1268,10 +1287,10 @@ export function JobDetail({
           {hasCompleteCleaningError && (
             <p className="form-error" role="alert">{translate("jobs.completeCleaningError")}</p>
           )}
-        </section>
+        </section>)
       )}
 
-      {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
+      {!isAssignmentAware && (!workspace || !job.archivedAt) && (job.operationalStatus === "ASSIGNED" ||
         isInProgress ||
         isCompleted) && (
         <section
@@ -1313,6 +1332,7 @@ export function JobDetail({
       )}
 
       {!isAssignmentAware &&
+        (!workspace || !job.archivedAt) &&
         job.operationalStatus === "ASSIGNED" &&
         (job.assignedCleanerId || job.assignedCleanerName) && (
         <section className="job-cleaner-reminder" aria-label={translate("jobs.cleanerReminder")}>
@@ -1334,7 +1354,7 @@ export function JobDetail({
       )}
 
       {isAssignmentAware && (
-        <section className="assignment-roster" aria-labelledby="assigned-cleaners-title">
+        renderActionSection("assign", <section className="assignment-roster" aria-labelledby="assigned-cleaners-title">
           <div className="assignment-roster__header">
             <div>
               <h3 id="assigned-cleaners-title">{translate("jobs.assignedCleaners")}</h3>
@@ -1513,11 +1533,11 @@ export function JobDetail({
             <p className="form-hint">{translate("jobs.assignmentConfirmationDisclaimer")}</p>
           )}
           {assignmentError && <p className="form-error assignment-error" role="alert">{assignmentError}</p>}
-        </section>
+        </section>)
       )}
 
       {reminderPreview && (
-        <section className="job-reminder-preview" aria-labelledby="job-reminder-preview-title">
+        renderActionSection("message", <section className="job-reminder-preview" aria-labelledby="job-reminder-preview-title">
           <div className="job-reminder-preview__header">
             <h3 id="job-reminder-preview-title">
               {translate("jobs.reminderPreviewTitle", { cleaner: reminderPreview.cleanerName })}
@@ -1642,7 +1662,7 @@ export function JobDetail({
           {reminderReadyToSend && !reminderWhatsAppUrl && (
             <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
           )}
-        </section>
+        </section>)
       )}
 
       {job.notes && (
@@ -1652,7 +1672,7 @@ export function JobDetail({
         </section>
       )}
 
-      <section className="issues-section" aria-labelledby="issues-title">
+      {renderActionSection("issues", <section className="issues-section" aria-labelledby="issues-title">
         <div className="issues-section__header">
           <h3 id="issues-title">{translate("issues.title")}</h3>
           <button
@@ -1792,9 +1812,9 @@ export function JobDetail({
             })}
           </div>
         )}
-      </section>
+      </section>)}
 
-      <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
+      {renderActionSection("offers", <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
         <div className="offers-section__header">
           <h3 id="offers-title">{translate("offers.title")}</h3>
           <div className="offers-section__actions">
@@ -2046,10 +2066,10 @@ export function JobDetail({
             {assignmentError}
           </p>
         )}
-      </section>
+      </section>)}
 
       <div className="button-row">
-        {canSimulateAssignedCleaner && (
+        {!workspace && canSimulateAssignedCleaner && (
           <button
             className="button"
             type="button"
@@ -2059,7 +2079,7 @@ export function JobDetail({
           </button>
         )}
       </div>
-      <ScrollToTopButton />
+      {!workspace && <ScrollToTopButton />}
     </section>
   );
 }

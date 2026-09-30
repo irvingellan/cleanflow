@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useFirebaseEmulators } from "./services/firebase/client.js";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -84,6 +85,8 @@ const content = {
   unnamedProperty: "Unnamed property",
 };
 
+const OperationsWorkspacePreview = lazy(() => import("./features/workspace/OperationsWorkspacePreview.jsx"));
+
 function publicOfferTokenFromPathname(pathname = window.location.pathname) {
   const pathSegments = pathname.split("/").filter(Boolean);
 
@@ -127,6 +130,7 @@ function publicClientReportTokenFromSearch(
 }
 
 function App() {
+  const isWorkspacePreviewRoute = window.location.pathname.replace(/\/+$/, "") === "/workspace-preview";
   const publicOfferToken = publicOfferTokenFromPathname();
   const isPublicOfferRoute = publicOfferToken !== null;
   const publicChecklistToken = publicChecklistTokenFromSearch();
@@ -139,12 +143,15 @@ function App() {
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
   useEffect(() => {
+    if (isWorkspacePreviewRoute && !useFirebaseEmulators) return undefined;
     if (isPublicOfferRoute || isPublicChecklistRoute || isPublicClientReportRoute || isChecklistPreviewRoute) {
       return undefined;
     }
 
     return subscribeToAuthState(setAuthUser);
-  }, [isChecklistPreviewRoute, isPublicChecklistRoute, isPublicClientReportRoute, isPublicOfferRoute]);
+  }, [isChecklistPreviewRoute, isPublicChecklistRoute, isPublicClientReportRoute, isPublicOfferRoute, isWorkspacePreviewRoute]);
+
+  if (isWorkspacePreviewRoute && !useFirebaseEmulators) return <WorkspacePreviewUnavailable />;
 
   if (isPublicOfferRoute) {
     return <PublicOfferPage token={publicOfferToken} />;
@@ -193,15 +200,22 @@ function App() {
         isSigningOut={isSigningOut}
         hasSignOutError={hasSignOutError}
       >
-        <ManagerApplication
+        {isWorkspacePreviewRoute ? <Suspense fallback={<AuthenticationLoading />}>
+          <OperationsWorkspacePreview authUser={authUser} />
+        </Suspense> : <ManagerApplication
           authUser={authUser}
           hasSignOutError={hasSignOutError}
           isSigningOut={isSigningOut}
           onSignOut={handleSignOut}
-        />
+        />}
       </ManagerAccessBoundary>
     </ThemeProvider>
   );
+}
+
+function WorkspacePreviewUnavailable() {
+  const { translate } = useTranslation();
+  return <main className="app-shell"><StateCard message={translate("workspace.emulatorOnly")} status="alert" /></main>;
 }
 
 function PublicOfferPage({ token }) {
