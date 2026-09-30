@@ -17,14 +17,14 @@ const lab = vi.hoisted(() => ({
 vi.mock("../notifications/notificationHealthService.js", () => ({ readLocalNotificationHealth: lab.readLocalNotificationHealth }));
 vi.mock("./devCenterService.js", () => ({ sendDeveloperTestNotification: lab.sendDeveloperTestNotification }));
 
-function renderDiagnostics({ diagnostics, isLoading = false, hasError = false } = {}) {
+function renderDiagnostics({ diagnostics, isLoading = false, hasError = false, onRefresh = vi.fn() } = {}) {
   return render(
     <TranslationProvider>
       <NotificationDiagnostics
         diagnostics={diagnostics}
         isLoading={isLoading}
         hasError={hasError}
-        onRefresh={vi.fn()}
+        onRefresh={onRefresh}
       />
     </TranslationProvider>,
   );
@@ -197,5 +197,24 @@ describe("NotificationDiagnostics", () => {
 
     expect(await screen.findByText("FCM outcome is unknown. Do not retry blindly; check the audit result.")).toBeVisible();
     expect(screen.queryByText(/FCM did not confirm acceptance/)).not.toBeInTheDocument();
+  });
+
+  it("treats a lost callable response as unknown and refreshes the server audit", async () => {
+    const onRefresh = vi.fn();
+    lab.sendDeveloperTestNotification.mockRejectedValueOnce(new Error("network response lost"));
+    renderDiagnostics({
+      diagnostics: {
+        devices: [{ registrationId: "active-registration", deviceId: "active12", active: true, platform: "web" }],
+        deliveries: [],
+      },
+      onRefresh,
+    });
+    fireEvent.change(screen.getByLabelText("Target device"), { target: { value: "active-registration" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare test" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send test notification" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to confirm whether FCM accepted the test");
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(lab.sendDeveloperTestNotification).toHaveBeenCalledTimes(1);
   });
 });

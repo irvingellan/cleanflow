@@ -59,9 +59,12 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
     setTestResult(null);
     try {
       setTestResult(await sendDeveloperTestNotification(selectedDevice.registrationId));
-      onRefresh?.();
+      void Promise.resolve().then(() => onRefresh?.()).catch(() => undefined);
     } catch (error) {
       setTestError(error?.code === "functions/resource-exhausted" ? "cooldown" : "failed");
+      // A lost callable response can follow an accepted FCM send. Read the
+      // server audit before the developer considers another manual attempt.
+      void Promise.resolve().then(() => onRefresh?.()).catch(() => undefined);
     } finally {
       setIsSendingTest(false);
       setIsConfirmingTest(false);

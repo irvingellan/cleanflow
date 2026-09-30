@@ -2000,7 +2000,7 @@ Object.assign(messages.en, {
   "devCenter.healthFcmerror": "Registration failed",
   "devCenter.healthFcmunsupported": "Unsupported",
   "devCenter.recentChecklistReviewNotifications": "Checklist-review notification sample",
-  "devCenter.noChecklistReviewNotifications": "No checklist-review notification attempts recorded.",
+  "devCenter.noChecklistReviewNotifications": "No checklist-review attempts in this bounded sample.",
   "devCenter.reviewStatusPENDING": "Pending",
   "devCenter.reviewStatusSENDING": "Sending",
   "devCenter.reviewStatusNO_ACTIVE_DEVICES": "No active devices",
@@ -2027,7 +2027,7 @@ Object.assign(messages.en, {
   "devCenter.testProviderNotAccepted": "FCM did not confirm acceptance. Check the audit result before retrying.",
   "devCenter.testProviderUnknown": "FCM outcome is unknown. Do not retry blindly; check the audit result.",
   "devCenter.testCooldown": "Test cooldown is active. Wait before trying again.",
-  "devCenter.testFailed": "The test could not be completed. No phone display is confirmed.",
+  "devCenter.testFailed": "Unable to confirm whether FCM accepted the test. Check the audit before retrying; phone display is unverified.",
 });
 
 Object.assign(messages.pt, {
@@ -2057,7 +2057,7 @@ Object.assign(messages.pt, {
   "devCenter.healthFcmerror": "Falha no registro",
   "devCenter.healthFcmunsupported": "Não compatível",
   "devCenter.recentChecklistReviewNotifications": "Amostra de notificações de checklist para revisão",
-  "devCenter.noChecklistReviewNotifications": "Nenhuma tentativa de notificação de revisão registrada.",
+  "devCenter.noChecklistReviewNotifications": "Nenhuma tentativa de notificação de revisão nesta amostra limitada.",
   "devCenter.reviewStatusPENDING": "Pendente",
   "devCenter.reviewStatusSENDING": "Enviando",
   "devCenter.reviewStatusNO_ACTIVE_DEVICES": "Sem dispositivos ativos",
@@ -2084,7 +2084,7 @@ Object.assign(messages.pt, {
   "devCenter.testProviderNotAccepted": "O FCM não confirmou a aceitação. Verifique o registro antes de tentar novamente.",
   "devCenter.testProviderUnknown": "O resultado do FCM é desconhecido. Não tente novamente sem verificar o registro.",
   "devCenter.testCooldown": "Aguarde o intervalo entre testes antes de tentar novamente.",
-  "devCenter.testFailed": "Não foi possível concluir o teste. A exibição no aparelho não está confirmada.",
+  "devCenter.testFailed": "Não foi possível confirmar se o FCM aceitou o teste. Verifique o registro antes de tentar novamente; a exibição no aparelho não foi verificada.",
 });
 
 Object.assign(messages.es, {
@@ -2114,7 +2114,7 @@ Object.assign(messages.es, {
   "devCenter.healthFcmerror": "Falló el registro",
   "devCenter.healthFcmunsupported": "No compatible",
   "devCenter.recentChecklistReviewNotifications": "Muestra de notificaciones de checklist para revisión",
-  "devCenter.noChecklistReviewNotifications": "No hay intentos de notificación de revisión registrados.",
+  "devCenter.noChecklistReviewNotifications": "No hay intentos de notificación de revisión en esta muestra limitada.",
   "devCenter.reviewStatusPENDING": "Pendiente",
   "devCenter.reviewStatusSENDING": "Enviando",
   "devCenter.reviewStatusNO_ACTIVE_DEVICES": "Sin dispositivos activos",
@@ -2141,7 +2141,7 @@ Object.assign(messages.es, {
   "devCenter.testProviderNotAccepted": "FCM no confirmó la aceptación. Revisa el registro antes de reintentar.",
   "devCenter.testProviderUnknown": "El resultado de FCM es desconocido. No reintentes sin revisar el registro.",
   "devCenter.testCooldown": "El intervalo entre pruebas está activo. Espera antes de reintentar.",
-  "devCenter.testFailed": "No se pudo completar la prueba. No se confirma la visualización en el teléfono.",
+  "devCenter.testFailed": "No se pudo confirmar si FCM aceptó la prueba. Revisa el registro antes de reintentar; no se verificó la visualización en el teléfono.",
 });
 
 export function translateInLanguage(language, key, replacements = {}) {
