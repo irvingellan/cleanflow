@@ -630,7 +630,7 @@ cannot retain manager notification access through an earlier device record.
 Public Offer links remain server-mediated bearer capabilities and do not gain
 general authenticated access.
 
-Issue #48 client recovery (implemented 2026-09-30; not deployed) explicitly
+Issue #48 client recovery (Hosting deployed 2026-09-30; real-device validation pending) explicitly
 verifies membership with a server-only read before attaching the revocation
 listener. Each attempt has a seven-second deadline and a generation guard;
 one automatic retry is followed by recoverable error/offline UI. Manual retry

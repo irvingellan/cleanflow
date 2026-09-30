@@ -158,15 +158,21 @@ free text remains verbatim.
 
 ## Unresolved blockers / validation
 
-- Issue #48 manager-access recovery is implemented on
-  `feature/manager-access-pwa-recovery-2026-09-30`, **not deployed**. Entry now
+- Issue #48 manager-access recovery (`d5342e8`) is merged into `main` and
+  deployed to Hosting only (2026-09-30). HTTPS and live HTML/JS/CSS/worker
+  hashes match the release. Entry now
   requires an explicit server membership read with a seven-second deadline,
   one automatic retry, and localized retry/offline feedback. Unresolved
   verification can recover on pageshow, visible resume, or online events;
   stale attempts cannot change access and realtime revocation is retained.
   A bounded session-local diagnostic trace excludes account/operational data.
-  The indefinite cache-only listener path is confirmed; the precise installed
-  iOS transport failure and real-device recovery remain unverified.
+  Validation passed 32 focused, 677 unit, 60 security and 11 E2E tests,
+  including mobile offline reload/recovery. Live signed-in smoke was deferred
+  to avoid automatic health/telemetry and push-registration writes; the
+  isolated mobile browser smoke was inconclusive due to tool timeouts.
+  Issue #48 remains open pending real installed-iPhone launch/resume and
+  network-interruption checks. The indefinite cache-only listener path is
+  confirmed; the precise iOS transport failure remains unverified.
 - Capture the real photo-upload failure stage and safe error details, then
   observe one real cleaning through saved checklist, required evidence,
   manager review, report use, and completion. Until then, the full pilot flow
