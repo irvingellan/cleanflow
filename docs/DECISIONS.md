@@ -852,7 +852,7 @@ defined and observable without a misleading aggregate.
 ## DEC-044 — Pilot Notification Lab separates channel evidence from phone display
 
 Date: 2026-09-29
-Status: Implemented on feature branch; not deployed
+Status: Deployed 2026-09-29; real-device validation pending
 
 Manager devices may report a coarse, token-free permission/service-worker/FCM
 health snapshot through a manager-authorized callable. Identical reports are

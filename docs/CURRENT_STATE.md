@@ -45,17 +45,18 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   Jobs without a safe Offer-to-Assignment relationship are not retrofitted.
 - The review-handoff notification Function is deployed. Scheduled manager
   reminders use FCM; Irving has received a real reminder on a phone. Gabi's
-  device-specific display remains unverified. A narrow 2026-09-29 production
-  metadata read found four recent checklist-review events processed as
-  `NO_ACTIVE_DEVICES` (zero targets), and all ten stored manager FCM
-  registrations across the two active manager memberships inactive. Recent
-  scheduled reminders also show FCM token invalidations. This confirms a
-  registration/eligibility blocker, not the live permission state of either
-  remote browser; local Auth lookup could not map the device groups to names.
-  Notification Lab V1 (blocked-permission guidance, coarse device health,
-  developer-only single-device synthetic test) is implemented locally but
-  **not deployed**. No real test push has been sent. Page-load telemetry is
-  diagnostic only, not an adoption metric.
+  device-specific display remains unverified. Before the Notification Lab V1
+  release, a narrow 2026-09-29 metadata read found four recent checklist-review
+  events processed as `NO_ACTIVE_DEVICES` (zero targets), and all ten then-stored
+  manager FCM registrations inactive. Recent scheduled reminders also showed
+  FCM token invalidations. This confirmed a registration/eligibility blocker
+  for those events, not the live permission state of either remote browser.
+  Notification Lab V1 was deployed from `b5788e4` on 2026-09-29 with Hosting
+  and only `getManagerNotificationDiagnostics`, `reportManagerNotificationHealth`,
+  and `sendDeveloperTestNotification`. An approved manager browser loaded the
+  lab and reported its current channel health; Gabi's current device state and
+  phone display remain unverified. No developer test push has been sent.
+  Page-load telemetry is diagnostic only, not an adoption metric.
 - OneSignal remains a frozen experiment. Do not resume cutover or delete its
   existing browser integration unless a concrete FCM limitation is observed.
 - Required-cleaner-count implementation `b4b35bf` is preserved on
