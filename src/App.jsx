@@ -883,7 +883,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   return (
     <main className="app-shell">
       <section
-        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}`}
+        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}`}
         aria-labelledby="page-title"
       >
         <header className="foundation__header">

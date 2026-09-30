@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { BackButton, StateCard } from "../../components/UiPrimitives.jsx";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import {
   durationSeverity,
@@ -77,6 +78,8 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
   const [selectedVisitId, setSelectedVisitId] = useState("");
   const selectedVisit = diagnostics.jobDetailVisits.find((visit) => visit.id === selectedVisitId)
     || diagnostics.jobDetailVisits[0];
+  const hasPageResults = !diagnostics.isLoading && !diagnostics.hasError;
+  const hasOperationResults = !diagnostics.operationIsLoading && !diagnostics.operationHasError;
 
   return (
     <section className="panel manager-load-diagnostics" aria-labelledby="load-diagnostics-title">
@@ -133,7 +136,7 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
         </div>
       )}
 
-      {!diagnostics.isLoading && !diagnostics.hasError && (
+      {hasPageResults && (
         <>
           <p className="load-diagnostics__sample-note">{translate("loadDiagnostics.sampleLimit")}</p>
           <div className="load-diagnostics__summary" aria-label={translate("loadDiagnostics.summary")}>
@@ -153,7 +156,7 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
             ))}
           </div>
 
-          <section className="load-diagnostics__section" aria-labelledby="load-diagnostics-by-page">
+          <section className="load-diagnostics__section load-diagnostics__section--by-page" aria-labelledby="load-diagnostics-by-page">
             <h3 id="load-diagnostics-by-page">{translate("loadDiagnostics.byPage")}</h3>
             <div className="load-diagnostics__table-wrap">
               <table className="load-diagnostics__table">
@@ -176,52 +179,10 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
               </table>
             </div>
           </section>
-
-          <section className="load-diagnostics__section" aria-labelledby="load-diagnostics-events">
-            <h3 id="load-diagnostics-events">{translate("loadDiagnostics.events")}</h3>
-            {diagnostics.events.length === 0 ? (
-              <StateCard message={translate("loadDiagnostics.empty")} />
-            ) : (
-              <div className="load-diagnostics__table-wrap">
-                <table className="load-diagnostics__table load-diagnostics__events-table">
-                  <thead><tr>
-                    <th>{translate("loadDiagnostics.time")}</th>
-                    <th>{translate("loadDiagnostics.user")}</th>
-                    <th>{translate("loadDiagnostics.page")}</th>
-                    <th>{translate("loadDiagnostics.loadDuration")}</th>
-                    <th>{translate("loadDiagnostics.result")}</th>
-                    <th>{translate("loadDiagnostics.deviceBrowser")}</th>
-                    <th>{translate("loadDiagnostics.network")}</th>
-                    <th>{translate("loadDiagnostics.sessionDevice")}</th>
-                  </tr></thead>
-                  <tbody>{diagnostics.events.map((event) => (
-                    <tr key={event.id}>
-                      <td>{eventTime(event.createdAt, language)}</td>
-                      <td className="load-diagnostics__uid">{event.uid}</td>
-                      <td>{translate(`loadDiagnostics.pages.${event.page}`)}</td>
-                      <td>
-                        <Duration value={event.durationMs} translate={translate} />
-                        <small>{translate("loadDiagnostics.dataLoad")}: {durationLabel(event.dataDurationMs, translate)}</small>
-                      </td>
-                      <td><span className={`load-diagnostics__result load-diagnostics__result--${event.result}`}>
-                        {translate(`loadDiagnostics.results.${event.result}`)}
-                      </span></td>
-                      <td>{event.browser}/{event.platform} · {translate(`loadDiagnostics.deviceClasses.${event.deviceClass}`)}</td>
-                      <td>{event.connection?.effectiveType || translate("loadDiagnostics.noValue")}</td>
-                      <td>{translate("loadDiagnostics.ids", {
-                        session: shortIdentifier(event.sessionId),
-                        device: shortIdentifier(event.deviceId),
-                      })}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            )}
-          </section>
         </>
       )}
 
-      <section className="load-diagnostics__section" aria-labelledby="load-diagnostics-operations">
+      <section className={`load-diagnostics__section load-diagnostics__section--operations${hasPageResults ? " load-diagnostics__section--alongside" : ""}`} aria-labelledby="load-diagnostics-operations">
         <h3 id="load-diagnostics-operations">{translate("loadDiagnostics.operationsTitle")}</h3>
         <p className="load-diagnostics__sample-note">{translate("loadDiagnostics.operationSampleLimit")}</p>
         {diagnostics.operationIsLoading && <StateCard message={translate("loadDiagnostics.loadingOperations")} status="status" />}
@@ -231,7 +192,7 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
             <button className="button" type="button" onClick={diagnostics.refresh}>{translate("common.retry")}</button>
           </div>
         )}
-        {!diagnostics.operationIsLoading && !diagnostics.operationHasError && (
+        {hasOperationResults && (
           diagnostics.operationEvents.length === 0
             ? <StateCard message={translate("loadDiagnostics.operationsEmpty")} />
             : <>
@@ -257,41 +218,91 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
                   ))}</tbody>
                 </table>
               </div>
-              <div className="load-diagnostics__visits">
-                <h4>{translate("loadDiagnostics.recentJobDetailVisits")}</h4>
-                {diagnostics.jobDetailVisits.length === 0 ? (
-                  <StateCard message={translate("loadDiagnostics.noJobDetailVisits")} />
-                ) : (
-                  <>
-                    <label className="load-diagnostics__visit-picker">
-                      {translate("loadDiagnostics.selectVisit")}
-                      <select value={selectedVisit?.id || ""} onChange={(event) => setSelectedVisitId(event.target.value)}>
-                        {diagnostics.jobDetailVisits.map((visit) => (
-                          <option key={visit.id} value={visit.id}>
-                            {eventTime(visit.latestAtMs, language)} · {shortIdentifier(visit.id)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {selectedVisit && (
-                      <>
-                        <p className="load-diagnostics__visit-details">
-                          {translate("loadDiagnostics.visitDetails", {
-                            time: eventTime(selectedVisit.latestAtMs, language),
-                            user: shortIdentifier(selectedVisit.events[0]?.uid),
-                            device: `${selectedVisit.events[0]?.browser || translate("loadDiagnostics.noValue")}/${selectedVisit.events[0]?.platform || translate("loadDiagnostics.noValue")} · ${translate(`loadDiagnostics.deviceClasses.${selectedVisit.events[0]?.deviceClass}`)}`,
-                            span: durationLabel(selectedVisit.spanMs, translate),
-                          })}
-                        </p>
-                        <OperationWaterfall visit={selectedVisit} translate={translate} />
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
             </>
         )}
       </section>
+
+      {hasOperationResults && diagnostics.operationEvents.length > 0 && (
+        <section className="load-diagnostics__section load-diagnostics__visits" aria-labelledby="load-diagnostics-visits">
+          <h3 id="load-diagnostics-visits">{translate("loadDiagnostics.recentJobDetailVisits")}</h3>
+          {diagnostics.jobDetailVisits.length === 0 ? (
+            <StateCard message={translate("loadDiagnostics.noJobDetailVisits")} />
+          ) : (
+            <>
+              <label className="load-diagnostics__visit-picker">
+                {translate("loadDiagnostics.selectVisit")}
+                <select value={selectedVisit?.id || ""} onChange={(event) => setSelectedVisitId(event.target.value)}>
+                  {diagnostics.jobDetailVisits.map((visit) => (
+                    <option key={visit.id} value={visit.id}>
+                      {eventTime(visit.latestAtMs, language)} · {shortIdentifier(visit.id)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {selectedVisit && (
+                <>
+                  <p className="load-diagnostics__visit-details">
+                    {translate("loadDiagnostics.visitDetails", {
+                      time: eventTime(selectedVisit.latestAtMs, language),
+                      user: shortIdentifier(selectedVisit.events[0]?.uid),
+                      device: `${selectedVisit.events[0]?.browser || translate("loadDiagnostics.noValue")}/${selectedVisit.events[0]?.platform || translate("loadDiagnostics.noValue")} · ${translate(`loadDiagnostics.deviceClasses.${selectedVisit.events[0]?.deviceClass}`)}`,
+                      span: durationLabel(selectedVisit.spanMs, translate),
+                    })}
+                  </p>
+                  <OperationWaterfall visit={selectedVisit} translate={translate} />
+                </>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {hasPageResults && (
+        <section className="load-diagnostics__section" aria-labelledby="load-diagnostics-events">
+          <h3 id="load-diagnostics-events">{translate("loadDiagnostics.events")}</h3>
+          {diagnostics.events.length === 0 ? (
+            <StateCard message={translate("loadDiagnostics.empty")} />
+          ) : (
+            <div className="load-diagnostics__table-wrap">
+              <table className="load-diagnostics__table load-diagnostics__events-table">
+                <thead><tr>
+                  <th>{translate("loadDiagnostics.time")}</th>
+                  <th>{translate("loadDiagnostics.user")}</th>
+                  <th>{translate("loadDiagnostics.page")}</th>
+                  <th>{translate("loadDiagnostics.loadDuration")}</th>
+                  <th>{translate("loadDiagnostics.result")}</th>
+                  <th>{translate("loadDiagnostics.deviceBrowser")}</th>
+                  <th>{translate("loadDiagnostics.network")}</th>
+                  <th>{translate("loadDiagnostics.sessionDevice")}</th>
+                </tr></thead>
+                <tbody>{diagnostics.events.map((event) => (
+                  <tr key={event.id}>
+                    <td>{eventTime(event.createdAt, language)}</td>
+                    <td className="load-diagnostics__uid"><span className="load-diagnostics__identifier" title={event.uid}>{shortIdentifier(event.uid)}</span></td>
+                    <td>{translate(`loadDiagnostics.pages.${event.page}`)}</td>
+                    <td>
+                      <Duration value={event.durationMs} translate={translate} />
+                      <small>{translate("loadDiagnostics.dataLoad")}: {durationLabel(event.dataDurationMs, translate)}</small>
+                    </td>
+                    <td><span className={`load-diagnostics__result load-diagnostics__result--${event.result}`}>
+                      {translate(`loadDiagnostics.results.${event.result}`)}
+                    </span></td>
+                    <td>{event.browser}/{event.platform} · {translate(`loadDiagnostics.deviceClasses.${event.deviceClass}`)}</td>
+                    <td>{event.connection?.effectiveType || translate("loadDiagnostics.noValue")}</td>
+                    <td><span className="load-diagnostics__identifier" title={`${event.sessionId || "—"} / ${event.deviceId || "—"}`}>
+                      {translate("loadDiagnostics.ids", {
+                        session: shortIdentifier(event.sessionId),
+                        device: shortIdentifier(event.deviceId),
+                      })}
+                    </span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+      <ScrollToTopButton threshold={600} />
     </section>
   );
 }

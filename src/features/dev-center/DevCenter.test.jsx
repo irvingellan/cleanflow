@@ -25,6 +25,42 @@ function buildDevCenter({ environment = "emulator", pendingPreviewType = null, o
 }
 
 describe("DevCenter action states", () => {
+  it("shows back to top only after 600px while keeping allowed actions available", () => {
+    const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY");
+    let scrollY = 0;
+    Object.defineProperty(window, "scrollY", { configurable: true, get: () => scrollY });
+    const onPreviewReminder = vi.fn();
+
+    try {
+      render(buildDevCenter({ onPreviewReminder }));
+      expect(screen.queryByRole("button", { name: "Back to top" })).not.toBeInTheDocument();
+
+      scrollY = 600;
+      fireEvent.scroll(window);
+      expect(screen.queryByRole("button", { name: "Back to top" })).not.toBeInTheDocument();
+
+      scrollY = 601;
+      fireEvent.scroll(window);
+      expect(screen.getByRole("button", { name: "Back to top" })).toBeVisible();
+      const generateButtons = screen.getAllByRole("button", { name: "Generate" });
+      expect(generateButtons).toHaveLength(4);
+      generateButtons.forEach((button) => expect(button).toBeEnabled());
+      expect(screen.getByRole("button", { name: "Clear demo data" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Preview today" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Preview tomorrow" })).toBeEnabled();
+      fireEvent.click(screen.getByRole("button", { name: "Preview today" }));
+      expect(onPreviewReminder).toHaveBeenCalledExactlyOnceWith("TODAY_07");
+
+      scrollY = 0;
+      fireEvent.scroll(window);
+      expect(screen.queryByRole("button", { name: "Back to top" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview tomorrow" })).toBeEnabled();
+    } finally {
+      if (originalScrollY) Object.defineProperty(window, "scrollY", originalScrollY);
+      else delete window.scrollY;
+    }
+  });
+
   it("does not run advanced provider checks until the developer explicitly requests them", () => {
     render(buildDevCenter());
 

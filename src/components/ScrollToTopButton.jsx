@@ -16,12 +16,19 @@ export function ScrollToTopButton({ threshold = 400 }) {
 
   if (!isVisible) return null;
 
+  function scrollToTop() {
+    const prefersReducedMotion = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" });
+  }
+
   return (
     <button
       className="scroll-to-top-button"
       type="button"
       aria-label={translate("jobs.scrollToTop")}
-      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      title={translate("jobs.scrollToTop")}
+      onClick={scrollToTop}
     >
       ↑
     </button>

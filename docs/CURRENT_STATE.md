@@ -156,6 +156,22 @@ free text remains verbatim.
   audit evidence preserved in Issue #27. They are **not** a consolidated,
   approved implementation plan.
 
+## Issue #49 — diagnostics UX (branch only, not deployed)
+
+`feature/dev-diagnostics-wide-scrolltop-2026-09-30` adds a diagnostics-only
+1600px maximum shell, responsive page/operation summaries, full-width Events
+and visit waterfall, and shortened identifiers with full-value tooltips.
+Other screen widths, telemetry queries/aggregation, and Issue #48 behavior
+are unchanged. The existing shared scroll-to-top control is now reused by
+Diagnostics and Dev Center at 600px; existing mounts retain 400px. It respects
+reduced motion and keeps localized accessible labels. The observed `600.00 s`
+success outlier is preserved exactly; its cause remains a separate investigation.
+Local validation passed 690 unit and 27 emulator E2E tests, including EN/PT/ES
+at 2560, 1920, 1440, 768 and 390px widths; desktop Events fit without horizontal
+scrolling and all sizes avoid page overflow. Build and diff check passed.
+These are Chromium/local-fixture checks, not real-device or production proof.
+This work is not merged into `main` or deployed.
+
 ## Unresolved blockers / validation
 
 - Issue #48 manager-access recovery (`d5342e8`) is merged into `main` and

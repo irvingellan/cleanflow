@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { NotificationDiagnostics } from "./NotificationDiagnostics.jsx";
@@ -164,6 +165,7 @@ export function DevCenter({
         />
       )}
       {hasError && <StateCard message={translate("devCenter.error")} status="alert" isError />}
+      <ScrollToTopButton threshold={600} />
     </section>
   );
 }
