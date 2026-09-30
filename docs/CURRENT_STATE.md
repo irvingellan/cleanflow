@@ -156,10 +156,11 @@ free text remains verbatim.
   audit evidence preserved in Issue #27. They are **not** a consolidated,
   approved implementation plan.
 
-## Issue #49 — diagnostics UX (branch only, not deployed)
+## Issue #49 — diagnostics UX (deployed)
 
-`feature/dev-diagnostics-wide-scrolltop-2026-09-30` adds a diagnostics-only
-1600px maximum shell, responsive page/operation summaries, full-width Events
+`8003f72` was fast-forwarded into `main` and deployed to Hosting only on
+2026-09-30. It adds a diagnostics-only 1600px maximum shell, responsive
+page/operation summaries, full-width Events
 and visit waterfall, and shortened identifiers with full-value tooltips.
 Other screen widths, telemetry queries/aggregation, and Issue #48 behavior
 are unchanged. The existing shared scroll-to-top control is now reused by
@@ -169,8 +170,13 @@ success outlier is preserved exactly; its cause remains a separate investigation
 Local validation passed 690 unit and 27 emulator E2E tests, including EN/PT/ES
 at 2560, 1920, 1440, 768 and 390px widths; desktop Events fit without horizontal
 scrolling and all sizes avoid page overflow. Build and diff check passed.
-These are Chromium/local-fixture checks, not real-device or production proof.
-This work is not merged into `main` or deployed.
+These are Chromium/local-fixture checks, not real-device proof. Live HTTPS,
+version marker and HTML/JS/CSS/worker hashes match `8003f72`; the anonymous
+diagnostics route renders sign-in without overflow at desktop/mobile widths.
+Signed-in live Diagnostics/Dev Center layout and scroll interaction remain
+unverified: entering the shell can automatically write notification health or
+refresh FCM registration, which the zero-production-write release forbade.
+No Functions, Rules, indexes, Storage, telemetry semantics, or #48 behavior changed.
 
 ## Unresolved blockers / validation
 
