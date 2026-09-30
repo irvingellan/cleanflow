@@ -295,6 +295,7 @@ h1 {
 .feedback-trigger:focus-visible,
 .feedback-close:focus-visible,
 .notification-control:focus-visible,
+.notification-control__recovery button:focus-visible,
 .whats-new-trigger:focus-visible,
 .whats-new-close:focus-visible {
   outline: 3px solid var(--focus-ring-strong);
@@ -327,6 +328,27 @@ h1 {
 .notification-control:disabled {
   cursor: default;
   opacity: 0.72;
+}
+
+.notification-control__recovery {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  max-width: 340px;
+  color: var(--color-brand-muted);
+  font-size: 0.75rem;
+}
+
+.notification-control__recovery button {
+  min-height: 44px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--color-brand-text);
+  background: var(--color-surface);
+  font-weight: 750;
+  cursor: pointer;
 }
 
 .feedback-backdrop {
@@ -4371,6 +4393,31 @@ button.summary-card {
 .dev-center__diagnostics-list span {
   color: var(--color-muted);
   font-size: 0.875rem;
+}
+
+.dev-center__lab-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.dev-center__lab-block h4,
+.dev-center__lab-block h5 {
+  margin: 0;
+}
+
+.dev-center__lab-target {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 420px);
+}
+
+.dev-center__lab-target select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
 }
 
 .dev-center__confirm {

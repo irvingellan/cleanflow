@@ -28,6 +28,7 @@ export function DevCenter({
 }) {
   const { translate } = useTranslation();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+  const [advancedNotificationCheck, setAdvancedNotificationCheck] = useState(0);
   const canMutate = access.environment === "emulator";
   const canPreview = access.authorized;
   const isPreviewPending = (type) => pendingPreviewType === type;
@@ -126,7 +127,15 @@ export function DevCenter({
         hasError={hasDiagnosticsError}
         onRefresh={onRefreshDiagnostics}
       />
-      <NotificationChannelDiagnostics userId={notificationUserId} />
+      <section className="dev-center__diagnostics dev-center__advanced-notifications">
+        <button className="button button--small" type="button" onClick={() => setAdvancedNotificationCheck((count) => count + 1)}>
+          {translate("devCenter.runAdvancedProviderChecks")}
+        </button>
+        <p>{translate("devCenter.advancedProviderChecksNote")}</p>
+        {advancedNotificationCheck > 0 && (
+          <NotificationChannelDiagnostics key={advancedNotificationCheck} userId={notificationUserId} />
+        )}
+      </section>
       <p className="dev-center__internal-link">
         <a className="button button--small" href="/diagnostics/load-times">
           {translate("loadDiagnostics.open")}

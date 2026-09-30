@@ -4,6 +4,7 @@ import {
   enablePushNotifications,
   getPushChannelDiagnostics,
 } from "./notificationService.js";
+import { reportCurrentManagerNotificationHealth } from "./notificationHealthReporter.js";
 
 export function NotificationControl({ userId }) {
   const { language, translate } = useTranslation();
@@ -15,9 +16,15 @@ export function NotificationControl({ userId }) {
     async function checkPushNotifications() {
       try {
         const result = await getPushChannelDiagnostics(userId);
-        if (isCurrent) setState(result.state);
+        if (isCurrent) {
+          setState(result.state);
+          void reportCurrentManagerNotificationHealth();
+        }
       } catch {
-        if (isCurrent) setState("error");
+        if (isCurrent) {
+          setState("error");
+          void reportCurrentManagerNotificationHealth();
+        }
       }
     }
 
@@ -35,6 +42,23 @@ export function NotificationControl({ userId }) {
       setState(result.state);
     } catch {
       setState("error");
+    } finally {
+      void reportCurrentManagerNotificationHealth();
+    }
+  }
+
+  async function recheckNotifications() {
+    setState("checking");
+
+    try {
+      const result = await getPushChannelDiagnostics(userId);
+      setState(result.state);
+    } catch {
+      // A provider failure after the user changes browser settings is not
+      // evidence that permission is still denied.
+      setState(globalThis.Notification?.permission === "denied" ? "denied" : "error");
+    } finally {
+      void reportCurrentManagerNotificationHealth();
     }
   }
 
@@ -50,16 +74,26 @@ export function NotificationControl({ userId }) {
   }[state];
 
   return (
-    <button
-      className={`notification-control notification-control--${state}`}
-      type="button"
-      disabled={status.disabled}
-      aria-label={translate(status.label)}
-      title={translate(status.label)}
-      onClick={enableNotifications}
-    >
-      <span aria-hidden="true">🔔</span>
-      <span className="notification-control__label">{translate(status.label)}</span>
-    </button>
+    <>
+      <button
+        className={`notification-control notification-control--${state}`}
+        type="button"
+        disabled={status.disabled}
+        aria-label={translate(status.label)}
+        title={translate(status.label)}
+        onClick={enableNotifications}
+      >
+        <span aria-hidden="true">🔔</span>
+        <span className="notification-control__label">{translate(status.label)}</span>
+      </button>
+      {state === "denied" && (
+        <div className="notification-control__recovery" role="status">
+          <span>{translate("notifications.deniedGuidance")}</span>
+          <button type="button" onClick={recheckNotifications}>
+            {translate("notifications.checkAgain")}
+          </button>
+        </div>
+      )}
+    </>
   );
 }

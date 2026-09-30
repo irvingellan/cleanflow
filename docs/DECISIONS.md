@@ -846,3 +846,20 @@ telemetry and parallel reads. The internal diagnostic view uses a bounded
 recent-event query and a simple visit waterfall; it is not a general tracing
 platform. Defer a formal time-to-actionable metric until its action gates are
 defined and observable without a misleading aggregate.
+
+---
+
+## DEC-044 — Pilot Notification Lab separates channel evidence from phone display
+
+Date: 2026-09-29
+Status: Implemented on feature branch; not deployed
+
+Manager devices may report a coarse, token-free permission/service-worker/FCM
+health snapshot through a manager-authorized callable. Identical reports are
+throttled; changed states update promptly. The existing Dev Center developer
+UID gate protects an explicit one-device synthetic FCM test. Its server-owned
+claim/cooldown and audit permit one attempt without automatic retry or provider
+fallback. A test cannot accept arbitrary push copy, bearer tokens, or Job data.
+FCM acceptance is provider evidence only, never proof that a phone displayed
+the notification. Browser permission must be observed on that browser or via
+its latest reported snapshot; registration metadata alone cannot establish it.

@@ -21,6 +21,10 @@ import {
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import {
+  reportManagerDeviceHealth,
+  sendDeveloperTestNotification as dispatchDeveloperTestNotification,
+} from "./notificationLab.js";
+import {
   buildPublicChecklistPhotoUploadServerEvent,
   normalizePublicChecklistLoadDiagnostic,
   normalizePublicChecklistPhotoUploadDiagnostic,
@@ -252,14 +256,68 @@ export const getManagerNotificationDiagnostics = onCall(
         .limit(20)
         .get(),
     ]);
+    const [healthSnapshot, reviewSnapshot, developerTestsSnapshot] = await Promise.all([
+      organizationReference().collection("managerNotificationDeviceHealth").limit(100).get(),
+      // The pilot has a small bounded outbox. Avoid a new collection-group index
+      // solely for a developer diagnostic; filter to this organization below.
+      db.collectionGroup("managerNotificationDeliveries").limit(100).get(),
+      organizationReference()
+        .collection("developerNotificationTests")
+        .orderBy("attemptedAt", "desc")
+        .limit(20)
+        .get(),
+    ]);
     const devices = devicesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
-    const userIds = [...new Set(devices.map(({ data }) => data.userId).filter(Boolean))];
+    const healthReports = healthSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
+    const userIds = [...new Set([...devices, ...healthReports].map(({ data }) => data.userId).filter(Boolean))];
     const emailsByUserId = await managerEmailsByUserId(userIds);
 
     return buildNotificationDiagnostics({
       devices,
       deliveries: deliveriesSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
+      healthReports,
+      reviewDeliveries: reviewSnapshot.docs
+        .filter((snapshot) => snapshot.ref.path.startsWith(`organizations/${organizationId}/jobs/`))
+        .map((snapshot) => ({ data: snapshot.data() }))
+        .sort((a, b) => (b.data.createdAt?.toMillis?.() || 0) - (a.data.createdAt?.toMillis?.() || 0))
+        .slice(0, 20),
+      developerTests: developerTestsSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
       emailsByUserId,
+    });
+  },
+);
+
+export const reportManagerNotificationHealth = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return reportManagerDeviceHealth({
+      database: db,
+      organizationId,
+      userId: request.auth.uid,
+      input: request.data,
+    });
+  },
+);
+
+export const sendDeveloperTestNotification = onCall(
+  { region: "us-central1", secrets: [devCenterDeveloperUids] },
+  async (request) => {
+    requireAuthorizedDeveloper(request, allowedDeveloperUids());
+    await requireOrganizationManager(db, request, organizationId);
+    const data = request.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)
+      || Object.keys(data).sort().join(",") !== "confirm,targetRegistrationId") {
+      throw new HttpsError("invalid-argument", "Developer notification test request is invalid.");
+    }
+    return dispatchDeveloperTestNotification({
+      database: db,
+      organizationId,
+      developerUid: request.auth.uid,
+      targetRegistrationId: data.targetRegistrationId,
+      confirm: data.confirm,
+      sendFcm: (message) => getMessaging().send(message),
+      logger,
     });
   },
 );

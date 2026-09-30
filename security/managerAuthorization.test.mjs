@@ -31,6 +31,8 @@ const {
   issueChecklistCapability,
   revokeChecklistCapability,
   registerManagerPushDevice,
+  reportManagerNotificationHealth,
+  sendDeveloperTestNotification,
   submitFeedback,
   publicOffer,
   publicChecklist,
@@ -263,6 +265,9 @@ test("manager browsers cannot directly read or mutate server-only checklist noti
     "clientReportTokenLookups/" + "a".repeat(64),
     root + "/jobs/job/checklistRuns/initial/clientReportCapabilities/active",
     root + "/jobs/job/checklistRuns/initial/managerNotificationDeliveries/" + "b".repeat(64),
+    root + "/managerNotificationDeviceHealth/" + "c".repeat(64),
+    root + "/developerNotificationTests/test-attempt",
+    root + "/developerNotificationTestCooldowns/manager",
   ];
   for (const path of pathsToProtect) {
     await assertFails(db.doc(path).get());
@@ -782,6 +787,52 @@ test("actual manager callables reject unauthorized/anonymous callers before enro
   assert.equal((await admin.collection("managerPushDevices").get()).size, 0);
   // An approved manager reaches payload validation, without contacting GitHub.
   await assert.rejects(submitFeedback.run(request("manager")), { code: "invalid-argument" });
+});
+
+test("manager notification health is owner-scoped and developer test push rejects ordinary managers", async () => {
+  const health = {
+    deviceId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    notificationPermission: "denied",
+    serviceWorker: "ready",
+    fcmRegistration: "unknown",
+    platform: "ios",
+    browserClass: "safari",
+    standalone: true,
+    appVersion: "v0.9.3",
+  };
+  assert.deepEqual(await reportManagerNotificationHealth.run(request("manager", health)), { recorded: true });
+  const stored = await admin.collection(`${root}/managerNotificationDeviceHealth`).get();
+  assert.equal(stored.size, 1);
+  assert.equal(stored.docs[0].data().userId, "manager");
+  assert.equal(stored.docs[0].data().notificationPermission, "denied");
+  assert.equal("token" in stored.docs[0].data(), false);
+  assert.equal("deviceId" in stored.docs[0].data(), false);
+
+  for (const uid of ["cleaner", "inactive", "other-manager", null]) {
+    await assert.rejects(reportManagerNotificationHealth.run(request(uid, health)), {
+      code: uid ? "permission-denied" : "unauthenticated",
+    });
+  }
+  await assert.rejects(reportManagerNotificationHealth.run(request("manager", { ...health, token: "x" })), {
+    code: "invalid-argument",
+  });
+  await assert.rejects(sendDeveloperTestNotification.run(request("manager", {
+    targetRegistrationId: "a".repeat(64), confirm: true,
+  })), { code: "permission-denied" });
+  const previousDeveloperUids = process.env.DEV_CENTER_DEVELOPER_UIDS;
+  process.env.DEV_CENTER_DEVELOPER_UIDS = "manager";
+  try {
+    await assert.rejects(sendDeveloperTestNotification.run(request("manager", {
+      targetRegistrationId: "a".repeat(64), confirm: true, title: "arbitrary message",
+    })), { code: "invalid-argument" });
+    await assert.rejects(sendDeveloperTestNotification.run(request("cleaner", {
+      targetRegistrationId: "a".repeat(64), confirm: true,
+    })), { code: "permission-denied" });
+  } finally {
+    if (previousDeveloperUids === undefined) delete process.env.DEV_CENTER_DEVELOPER_UIDS;
+    else process.env.DEV_CENTER_DEVELOPER_UIDS = previousDeveloperUids;
+  }
+  assert.equal((await admin.collection(`${root}/developerNotificationTests`).get()).size, 0);
 });
 
 async function seedChecklistJob({ checklistSettings } = {}) {

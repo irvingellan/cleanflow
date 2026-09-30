@@ -17,6 +17,11 @@ const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 const registerPushDeviceCall = httpsCallable(functions, "registerManagerPushDevice");
 let fcmRegistrationState = "unknown";
 
+// A passive local observation. It must not fetch a token or register a worker.
+export function getCachedFcmRegistrationState() {
+  return fcmRegistrationState;
+}
+
 function managerNotificationLanguage() {
   const language = window.localStorage.getItem("cleanflow-language");
   return ["en", "pt", "es"].includes(language) ? language : "pt";
@@ -32,6 +37,10 @@ function pushDeviceId() {
   const deviceId = crypto.randomUUID();
   window.localStorage.setItem(pushDeviceStorageKey, deviceId);
   return deviceId;
+}
+
+export function getLocalPushDeviceId() {
+  return pushDeviceId();
 }
 
 export async function pushNotificationsAvailable() {
@@ -109,14 +118,15 @@ export async function refreshPushNotifications() {
 
 async function fcmDiagnosticState() {
   if (!(await pushNotificationsAvailable())) return { state: "unavailable" };
+  if (browserPermission() === "denied") return { state: "unavailable" };
   return browserPermission() === "granted" ? refreshPushNotifications() : { state: fcmRegistrationState };
 }
 
 function notificationState({ fcm, oneSignal }) {
   // Scheduled manager reminders currently use FCM; OneSignal opt-in alone does
   // not make this browser eligible for that delivery path.
-  if (fcm.state === "registered") return "enabled";
   if (browserPermission() === "denied") return "denied";
+  if (fcm.state === "registered") return "enabled";
   if (oneSignal.state === "error") return "error";
   if (fcm.state === "unavailable") return "unavailable";
   if (fcm.state === "error") return "error";
@@ -148,6 +158,8 @@ export async function getPushChannelDiagnostics(userId) {
 }
 
 export async function enablePushNotifications({ userId } = {}) {
+  // Browser denial must be changed in settings; another click cannot reprompt it.
+  if (browserPermission() === "denied") return { state: "denied" };
   let oneSignal;
 
   try {

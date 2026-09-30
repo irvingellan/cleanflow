@@ -6,6 +6,7 @@ const generateScenarioCall = httpsCallable(functions, "generateDevCenterScenario
 const clearDataCall = httpsCallable(functions, "clearDevCenterData");
 const previewManagerReminderCall = httpsCallable(functions, "previewManagerReminder");
 const notificationDiagnosticsCall = httpsCallable(functions, "getManagerNotificationDiagnostics");
+const developerTestNotificationCall = httpsCallable(functions, "sendDeveloperTestNotification");
 
 export async function getDevCenterAccess() {
   const result = await accessCall();
@@ -29,5 +30,10 @@ export async function previewManagerReminder(type) {
 
 export async function getManagerNotificationDiagnostics() {
   const result = await notificationDiagnosticsCall();
+  return result.data;
+}
+
+export async function sendDeveloperTestNotification(targetRegistrationId) {
+  const result = await developerTestNotificationCall({ targetRegistrationId, confirm: true });
   return result.data;
 }

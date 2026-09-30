@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { DevCenter } from "./DevCenter.jsx";
 
+vi.mock("../notifications/NotificationChannelDiagnostics.jsx", () => ({
+  NotificationChannelDiagnostics: () => <p>Advanced provider diagnostics mounted</p>,
+}));
+
 function buildDevCenter({ environment = "emulator", pendingPreviewType = null, onPreviewReminder = vi.fn() } = {}) {
   return (
     <TranslationProvider>
@@ -21,6 +25,14 @@ function buildDevCenter({ environment = "emulator", pendingPreviewType = null, o
 }
 
 describe("DevCenter action states", () => {
+  it("does not run advanced provider checks until the developer explicitly requests them", () => {
+    render(buildDevCenter());
+
+    expect(screen.queryByText("Advanced provider diagnostics mounted")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Run advanced provider checks" }));
+    expect(screen.getByText("Advanced provider diagnostics mounted")).toBeVisible();
+  });
+
   it("keeps the internal page-load view linked from the developer-only Dev Center", () => {
     render(buildDevCenter());
     expect(screen.getByRole("link", { name: "Page-load timings" }))

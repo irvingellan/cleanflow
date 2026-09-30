@@ -76,6 +76,8 @@ describe("notificationService channel coexistence", () => {
     expect(oneSignal.requestOneSignalSubscription).toHaveBeenCalledWith("firebase-user-uid");
     expect(oneSignal.requestOneSignalSubscription.mock.invocationCallOrder[0]).toBeLessThan(firebase.getToken.mock.invocationCallOrder[0]);
     expect(result).toMatchObject({ state: "enabled", fcm: { state: "registered" }, oneSignal: { optedIn: true } });
+    const registerCall = firebase.httpsCallable.mock.results[0].value;
+    expect(registerCall.mock.calls[0][0].deviceId).toBe(service.getLocalPushDeviceId());
   });
 
   it("reports FCM as ready for scheduled reminders even when OneSignal is not opted in", async () => {
@@ -90,6 +92,23 @@ describe("notificationService channel coexistence", () => {
       fcm: { state: "registered" },
       oneSignal: { optedIn: false },
     });
+  });
+
+  it("treats revoked browser permission as blocked and never reprompts on enable", async () => {
+    browserPermission("granted");
+    const service = await loadService();
+    await service.getPushChannelDiagnostics("firebase-user-uid");
+    expect(firebase.getToken).toHaveBeenCalledOnce();
+
+    browserPermission("denied");
+    const diagnostics = await service.getPushChannelDiagnostics("firebase-user-uid");
+    const result = await service.enablePushNotifications({ userId: "firebase-user-uid" });
+
+    expect(diagnostics).toMatchObject({ browserPermission: "denied", fcm: { state: "unavailable" }, state: "denied" });
+    expect(result).toEqual({ state: "denied" });
+    expect(Notification.requestPermission).not.toHaveBeenCalled();
+    expect(oneSignal.requestOneSignalSubscription).not.toHaveBeenCalled();
+    expect(firebase.getToken).toHaveBeenCalledOnce();
   });
 
   it("keeps a working FCM channel usable if OneSignal initialization fails", async () => {

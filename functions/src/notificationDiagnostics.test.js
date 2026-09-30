@@ -89,4 +89,32 @@ describe("notification diagnostics projection", () => {
       attemptedDevices: 0,
     });
   });
+
+  it("projects coarse health, review outcomes, and test audit without tokens or operational data", () => {
+    const diagnostics = buildNotificationDiagnostics({
+      devices: [{ id: "a".repeat(64), data: { userId: "manager-uid", token: "private-fcm-token", active: true } }],
+      deliveries: [],
+      healthReports: [{ id: "a".repeat(64), data: {
+        userId: "manager-uid", notificationPermission: "denied", serviceWorker: "ready",
+        fcmRegistration: "missing", platform: "web", browserClass: "mobile",
+        appVersion: "v1", checkedAt: timestamp("2026-09-29T20:00:00.000Z"),
+        token: "private-fcm-token", jobId: "private-job",
+      } }],
+      reviewDeliveries: [{ data: {
+        eventType: "CHECKLIST_READY_FOR_REVIEW", deliveryStatus: "NO_ACTIVE_DEVICES",
+        targetDeviceCount: 0, acceptedByFcmDevices: 0, failedDevices: 0,
+        createdAt: timestamp("2026-09-29T20:00:00.000Z"), jobId: "private-job",
+      } }],
+      developerTests: [{ data: {
+        testType: "BASIC", targetRegistrationId: "a".repeat(64), status: "FCM_ACCEPTED",
+        providerAccepted: true, tokenInvalidated: false, token: "private-fcm-token",
+      } }],
+    });
+
+    expect(diagnostics.devices[0].registrationId).toBe("a".repeat(64));
+    expect(diagnostics.healthReports[0]).toMatchObject({ notificationPermission: "denied", fcmRegistration: "missing" });
+    expect(diagnostics.reviewDeliveries[0]).toMatchObject({ deliveryStatus: "NO_ACTIVE_DEVICES", targetDeviceCount: 0 });
+    expect(diagnostics.developerTests[0]).toMatchObject({ status: "FCM_ACCEPTED", providerAccepted: true, targetDeviceId: "aaaaaaaa" });
+    expect(JSON.stringify(diagnostics)).not.toMatch(/private-fcm-token|private-job/);
+  });
 });
