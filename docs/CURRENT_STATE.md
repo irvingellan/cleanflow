@@ -170,7 +170,12 @@ free text remains verbatim.
 - Legacy and Assignment-aware Job paths are maintenance debt, not a reason for
   immediate cleanup. Before migration/removal, inventory real records, verify
   backup, identify history/monetary dependencies, and validate real operation
-  for a short period.
+  for a short period. The 2026-09-29
+  [legacy compatibility audit](PILOT_LEGACY_COMPATIBILITY_AUDIT_2026-09-29.md)
+  found all REAL Jobs are schema v2 and recommends no backfill; older Jobs
+  differ by early Checklist Runs, not Job shape. Five past-due REAL Jobs with
+  DRAFT Runs need a per-Job manager decision. Re-check with the read-only
+  `scripts/pilotCompatibilityAudit.mjs` aggregate command.
 - Consider resizing only if captured errors point to size/format; add more
   owner-report photos only after one-photo reliability; revisit capability
   consolidation before adding another link type. Do not treat these as current

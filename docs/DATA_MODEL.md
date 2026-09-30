@@ -259,10 +259,10 @@ path.
 
 ## Scheduling and reschedule history
 
-Frequent schedule changes are a validated workflow. The current bounded
-implementation on the isolated `feature/audited-job-reschedule-2026-09-25`
-branch (not merged or deployed) records each actual change atomically with the
-Job under `jobs/{jobId}/scheduleHistory/{scheduleRevision}`. Missing Job
+Frequent schedule changes are a validated workflow. The bounded
+implementation (deployed 2026-09-26; DEC-029) records each actual change
+atomically with the Job under
+`jobs/{jobId}/scheduleHistory/{scheduleRevision}`. Missing Job
 revisions mean `0`. The history entry contains:
 
 - previous and new scheduled date/time (`null` when the optional time is blank);
@@ -332,11 +332,12 @@ additive migration. New Assignment-based behavior must provide safe fallbacks
 for records that do not yet have Assignment entities.
 
 **Phase 0 compatibility marker:** a versionless or invalid `schemaVersion`
-remains a legacy Job (`0`). Newly manager-created Jobs write
-`schemaVersion: 1` while preserving the current singular-cleaner fields and
-lifecycle. The marker is additive: reading a legacy Job must never backfill it
-or enable planned Assignment, pricing, payout, invoice, QA, or rescheduling
-behavior.
+remains a legacy Job (`0`); `schemaVersion: 1` Jobs keep the singular-cleaner
+fields and lifecycle. Since `832811b` (2026-08-31), newly manager-created Jobs
+write `schemaVersion: 2` (Assignment-aware); every REAL pilot Job inventoried
+on 2026-09-29 is v2. The marker is additive: reading a legacy Job must never
+backfill it or enable planned Assignment, pricing, payout, invoice, QA, or
+rescheduling behavior.
 
 ## Record provenance
 

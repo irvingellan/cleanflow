@@ -97,6 +97,7 @@ function validRecords(overrides = {}) {
       offeredCompensation: 125,
       ...overrides.offer,
     },
+    // Mirrors pre-Fast-Path-V2 production Assignments: Offer-sourced, with no `source` field.
     [assignmentPath]: {
       organizationId,
       jobId: "job-a",
@@ -185,6 +186,13 @@ describe("public cleaner assignment acknowledgment", () => {
     ["expired capability", { offer: { publicOfferExpiresAt: { toMillis: () => now.getTime() } } }, "expired"],
     ["replaced capability", { offer: { publicOfferTokenHash: "old-token-hash" } }, "not-found"],
     ["legacy Job", { job: { schemaVersion: 1 } }, "unavailable"],
+    ["same-Cleaner interested Offer beside a manager-direct Assignment", {
+      assignment: { source: "MANAGER_DIRECT", sourceOfferId: undefined },
+    }, "unavailable"],
+    ["same-Cleaner pending Offer beside a manager-direct Assignment", {
+      offer: { status: "PENDING" },
+      assignment: { source: "MANAGER_DIRECT", sourceOfferId: undefined },
+    }, "unavailable"],
   ])("denies %s without mutation", async (_name, overrides, state) => {
     const { database, records, updateCount } = fakeDatabase(validRecords(overrides));
     const beforeAssignment = { ...records.get(assignmentPath) };
