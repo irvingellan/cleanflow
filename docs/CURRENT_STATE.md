@@ -1,6 +1,6 @@
 # CleanFlow — Current State
 
-- **Updated:** 2026-09-29
+- **Updated:** 2026-09-30
 - **Repository:** `main` remains the release source of truth. Manager Fast
   Path V2 (`5f14d63`) is deployed; the earlier photo-diagnostics and
   Cleaner-language release (`766883b`) remains deployed.
@@ -158,6 +158,15 @@ free text remains verbatim.
 
 ## Unresolved blockers / validation
 
+- Issue #48 manager-access recovery is implemented on
+  `feature/manager-access-pwa-recovery-2026-09-30`, **not deployed**. Entry now
+  requires an explicit server membership read with a seven-second deadline,
+  one automatic retry, and localized retry/offline feedback. Unresolved
+  verification can recover on pageshow, visible resume, or online events;
+  stale attempts cannot change access and realtime revocation is retained.
+  A bounded session-local diagnostic trace excludes account/operational data.
+  The indefinite cache-only listener path is confirmed; the precise installed
+  iOS transport failure and real-device recovery remain unverified.
 - Capture the real photo-upload failure stage and safe error details, then
   observe one real cleaning through saved checklist, required evidence,
   manager review, report use, and completion. Until then, the full pilot flow

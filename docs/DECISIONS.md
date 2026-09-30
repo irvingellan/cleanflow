@@ -630,6 +630,17 @@ cannot retain manager notification access through an earlier device record.
 Public Offer links remain server-mediated bearer capabilities and do not gain
 general authenticated access.
 
+Issue #48 client recovery (implemented 2026-09-30; not deployed) explicitly
+verifies membership with a server-only read before attaching the revocation
+listener. Each attempt has a seven-second deadline and a generation guard;
+one automatic retry is followed by recoverable error/offline UI. Manual retry
+and debounced pageshow/visible/online events can start a fresh verification
+while unverified. Cached snapshots never grant access, temporary failures do
+not imply membership denial, and successful authorization does not restart
+unnecessarily. Startup diagnostics remain a bounded session-local trace:
+existing backend telemetry requires manager authorization and account IDs,
+so it is unsuitable for this pre-authorization, identifier-free evidence.
+
 ---
 
 ## DEC-037 — Checklist capabilities bind to a monotonic Job context revision
