@@ -91,6 +91,14 @@ describe("DevCenter action states", () => {
     expect(screen.getAllByRole("button", { name: "Generate" })).toHaveLength(4);
   });
 
+  it("allows demo mutations in the dedicated sandbox", () => {
+    render(buildDevCenter({ environment: "sandbox" }));
+
+    screen.getAllByRole("button", { name: "Generate" }).forEach((button) => expect(button).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Clear demo data" })).toBeEnabled();
+    expect(screen.getByText("Sandbox target")).toBeVisible();
+  });
+
   it("keeps production demo mutations blocked while allowing authorized read-only previews", () => {
     const onPreviewReminder = vi.fn();
     render(buildDevCenter({ environment: "production", onPreviewReminder }));
