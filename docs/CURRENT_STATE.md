@@ -67,8 +67,8 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
 
 ## Issue #53 — current-device notification self-test
 
-Implemented on `feature/current-device-notification-self-test-2026-10-01`, not
-yet deployed. Any active manager can explicitly tap **Enable & test
+`47bceeb` was reviewed, integrated into main and deployed on 2026-10-01.
+Any active manager can explicitly tap **Enable & test
 notifications** beside the existing notification status. Permission is requested
 from that tap; denied permission instead shows settings guidance. The flow
 refreshes the existing local device UUID's FCM registration before calling
@@ -86,8 +86,12 @@ FCM rejection/acceptance and unknown outcome. Acceptance is not phone-display
 proof. Validation passed 118 focused, 845 unit, 66 security and 35 emulator E2E
 tests, including five narrow mobile UI checks; build, syntax and diff checks
 passed. Real installed-iPhone permission/display remains unvalidated; no real
-test push has been sent during implementation. Release needs only the new
-callable and Hosting, not Rules, indexes, Storage or other Functions.
+test push has been sent during implementation or release verification. Only
+`sendCurrentManagerTestNotification` (ACTIVE) and Hosting were deployed; all 29
+previous Function code hashes are unchanged. Live HTTPS returned 200 and all
+14 deployed file hashes match `47bceeb`; an anonymous callable request returned
+401 without a test attempt. No Rules, indexes, Storage or other Functions were
+deployed. Issue #53 remains open for the explicit real-device test.
 
 ## Manager Fast Path V2 — deployed
 
