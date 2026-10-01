@@ -56,7 +56,9 @@ export function DevCenter({
             ? translate("devCenter.environmentProduction")
             : access.environment === "sandbox"
               ? translate("devCenter.environmentSandbox")
-              : translate("devCenter.environmentEmulator")}
+              : access.environment === "emulator"
+                ? translate("devCenter.environmentEmulator")
+                : translate("devCenter.environmentUnknown")}
         </span>
       </div>
 
