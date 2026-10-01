@@ -904,7 +904,7 @@ still requires real-device observation.
 ## DEC-045 — Operational manager notifications follow committed event claims
 
 Date: 2026-10-01
-Status: Implemented on the Issue #55 branch; not deployed
+Status: Integrated into main and deployed on 2026-10-01; operational real-device validation pending (Issue #55)
 
 The first public Offer `PENDING → INTERESTED` response and first acknowledgment
 of an exact active Offer-backed Assignment create their server-only Job

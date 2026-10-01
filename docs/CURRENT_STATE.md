@@ -95,10 +95,11 @@ previous Function code hashes are unchanged. Live HTTPS returned 200 and all
 401 without a test attempt. No Rules, indexes, Storage or other Functions were
 deployed. Issue #53 remains open for Gabi's explicit real-device test.
 
-## Issue #55 — manager notification reliability (local branch)
+## Issue #55 — manager notification reliability (deployed)
 
-Implemented on `feature/manager-notification-reliability-v1-2026-10-01`,
-**not merged or deployed; operational real-device delivery not validated**.
+`2fbdcdd` and `1d4a8cf` were reviewed, fast-forwarded individually into `main`
+and released on 2026-10-01. **Operational real-device delivery is not yet
+validated**; Issue #55 remains open.
 Public Offer interest and exact Offer-backed Assignment acknowledgment now
 create server-only notification events atomically with their first transition.
 Interest identity includes the existing Offer creation timestamp so a normal
@@ -130,12 +131,22 @@ build, server syntax and diff checks passed. Fixtures used isolated synthetic
 demo emulators, not production or the owner's existing local emulator data.
 Conservative limitations remain: a crash after claim or an uncertain FCM result
 can miss a notification; an outcome-write failure can leave `SENDING`. No
-automatic retry/backfill is introduced. Next is review/merge and a separately
-authorized targeted release, followed by real operational display observation
-on the affected manager's device. Create/ready the new operational-event trigger
-before updating `publicOffer`; existing review/diagnostics/reminder helper
-consumers and Hosting also require their scoped release. No Rules/index change
-is needed.
+automatic retry/backfill is introduced.
+
+The targeted release deployed `notifyManagersOperationalEvent` first and verified
+its ACTIVE revision and intended Firestore trigger before updating `publicOffer`.
+Then `notifyManagersChecklistReadyForReview`, `getManagerNotificationDiagnostics`,
+`sendTomorrowPlanningReminder` and `sendTodayExecutionReminder` were deployed;
+all six Functions are ACTIVE with matching source-archive checksums. All 25
+unrelated Function code hashes remain unchanged. Live reminder configuration is
+still FCM, 19:00/07:00 in `America/Los_Angeles`. Hosting followed only after
+Function verification: HTTPS returned 200, the build marker matched, and all 13
+published file hashes matched the build from `1d4a8cf`. No Rules, indexes,
+Storage, provider/secret changes or live business/test-push actions were performed.
+Next evidence: physical display for first cleaner interest, checklist review
+handoff and exact Assignment confirmation, plus the affected manager's explicit
+current-device self-test. Provider acceptance or this release alone does not
+resolve remote-device delivery.
 
 ## Manager Fast Path V2 — deployed
 
