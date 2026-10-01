@@ -4558,3 +4558,36 @@ button.summary-card {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Sandbox is a separate Firebase project/origin and must never resemble production. */
+.environment-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-bottom: 2px solid currentColor;
+  background: var(--color-status-warning-bg);
+  color: var(--color-warning-text);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.environment-banner strong {
+  font-size: 0.84rem;
+}
+
+.environment-switch {
+  text-decoration: none;
+}
+
+.dev-center__environment--sandbox {
+  color: var(--color-warning-text);
+  background: var(--color-status-warning-bg);
+}
