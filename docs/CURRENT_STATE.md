@@ -1,6 +1,6 @@
 # CleanFlow — Current State
 
-- **Updated:** 2026-09-30
+- **Updated:** 2026-10-01
 - **Repository:** `main` remains the release source of truth. Manager Fast
   Path V2 (`5f14d63`) is deployed; the earlier photo-diagnostics and
   Cleaner-language release (`766883b`) remains deployed.
@@ -251,18 +251,31 @@ during this release.
   consolidation before adding another link type. Do not treat these as current
   implementation tasks.
 
-## Compatibility cleanup V1 (#52) — branch only
+## Compatibility cleanup V1 (#52) — deployed
 
-`feature/compatibility-cleanup-v1-2026-09-30` adds legacy + v2 roster-aware
-Cleaner history (deduplicated, same bounded history windows), batched Dashboard
-roster-name resolution, unarchived REAL scorecard totals with a separate archived
-scheduled count, and archived-Job public Offer denial without record mutation.
-Assignment acknowledgment remains archive-denied. Three collection-scoped
-Cleaner-history composite indexes are defined but not deployed; deploy them and
-wait for readiness before releasing the new history queries. Later release
-surfaces: those indexes, `publicOffer`, and Hosting. No migration/backfill,
-Workspace/visual, photo, notification, or manager-access changes are included.
-This branch is not yet integrated into main or deployed.
+`1d835a9` was reviewed, fast-forwarded into `main`, pushed, and released on
+2026-10-01. It preserves legacy Cleaner history while adding deduplicated v2
+roster queries with the existing history windows, batched Dashboard roster-name
+resolution, unarchived REAL scorecard totals with a separate archived scheduled
+count, and archived-Job public Offer denial without mutation. Assignment
+acknowledgment remains archive-denied.
+
+Only three collection-scoped Cleaner-history indexes, `publicOffer`, and
+Hosting were deployed. All three indexes were verified `READY` at
+08:35:59 UTC **before** either application surface was released. Production
+query-shape probes using a nonexistent Cleaner returned HTTP 200 with no
+records. `publicOffer` is ACTIVE at `publicoffer-00010-luv`; the other 28
+Functions are unchanged. HTTPS, version marker and HTML/JS/CSS/worker hashes
+match `1d835a9`; an unknown synthetic Offer token returned bounded 404.
+
+Validation passed 66 focused and 757 unit tests, 62 security tests plus one
+isolated emulator history-query probe, build, syntax and diff checks. Archived
+Offer GET/POST/acknowledgment denial and non-mutation were tested synthetically.
+Signed-in live Dashboard/Cleaner History UI smoke remains unverified to avoid
+automatic push-registration/diagnostic writes; #52 remains open for that check.
+No Rules, Storage rules, unrelated Functions, operational data,
+migration/backfill, Workspace/visual, photo, notification, or manager-access
+changes were released.
 
 ## Deployment holds
 
@@ -295,7 +308,7 @@ or product success. Pilot Evidence V0 is available as the one-cleaning
 [observation checklist](PILOT_OBSERVATION_CHECKLIST.md) and the local,
 read-only `scripts/pilotScorecard.mjs` aggregate command. Example:
 `node scripts/pilotScorecard.mjs --project <project-id> --from YYYY-MM-DD --to YYYY-MM-DD [--expected-jobs N] [--allow-production-read]`.
-On the #52 branch, active totals include only unarchived Jobs with explicit
+Active totals include only unarchived Jobs with explicit
 `dataProvenance: REAL`; archived REAL Jobs scheduled in the period are counted
 separately. Absent/UNKNOWN and DEMO Jobs are excluded. Timestamp events use UTC
 dates, while `scheduledDate`
