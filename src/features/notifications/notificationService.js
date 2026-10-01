@@ -21,8 +21,11 @@ let fcmRegistrationState = "unknown";
 let fcmRegistrationGeneration = 0;
 let currentDeviceTestInFlight = false;
 const pendingDeviceRegistrationWrites = new Set();
-let currentTestForegroundWorker;
-let currentTestForegroundUnsubscribe;
+let managerForegroundRegistration;
+let managerForegroundUnsubscribe;
+const operationalForegroundEvents = new Set([
+  "CLEANER_INTERESTED", "CHECKLIST_READY_FOR_REVIEW", "ASSIGNMENT_CONFIRMED", "MANAGER_REMINDER",
+]);
 export const currentDeviceRegistrationTimeoutMs = 15_000;
 export const currentDeviceTestTimeoutMs = 30_000;
 
@@ -75,8 +78,12 @@ function browserPermission() {
 
 async function registerCurrentPushDevice({ deadlineAt, assertCurrentUser = () => {} } = {}) {
   const generation = fcmRegistrationGeneration;
+  const userId = getAuth(firebaseApp).currentUser?.uid;
   const assertRegistrationCurrent = () => {
     assertCurrentUser();
+    if (!userId || getAuth(firebaseApp).currentUser?.uid !== userId) {
+      throw Object.assign(new Error("Manager session changed."), { code: "unauthenticated" });
+    }
     if (generation !== fcmRegistrationGeneration) {
       throw Object.assign(new Error("Device registration superseded."), { code: "registration-superseded" });
     }
@@ -115,23 +122,37 @@ async function registerCurrentPushDevice({ deadlineAt, assertCurrentUser = () =>
   await wait(registrationWrite, "Manager device registration");
   assertRegistrationCurrent();
   fcmRegistrationState = "registered";
+  receiveManagerNotifications({ messaging, serviceWorkerRegistration });
   return { messaging, serviceWorkerRegistration };
 }
 
-function receiveCurrentDeviceTest({ messaging, serviceWorkerRegistration }) {
-  currentTestForegroundWorker = serviceWorkerRegistration;
-  if (currentTestForegroundUnsubscribe) return;
-  // Foreground FCM messages do not automatically display. Show only this fixed
-  // test when it actually arrives, never from a provider acceptance response.
-  currentTestForegroundUnsubscribe = onMessage(messaging, (payload) => {
-    if (payload?.data?.eventType !== "CURRENT_DEVICE_TEST" || browserPermission() !== "granted") return;
-    void Promise.resolve().then(() => currentTestForegroundWorker.showNotification("CleanFlow Test", {
-      body: "Notifications are working on this device.",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: "cleanflow-current-device-test",
-      data: { link: "/" },
-    })).catch(() => {});
+function receiveManagerNotifications({ messaging, serviceWorkerRegistration }) {
+  const userId = getAuth(firebaseApp).currentUser?.uid;
+  managerForegroundRegistration = { worker: serviceWorkerRegistration, userId };
+  if (managerForegroundUnsubscribe) return;
+  // Foreground FCM does not automatically display. Receipt, never provider
+  // acceptance or page entry, authorizes this existing worker display call.
+  managerForegroundUnsubscribe = onMessage(messaging, (payload) => {
+    const registration = managerForegroundRegistration;
+    const data = payload?.data;
+    if (!registration?.userId || getAuth(firebaseApp).currentUser?.uid !== registration.userId
+      || browserPermission() !== "granted") return;
+    const isTest = data?.eventType === "CURRENT_DEVICE_TEST";
+    if (!isTest && (!operationalForegroundEvents.has(data?.eventType)
+      || typeof data.title !== "string" || !data.title || data.title.length > 160
+      || typeof data.body !== "string" || !data.body || data.body.length > 500
+      || typeof data.eventId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(data.eventId))) return;
+    void Promise.resolve().then(() => {
+      if (getAuth(firebaseApp).currentUser?.uid !== registration.userId
+        || managerForegroundRegistration !== registration || browserPermission() !== "granted") return;
+      return registration.worker.showNotification(isTest ? "CleanFlow Test" : data.title, {
+        body: isTest ? "Notifications are working on this device." : data.body,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: isTest ? "cleanflow-current-device-test" : data.eventId,
+        data: { link: "/" },
+      });
+    }).catch(() => {});
   });
 }
 
@@ -190,7 +211,6 @@ async function runCurrentDeviceNotificationTest() {
     registration = await registerCurrentPushDevice({
       deadlineAt, assertCurrentUser,
     });
-    receiveCurrentDeviceTest(registration);
   } catch (error) {
     fcmRegistrationState = "error";
     return { state: testFailureState(error) === "unauthorized" ? "unauthorized" : "registration-failed" };
@@ -220,7 +240,6 @@ async function runCurrentDeviceNotificationTest() {
       registration = await registerCurrentPushDevice({
         deadlineAt: Date.now() + currentDeviceRegistrationTimeoutMs, assertCurrentUser,
       });
-      receiveCurrentDeviceTest(registration);
       recovered = true;
       refreshingStaleToken = false;
       result = await sendTest();

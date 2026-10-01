@@ -100,6 +100,73 @@ describe("explicit current-device notification self-test", () => {
       expect.objectContaining({ body: "Notifications are working on this device.", data: { link: "/" } })));
   });
 
+  it.each(["CLEANER_INTERESTED", "CHECKLIST_READY_FOR_REVIEW", "ASSIGNMENT_CONFIRMED", "MANAGER_REMINDER"])(
+    "normal registration displays actual foreground %s receipts without sending a test", async (eventType) => {
+      const api = await service();
+      await api.refreshPushNotifications();
+      expect(firebase.test).not.toHaveBeenCalled();
+      const receive = firebase.onMessage.mock.calls[0]?.[1];
+      expect(receive).toBeTypeOf("function");
+      receive({ data: { eventType, eventId: "synthetic-event", title: "Safe operational title", body: "Safe summary", link: "/" } });
+      await vi.waitFor(() => expect(worker.showNotification).toHaveBeenCalledExactlyOnceWith("Safe operational title",
+        expect.objectContaining({ body: "Safe summary", tag: "synthetic-event", data: { link: "/" } })));
+    },
+  );
+
+  it("subscribes once across registration refreshes and the explicit test", async () => {
+    const api = await service();
+    await api.refreshPushNotifications();
+    await api.refreshPushNotifications();
+    await api.testCurrentDeviceNotifications();
+    expect(firebase.onMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([null, { uid: "another-synthetic-manager" }])(
+    "does not attach a receiver if the account changes during passive registration (%j)", async currentUser => {
+      const api = await service();
+      let finishRegistration;
+      firebase.register.mockImplementationOnce(() => new Promise(resolve => { finishRegistration = resolve; }));
+      const refresh = api.refreshPushNotifications();
+      await vi.waitFor(() => expect(firebase.register).toHaveBeenCalledOnce());
+      firebase.getAuth.mockReturnValue({ currentUser });
+      finishRegistration({ data: { registered: true } });
+      await expect(refresh).resolves.toEqual({ state: "error" });
+      expect(firebase.onMessage).not.toHaveBeenCalled();
+      expect(firebase.test).not.toHaveBeenCalled();
+    },
+  );
+
+  it("drops actual receipts if sign-out/account change occurs before display", async () => {
+    const api = await service();
+    await api.refreshPushNotifications();
+    const receive = firebase.onMessage.mock.calls[0][1];
+    receive({ data: { eventType: "CLEANER_INTERESTED", eventId: "synthetic-event", title: "Safe title", body: "Safe summary" } });
+    firebase.getAuth.mockReturnValue({ currentUser: null });
+    await Promise.resolve();
+    expect(worker.showNotification).not.toHaveBeenCalled();
+    firebase.getAuth.mockReturnValue({ currentUser: { uid: "another-synthetic-manager" } });
+    receive({ data: { eventType: "CURRENT_DEVICE_TEST" } });
+    await Promise.resolve();
+    expect(worker.showNotification).not.toHaveBeenCalled();
+  });
+
+  it("ignores unknown/malformed receipts, fixes the authenticated destination and tolerates display failure", async () => {
+    const api = await service();
+    await api.refreshPushNotifications();
+    const receive = firebase.onMessage.mock.calls[0][1];
+    receive({ data: { eventType: "OTHER_EVENT", eventId: "synthetic-event", title: "Ignored", body: "Ignored" } });
+    receive({ data: { eventType: "CLEANER_INTERESTED", eventId: "https://invalid.example", title: "Ignored", body: "Ignored" } });
+    receive({ data: { eventType: "CLEANER_INTERESTED", eventId: "synthetic-event", title: "Ignored" } });
+    await Promise.resolve();
+    expect(worker.showNotification).not.toHaveBeenCalled();
+    worker.showNotification.mockRejectedValueOnce(new Error("Synthetic OS display rejection"));
+    receive({ data: { eventType: "CLEANER_INTERESTED", eventId: "synthetic-event", title: "Safe title", body: "Safe summary", link: "https://invalid.example" } });
+    await vi.waitFor(() => expect(worker.showNotification).toHaveBeenCalledExactlyOnceWith("Safe title",
+      expect.objectContaining({ data: { link: "/" } })));
+    expect(firebase.test).not.toHaveBeenCalled();
+    await expect(api.refreshPushNotifications()).resolves.toMatchObject({ state: "registered" });
+  });
+
   it("deletes a conclusively stale SDK token, registers the same device and retries exactly once", async () => {
     const api = await service();
     firebase.test.mockResolvedValueOnce(rejected).mockResolvedValueOnce(accepted);

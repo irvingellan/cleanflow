@@ -5,6 +5,8 @@ const firebase = vi.hoisted(() => ({
   getToken: vi.fn(),
   isSupported: vi.fn(),
   httpsCallable: vi.fn(),
+  getAuth: vi.fn(),
+  onMessage: vi.fn(),
 }));
 const oneSignal = vi.hoisted(() => ({
   associateOneSignalUser: vi.fn(),
@@ -25,7 +27,9 @@ vi.mock("firebase/messaging", () => ({
   getMessaging: firebase.getMessaging,
   getToken: firebase.getToken,
   isSupported: firebase.isSupported,
+  onMessage: firebase.onMessage,
 }));
+vi.mock("firebase/auth", () => ({ getAuth: firebase.getAuth }));
 vi.mock("firebase/functions", () => ({ httpsCallable: firebase.httpsCallable }));
 vi.mock("../../services/firebase/client.js", () => ({ firebaseApp: {}, functions: {} }));
 vi.mock("./oneSignalService.js", () => oneSignal);
@@ -52,6 +56,8 @@ describe("notificationService channel coexistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     firebase.isSupported.mockResolvedValue(true);
+    firebase.getAuth.mockReturnValue({ currentUser: { uid: "synthetic-manager" } });
+    firebase.onMessage.mockReturnValue(vi.fn());
     firebase.getToken.mockResolvedValue("fcm-token");
     firebase.httpsCallable.mockReturnValue(vi.fn().mockResolvedValue(undefined));
     oneSignal.associateOneSignalUser.mockResolvedValue({ configured: true, initialized: true, optedIn: false, state: "not-subscribed" });

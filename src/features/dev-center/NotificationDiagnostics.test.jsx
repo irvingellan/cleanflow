@@ -36,6 +36,20 @@ describe("NotificationDiagnostics", () => {
     lab.sendDeveloperTestNotification.mockReset();
   });
 
+  it("identifies the three operational event types in the existing bounded sample", () => {
+    renderDiagnostics({ diagnostics: {
+      devices: [], deliveries: [],
+      reviewDeliveries: ["CHECKLIST_READY_FOR_REVIEW", "CLEANER_INTERESTED", "ASSIGNMENT_CONFIRMED"].map(eventType => ({
+        eventType, deliveryStatus: "FCM_ACCEPTED", targetDeviceCount: 1, acceptedByFcmDevices: 1, failedDevices: 0,
+      })),
+    } });
+    expect(screen.getByText("Operational notification sample")).toBeVisible();
+    expect(screen.getByText("Checklist sent for review")).toBeVisible();
+    expect(screen.getByText("Cleaner interested")).toBeVisible();
+    expect(screen.getByText("Cleaner confirmed assignment")).toBeVisible();
+    expect(lab.sendDeveloperTestNotification).not.toHaveBeenCalled();
+  });
+
   it("renders active and inactive device metadata and aggregate reminder outcomes", () => {
     renderDiagnostics({
       diagnostics: {

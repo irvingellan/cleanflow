@@ -85,13 +85,57 @@ explicit refresh. Results distinguish blocked permission, registration failure,
 FCM rejection/acceptance and unknown outcome. Acceptance is not phone-display
 proof. Validation passed 118 focused, 845 unit, 66 security and 35 emulator E2E
 tests, including five narrow mobile UI checks; build, syntax and diff checks
-passed. Real installed-iPhone permission/display remains unvalidated; no real
-test push has been sent during implementation or release verification. Only
+passed. The owner subsequently confirmed physical test display on a real
+installed iPhone PWA and iPad (Issue #53, 2026-10-01); the apparent duplicate
+iPhone banners were explained by repeated manual taps. Gabi-device validation
+remains pending. No real test push was sent during implementation or release verification. Only
 `sendCurrentManagerTestNotification` (ACTIVE) and Hosting were deployed; all 29
 previous Function code hashes are unchanged. Live HTTPS returned 200 and all
 14 deployed file hashes match `47bceeb`; an anonymous callable request returned
 401 without a test attempt. No Rules, indexes, Storage or other Functions were
-deployed. Issue #53 remains open for the explicit real-device test.
+deployed. Issue #53 remains open for Gabi's explicit real-device test.
+
+## Issue #55 — manager notification reliability (local branch)
+
+Implemented on `feature/manager-notification-reliability-v1-2026-10-01`,
+**not merged or deployed; operational real-device delivery not validated**.
+Public Offer interest and exact Offer-backed Assignment acknowledgment now
+create server-only notification events atomically with their first transition.
+Interest identity includes the existing Offer creation timestamp so a normal
+same-ID re-invite does not collide; timestamp-less legacy receipts remain
+conservative without preventing the business response. Acknowledgment identity
+includes the exact Assignment and source Offer. Neither path sends inside the
+transaction/HTTP response, retrofits direct Assignments, or backfills old events.
+
+Checklist review retains its existing atomic handoff event. Trigger processors
+claim one attempt, bound FCM to 15 seconds, audit partial/unknown results, and
+never retry ambiguous outcomes or switch providers. Five-second, transactional
+invalid-token cleanup compares the sent token/owner/organization to the current
+registration; a refresh is not disabled and cleanup failure does not erase the
+provider result. Scheduled reminder selection/copy/claims remain unchanged;
+only their shared cleanup/recipient helpers are reused. Browser access to
+delivery claims remains default-deny. Notifications contain only localized safe
+copy, bounded Cleaner/Property display names when applicable, and a normal
+authenticated entry link. FCM acceptance is not phone-display proof.
+The existing foreground FCM receipt handler now includes the fixed operational
+event allowlist, not only the self-test. Normal successful registration attaches
+one handler; actual receipts display through the same worker, never from API
+acceptance. Sign-out/account changes suppress stale foreground display, while
+the existing data-only background worker remains unchanged.
+Passive enrollment also checks the originating account before attaching that
+receiver. The existing bounded diagnostic sample identifies all three event
+types; no new query, reporting screen or telemetry collection was added.
+Validation: 295 focused, 934 unit, 78 security/emulator and 35 E2E tests passed;
+build, server syntax and diff checks passed. Fixtures used isolated synthetic
+demo emulators, not production or the owner's existing local emulator data.
+Conservative limitations remain: a crash after claim or an uncertain FCM result
+can miss a notification; an outcome-write failure can leave `SENDING`. No
+automatic retry/backfill is introduced. Next is review/merge and a separately
+authorized targeted release, followed by real operational display observation
+on the affected manager's device. Create/ready the new operational-event trigger
+before updating `publicOffer`; existing review/diagnostics/reminder helper
+consumers and Hosting also require their scoped release. No Rules/index change
+is needed.
 
 ## Manager Fast Path V2 — deployed
 

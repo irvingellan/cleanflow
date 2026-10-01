@@ -203,6 +203,7 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
               <ul className="dev-center__diagnostics-list">
                 {diagnostics.reviewDeliveries.map((delivery, index) => (
                   <li key={`${delivery.createdAt || "review"}-${index}`}>
+                    <span>{translate(`devCenter.operationalEvent${["CHECKLIST_READY_FOR_REVIEW", "CLEANER_INTERESTED", "ASSIGNMENT_CONFIRMED"].includes(delivery.eventType) ? delivery.eventType : "UNKNOWN"}`)}</span>
                     <strong>{translate(`devCenter.reviewStatus${delivery.deliveryStatus}`)}</strong>
                     <span>{translate("devCenter.created")}: {formatTimestamp(delivery.createdAt, language, translate)}</span>
                     <span>{translate("devCenter.attempted")}: {countOrUnknown(delivery.targetDeviceCount, translate)} · {translate("devCenter.fcmAccepted")}: {countOrUnknown(delivery.acceptedByFcmDevices, translate)} · {translate("devCenter.providerFailed")}: {countOrUnknown(delivery.failedDevices, translate)}</span>

@@ -900,3 +900,44 @@ changed-token recovery within the cooldown; UNKNOWN/timeout never does.
 Passive registration cannot overwrite that explicit refresh. Scheduled
 reminders, OneSignal and operational copy remain unchanged. Physical display
 still requires real-device observation.
+
+## DEC-045 — Operational manager notifications follow committed event claims
+
+Date: 2026-10-01
+Status: Implemented on the Issue #55 branch; not deployed
+
+The first public Offer `PENDING → INTERESTED` response and first acknowledgment
+of an exact active Offer-backed Assignment create their server-only Job
+`managerNotificationDeliveries` event in the business transaction. Checklist
+`DRAFT → READY_FOR_REVIEW` retains its existing Run-level event. No FCM call
+occurs inside a retryable transaction or as unawaited post-response work.
+
+Interest identity uses organization, Job, Offer and its existing server-generated
+creation timestamp: normal same-ID re-invites are distinct. Timestamp-less
+legacy Offers use one conservative receipt per stable ID, without rejecting a
+later business response. Acknowledgment identity includes Assignment and source
+Offer; it does not notify for direct Assignments without the supported public
+acknowledgment relationship. Events freeze only the safe Property display name
+to avoid delayed-context copy drift; contacts/access/financial data and bearer
+tokens are excluded. No old business records are backfilled.
+
+Each trigger transactionally claims `PENDING → SENDING` before one FCM attempt.
+FCM has a 15-second deadline; uncertain outcomes and claim/outcome-write gaps are
+not automatically retried, trading possible missed notifications for duplicate
+avoidance. One healthy registration can be accepted even when another is stale.
+Active-manager membership/organization remain authoritative at selection.
+Five-second cleanup disables only a conclusively invalid, still-matching
+token/owner/organization; failure cannot replace a known provider result.
+
+`acceptedByFcmDevices` means provider acceptance, not phone display.
+`failedDevices` counts SDK non-accepted results, including the uncertain
+`unknownDevices` subset; confirmed rejections equal their difference. For a
+whole-batch timeout/unreadable outcome, acceptance/failure counts are unknown
+and `unknownDevices` records the known target count. No provider migration,
+generic event bus, delivery retry system or new schedule policy is introduced.
+
+The existing manager foreground FCM handler accepts only the fixed operational
+event types and the synthetic self-test. Normal successful registration attaches
+it once; only actual receipt may display a notification, with an authenticated
+root destination and stale-account suppression. Background worker behavior is
+unchanged. Neither local handler nor provider acceptance verifies OS display.
