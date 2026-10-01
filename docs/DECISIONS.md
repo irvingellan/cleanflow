@@ -941,3 +941,19 @@ event types and the synthetic self-test. Normal successful registration attaches
 it once; only actual receipt may display a notification, with an authenticated
 root destination and stale-account suppression. Background worker behavior is
 unchanged. Neither local handler nor provider acceptance verifies OS display.
+
+---
+
+## DEC-046 — Production, Sandbox, and Emulator have separate responsibilities
+
+Date: 2026-10-01
+Status: Accepted; Foundation V0 prepared, Sandbox Firebase project activation pending
+
+Production remains Firebase project `clean-flow-prototipo` and contains the real Gabi pilot. It is not a demo/test target. Human feature review uses one dedicated persistent Sandbox Firebase project with a separate Hosting origin, Auth, Firestore, Functions, and Storage where required. Automated and deterministic tests continue to use Firebase Emulator.
+
+The Sandbox is not a long-lived Git branch. `main` remains the release source of truth; temporary feature branches may be published to Sandbox for review and then merged or discarded normally.
+
+CleanFlow must never reinitialize a running production SPA against another Firebase project. Developer environment navigation is normal cross-origin navigation. A Sandbox build must be bound at build time to one explicit non-production Firebase project and must display a permanent test-data marker. Client environment/project and Hosting-origin bindings fail closed when crossed.
+
+Dev Center mutations are permitted only in Firebase Emulator or when Functions are running in the exact server-configured Sandbox project ID. Production and unknown projects fail closed. Developer authorization remains required independently of the environment check. No real production data may be copied to Sandbox.
+
