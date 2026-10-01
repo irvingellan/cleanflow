@@ -53,6 +53,12 @@ describe("session-local manager access diagnostics", () => {
     expect(sessionStorage.getItem(storageKey)).not.toMatch(/sensitive|uid|token/);
   });
 
+  it.each(["outer_deadline_expired", "lifecycle_retry_suppressed"])("retains allowlisted %s evidence without private values", (stage) => {
+    recordManagerAccessDiagnostic(stage, { attempt: 3, durationMs: 18_000, reason: "timeout" });
+    expect(events()[0]).toMatchObject({ stage, attempt: 3, durationMs: 18_000, reason: "timeout" });
+    expect(sessionStorage.getItem(storageKey)).not.toMatch(/private|email|uid|deviceId|jobId|token|error/);
+  });
+
   it("filters unknown stages/reasons and invalid metadata instead of retaining raw strings", () => {
     recordManagerAccessDiagnostic("arbitrary-secret-stage");
     expect(events()).toEqual([]);

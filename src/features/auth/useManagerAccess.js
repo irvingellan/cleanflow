@@ -3,6 +3,7 @@ import { recordManagerAccessDiagnostic } from "./managerAccessDiagnostics.js";
 import { subscribeToManagerAccess, verifyManagerAccess } from "./managerAccessService.js";
 
 export const managerAccessDeadlineMs = 7_000;
+export const managerAccessOuterDeadlineMs = 18_000;
 const lifecycleDebounceMs = 250;
 const lifecycleCooldownMs = 1_000;
 
@@ -25,6 +26,12 @@ export function useManagerAccess(user) {
     let status = "loading";
     let startedAt = 0;
     let lastLifecycleRetryAt = -Infinity;
+    let lastLifecycleSuppressedAt = -Infinity;
+    let sessionStartedAt = 0;
+    let outerDeadlineAt;
+    let outerExpired = false;
+    let verifying = false;
+    let outerWatchdog;
     let watchdog;
     let lifecycleTimer;
     let unsubscribe = () => {};
@@ -36,15 +43,51 @@ export function useManagerAccess(user) {
     };
     const stopAttempt = () => {
       generation += 1;
+      verifying = false;
       clearTimeout(watchdog);
       unsubscribe();
       unsubscribe = () => {};
     };
 
+    function clearOuterDeadline() {
+      clearTimeout(outerWatchdog);
+      outerDeadlineAt = undefined;
+    }
+
+    function expireSession() {
+      if (disposed || outerExpired || outerDeadlineAt === undefined) return;
+      outerExpired = true;
+      clearOuterDeadline();
+      stopAttempt();
+      clearTimeout(lifecycleTimer);
+      lifecycleTimer = undefined;
+      recordManagerAccessDiagnostic("outer_deadline_expired", {
+        attempt, durationMs: Date.now() - sessionStartedAt, reason: "timeout",
+      });
+      update(offline() ? "offline" : "error");
+    }
+
+    function deadlineExceeded() {
+      // Resume/late Promise callbacks can run before a suspended browser's timer.
+      if (outerDeadlineAt !== undefined && Date.now() >= outerDeadlineAt) expireSession();
+      return outerExpired;
+    }
+
+    function ensureOuterDeadline() {
+      if (deadlineExceeded()) return false;
+      if (outerDeadlineAt === undefined) {
+        sessionStartedAt = Date.now();
+        outerDeadlineAt = sessionStartedAt + managerAccessOuterDeadlineMs;
+        outerWatchdog = setTimeout(expireSession, managerAccessOuterDeadlineMs);
+      }
+      return true;
+    }
+
     function startAttempt(reconnecting = false, retriesRemaining = 1) {
       stopAttempt();
       if (disposed) return;
       if (!subject.uid || subject.isAnonymous) {
+        clearOuterDeadline();
         update("denied");
         return;
       }
@@ -52,11 +95,13 @@ export function useManagerAccess(user) {
         update("offline");
         return;
       }
+      if (!ensureOuterDeadline()) return;
 
       const currentGeneration = generation;
-      const isCurrent = () => !disposed && generation === currentGeneration;
+      const isCurrent = () => !disposed && generation === currentGeneration && !deadlineExceeded();
       const currentAttempt = ++attempt;
       startedAt = Date.now();
+      verifying = true;
       update(reconnecting ? "reconnecting" : "loading");
       recordManagerAccessDiagnostic("access_verification_started", { attempt: currentAttempt });
 
@@ -66,6 +111,9 @@ export function useManagerAccess(user) {
           attempt: currentAttempt, durationMs: Date.now() - startedAt, reason,
         });
         stopAttempt();
+        // A listener failure after authorization starts a new bounded recovery,
+        // but lifecycle/automatic retries share any still-unresolved deadline.
+        ensureOuterDeadline();
         if (offline()) update("offline");
         else if (retriesRemaining > 0) startAttempt(true, retriesRemaining - 1);
         else update("error");
@@ -77,11 +125,15 @@ export function useManagerAccess(user) {
       }).then((allowed) => {
         if (!isCurrent()) return;
         clearTimeout(watchdog);
+        verifying = false;
         recordManagerAccessDiagnostic(allowed ? "server_membership_confirmed" : "access_denied", {
           attempt: currentAttempt, durationMs: Date.now() - startedAt,
         });
         update(allowed ? "allowed" : "denied");
-        if (!allowed) return;
+        if (!allowed) {
+          clearOuterDeadline();
+          return;
+        }
         if (reconnecting) recordManagerAccessDiagnostic("recovered_after_retry", { attempt: currentAttempt });
 
         let cacheSeen = false;
@@ -95,20 +147,29 @@ export function useManagerAccess(user) {
             recordManagerAccessDiagnostic("cache_snapshot_seen", { attempt: currentAttempt });
           }
         });
-        if (isCurrent()) unsubscribe = stopListener;
-        else stopListener();
+        if (isCurrent()) {
+          unsubscribe = stopListener;
+          // A synchronous listener failure must not reset the unresolved budget.
+          clearOuterDeadline();
+        } else stopListener();
       }).catch((error) => fail(errorReason(error), "verification_error"));
     }
 
     function lifecycleRetry(reason) {
       if (disposed || status === "allowed" || status === "denied" || lifecycleTimer) return;
       const now = Date.now();
-      if ((status === "loading" || status === "reconnecting") && now - startedAt < lifecycleCooldownMs) return;
+      if (deadlineExceeded() || verifying) {
+        if (now - lastLifecycleSuppressedAt >= lifecycleCooldownMs) {
+          lastLifecycleSuppressedAt = now;
+          recordManagerAccessDiagnostic("lifecycle_retry_suppressed", { attempt, reason });
+        }
+        return;
+      }
       const delay = Math.max(lifecycleDebounceMs,
         startedAt + lifecycleCooldownMs - now, lastLifecycleRetryAt + lifecycleCooldownMs - now);
       lifecycleTimer = setTimeout(() => {
         lifecycleTimer = undefined;
-        if (disposed || status === "allowed" || status === "denied") return;
+        if (disposed || status === "allowed" || status === "denied" || verifying || deadlineExceeded()) return;
         const now = Date.now();
         lastLifecycleRetryAt = now;
         recordManagerAccessDiagnostic("lifecycle_retry", { attempt, reason });
@@ -123,6 +184,8 @@ export function useManagerAccess(user) {
     retryRef.current = () => {
       clearTimeout(lifecycleTimer);
       lifecycleTimer = undefined;
+      clearOuterDeadline();
+      outerExpired = false;
       recordManagerAccessDiagnostic("manual_retry", { attempt, reason: "manual" });
       startAttempt(true);
     };
@@ -136,6 +199,7 @@ export function useManagerAccess(user) {
       disposed = true;
       retryRef.current = () => {};
       stopAttempt();
+      clearOuterDeadline();
       clearTimeout(lifecycleTimer);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);

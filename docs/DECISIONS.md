@@ -630,7 +630,7 @@ cannot retain manager notification access through an earlier device record.
 Public Offer links remain server-mediated bearer capabilities and do not gain
 general authenticated access.
 
-Issue #48 client recovery (Hosting deployed 2026-09-30; real-device validation pending) explicitly
+Issue #48 client recovery (Hosting deployed 2026-09-30; recurrence observed 2026-10-01) explicitly
 verifies membership with a server-only read before attaching the revocation
 listener. Each attempt has a seven-second deadline and a generation guard;
 one automatic retry is followed by recoverable error/offline UI. Manual retry
@@ -640,6 +640,14 @@ not imply membership denial, and successful authorization does not restart
 unnecessarily. Startup diagnostics remain a bounded session-local trace:
 existing backend telemetry requires manager authorization and account IDs,
 so it is unsuitable for this pre-authorization, identifier-free evidence.
+
+The recurrence hotfix adds an 18-second absolute unresolved-session deadline
+across automatic/lifecycle retries. Lifecycle signals cannot replace an active
+read or renew that deadline; expiry locks background recovery until manual
+Try again starts a fresh window. Success closes the window only after the
+revocation listener attaches without failure. Late callbacks are ignored and
+overdue callbacks/resume enforce the wall-clock bound even if timers were
+suspended. This hotfix is implemented on its branch, not yet deployed.
 
 ---
 

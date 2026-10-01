@@ -7,6 +7,7 @@ const stages = new Set([
   "server_membership_confirmed", "access_denied", "verification_timeout",
   "verification_error", "listener_error", "lifecycle_retry", "manual_retry",
   "recovered_after_retry",
+  "outer_deadline_expired", "lifecycle_retry_suppressed",
 ]);
 const reasons = new Set([
   "timeout", "offline", "unavailable", "permission-denied", "unauthenticated",

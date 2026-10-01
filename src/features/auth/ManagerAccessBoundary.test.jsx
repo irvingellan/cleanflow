@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { ManagerAccessBoundary } from "./ManagerAccessBoundary.jsx";
 import { subscribeToManagerAccess, verifyManagerAccess } from "./managerAccessService.js";
-import { managerAccessDeadlineMs } from "./useManagerAccess.js";
+import { recordManagerAccessDiagnostic } from "./managerAccessDiagnostics.js";
+import { managerAccessDeadlineMs, managerAccessOuterDeadlineMs } from "./useManagerAccess.js";
 
 vi.mock("./managerAccessService.js", () => ({
   subscribeToManagerAccess: vi.fn(), verifyManagerAccess: vi.fn(),
@@ -93,6 +94,112 @@ describe("bounded manager application authorization gate", () => {
     expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
   });
 
+  it.each(["pageshow", "visibilitychange", "online", "mixed"])(
+    "continuous %s lifecycle churn cannot postpone recovery controls indefinitely", async (kind) => {
+      render(gate());
+      await flush();
+      for (let elapsed = 0; elapsed < managerAccessDeadlineMs * 4; elapsed += 1_500) {
+        await advance(1_500);
+        const events = kind === "mixed" ? ["pageshow", "visibilitychange", "online"] : [kind];
+        for (const event of events) {
+          fireEvent(event === "visibilitychange" ? document : window, new Event(event));
+        }
+      }
+      await advance(250);
+      expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
+      expect(recordManagerAccessDiagnostic).toHaveBeenCalledWith("outer_deadline_expired", {
+        attempt: expect.any(Number), durationMs: managerAccessOuterDeadlineMs, reason: "timeout",
+      });
+      const settledReads = verifyManagerAccess.mock.calls.length;
+      for (let index = 0; index < 6; index++) {
+        fireEvent(window, new Event("online"));
+        await advance(1_500);
+      }
+      expect(verifyManagerAccess).toHaveBeenCalledTimes(settledReads);
+    },
+  );
+
+  it("manual retry after outer expiry owns a fresh fixed window and ignores the previous read", async () => {
+    const oldRead = deferred();
+    verifyManagerAccess.mockReturnValueOnce(oldRead.promise).mockImplementation(() => new Promise(() => {}));
+    render(gate());
+    await advance(managerAccessOuterDeadlineMs);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await flush();
+    expect(screen.getByRole("status")).toHaveTextContent("Reconnecting");
+    await act(async () => oldRead.resolve(true));
+    expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Reconnecting");
+    await advance(managerAccessOuterDeadlineMs - 1);
+    expect(recordManagerAccessDiagnostic.mock.calls.filter(([stage]) => stage === "outer_deadline_expired")).toHaveLength(1);
+    await advance(1);
+    expect(recordManagerAccessDiagnostic.mock.calls.filter(([stage]) => stage === "outer_deadline_expired")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    verifyManagerAccess.mockResolvedValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await flush();
+    expect(screen.getByText("Operational UI")).toBeVisible();
+  });
+
+  it.each(["lifecycle", "promise"])("wall-clock expiry is enforced before overdue %s callbacks even when timers were suspended", async (callback) => {
+    const read = deferred();
+    verifyManagerAccess.mockReturnValue(read.promise);
+    render(gate());
+    await flush();
+    vi.setSystemTime(Date.now() + managerAccessOuterDeadlineMs + 1);
+    if (callback === "lifecycle") fireEvent(window, new Event("pageshow"));
+    else await act(async () => read.resolve(true));
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
+    expect(subscribeToManagerAccess).not.toHaveBeenCalled();
+  });
+
+  it("continuous immediate read failures cannot renew the outer window", async () => {
+    verifyManagerAccess.mockRejectedValue({ code: "unavailable" });
+    render(gate());
+    await flush();
+    for (let index = 0; index < 20; index++) {
+      fireEvent(window, new Event("pageshow"));
+      await advance(1_500);
+    }
+    expect(recordManagerAccessDiagnostic).toHaveBeenCalledWith("outer_deadline_expired", {
+      attempt: expect.any(Number), durationMs: managerAccessOuterDeadlineMs, reason: "timeout",
+    });
+    const settledReads = verifyManagerAccess.mock.calls.length;
+    verifyManagerAccess.mockResolvedValue(true);
+    fireEvent(window, new Event("online"));
+    await advance(2_000);
+    expect(verifyManagerAccess).toHaveBeenCalledTimes(settledReads);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
+  });
+
+  it("synchronous revocation-listener failures also share the unresolved outer budget", async () => {
+    verifyManagerAccess.mockResolvedValue(true);
+    subscribeToManagerAccess.mockImplementation((_subject, _onAccess, onError) => {
+      onError({ code: "unavailable" });
+      return vi.fn();
+    });
+    render(gate());
+    await flush();
+    for (let index = 0; index < 20; index++) {
+      fireEvent(window, new Event("pageshow"));
+      await advance(1_500);
+    }
+    expect(recordManagerAccessDiagnostic).toHaveBeenCalledWith("outer_deadline_expired", {
+      attempt: expect.any(Number), durationMs: managerAccessOuterDeadlineMs, reason: "timeout",
+    });
+    const settledReads = verifyManagerAccess.mock.calls.length;
+    fireEvent(window, new Event("online"));
+    await advance(2_000);
+    expect(verifyManagerAccess).toHaveBeenCalledTimes(settledReads);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
+  });
+
   it("manual retry starts a fresh attempt and can recover without reloading", async () => {
     render(gate());
     await advance(managerAccessDeadlineMs * 2);
@@ -134,11 +241,12 @@ describe("bounded manager application authorization gate", () => {
   });
 
   it.each(["online", "pageshow", "visibilitychange"])("%s starts fresh verification of unresolved PWA state", async (event) => {
+    verifyManagerAccess.mockRejectedValue({ code: "unavailable" });
     render(gate());
-    await advance(managerAccessDeadlineMs * 2);
+    await flush();
     verifyManagerAccess.mockResolvedValue(true);
     fireEvent(event === "visibilitychange" ? document : window, new Event(event));
-    await advance(250);
+    await advance(1_000);
     expect(verifyManagerAccess).toHaveBeenCalledTimes(3);
     expect(screen.getByText("Operational UI")).toBeVisible();
   });
@@ -152,14 +260,14 @@ describe("bounded manager application authorization gate", () => {
       fireEvent(document, new Event("visibilitychange"));
     }
     await advance(250);
-    expect(verifyManagerAccess).toHaveBeenCalledTimes(2);
+    expect(verifyManagerAccess).toHaveBeenCalledOnce();
     fireEvent(window, new Event("pageshow"));
     await advance(250);
-    expect(verifyManagerAccess).toHaveBeenCalledTimes(2);
+    expect(verifyManagerAccess).toHaveBeenCalledOnce();
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
     fireEvent(document, new Event("visibilitychange"));
     await advance(1_001);
-    expect(verifyManagerAccess).toHaveBeenCalledTimes(2);
+    expect(verifyManagerAccess).toHaveBeenCalledOnce();
   });
 
   it("does not lose an online recovery event arriving just after immediate failures", async () => {
@@ -218,6 +326,33 @@ describe("bounded manager application authorization gate", () => {
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
   });
 
+  it("a post-authorization listener failure gets a bounded recovery and old callbacks cannot affect manual recovery", async () => {
+    let oldAccess;
+    let oldError;
+    const oldStop = vi.fn();
+    verifyManagerAccess.mockResolvedValueOnce(true).mockImplementation(() => new Promise(() => {}));
+    subscribeToManagerAccess.mockImplementationOnce((_user, onAccess, onError) => {
+      oldAccess = onAccess;
+      oldError = onError;
+      return oldStop;
+    }).mockReturnValue(vi.fn());
+    render(gate());
+    await flush();
+    await advance(managerAccessOuterDeadlineMs * 2);
+    expect(screen.getByText("Operational UI")).toBeVisible();
+    act(() => oldError({ code: "unavailable" }));
+    await advance(managerAccessOuterDeadlineMs);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(oldStop).toHaveBeenCalledOnce();
+    act(() => { oldAccess(true); oldError({ code: "unavailable" }); });
+    expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
+    verifyManagerAccess.mockResolvedValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await flush();
+    act(() => { oldAccess(false); oldError({ code: "permission-denied" }); });
+    expect(screen.getByText("Operational UI")).toBeVisible();
+  });
+
   it("keeps offline distinct from denial and reconnects when online", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     const signOut = vi.fn();
@@ -228,6 +363,7 @@ describe("bounded manager application authorization gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect(signOut).toHaveBeenCalledOnce();
+    await advance(managerAccessOuterDeadlineMs * 2);
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
     verifyManagerAccess.mockResolvedValue(true);
     fireEvent(window, new Event("online"));
