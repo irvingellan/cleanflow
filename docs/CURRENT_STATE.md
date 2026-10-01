@@ -379,6 +379,33 @@ No Rules, Storage rules, unrelated Functions, operational data,
 migration/backfill, Workspace/visual, photo, notification, or manager-access
 changes were released.
 
+## Weekly Close V0 (#56) — branch-only preview
+
+**IMPLEMENTED / TESTED / NOT DEPLOYED / NOT GABI-VALIDATED** on
+`feature/weekly-close-v0-2026-10-01`; main remains the release source.
+`/weekly-close-preview` is behind the existing active-manager gate. It selects
+a Monday–Sunday week by `scheduledDate` (previous Los Angeles calendar week
+initially), includes only completed, non-archived REAL Jobs, and groups saved
+Job charge/payout quotes by Client with expandable services and attention.
+
+Financial Job/payout reads require server responses, not offline cache; no
+worklist/recent-payment cap silently truncates totals. Missing/invalid prices
+produce Unknown plus labelled known subtotals; Property defaults are never
+substituted. Existing legacy eligibility identifies outstanding quotes.
+Reciprocal single-service payout evidence can prove paid; v2 payment state,
+grouped-payment allocation and conflicting/edited evidence stay Unknown.
+Margin is operational, not net profit or cash received. Invoice/client-payment
+state and automated-client-payment distinctions are not tracked or invented.
+No invoice, payment, payout, lifecycle or operational writes are added.
+
+Synthetic tests and the `weekly-close` scenario cover reconciliation, read-only
+behavior and EN/PT/ES desktop/tablet/phone layouts: 986 unit, 78 security and
+35 existing E2E checks passed; Weekly Close passed FAST, three FAST repeats and
+headed mobile WATCH with a 15-combination visual matrix and no page overflow.
+Owner review/comparison with
+one real manual weekly close is required before release; no Notion replacement
+or real-user validation is claimed.
+
 ## Deployment holds
 
 - **Required cleaner count (`b4b35bf`):** implemented/tested and preserved on

@@ -1,7 +1,9 @@
 import {
   collection,
   doc,
+  documentId,
   getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -77,6 +79,29 @@ export async function getRecentPayouts() {
   );
 
   return snapshot.docs.map(jobFromSnapshot);
+}
+
+/** Complete evidence for the selected Jobs, rather than the directory's latest 20 payments. */
+export async function getPayoutEvidenceForJobs(jobs) {
+  const jobIds = [...new Set(jobs.map((job) => job.id).filter(Boolean))];
+  const payoutIds = [...new Set(jobs.map((job) => job.payoutId).filter((id) =>
+    typeof id === "string" && id.trim(),
+  ))];
+  const reads = [];
+  for (let index = 0; index < jobIds.length; index += 30) {
+    reads.push(getDocsFromServer(query(payoutsCollection(),
+      where("jobIds", "array-contains-any", jobIds.slice(index, index + 30)),
+    )));
+  }
+  for (let index = 0; index < payoutIds.length; index += 30) {
+    reads.push(getDocsFromServer(query(payoutsCollection(),
+      where(documentId(), "in", payoutIds.slice(index, index + 30)),
+    )));
+  }
+  const snapshots = await Promise.all(reads);
+  // Keep repeated snapshots: the pure model deduplicates identical proof and
+  // rejects contradictory versions instead of silently choosing the last read.
+  return snapshots.flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot));
 }
 
 export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {

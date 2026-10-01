@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -58,6 +59,18 @@ export async function getJobById(jobId) {
     throw error;
   }
   return jobFromSnapshot(snapshot);
+}
+
+/** Service-week reconciliation uses scheduledDate, not the worklist's completedAt window. */
+export async function getServiceWeekJobs({ start, end }) {
+  const snapshot = await getDocsFromServer(query(
+    jobsCollection(),
+    where("scheduledDate", ">=", start),
+    where("scheduledDate", "<=", end),
+    orderBy("scheduledDate", "asc"),
+  ));
+  // No page cap: a financial summary must never silently total only the first page.
+  return snapshot.docs.map(jobFromSnapshot);
 }
 
 function currentLocalDate(date = new Date()) {
