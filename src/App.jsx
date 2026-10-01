@@ -78,6 +78,7 @@ import {
   PropertyForm,
 } from "./features/properties/PropertyForm.jsx";
 import { usePropertiesController } from "./features/properties/usePropertiesController.js";
+import { cleanflowEnvironment, environmentNavigationTarget } from "./environment.js";
 
 const content = {
   productName: "CleanFlow",
@@ -413,6 +414,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
   const [showExcludedRecords, setShowExcludedRecords] = useState(false);
   const devCenterController = useDevCenterController({ view });
+  const environmentTarget = environmentNavigationTarget(cleanflowEnvironment);
   const canManageExcludedRecords = devCenterController.access.authorized;
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
 
@@ -912,6 +914,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <NotificationControl userId={authUser.uid} />
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
+                {devCenterController.access.authorized && environmentTarget && (
+                  <a className="button button--small environment-switch" href={environmentTarget.href}>
+                    {environmentTarget.label}
+                  </a>
+                )}
                 <button
                   className="header-sign-out"
                   type="button"
