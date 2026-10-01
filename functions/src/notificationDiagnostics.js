@@ -71,7 +71,8 @@ export function buildNotificationDiagnostics({
       checkedAt: timestampToIso(data.checkedAt),
     })),
     reviewDeliveries: reviewDeliveries.map(({ data }) => ({
-      eventType: data.eventType === "CHECKLIST_READY_FOR_REVIEW" ? data.eventType : "UNKNOWN",
+      eventType: ["CHECKLIST_READY_FOR_REVIEW", "CLEANER_INTERESTED", "ASSIGNMENT_CONFIRMED"].includes(data.eventType)
+        ? data.eventType : "UNKNOWN",
       deliveryStatus: ["PENDING", "SENDING", "NO_ACTIVE_DEVICES", "FCM_ACCEPTED", "PARTIAL", "FAILED", "UNKNOWN"]
         .includes(data.deliveryStatus) ? data.deliveryStatus : "UNKNOWN",
       createdAt: timestampToIso(data.createdAt),

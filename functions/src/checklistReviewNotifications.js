@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
+import {
+  boundedManagerFcmSend, deactivateInvalidManagerDevices,
+  managerFcmFailureCode, normalizeManagerFcmResult,
+} from "./managerFcmDelivery.js";
 
 export const checklistReviewNotificationCollection = "managerNotificationDeliveries";
 export const checklistReviewNotificationType = "CHECKLIST_READY_FOR_REVIEW";
@@ -20,8 +24,7 @@ const notificationCopy = {
 };
 
 function failureCode(error) {
-  const code = typeof error?.code === "string" ? error.code : "unknown";
-  return /^[A-Za-z0-9/_-]{1,80}$/.test(code) ? code : "unknown";
+  return managerFcmFailureCode(error);
 }
 
 function deviceData(device) {
@@ -62,10 +65,12 @@ export function checklistReviewFcmMessages(devices, eventId) {
   });
 }
 
-async function claimChecklistReviewNotification(database, deliveryReference) {
+async function claimChecklistReviewNotification(database, deliveryReference, eventId) {
   return database.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(deliveryReference);
-    if (!snapshot.exists || snapshot.data()?.deliveryStatus !== "PENDING") return false;
+    const data = snapshot.data();
+    if (!snapshot.exists || data?.deliveryStatus !== "PENDING" || data.eventId !== eventId
+      || data.eventType !== checklistReviewNotificationType || data.deliveryProvider !== "fcm") return false;
 
     transaction.update(deliveryReference, {
       deliveryStatus: "SENDING",
@@ -110,6 +115,7 @@ export async function processChecklistReviewNotification({
 }) {
   const expectedEventId = checklistReviewNotificationEventId(organizationId, jobId, runId);
   if (eventId !== expectedEventId
+    || deliveryReference.path !== `organizations/${organizationId}/jobs/${jobId}/checklistRuns/${runId}/${checklistReviewNotificationCollection}/${eventId}`
     || deliveryData?.eventId !== eventId
     || deliveryData?.eventType !== checklistReviewNotificationType
     || deliveryData?.deliveryProvider !== "fcm") {
@@ -117,7 +123,7 @@ export async function processChecklistReviewNotification({
     return { skipped: "invalid-event" };
   }
 
-  const claimed = await claimChecklistReviewNotification(database, deliveryReference);
+  const claimed = await claimChecklistReviewNotification(database, deliveryReference, eventId);
   if (!claimed) return { skipped: "already-claimed" };
 
   let targetDeviceCount = null;
@@ -131,6 +137,7 @@ export async function processChecklistReviewNotification({
         targetDeviceCount: 0,
         acceptedByFcmDevices: 0,
         failedDevices: 0,
+        unknownDevices: 0,
       };
       await recordOutcome(deliveryReference, update, eventId, logger);
       logger?.info?.("Checklist review notification had no eligible manager devices.", { eventId });
@@ -138,27 +145,19 @@ export async function processChecklistReviewNotification({
     }
 
     const messages = checklistReviewFcmMessages(devices, eventId);
-    const response = await sendFcm(messages);
-    const acceptedByFcmDevices = response?.successCount;
-    const failedDevices = response?.failureCount;
-    if (!Number.isInteger(acceptedByFcmDevices)
-      || !Number.isInteger(failedDevices)
-      || acceptedByFcmDevices < 0
-      || failedDevices < 0
-      || acceptedByFcmDevices + failedDevices !== devices.length) {
-      throw new Error("FCM returned an unreadable batch result.");
-    }
-
-    const deliveryStatus = acceptedByFcmDevices === devices.length
-      ? "FCM_ACCEPTED"
-      : acceptedByFcmDevices > 0 ? "PARTIAL" : "FAILED";
+    const response = await boundedManagerFcmSend(sendFcm, messages);
+    const { deliveryStatus, acceptedByFcmDevices, failedDevices, unknownDevices } =
+      normalizeManagerFcmResult(response, devices.length);
+    const cleanup = await deactivateInvalidManagerDevices(database, devices, response);
     const update = {
       deliveryStatus,
       targetDeviceCount,
       acceptedByFcmDevices,
       failedDevices,
+      unknownDevices,
+      ...cleanup,
       ...(acceptedByFcmDevices > 0 ? { acceptedAt: FieldValue.serverTimestamp() } : {}),
-      ...(failedDevices > 0 ? { failureSummary: "Some FCM sends were not accepted." } : {}),
+      ...(failedDevices > 0 ? { failureSummary: "Some FCM sends were not confirmed accepted." } : {}),
     };
     await recordOutcome(deliveryReference, update, eventId, logger);
     logger?.info?.("Checklist review notification attempt completed.", {
@@ -175,6 +174,7 @@ export async function processChecklistReviewNotification({
       targetDeviceCount,
       acceptedByFcmDevices: null,
       failedDevices: null,
+      unknownDevices: targetDeviceCount,
       failureCode: failureCode(error),
       failureSummary: "FCM did not confirm whether the notification was accepted.",
     };

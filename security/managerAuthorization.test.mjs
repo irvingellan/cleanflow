@@ -43,6 +43,12 @@ const {
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
 const { sendCurrentManagerTestNotification: dispatchCurrentDeviceTest } = await import("../functions/src/currentDeviceNotificationTest.js");
+const { processChecklistReviewNotification } = await import("../functions/src/checklistReviewNotifications.js");
+const { loadEligibleManagerPushDevices } = await import("../functions/src/managerFcmDelivery.js");
+const {
+  managerOperationalNotificationTypes,
+  processManagerOperationalNotification,
+} = await import("../functions/src/managerOperationalNotifications.js");
 const { createHash } = await import("node:crypto");
 const admin = getFirestore();
 // Direct service tests must use the Functions dependency's Admin SDK, matching
@@ -743,6 +749,7 @@ test("server metadata, unknown subcollections and future checklist namespaces ar
     `${root}/jobs/job/checklistRuns/run/checklistCapabilities/active`,
     `${root}/jobs/job/checklistRuns/run/drafts/current`,
     `${root}/jobs/job/checklistRuns/run/draftMutations/mutation-identifier-1`,
+    `${root}/jobs/job/managerNotificationDeliveries/forged`,
     `${root}/jobs/job/checklistRuns/run/deliveries/delivery`, `${root}/jobs/job/unknown/record`,
   ]) {
     await assertFails(db.doc(path).get());
@@ -751,6 +758,26 @@ test("server metadata, unknown subcollections and future checklist namespaces ar
   await assertFails(account("manager").storage()
     .ref(`${root}/jobs/job/checklistRuns/run/photos/photo`)
     .put(new Uint8Array([1]), { contentType: "image/jpeg" }));
+});
+
+test("operational manager notification delivery claims are server-only for every browser identity", async () => {
+  const deliveryPath = `${root}/jobs/job/managerNotificationDeliveries/synthetic-interest-event`;
+  await admin.doc(deliveryPath).set({ status: "PENDING", eventType: "CLEANER_INTEREST" });
+  for (const context of [
+    account("manager"), account("cleaner"), account("inactive"), account("other-manager"),
+    account("anonymous-member", true), environment.unauthenticatedContext(),
+  ]) {
+    const db = context.firestore();
+    const reference = db.doc(deliveryPath);
+    await assertFails(reference.get());
+    await assertFails(reference.parent.get());
+    await assertFails(reference.parent.doc("forged-event").set({ status: "PENDING" }));
+    await assertFails(reference.update({ status: "FCM_ACCEPTED" }));
+    await assertFails(reference.delete());
+  }
+  assert.deepEqual((await admin.doc(deliveryPath).get()).data(), {
+    status: "PENDING", eventType: "CLEANER_INTEREST",
+  });
 });
 
 test("payout proof size/type/path limits survive; current authorized upload/read still works", async () => {
@@ -1502,6 +1529,7 @@ test("capability-authorized cleaner can hand off one saved DRAFT for manager rev
   assert.equal(managerRun.run.draft.progress.inventory.answered, managerRun.run.inventoryItemCount);
   assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), beforeJob);
   assert.deepEqual((await admin.doc(`${root}/${assignmentPath}`).get()).data(), beforeAssignment);
+  assert.equal((await admin.collection(`${runPath}/managerNotificationDeliveries`).get()).size, 1);
   await assertFails(account("manager").firestore().doc(runPath).update({ status: "DRAFT" }));
 });
 
@@ -1540,6 +1568,7 @@ test("review handoff rejects unanswered frozen items and missing evidence withou
   assert.equal(draft.checklistAnswers["bed-remake"], "DONE");
   assert.equal(draft.checklistAnswers["outdoor-pool"], "NOT_APPLICABLE");
   assert.equal(draft.generalNotes, "Saved before validation.");
+  assert.equal((await admin.collection(`${root}/jobs/job/checklistRuns/initial/managerNotificationDeliveries`).get()).size, 0);
 });
 
 test("a saved complete checklist without its frozen photo stays editable; adding evidence permits the same handoff", async () => {
@@ -1624,6 +1653,7 @@ test("one concurrent review handoff wins and its identical peer observes the sam
   assert.equal([one, two].filter((result) => result.code === 200).length, 2);
   assert.equal([one.body.duplicate, two.body.duplicate].filter(Boolean).length, 1);
   assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data().status, "READY_FOR_REVIEW");
+  assert.equal((await admin.collection(`${root}/jobs/job/checklistRuns/initial/managerNotificationDeliveries`).get()).size, 1);
 });
 
 test("revoked or stale capability cannot replay a saved draft receipt", async () => {
@@ -2009,4 +2039,347 @@ test("public Offer expiry and removed/replaced token lookup remain denied withou
     assert.deepEqual((await offer.get()).data(), before);
   }
   assert.deepEqual((await job.get()).data(), originalJob);
+});
+
+async function syntheticOperationalOffer({ jobId, tokenByte, organizationId = org, assigned = false }) {
+  const token = Buffer.alloc(32, tokenByte).toString("base64url");
+  const job = admin.doc(`organizations/${organizationId}/jobs/${jobId}`);
+  const offer = job.collection("offers").doc("offer-a");
+  const assignment = job.collection("assignments").doc("assignment-a");
+  await job.set({
+    organizationId, schemaVersion: 2,
+    operationalStatus: assigned ? "ASSIGNED" : "OFFERED",
+    assignedCleanerIds: assigned ? ["cleaner-a"] : [],
+    propertyName: "Synthetic Property", scheduledDate: "2026-10-01",
+    clientPrice: 500, cleanerPayout: 250, notes: "Synthetic private manager content",
+  });
+  await offer.set({
+    organizationId, cleanerId: "cleaner-a", cleanerName: "Synthetic Cleaner",
+    status: assigned ? "INTERESTED" : "PENDING",
+    publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+    publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+  });
+  if (assigned) await assignment.set({
+    organizationId, jobId, cleanerId: "cleaner-a", cleanerNameSnapshot: "Synthetic Cleaner",
+    sourceOfferId: offer.id, isActive: true, executionStatus: "ASSIGNED",
+  });
+  return { token, job, offer, assignment };
+}
+
+async function operationalOfferHttp(body) {
+  const response = {
+    code: 200, set() { return this; },
+    status(code) { this.code = code; return this; },
+    json(data) { this.body = data; return this; },
+  };
+  await publicOffer({ method: "POST", body }, response);
+  return response;
+}
+
+test("operational notifications: first/repeated/concurrent public interest creates one durable event across five races", async () => {
+  for (let repetition = 0; repetition < 5; repetition += 1) {
+    const fixture = await syntheticOperationalOffer({ jobId: `interest-race-${repetition}`, tokenByte: 30 + repetition });
+    const beforeJob = (await fixture.job.get()).data();
+    const body = { token: fixture.token, status: "INTERESTED" };
+    const concurrent = await Promise.all([operationalOfferHttp(body), operationalOfferHttp(body)]);
+    assert.deepEqual(concurrent.map((result) => result.code), [200, 200]);
+    assert.deepEqual(concurrent.map((result) => result.body.status), ["INTERESTED", "INTERESTED"]);
+    const respondedAt = (await fixture.offer.get()).data().respondedAt.toMillis();
+    assert.equal((await operationalOfferHttp(body)).code, 200);
+    assert.equal((await fixture.offer.get()).data().respondedAt.toMillis(), respondedAt);
+    const events = await fixture.job.collection("managerNotificationDeliveries").get();
+    assert.equal(events.size, 1);
+    assert.equal(events.docs[0].data().eventType, managerOperationalNotificationTypes.interest);
+    assert.equal((await fixture.job.collection("assignments").get()).size, 0);
+    assert.deepEqual((await fixture.job.get()).data(), beforeJob);
+  }
+});
+
+test("operational notifications: reinviting the same Offer uses its fresh generation while legacy resets remain usable", async () => {
+  const fixture = await syntheticOperationalOffer({ jobId: "reinvited-offer", tokenByte: 80 });
+  await fixture.offer.update({ createdAt: Timestamp.fromMillis(1000) });
+  assert.equal((await operationalOfferHttp({ token: fixture.token, status: "INTERESTED" })).code, 200);
+  const firstEvents = await fixture.job.collection("managerNotificationDeliveries").get();
+  assert.equal(firstEvents.size, 1);
+
+  const replacement = Buffer.alloc(32, 81).toString("base64url");
+  await fixture.offer.update({
+    status: "PENDING", createdAt: Timestamp.fromMillis(2000), respondedAt: FieldValue.delete(),
+    publicOfferTokenHash: createHash("sha256").update(replacement).digest("hex"),
+  });
+  const response = { token: replacement, status: "INTERESTED" };
+  assert.equal((await operationalOfferHttp(response)).code, 200);
+  assert.equal((await operationalOfferHttp(response)).code, 200);
+  assert.equal((await fixture.offer.get()).data().status, "INTERESTED");
+  const reinvitedEvents = await fixture.job.collection("managerNotificationDeliveries").get();
+  assert.equal(reinvitedEvents.size, 2);
+  assert.equal(new Set(reinvitedEvents.docs.map((event) => event.data().offerGeneration)).size, 2);
+  assert.ok(reinvitedEvents.docs.some((event) => event.id === firstEvents.docs[0].id));
+
+  const legacy = await readyOperationalEvent({ jobId: "reinvited-legacy-offer", tokenByte: 82 });
+  const legacyReplacement = Buffer.alloc(32, 83).toString("base64url");
+  await legacy.offer.update({
+    status: "PENDING", respondedAt: FieldValue.delete(), createdAt: FieldValue.delete(),
+    publicOfferTokenHash: createHash("sha256").update(legacyReplacement).digest("hex"),
+  });
+  const legacyResponse = { token: legacyReplacement, status: "INTERESTED" };
+  assert.equal((await operationalOfferHttp(legacyResponse)).code, 200);
+  assert.equal((await operationalOfferHttp(legacyResponse)).code, 200);
+  assert.equal((await legacy.offer.get()).data().status, "INTERESTED");
+  const legacyEvents = await legacy.job.collection("managerNotificationDeliveries").get();
+  assert.equal(legacyEvents.size, 1);
+  assert.equal(legacyEvents.docs[0].id, legacy.event.id);
+});
+
+test("operational notifications: declined, malformed, archived and other-organization public offers create no event", async () => {
+  const declined = await syntheticOperationalOffer({ jobId: "declined-event", tokenByte: 40 });
+  const declinedBody = { token: declined.token, status: "DECLINED" };
+  assert.equal((await operationalOfferHttp(declinedBody)).code, 200);
+  assert.equal((await operationalOfferHttp(declinedBody)).code, 200);
+  assert.equal((await declined.offer.get()).data().status, "DECLINED");
+  assert.equal((await declined.job.collection("managerNotificationDeliveries").get()).size, 0);
+
+  assert.equal((await operationalOfferHttp({ token: "malformed", status: "INTERESTED" })).code, 400);
+  const archived = await syntheticOperationalOffer({ jobId: "archived-event", tokenByte: 41 });
+  await archived.job.update({ archivedAt: Timestamp.now() });
+  assert.equal((await operationalOfferHttp({ token: archived.token, status: "INTERESTED" })).code, 410);
+  assert.equal((await archived.offer.get()).data().status, "PENDING");
+  assert.equal((await archived.job.collection("managerNotificationDeliveries").get()).size, 0);
+
+  const crossOrg = await syntheticOperationalOffer({ jobId: "cross-org-event", tokenByte: 42, organizationId: "other" });
+  const denied = await operationalOfferHttp({
+    token: crossOrg.token, status: "INTERESTED", organizationId: "other", jobId: "cross-org-event",
+  });
+  assert.ok([404, 410].includes(denied.code));
+  assert.equal((await crossOrg.offer.get()).data().status, "PENDING");
+  assert.equal((await crossOrg.job.collection("managerNotificationDeliveries").get()).size, 0);
+});
+
+test("operational notifications: exact Assignment confirmation creates one event across five concurrent/repeated races", async () => {
+  for (let repetition = 0; repetition < 5; repetition += 1) {
+    const fixture = await syntheticOperationalOffer({
+      jobId: `assignment-race-${repetition}`, tokenByte: 50 + repetition, assigned: true,
+    });
+    const beforeJob = (await fixture.job.get()).data();
+    const beforeOffer = (await fixture.offer.get()).data();
+    const body = { token: fixture.token, action: "ACKNOWLEDGE_ASSIGNMENT" };
+    const concurrent = await Promise.all([operationalOfferHttp(body), operationalOfferHttp(body)]);
+    assert.deepEqual(concurrent.map((result) => result.code), [200, 200]);
+    assert.deepEqual(concurrent.map((result) => result.body.assignmentAcknowledgment), ["CONFIRMED", "CONFIRMED"]);
+    const acknowledgedAt = (await fixture.assignment.get()).data().cleanerAcknowledgedAt.toMillis();
+    assert.equal((await operationalOfferHttp(body)).code, 200);
+    assert.equal((await fixture.assignment.get()).data().cleanerAcknowledgedAt.toMillis(), acknowledgedAt);
+    const events = await fixture.job.collection("managerNotificationDeliveries").get();
+    assert.equal(events.size, 1);
+    assert.equal(events.docs[0].data().eventType, managerOperationalNotificationTypes.acknowledgment);
+    assert.deepEqual((await fixture.job.get()).data(), beforeJob);
+    assert.deepEqual((await fixture.offer.get()).data(), beforeOffer);
+  }
+});
+
+async function seedOperationalDevice(id, overrides = {}) {
+  const reference = admin.doc(`managerPushDevices/${id}`);
+  await reference.set({
+    organizationId: org, userId: "manager", active: true, language: "en",
+    token: `synthetic-${id}-token-${"x".repeat(40)}`, ...overrides,
+  });
+  return reference;
+}
+
+async function readyOperationalEvent({ jobId, tokenByte, assigned = false }) {
+  const fixture = await syntheticOperationalOffer({ jobId, tokenByte, assigned });
+  const response = await operationalOfferHttp(assigned
+    ? { token: fixture.token, action: "ACKNOWLEDGE_ASSIGNMENT" }
+    : { token: fixture.token, status: "INTERESTED" });
+  assert.equal(response.code, 200);
+  const events = await functionDatabase.collection(`${fixture.job.path}/managerNotificationDeliveries`).get();
+  assert.equal(events.size, 1);
+  return { ...fixture, event: events.docs[0] };
+}
+
+function dispatchOperationalFixture(fixture, sendFcm) {
+  return processManagerOperationalNotification({
+    database: functionDatabase, deliveryReference: fixture.event.ref,
+    organizationId: org, jobId: fixture.job.id, eventId: fixture.event.id, sendFcm,
+  });
+}
+
+test("operational notifications: recipient selection excludes removed/inactive membership, other tenant and malformed tokens", async () => {
+  await admin.doc(`${root}/members/removed-manager`).set({ role: "MANAGER", active: true });
+  await seedOperationalDevice("eligible");
+  await seedOperationalDevice("removed", { userId: "removed-manager" });
+  await admin.doc(`${root}/members/removed-manager`).delete();
+  await seedOperationalDevice("inactive-member", { userId: "inactive" });
+  await seedOperationalDevice("cleaner-role", { userId: "cleaner" });
+  await seedOperationalDevice("other-tenant", { organizationId: "other", userId: "other-manager" });
+  await seedOperationalDevice("inactive-device", { active: false });
+  await seedOperationalDevice("missing-token", { token: null });
+  await seedOperationalDevice("short-token", { token: "short" });
+  await seedOperationalDevice("oversized-token", { token: "x".repeat(4097) });
+  await seedOperationalDevice("whitespace-token", { token: " ".repeat(32) });
+  await seedOperationalDevice("control-token", { token: `${"x".repeat(40)}\u0000` });
+  await seedOperationalDevice("malformed-user", { userId: "manager/forged" });
+  const eligible = await loadEligibleManagerPushDevices(functionDatabase, org);
+  assert.deepEqual(eligible.map((snapshot) => snapshot.id), ["eligible"]);
+  await admin.doc(`${root}/members/manager`).delete();
+  assert.equal((await loadEligibleManagerPushDevices(functionDatabase, org)).length, 0);
+});
+
+test("operational notifications: mixed healthy/stale manager devices preserve acceptance and invalidate only conclusive stale token", async () => {
+  const fixture = await readyOperationalEvent({ jobId: "mixed-operational-event", tokenByte: 60 });
+  const healthy = await seedOperationalDevice("a-healthy");
+  const stale = await seedOperationalDevice("b-stale");
+  const uncertain = await seedOperationalDevice("c-uncertain");
+  let messages;
+  const outcome = await dispatchOperationalFixture(fixture, async (batch) => {
+    messages = batch;
+    return { successCount: 1, failureCount: 2, responses: [
+      { success: true, messageId: "synthetic-accepted-message" },
+      { success: false, error: { code: "messaging/registration-token-not-registered" } },
+      { success: false, error: { code: "messaging/server-unavailable" } },
+    ] };
+  });
+  assert.equal(messages.length, 3);
+  assert.deepEqual(Object.keys(messages[0].data).sort(), ["body", "eventId", "eventType", "link", "title"]);
+  assert.equal(messages[0].data.eventType, managerOperationalNotificationTypes.interest);
+  assert.equal(messages[0].data.link, "/");
+  assert.equal(JSON.stringify(messages).includes("Synthetic private manager content"), false);
+  assert.equal(outcome.deliveryStatus, "PARTIAL");
+  assert.equal(outcome.acceptedByFcmDevices, 1);
+  assert.equal(outcome.failedDevices, 2);
+  assert.equal(outcome.unknownDevices, 1);
+  assert.equal(outcome.invalidated, 1);
+  assert.equal((await healthy.get()).data().active, true);
+  assert.equal((await stale.get()).data().active, false);
+  assert.equal((await uncertain.get()).data().active, true);
+  const persisted = (await fixture.event.ref.get()).data();
+  assert.equal(persisted.deliveryStatus, "PARTIAL");
+  assert.equal(persisted.acceptedByFcmDevices, 1);
+  assert.equal(persisted.token, undefined);
+  assert.equal(persisted.title, undefined);
+  assert.equal((await fixture.offer.get()).data().status, "INTERESTED");
+});
+
+test("operational notifications: token refreshed while send is in flight remains active after old-token rejection", async () => {
+  const fixture = await readyOperationalEvent({ jobId: "refreshed-token-event", tokenByte: 61 });
+  const registration = await seedOperationalDevice("refresh-during-send");
+  const refreshedToken = `synthetic-new-token-${"n".repeat(40)}`;
+  const outcome = await dispatchOperationalFixture(fixture, async (messages) => {
+    assert.equal(messages.length, 1);
+    assert.notEqual(messages[0].token, refreshedToken);
+    await registration.update({ token: refreshedToken, active: true });
+    return { successCount: 0, failureCount: 1, responses: [
+      { success: false, error: { code: "messaging/invalid-registration-token" } },
+    ] };
+  });
+  assert.equal(outcome.deliveryStatus, "FAILED");
+  assert.equal(outcome.invalidated, 0);
+  assert.equal((await registration.get()).data().active, true);
+  assert.equal((await registration.get()).data().token, refreshedToken);
+  assert.equal((await fixture.offer.get()).data().status, "INTERESTED");
+});
+
+test("operational notifications: five concurrent/redelivered trigger races each claim and send once", async () => {
+  await seedOperationalDevice("race-eligible");
+  let sends = 0;
+  for (let repetition = 0; repetition < 5; repetition += 1) {
+    const fixture = await readyOperationalEvent({ jobId: `dispatch-race-${repetition}`, tokenByte: 65 + repetition });
+    const send = async (messages) => {
+      sends += 1;
+      assert.equal(messages.length, 1);
+      return { successCount: 1, failureCount: 0, responses: [
+        { success: true, messageId: `synthetic-accepted-${repetition}` },
+      ] };
+    };
+    const concurrent = await Promise.all([
+      dispatchOperationalFixture(fixture, send), dispatchOperationalFixture(fixture, send),
+    ]);
+    assert.equal(concurrent.filter((result) => result.deliveryStatus === "FCM_ACCEPTED").length, 1);
+    assert.equal(concurrent.filter((result) => result.skipped).length, 1);
+    assert.ok((await dispatchOperationalFixture(fixture, send)).skipped);
+    assert.equal(sends, repetition + 1);
+    assert.equal((await fixture.event.ref.get()).data().deliveryStatus, "FCM_ACCEPTED");
+  }
+});
+
+test("operational notifications: provider uncertainty cannot roll back interest or Assignment acknowledgment and is never retried", async () => {
+  await seedOperationalDevice("provider-failure-device");
+  let sends = 0;
+  for (const assigned of [false, true]) {
+    const fixture = await readyOperationalEvent({
+      jobId: assigned ? "ack-failure-event" : "interest-failure-event", tokenByte: assigned ? 71 : 70, assigned,
+    });
+    const beforeJob = (await fixture.job.get()).data();
+    const beforeOffer = (await fixture.offer.get()).data();
+    const beforeAssignment = assigned ? (await fixture.assignment.get()).data() : null;
+    const send = async () => {
+      sends += 1;
+      throw Object.assign(new Error("Synthetic ambiguous provider failure"), { code: "messaging/network-error" });
+    };
+    const outcome = await dispatchOperationalFixture(fixture, send);
+    assert.equal(outcome.deliveryStatus, "UNKNOWN");
+    assert.equal(outcome.failureCode, "messaging/network-error");
+    assert.ok((await dispatchOperationalFixture(fixture, send)).skipped);
+    assert.deepEqual((await fixture.job.get()).data(), beforeJob);
+    assert.deepEqual((await fixture.offer.get()).data(), beforeOffer);
+    if (assigned) assert.deepEqual((await fixture.assignment.get()).data(), beforeAssignment);
+    assert.equal((await fixture.event.ref.get()).data().deliveryStatus, "UNKNOWN");
+  }
+  assert.equal(sends, 2);
+});
+
+test("operational notifications: no eligible manager device produces a durable no-target outcome without affecting interest", async () => {
+  const fixture = await readyOperationalEvent({ jobId: "no-target-event", tokenByte: 72 });
+  let sends = 0;
+  const outcome = await dispatchOperationalFixture(fixture, async () => { sends += 1; });
+  assert.equal(outcome.deliveryStatus, "NO_ACTIVE_DEVICES");
+  assert.equal(outcome.targetDeviceCount, 0);
+  assert.equal((await fixture.event.ref.get()).data().deliveryStatus, "NO_ACTIVE_DEVICES");
+  assert.equal((await fixture.offer.get()).data().status, "INTERESTED");
+  assert.equal(sends, 0);
+});
+
+test("operational notifications: committed checklist READY survives mixed provider failure and redelivery sends once", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  await saveRequiredChecklistPhoto(issued.token);
+  assert.equal((await publicChecklistSave({
+    token: issued.token, mutationId: "notification-checklist-draft", baseRevision: 0,
+    changes: await completeChecklistAnswers(),
+  })).code, 200);
+  const handoff = {
+    token: issued.token, action: "READY_FOR_REVIEW", submissionId: "notification-review-submit", baseRevision: 1,
+  };
+  assert.equal((await publicChecklistSave(handoff)).code, 200);
+  assert.equal((await publicChecklistSave(handoff)).code, 200);
+  const eventCollection = functionDatabase.collection(`${root}/jobs/job/checklistRuns/initial/managerNotificationDeliveries`);
+  const events = await eventCollection.get();
+  assert.equal(events.size, 1);
+  const event = events.docs[0];
+  const healthy = await seedOperationalDevice("a-checklist-healthy");
+  const stale = await seedOperationalDevice("b-checklist-stale");
+  let sends = 0;
+  const dispatch = () => processChecklistReviewNotification({
+    database: functionDatabase, deliveryReference: event.ref, deliveryData: event.data(),
+    organizationId: org, jobId: "job", runId: "initial", eventId: event.id,
+    loadManagerDevices: (organizationId) => loadEligibleManagerPushDevices(functionDatabase, organizationId),
+    sendFcm: async () => {
+      sends += 1;
+      return { successCount: 1, failureCount: 1, responses: [
+        { success: true, messageId: "synthetic-checklist-accepted" },
+        { success: false, error: { code: "messaging/registration-token-not-registered" } },
+      ] };
+    },
+  });
+  const results = await Promise.all([dispatch(), dispatch()]);
+  assert.equal(results.filter((result) => result.deliveryStatus === "PARTIAL").length, 1);
+  assert.equal(results.filter((result) => result.skipped).length, 1);
+  assert.ok((await dispatch()).skipped);
+  assert.equal(sends, 1);
+  assert.equal((await healthy.get()).data().active, true);
+  assert.equal((await stale.get()).data().active, false);
+  const run = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
+  assert.equal(run.status, "READY_FOR_REVIEW");
+  assert.equal((await event.ref.get()).data().deliveryStatus, "PARTIAL");
+  assert.equal((await publicChecklistGet(issued.token)).body.checklist.status, "READY_FOR_REVIEW");
 });

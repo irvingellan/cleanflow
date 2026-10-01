@@ -65,6 +65,10 @@ function fakeDatabase(initial = {}) {
         update(reference, patch) {
           writes.push({ reference, patch });
         },
+        create(reference, patch) {
+          if (records.has(reference.path)) throw new Error("Synthetic event already exists.");
+          writes.push({ reference, patch });
+        },
       };
       const result = await callback(transaction);
       for (const { reference, patch } of writes) {

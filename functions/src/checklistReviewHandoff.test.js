@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
 import { readyPublicChecklistForReview } from "./checklistCapabilityService.js";
 import {
@@ -8,6 +8,22 @@ import {
   checklistReviewNotificationType,
   processChecklistReviewNotification,
 } from "./checklistReviewNotifications.js";
+
+afterEach(() => vi.useRealTimers());
+
+function fcmBatch(responses) {
+  return {
+    responses,
+    successCount: responses.filter((response) => response.success).length,
+    failureCount: responses.filter((response) => !response.success).length,
+  };
+}
+
+function fcmAcceptedBatch(count) {
+  return fcmBatch(Array.from({ length: count }, (_, index) => ({
+    success: true, messageId: `synthetic-message-${index}`,
+  })));
+}
 
 const organizationId = "cleanflow-demo";
 const jobId = "synthetic-job";
@@ -167,8 +183,14 @@ function deliveryData() {
   };
 }
 
-function managerDevice(language, suffix) {
-  return { data: () => ({ token: `synthetic-fcm-token-${suffix}`, language, active: true }) };
+function managerDevice(language, suffix, database) {
+  const path = `managerPushDevices/synthetic-registration-${suffix}`;
+  const data = {
+    token: `synthetic-fcm-token-${suffix}`, language, active: true,
+    organizationId, userId: `synthetic-manager-${suffix}`,
+  };
+  if (database) database.documents.set(path, { ...data });
+  return { ref: { path }, data: () => data };
 }
 
 function processDelivery(database, options = {}) {
@@ -181,7 +203,7 @@ function processDelivery(database, options = {}) {
     runId,
     eventId,
     loadManagerDevices: vi.fn().mockResolvedValue([managerDevice("en", "one")]),
-    sendFcm: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0 }),
+    sendFcm: vi.fn().mockResolvedValue(fcmAcceptedBatch(1)),
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     ...options,
   });
@@ -226,7 +248,7 @@ describe("checklist review handoff notifications", () => {
     const submissions = await Promise.all([handoff(database), handoff(database)]);
     expect(submissions.map((result) => result.duplicate).sort()).toEqual([false, true]);
 
-    const sendFcm = vi.fn().mockResolvedValue({ successCount: 3, failureCount: 0 });
+    const sendFcm = vi.fn().mockResolvedValue(fcmAcceptedBatch(3));
     const loadManagerDevices = vi.fn().mockResolvedValue([
       managerDevice("en", "one"), managerDevice("pt", "two"), managerDevice("es", "three"),
     ]);
@@ -312,5 +334,208 @@ describe("checklist review handoff notifications", () => {
       "Checklist received", "Checklist recebido", "Lista de limpieza recibida",
     ]);
     expect(messages.every(({ data }) => data.link === "/")).toBe(true);
+  });
+
+  it("audits a mixed healthy/stale batch and deactivates only the conclusively stale registration", async () => {
+    const database = createFakeDatabase();
+    await handoff(database);
+    const healthy = managerDevice("en", "healthy", database);
+    const stale = managerDevice("pt", "stale", database);
+    const sendFcm = vi.fn().mockResolvedValue(fcmBatch([
+      { success: true, messageId: "synthetic-accepted-message" },
+      { success: false, error: { code: "messaging/registration-token-not-registered" } },
+    ]));
+    const options = { loadManagerDevices: vi.fn().mockResolvedValue([healthy, stale]), sendFcm };
+
+    await expect(processDelivery(database, options)).resolves.toMatchObject({
+      deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, failedDevices: 1,
+      unknownDevices: 0, invalidated: 1, invalidDeviceCleanupFailed: false,
+    });
+    expect(database.documents.get(healthy.ref.path).active).toBe(true);
+    expect(database.documents.get(stale.ref.path).active).toBe(false);
+    expect(database.documents.get(runPath).status).toBe("READY_FOR_REVIEW");
+    await processDelivery(database, options);
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not deactivate a stale snapshot when the registration token refreshes during send", async () => {
+    const database = createFakeDatabase();
+    await handoff(database);
+    const stale = managerDevice("en", "refresh-race", database);
+    const sendFcm = vi.fn(async () => {
+      database.documents.set(stale.ref.path, {
+        ...stale.data(), token: "synthetic-fresh-token",
+      });
+      return fcmBatch([{ success: false, error: { code: "messaging/invalid-registration-token" } }]);
+    });
+
+    await expect(processDelivery(database, {
+      loadManagerDevices: vi.fn().mockResolvedValue([stale]), sendFcm,
+    })).resolves.toMatchObject({ deliveryStatus: "FAILED", invalidated: 0 });
+    expect(database.documents.get(stale.ref.path)).toMatchObject({ active: true, token: "synthetic-fresh-token" });
+  });
+
+  it("keeps a confirmed PARTIAL provider result when invalid-device cleanup fails", async () => {
+    const database = createFakeDatabase();
+    await handoff(database);
+    const healthy = managerDevice("en", "healthy", database);
+    const stale = managerDevice("pt", "stale", database);
+    const originalTransaction = database.runTransaction;
+    let transactionCount = 0;
+    database.runTransaction = (operation) => {
+      transactionCount += 1;
+      return transactionCount === 1 ? originalTransaction(operation)
+        : Promise.reject(new Error("Synthetic cleanup failure"));
+    };
+    const sendFcm = vi.fn().mockResolvedValue(fcmBatch([
+      { success: true, messageId: "synthetic-accepted-message" },
+      { success: false, error: { code: "messaging/invalid-registration-token" } },
+    ]));
+
+    const result = await processDelivery(database, {
+      loadManagerDevices: vi.fn().mockResolvedValue([healthy, stale]), sendFcm,
+    });
+    expect(result).toMatchObject({
+      deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, failedDevices: 1,
+      invalidated: 0, invalidDeviceCleanupFailed: true,
+    });
+    expect(database.documents.get(notificationPath)).toMatchObject(result);
+    expect(database.documents.get(runPath).status).toBe("READY_FOR_REVIEW");
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists known PARTIAL after the five-second cleanup deadline and never repeats the FCM attempt", async () => {
+    vi.useFakeTimers();
+    const database = createFakeDatabase();
+    await handoff(database);
+    const healthy = managerDevice("en", "healthy", database);
+    const stale = managerDevice("pt", "stale", database);
+    const originalTransaction = database.runTransaction;
+    let transactionCount = 0;
+    database.runTransaction = (operation) => {
+      transactionCount += 1;
+      return transactionCount === 2 ? new Promise(() => {}) : originalTransaction(operation);
+    };
+    const sendFcm = vi.fn().mockResolvedValue(fcmBatch([
+      { success: true, messageId: "synthetic-accepted-message" },
+      { success: false, error: { code: "messaging/invalid-registration-token" } },
+    ]));
+    const options = { loadManagerDevices: vi.fn().mockResolvedValue([healthy, stale]), sendFcm };
+    const pending = processDelivery(database, options);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(database.documents.get(notificationPath).deliveryStatus).toBe("SENDING");
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toMatchObject({
+      deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, failedDevices: 1,
+      unknownDevices: 0, invalidated: 0, invalidDeviceCleanupFailed: true,
+    });
+    expect(database.documents.get(notificationPath)).toMatchObject({
+      deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, failedDevices: 1,
+      invalidDeviceCleanupFailed: true,
+    });
+    await expect(processDelivery(database, options)).resolves.toEqual({ skipped: "already-claimed" });
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+    expect(database.documents.get(runPath).status).toBe("READY_FOR_REVIEW");
+  });
+
+  it("times out a stalled FCM attempt after 15 seconds as UNKNOWN and never replays it", async () => {
+    vi.useFakeTimers();
+    const database = createFakeDatabase();
+    await handoff(database);
+    const sendFcm = vi.fn(() => new Promise(() => {}));
+    const options = { sendFcm };
+    const pending = processDelivery(database, options);
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(database.documents.get(notificationPath).deliveryStatus).toBe("SENDING");
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toMatchObject({
+      deliveryStatus: "UNKNOWN", failureCode: "deadline-exceeded",
+      acceptedByFcmDevices: null, failedDevices: null,
+    });
+    expect(database.documents.get(runPath).status).toBe("READY_FOR_REVIEW");
+    await expect(processDelivery(database, options)).resolves.toEqual({ skipped: "already-claimed" });
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not rewrite UNKNOWN or resend when an accepted provider response arrives after the deadline", async () => {
+    vi.useFakeTimers();
+    const database = createFakeDatabase();
+    await handoff(database);
+    let resolveProvider;
+    const sendFcm = vi.fn(() => new Promise((resolve) => { resolveProvider = resolve; }));
+    const options = { sendFcm };
+    const pending = processDelivery(database, options);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect(pending).resolves.toMatchObject({ deliveryStatus: "UNKNOWN", failureCode: "deadline-exceeded" });
+    resolveProvider(fcmAcceptedBatch(1));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(database.documents.get(notificationPath).deliveryStatus).toBe("UNKNOWN");
+    await expect(processDelivery(database, options)).resolves.toEqual({ skipped: "already-claimed" });
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+    expect(database.documents.get(runPath).status).toBe("READY_FOR_REVIEW");
+  });
+
+  it("does not repeat a known FCM acceptance if the audit outcome cannot be written", async () => {
+    const database = createFakeDatabase();
+    await handoff(database);
+    const originalDoc = database.doc;
+    database.doc = (path) => {
+      const reference = originalDoc(path);
+      return path === notificationPath ? {
+        ...reference, update: async () => { throw new Error("Synthetic outcome write failure"); },
+      } : reference;
+    };
+    const sendFcm = vi.fn().mockResolvedValue(fcmAcceptedBatch(1));
+    const options = { sendFcm };
+    await expect(processDelivery(database, options)).resolves.toMatchObject({ deliveryStatus: "FCM_ACCEPTED" });
+    expect(database.documents.get(notificationPath).deliveryStatus).toBe("SENDING");
+    await expect(processDelivery(database, options)).resolves.toEqual({ skipped: "already-claimed" });
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+    expect(database.documents.get(runPath).status).toBe("READY_FOR_REVIEW");
+  });
+
+  it("survives five bounded repeated submission/trigger races without a second logical send", async () => {
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      const database = createFakeDatabase();
+      const submissions = await Promise.all([handoff(database), handoff(database), handoff(database)]);
+      expect(submissions.filter((result) => result.duplicate === false)).toHaveLength(1);
+      const sendFcm = vi.fn().mockResolvedValue(fcmAcceptedBatch(1));
+      const results = await Promise.all([
+        processDelivery(database, { sendFcm }), processDelivery(database, { sendFcm }),
+        processDelivery(database, { sendFcm }),
+      ]);
+      expect(results.filter((result) => result.deliveryStatus === "FCM_ACCEPTED")).toHaveLength(1);
+      expect(sendFcm).toHaveBeenCalledTimes(1);
+      expect([...database.documents.keys()].filter((path) => path.startsWith(`${runPath}/${checklistReviewNotificationCollection}/`)))
+        .toEqual([notificationPath]);
+    }
+  });
+
+  it.each([
+    { successCount: 1, failureCount: 0 },
+    { successCount: 1, failureCount: 0, responses: [] },
+    { successCount: 1, failureCount: 0, responses: [{ success: false, error: { code: "messaging/invalid-registration-token" } }] },
+  ])("does not fabricate success or deactivate registrations for malformed FCM result %#", async (response) => {
+    const database = createFakeDatabase();
+    await handoff(database);
+    const device = managerDevice("en", "malformed", database);
+    const sendFcm = vi.fn().mockResolvedValue(response);
+    const options = { loadManagerDevices: vi.fn().mockResolvedValue([device]), sendFcm };
+    await expect(processDelivery(database, options)).resolves.toMatchObject({
+      deliveryStatus: "UNKNOWN", failureCode: "unreadable-provider-response",
+      acceptedByFcmDevices: null, failedDevices: null,
+    });
+    expect(database.documents.get(device.ref.path).active).toBe(true);
+    await processDelivery(database, options);
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not put arbitrary provider error detail into the delivery record", async () => {
+    const database = createFakeDatabase();
+    await handoff(database);
+    await expect(processDelivery(database, {
+      sendFcm: vi.fn().mockRejectedValue({ code: "synthetic-private-value", message: "synthetic-private-details" }),
+    })).resolves.toMatchObject({ deliveryStatus: "UNKNOWN", failureCode: "provider-error" });
+    expect(JSON.stringify(database.documents.get(notificationPath))).not.toContain("synthetic-private");
   });
 });

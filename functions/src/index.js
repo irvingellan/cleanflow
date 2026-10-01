@@ -34,7 +34,10 @@ import {
   publicChecklistPhotoSizeBucket,
 } from "./publicChecklistDiagnostics.js";
 import { processChecklistReviewNotification } from "./checklistReviewNotifications.js";
-import { authorizedManagerDevices, requireOrganizationManager } from "./managerAuthorization.js";
+import { requireOrganizationManager } from "./managerAuthorization.js";
+import { deactivateInvalidManagerDevices, loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
+import { processManagerOperationalNotification } from "./managerOperationalNotifications.js";
+import { canUsePublicOffer, publicOfferState as offerState, respondToPublicOffer } from "./publicOfferResponseService.js";
 import {
   createChecklistRunForManager,
   approveChecklistRunForManager,
@@ -430,27 +433,6 @@ function publicChecklistPhotoErrorCategory(error, stage) {
 
 function isAssignmentAwareJobData(jobData) {
   return Number.isInteger(jobData?.schemaVersion) && jobData.schemaVersion >= 2;
-}
-
-function canUsePublicOffer(jobData) {
-  if (jobData?.archivedAt) return false;
-  return isAssignmentAwareJobData(jobData)
-    ? ["OFFERED", "ASSIGNED"].includes(jobData.operationalStatus)
-    : jobData.operationalStatus === "OFFERED";
-}
-
-function offerState(offerData, jobData, now) {
-  const expiresAt = offerData.publicOfferExpiresAt;
-
-  if (!expiresAt?.toMillis || expiresAt.toMillis() <= now.getTime()) {
-    return "expired";
-  }
-
-  if (!canUsePublicOffer(jobData) || !["PENDING", "INTERESTED", "DECLINED"].includes(offerData.status)) {
-    return "unavailable";
-  }
-
-  return "available";
 }
 
 function jobReferenceFromOffer(offerDocument) {
@@ -976,17 +958,23 @@ export const revokeClientReport = onCall(
 );
 
 async function activeManagerPushDevices(targetOrganizationId = organizationId) {
-  const deviceSnapshots = await db
-    .collection("managerPushDevices")
-    .where("organizationId", "==", targetOrganizationId)
-    .get();
-
-  const activeDevices = deviceSnapshots.docs.filter((snapshot) => {
-    const device = snapshot.data();
-    return device.active === true && validPushToken(device.token);
-  });
-  return authorizedManagerDevices(db, targetOrganizationId, activeDevices);
+  return loadEligibleManagerPushDevices(db, targetOrganizationId);
 }
+
+export const notifyManagersOperationalEvent = onDocumentCreated(
+  {
+    document: "organizations/{orgId}/jobs/{jobId}/managerNotificationDeliveries/{eventId}",
+    region: "us-central1", retry: false, timeoutSeconds: 60,
+  },
+  async (event) => {
+    if (!event.data) return;
+    await processManagerOperationalNotification({
+      database: db, deliveryReference: event.data.ref,
+      organizationId: event.params.orgId, jobId: event.params.jobId, eventId: event.params.eventId,
+      sendFcm: (messages) => getMessaging().sendEach(messages), logger,
+    });
+  },
+);
 
 export const notifyManagersChecklistReadyForReview = onDocumentCreated(
   {
@@ -1012,81 +1000,6 @@ export const notifyManagersChecklistReadyForReview = onDocumentCreated(
     });
   },
 );
-
-function invalidPushTokenError(error) {
-  return [
-    "messaging/invalid-registration-token",
-    "messaging/registration-token-not-registered",
-  ].includes(error?.code);
-}
-
-async function deactivateInvalidManagerPushDevices(deviceSnapshots, responses) {
-  const invalidDeviceUpdates = responses.responses.flatMap((response, index) => {
-    if (response.success || !invalidPushTokenError(response.error)) {
-      return [];
-    }
-
-    return [
-      deviceSnapshots[index].ref.update({
-        active: false,
-        invalidatedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }),
-    ];
-  });
-
-  await Promise.all(invalidDeviceUpdates);
-  return invalidDeviceUpdates.length;
-}
-
-async function sendCleanerInterestNotification({ jobId, propertyName, cleanerId, cleanerName, offerId }) {
-  const deviceSnapshots = await activeManagerPushDevices();
-
-  if (deviceSnapshots.length === 0) {
-    return;
-  }
-
-  let currentCleanerName = cleanerName || "A cleaner";
-
-  if (cleanerId) {
-    const cleanerSnapshot = await db
-      .collection("organizations")
-      .doc(organizationId)
-      .collection("cleaners")
-      .doc(cleanerId)
-      .get();
-
-    if (cleanerSnapshot.exists && cleanerSnapshot.data().name) {
-      currentCleanerName = cleanerSnapshot.data().name;
-    }
-  }
-
-  const safePropertyName = propertyName || "a property";
-  const responses = await getMessaging().sendEach(
-    deviceSnapshots.map((snapshot) => ({
-      token: snapshot.data().token,
-      data: {
-        title: "👤 Cleaner interested",
-        body: `${currentCleanerName} is interested in ${safePropertyName}.`,
-        eventId: `cleaner-interest-${offerId}`,
-        eventType: "CLEANER_INTERESTED",
-        jobId,
-        link: "/",
-      },
-      webpush: {
-        headers: { Urgency: "high" },
-      },
-    })),
-  );
-
-  const invalidated = await deactivateInvalidManagerPushDevices(deviceSnapshots, responses);
-
-  logger.info("Cleaner-interest notifications processed.", {
-    attempted: deviceSnapshots.length,
-    delivered: responses.successCount,
-    invalidated,
-  });
-}
 
 async function sendFcmManagerReminderNotification(reminder) {
   const deviceSnapshots = await activeManagerPushDevices();
@@ -1126,7 +1039,9 @@ async function sendFcmManagerReminderNotification(reminder) {
   let invalidated = 0;
   let invalidDeviceCleanupFailed = false;
   try {
-    invalidated = await deactivateInvalidManagerPushDevices(deviceSnapshots, responses);
+    const cleanup = await deactivateInvalidManagerDevices(db, deviceSnapshots, responses);
+    invalidated = cleanup.invalidated;
+    invalidDeviceCleanupFailed = cleanup.invalidDeviceCleanupFailed;
   } catch (error) {
     // Delivery is already known at this point; cleanup must not turn that
     // confirmed outcome into an unknown one.
@@ -1350,48 +1265,8 @@ export const publicOffer = onRequest(
         return;
       }
 
-      const result = await db.runTransaction(async (transaction) => {
-        const [jobSnapshot, offerSnapshot] = await Promise.all([
-          transaction.get(jobDocument),
-          transaction.get(offerDocument),
-        ]);
-
-        if (!jobSnapshot.exists || !offerSnapshot.exists) {
-          return { state: "not-found" };
-        }
-
-        const jobData = jobSnapshot.data();
-        const offerData = offerSnapshot.data();
-
-        if (offerData.publicOfferTokenHash !== tokenHash) {
-          return { state: "not-found" };
-        }
-
-        const state = offerState(offerData, jobData, new Date());
-
-        if (state !== "available") {
-          return { state };
-        }
-
-        if (offerData.status !== "PENDING") {
-          return { state: "answered", status: offerData.status, shouldNotifyManagers: false };
-        }
-
-        transaction.update(offerDocument, {
-          status,
-          respondedAt: FieldValue.serverTimestamp(),
-        });
-
-        return {
-          state: "answered",
-          status,
-          shouldNotifyManagers: status === "INTERESTED",
-          jobId: jobDocument.id,
-          propertyName: jobData.propertyName || null,
-          cleanerId: offerData.cleanerId || null,
-          cleanerName: offerData.cleanerName || null,
-          offerId: offerDocument.id,
-        };
+      const result = await respondToPublicOffer(db, {
+        organizationId, jobReference: jobDocument, offerReference: offerDocument, tokenHash, status,
       });
 
       if (result.state === "not-found") {
@@ -1407,17 +1282,6 @@ export const publicOffer = onRequest(
       if (result.state === "unavailable") {
         sendPublicError(response, 410, "offer_unavailable");
         return;
-      }
-
-      if (result.shouldNotifyManagers) {
-        try {
-          await sendCleanerInterestNotification(result);
-        } catch (error) {
-          // The offer response is already committed; a delivery failure must not invite a duplicate response.
-          logger.error("Unable to send cleaner-interest notifications.", {
-            code: error.code || "unknown",
-          });
-        }
       }
 
       configureResponse(response);

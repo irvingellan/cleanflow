@@ -4,6 +4,17 @@ import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 const timestamp = (iso) => ({ toDate: () => new Date(iso) });
 
 describe("notification diagnostics projection", () => {
+  it("allowlists all three operational event types without exposing event context or tokens", () => {
+    const eventTypes = ["CHECKLIST_READY_FOR_REVIEW", "CLEANER_INTERESTED", "ASSIGNMENT_CONFIRMED", "PRIVATE_EVENT"];
+    const projection = buildNotificationDiagnostics({ devices: [], deliveries: [],
+      reviewDeliveries: eventTypes.map((eventType) => ({ data: {
+        eventType, deliveryStatus: "PARTIAL", targetDeviceCount: 2, acceptedByFcmDevices: 1,
+        failedDevices: 1, cleanerId: "private-cleaner", offerId: "private-offer", token: "private-token",
+      } })),
+    });
+    expect(projection.reviewDeliveries.map((item) => item.eventType)).toEqual([...eventTypes.slice(0, 3), "UNKNOWN"]);
+    expect(JSON.stringify(projection)).not.toMatch(/private-cleaner|private-offer|private-token/);
+  });
   it("returns safe active and legacy device metadata without FCM tokens", () => {
     const diagnostics = buildNotificationDiagnostics({
       devices: [

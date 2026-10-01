@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { createManagerOperationalNotification, managerOperationalNotificationTypes } from "./managerOperationalNotifications.js";
 
 export const assignmentAcknowledgmentStates = Object.freeze({
   awaiting: "AWAITING_CONFIRMATION",
@@ -103,7 +104,7 @@ export async function acknowledgePublicOfferAssignment(database, {
   jobReference,
   offerReference,
   tokenHash,
-  now = new Date(),
+  now = () => new Date(),
 }) {
   const expectedJobPath = `organizations/${organizationId}/jobs/${jobReference?.id || ""}`;
   if (jobReference?.path !== expectedJobPath
@@ -121,7 +122,7 @@ export async function acknowledgePublicOfferAssignment(database, {
 
     const job = jobSnapshot.data();
     const offer = offerSnapshot.data();
-    const offerState = isCurrentInterestedOffer(offer, tokenHash, now);
+    const offerState = isCurrentInterestedOffer(offer, tokenHash, typeof now === "function" ? now() : now);
     if (offerState !== "available") return { state: offerState };
     if (!isV2AssignedJob(job) || !offer.cleanerId
       || !hasCleanerOnAssignedJob(job, offer.cleanerId)) return { state: "unavailable" };
@@ -151,6 +152,11 @@ export async function acknowledgePublicOfferAssignment(database, {
     transaction.update(assignmentDocument.ref, {
       cleanerAcknowledgedAt: FieldValue.serverTimestamp(),
       cleanerAcknowledgedOfferId: offerReference.id,
+    });
+    createManagerOperationalNotification(transaction, jobReference, {
+      organizationId, offerId: offerReference.id, assignmentId: assignmentDocument.id,
+      cleanerId: offer.cleanerId, eventType: managerOperationalNotificationTypes.acknowledgment,
+      propertyName: job.propertyName,
     });
     return { state: "confirmed", repeated: false };
   });
