@@ -647,7 +647,8 @@ read or renew that deadline; expiry locks background recovery until manual
 Try again starts a fresh window. Success closes the window only after the
 revocation listener attaches without failure. Late callbacks are ignored and
 overdue callbacks/resume enforce the wall-clock bound even if timers were
-suspended. This hotfix is implemented on its branch, not yet deployed.
+suspended. This hotfix (`edc71c4`) was integrated into main and deployed to
+Hosting only on 2026-10-01; real iPhone/PWA validation remains outstanding.
 
 ---
 

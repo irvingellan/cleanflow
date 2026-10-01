@@ -224,18 +224,23 @@ during this release.
   confirmed; the precise iOS transport failure remains unverified.
   **2026-10-01 recurrence:** the manager-access gate hung again on installed
   iPhone PWA and desktop Safari. The original recovery is not sufficient.
-  `hotfix/manager-access-global-deadline-2026-10-01` fixes a reproduced
+  `edc71c4` was fast-forwarded into `main` and released to Hosting only on
+  2026-10-01. It fixes a reproduced
   lifecycle-churn defect: repeated signals could replace a stalled attempt and
   continually reset its seven-second watchdog. An 18-second absolute outer
   window now survives retries; in-flight signals are suppressed, and expiry
   exposes stable Try again / Sign out until a manual retry. Server-only
   authority, cache rejection and realtime revocation remain intact. Two new
-  allowlisted stages join the existing max-30 session-local trace. This is
-  **not deployed**; the next release surface is Hosting only. The defect is
+  allowlisted stages join the existing max-30 session-local trace. Live HTTPS
+  returned 200; the build marker and all 14 deployed file hashes match
+  `edc71c4`. No Functions, Rules, indexes or Storage were deployed. The defect is
   confirmed in synthetic tests, not proven to be the sole real Safari cause.
   Hotfix validation passed 44 focused, 769 unit and 30 emulator E2E tests,
-  build, syntax and diff checks. Mobile Chromium kept recovery controls stable
-  through 24 seconds of lifecycle churn; installed Safari remains unvalidated.
+  build, syntax and diff checks, including both mobile recovery E2E tests.
+  Mobile Chromium kept recovery controls stable through 24 seconds of lifecycle
+  churn. Issue #48 remains open for real installed-iPhone/PWA and Safari retest;
+  no signed-in production smoke was attempted, avoiding automatic registration
+  and telemetry writes.
 - Capture the real photo-upload failure stage and safe error details, then
   observe one real cleaning through saved checklist, required evidence,
   manager review, report use, and completion. Until then, the full pilot flow
