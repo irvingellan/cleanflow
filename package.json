@@ -22,7 +22,8 @@
     "seed:cleaners": "node scripts/seedCleaners.js",
     "seed:dashboard": "node scripts/seedDashboard.js",
     "inventory:data": "node scripts/inventoryData.mjs",
-    "seed:public-offer-emulator": "npm --prefix functions run seed:public-offer-emulator"
+    "seed:public-offer-emulator": "npm --prefix functions run seed:public-offer-emulator",
+    "build:sandbox": "vite build --mode sandbox"
   },
   "dependencies": {
     "firebase": "^12.18.0",
