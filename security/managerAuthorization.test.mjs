@@ -1784,3 +1784,88 @@ test("current public Offer link acknowledges only its active Assignment without 
   await assertFails(account("manager").firestore().doc(assignment.path)
     .update({ cleanerAcknowledgedOfferId: "forged" }));
 });
+
+test("archived legacy and v2 Jobs deny public Offer reads, responses and acknowledgment without mutation", async () => {
+  const fixtures = [
+    { schemaVersion: 1, operationalStatus: "OFFERED", status: "PENDING" },
+    { schemaVersion: 2, operationalStatus: "OFFERED", status: "PENDING" },
+    { schemaVersion: 2, operationalStatus: "ASSIGNED", status: "INTERESTED" },
+  ];
+  for (const [index, fixture] of fixtures.entries()) {
+    const token = Buffer.alloc(32, 20 + index).toString("base64url");
+    const job = admin.doc(`${root}/jobs/archived-public-offer-${index}`);
+    const offer = job.collection("offers").doc("offer-a");
+    const assignment = job.collection("assignments").doc("assignment-a");
+    await job.set({
+      schemaVersion: fixture.schemaVersion,
+      operationalStatus: fixture.operationalStatus,
+      assignedCleanerIds: ["cleaner-a"],
+      archivedAt: Timestamp.fromMillis(1),
+    });
+    await offer.set({
+      status: fixture.status,
+      cleanerId: "cleaner-a",
+      publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+      publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+    });
+    await assignment.set({
+      organizationId: org,
+      jobId: job.id,
+      cleanerId: "cleaner-a",
+      sourceOfferId: offer.id,
+      isActive: true,
+      executionStatus: "ASSIGNED",
+    });
+    const before = await Promise.all([job.get(), offer.get(), assignment.get()]);
+
+    for (const request of [
+      { method: "GET", query: { token } },
+      { method: "POST", body: { token, status: "INTERESTED" } },
+      { method: "POST", body: { token, status: "DECLINED" } },
+      { method: "POST", body: { token, action: "ACKNOWLEDGE_ASSIGNMENT" } },
+    ]) {
+      const response = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+      await publicOffer(request, response);
+      assert.equal(response.code, 410);
+      assert.deepEqual(response.body, { error: "offer_unavailable" });
+    }
+
+    const after = await Promise.all([job.get(), offer.get(), assignment.get()]);
+    for (let index = 0; index < before.length; index += 1) {
+      assert.deepEqual(after[index].data(), before[index].data());
+    }
+  }
+});
+
+test("public Offer expiry and removed/replaced token lookup remain denied without mutation", async () => {
+  const token = Buffer.alloc(32, 24).toString("base64url");
+  const job = admin.doc(`${root}/jobs/expired-public-offer`);
+  const offer = job.collection("offers").doc("offer-a");
+  await job.set({ schemaVersion: 2, operationalStatus: "OFFERED" });
+  await offer.set({
+    status: "PENDING",
+    publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+    publicOfferExpiresAt: Timestamp.fromMillis(1),
+  });
+  async function get() {
+    const response = { code: 200, set() { return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; } };
+    await publicOffer({ method: "GET", query: { token } }, response);
+    return response;
+  }
+  const originalJob = (await job.get()).data();
+  const originalOffer = (await offer.get()).data();
+  const expired = await get();
+  assert.equal(expired.code, 410);
+  assert.deepEqual(expired.body, { error: "offer_expired" });
+  assert.deepEqual((await offer.get()).data(), originalOffer);
+
+  for (const tokenHash of [null, createHash("sha256").update("replacement").digest("hex")]) {
+    await offer.update({ publicOfferTokenHash: tokenHash, publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 60_000) });
+    const before = (await offer.get()).data();
+    const unavailable = await get();
+    assert.equal(unavailable.code, 404);
+    assert.deepEqual(unavailable.body, { error: "offer_not_found" });
+    assert.deepEqual((await offer.get()).data(), before);
+  }
+  assert.deepEqual((await job.get()).data(), originalJob);
+});

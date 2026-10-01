@@ -251,6 +251,19 @@ during this release.
   consolidation before adding another link type. Do not treat these as current
   implementation tasks.
 
+## Compatibility cleanup V1 (#52) — branch only
+
+`feature/compatibility-cleanup-v1-2026-09-30` adds legacy + v2 roster-aware
+Cleaner history (deduplicated, same bounded history windows), batched Dashboard
+roster-name resolution, unarchived REAL scorecard totals with a separate archived
+scheduled count, and archived-Job public Offer denial without record mutation.
+Assignment acknowledgment remains archive-denied. Three collection-scoped
+Cleaner-history composite indexes are defined but not deployed; deploy them and
+wait for readiness before releasing the new history queries. Later release
+surfaces: those indexes, `publicOffer`, and Hosting. No migration/backfill,
+Workspace/visual, photo, notification, or manager-access changes are included.
+This branch is not yet integrated into main or deployed.
+
 ## Deployment holds
 
 - **Required cleaner count (`b4b35bf`):** implemented/tested and preserved on
@@ -282,8 +295,10 @@ or product success. Pilot Evidence V0 is available as the one-cleaning
 [observation checklist](PILOT_OBSERVATION_CHECKLIST.md) and the local,
 read-only `scripts/pilotScorecard.mjs` aggregate command. Example:
 `node scripts/pilotScorecard.mjs --project <project-id> --from YYYY-MM-DD --to YYYY-MM-DD [--expected-jobs N] [--allow-production-read]`.
-It includes only Jobs with explicit `dataProvenance: REAL`; absent/UNKNOWN and
-DEMO Jobs are excluded. Timestamp events use UTC dates, while `scheduledDate`
+On the #52 branch, active totals include only unarchived Jobs with explicit
+`dataProvenance: REAL`; archived REAL Jobs scheduled in the period are counted
+separately. Absent/UNKNOWN and DEMO Jobs are excluded. Timestamp events use UTC
+dates, while `scheduledDate`
 uses its stored date-only value. Completion requires `completedAt`; older
 completed Jobs without it cannot be dated. Report opens are not recorded, and
 report-link replacement history is not fully measurable. The command was not

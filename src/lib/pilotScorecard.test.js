@@ -48,6 +48,39 @@ describe("buildPilotScorecard", () => {
     expect(zeroExpected.expectedJobs).toMatchObject({ supplied: true, expected: 0, coveragePercent: null });
   });
 
+  it("excludes archived REAL Jobs and their funnel data from all active totals", () => {
+    const funnel = {
+      offers: [{ createdAt: timestamp("2026-09-21"), respondedAt: timestamp("2026-09-22"),
+        status: "INTERESTED", offeredCompensation: 100 }],
+      assignments: [{ isActive: true }],
+      checklistRuns: [{ status: "READY_FOR_REVIEW",
+        evidence: [{ status: "SAVED", contentType: "image/jpeg" }],
+        clientReportCapabilities: [{ createdAt: timestamp("2026-09-23") }] }],
+    };
+    const active = realJob(funnel);
+    const report = buildPilotScorecard({ ...period, expectedJobs: 2, jobs: [
+      active,
+      realJob({ ...funnel, id: "archived", archivedAt: timestamp("2026-09-24") }),
+      realJob({ id: "archived-outside", archivedAt: timestamp("2026-09-24"), scheduledDate: "2026-09-19" }),
+      realJob({ id: "archived-demo", dataProvenance: "DEMO", archivedAt: timestamp("2026-09-24") }),
+      realJob({ id: "archived-unknown", dataProvenance: undefined, archivedAt: timestamp("2026-09-24") }),
+    ] });
+    const activeOnly = buildPilotScorecard({ ...period, expectedJobs: 2, jobs: [active] });
+
+    expect(report.jobs).toEqual(activeOnly.jobs);
+    expect(report.offers).toEqual(activeOnly.offers);
+    expect(report.checklists).toEqual(activeOnly.checklists);
+    expect(report.clientReports).toEqual(activeOnly.clientReports);
+    expect(report.expectedJobs).toEqual({ supplied: true, expected: 2, actualScheduledJobs: 1, coveragePercent: 50 });
+    expect(report.archivedJobs).toEqual({ scheduled: 1 });
+  });
+
+  it("keeps legacy missing and restored null archive fields active", () => {
+    const report = buildPilotScorecard({ ...period, jobs: [realJob(), realJob({ archivedAt: null })] });
+    expect(report.jobs).toMatchObject({ created: 2, scheduled: 2, completed: 2 });
+    expect(report.archivedJobs.scheduled).toBe(0);
+  });
+
   it("counts offer creation and response timestamps without treating a status as a dated response", () => {
     const report = buildPilotScorecard({
       ...period,

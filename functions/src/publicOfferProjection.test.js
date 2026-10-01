@@ -11,6 +11,33 @@ function availableOffer() {
 }
 
 describe("public offer projection", () => {
+  it.each([
+    ["legacy", { operationalStatus: "OFFERED" }],
+    ["v2 offered", { schemaVersion: 2, operationalStatus: "OFFERED" }],
+    ["v2 assigned", { schemaVersion: 2, operationalStatus: "ASSIGNED" }],
+  ])("makes an archived %s Job unavailable without changing its Offer or Job", (_label, activeJob) => {
+    const offer = availableOffer();
+    const job = { ...activeJob, archivedAt: { seconds: 1 } };
+    const beforeOffer = { ...offer };
+    const beforeJob = { ...job };
+
+    expect(publicOfferResult(offer, job)).toEqual({ state: "unavailable" });
+    expect(offer).toEqual(beforeOffer);
+    expect(job).toEqual(beforeJob);
+    expect(publicOfferResult(offer, activeJob).state).toBe("available");
+  });
+
+  it("preserves expired-link precedence even when its Job is archived", () => {
+    expect(publicOfferResult({
+      ...availableOffer(),
+      publicOfferExpiresAt: { toMillis: () => 0 },
+    }, {
+      schemaVersion: 2,
+      operationalStatus: "OFFERED",
+      archivedAt: { seconds: 1 },
+    })).toEqual({ state: "expired" });
+  });
+
   it("keeps the legacy singular-Job fallback for Offers created before amount snapshots", () => {
     const result = publicOfferResult(availableOffer(), {
       operationalStatus: "OFFERED",

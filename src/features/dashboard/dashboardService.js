@@ -13,7 +13,10 @@ import {
   getInterestedJobOffers,
   getPendingJobOffers,
 } from "../jobs/jobOfferService.js";
-import { normalizeJobRecord } from "../jobs/jobCompatibility.js";
+import {
+  getAssignedCleanerIds,
+  normalizeJobRecord,
+} from "../jobs/jobCompatibility.js";
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = [
@@ -246,8 +249,10 @@ export async function getOperationalDashboard() {
     ),
   ]);
   const cleanerNamesById = await getCleanerNamesById([
-    ...recentlyCompletedJobs.map((job) => job.assignedCleanerId),
-    ...next48HoursJobs.map((job) => job.assignedCleanerId),
+    ...[...recentlyCompletedJobs, ...next48HoursJobs].flatMap((job) => [
+      ...getAssignedCleanerIds(job),
+      job.assignedCleanerId,
+    ]),
     ...offeredJobOffers.flatMap(({ interestedOffers }) =>
       interestedOffers.map((offer) => offer.cleanerId),
     ),

@@ -424,6 +424,7 @@ function isAssignmentAwareJobData(jobData) {
 }
 
 function canUsePublicOffer(jobData) {
+  if (jobData?.archivedAt) return false;
   return isAssignmentAwareJobData(jobData)
     ? ["OFFERED", "ASSIGNED"].includes(jobData.operationalStatus)
     : jobData.operationalStatus === "OFFERED";

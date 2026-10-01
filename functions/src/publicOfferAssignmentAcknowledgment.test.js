@@ -227,6 +227,25 @@ describe("public cleaner assignment acknowledgment", () => {
     })).resolves.toBe("CONFIRMED");
   });
 
+  it("does not expose or acknowledge an archived Job's Assignment and leaves every record unchanged", async () => {
+    const fixture = fakeDatabase(validRecords({ job: { archivedAt: now } }));
+    const before = [...fixture.records.entries()];
+
+    await expect(loadPublicOfferAssignmentAcknowledgment(fixture.database, {
+      organizationId,
+      jobId: "job-a",
+      job: fixture.records.get(jobPath),
+      offerId: "offer-a",
+      offer: fixture.records.get(offerPath),
+      tokenHash,
+      now,
+    })).resolves.toBeNull();
+    await expect(request(fixture.database)).resolves.toEqual({ state: "unavailable" });
+
+    expect([...fixture.records.entries()]).toEqual(before);
+    expect(fixture.updateCount).toBe(0);
+  });
+
   it("does not transfer an old acknowledgment to a new source Offer", () => {
     expect(assignmentAcknowledgmentState({
       sourceOfferId: "replacement-offer",

@@ -308,11 +308,14 @@ export async function getPropertyJobHistory(propertyId) {
 export async function getCleanerJobHistory(cleanerId) {
   const today = currentLocalDate();
   const jobs = jobsCollection();
-  const [upcomingSnapshot, scheduledHistorySnapshot, completedHistorySnapshot] = await Promise.all([
+  const snapshots = await Promise.all([
+    where("assignedCleanerId", "==", cleanerId),
+    where("assignedCleanerIds", "array-contains", cleanerId),
+  ].flatMap((cleanerConstraint) => [
     getDocs(
       query(
         jobs,
-        where("assignedCleanerId", "==", cleanerId),
+        cleanerConstraint,
         where("operationalStatus", "in", ["ASSIGNED", "IN_PROGRESS"]),
         where("scheduledDate", ">=", today),
         orderBy("scheduledDate", "asc"),
@@ -322,7 +325,7 @@ export async function getCleanerJobHistory(cleanerId) {
     getDocs(
       query(
         jobs,
-        where("assignedCleanerId", "==", cleanerId),
+        cleanerConstraint,
         where("scheduledDate", "<", today),
         orderBy("scheduledDate", "desc"),
         limit(10),
@@ -331,19 +334,30 @@ export async function getCleanerJobHistory(cleanerId) {
     getDocs(
       query(
         jobs,
-        where("assignedCleanerId", "==", cleanerId),
+        cleanerConstraint,
         where("operationalStatus", "==", "COMPLETED"),
         orderBy("completedAt", "desc"),
         limit(10),
       ),
     ),
-  ]);
+  ]));
+
+  // Keep the existing bounded summary after merging the additive legacy/roster
+  // queries. Firestore orders equal scheduled dates by document ID.
+  const upcomingJobs = uniqueJobs(
+    [snapshots[0], snapshots[3]].flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
+  ).sort((firstJob, secondJob) =>
+    firstJob.scheduledDate.localeCompare(secondJob.scheduledDate)
+      || (firstJob.id < secondJob.id ? -1 : firstJob.id > secondJob.id ? 1 : 0),
+  ).slice(0, 5);
 
   return {
-    upcomingJobs: upcomingSnapshot.docs.map(jobFromSnapshot),
+    upcomingJobs,
     recentJobs: recentJobsFromSnapshots([
-      scheduledHistorySnapshot,
-      completedHistorySnapshot,
+      snapshots[1],
+      snapshots[2],
+      snapshots[4],
+      snapshots[5],
     ]),
   };
 }

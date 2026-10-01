@@ -1,4 +1,5 @@
 import { normalizeDataProvenance } from "../src/lib/dataProvenance.js";
+import { isArchived } from "../src/lib/archiveState.js";
 
 function timestampDateKey(value) {
   const date = value?.toDate?.() || (value instanceof Date ? value : new Date(value));
@@ -48,7 +49,8 @@ export function buildPilotScorecard({ jobs = [], from, to, expectedJobs }) {
     throw new Error("Expected Jobs must be a non-negative integer.");
   }
 
-  const realJobs = jobs.filter((job) => normalizeDataProvenance(job) === "REAL");
+  const allRealJobs = jobs.filter((job) => normalizeDataProvenance(job) === "REAL");
+  const realJobs = allRealJobs.filter((job) => !isArchived(job));
   const scheduledJobs = realJobs.filter((job) => withinScheduledRange(job.scheduledDate, from, to));
   const createdOffers = realJobs.flatMap((job) => asArray(job.offers))
     .filter((offer) => withinRange(offer.createdAt, from, to));
@@ -62,7 +64,11 @@ export function buildPilotScorecard({ jobs = [], from, to, expectedJobs }) {
 
   return {
     period: { from, to },
-    provenance: "Only Jobs with explicit dataProvenance REAL are included; DEMO and UNKNOWN are excluded.",
+    provenance: "Active totals include only unarchived Jobs with explicit dataProvenance REAL; DEMO and UNKNOWN are excluded.",
+    archivedJobs: {
+      scheduled: allRealJobs.filter((job) => isArchived(job)
+        && withinScheduledRange(job.scheduledDate, from, to)).length,
+    },
     jobs: {
       created: realJobs.filter((job) => withinRange(job.createdAt, from, to)).length,
       scheduled: actualScheduledJobs,

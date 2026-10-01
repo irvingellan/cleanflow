@@ -1,6 +1,7 @@
 import { applicationDefault, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { buildPilotScorecard, validatePilotPeriod } from "./pilotScorecardCore.mjs";
+import { isArchived } from "../src/lib/archiveState.js";
 
 const productionProjectId = "clean-flow-prototipo";
 const usage = "Usage: node scripts/pilotScorecard.mjs --project <project-id> --from YYYY-MM-DD --to YYYY-MM-DD [--expected-jobs N] [--allow-production-read]";
@@ -50,7 +51,7 @@ function printScorecard(report) {
   const { from, to } = report.period;
   console.log("CleanFlow Pilot Scorecard V0");
   console.log(`Period: ${from} through ${to} (inclusive)`);
-  console.log("Scope: explicit REAL Job provenance only; DEMO and absent/UNKNOWN provenance are excluded.");
+  console.log("Scope: unarchived REAL Jobs only for active totals; DEMO and absent/UNKNOWN provenance are excluded.");
   console.log("Date handling: event timestamps use UTC dates; scheduledDate uses its stored YYYY-MM-DD value.");
   console.log("");
 
@@ -58,6 +59,7 @@ function printScorecard(report) {
   console.log(`Created in period: ${report.jobs.created}`);
   console.log(`Scheduled in period: ${report.jobs.scheduled}`);
   console.log(`Completed in period (completedAt): ${report.jobs.completed}`);
+  console.log(`Archived REAL Jobs scheduled in period (excluded from active totals): ${report.archivedJobs.scheduled}`);
   if (report.expectedJobs.supplied) {
     const coverage = report.expectedJobs.coveragePercent === null
       ? "not calculable (expected 0)"
@@ -107,10 +109,12 @@ async function loadScorecardData(database, { from, to }) {
   const organization = database.collection("organizations").doc("cleanflow-demo");
   const jobs = await readDocs(organization.collection("jobs"), [
     "dataProvenance", "demoSeed", "fixture", "demoSeedBatch", "demoSeedScenario",
-    "createdAt", "scheduledDate", "completedAt", "schemaVersion", "clientPrice", "cleanerPayout",
+    "createdAt", "scheduledDate", "completedAt", "schemaVersion", "clientPrice", "cleanerPayout", "archivedAt",
   ]);
   const realJobs = jobs.filter((job) => job.dataProvenance === "REAL");
   return Promise.all(realJobs.map(async (job) => {
+    // Retain only the aggregate archive count; archived children do not contribute to adoption.
+    if (isArchived(job)) return job;
     const jobReference = organization.collection("jobs").doc(job.id);
     const [offers, assignments, runDocs] = await Promise.all([
       readDocs(jobReference.collection("offers"), ["createdAt", "respondedAt", "status", "offeredCompensation"]),
