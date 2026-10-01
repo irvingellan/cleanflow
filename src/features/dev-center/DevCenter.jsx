@@ -30,7 +30,7 @@ export function DevCenter({
   const { translate } = useTranslation();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [advancedNotificationCheck, setAdvancedNotificationCheck] = useState(0);
-  const canMutate = access.environment === "emulator";
+  const canMutate = ["emulator", "sandbox"].includes(access.environment);
   const canPreview = access.authorized;
   const isPreviewPending = (type) => pendingPreviewType === type;
 
@@ -54,11 +54,13 @@ export function DevCenter({
         <span className={`dev-center__environment dev-center__environment--${access.environment || "unknown"}`}>
           {access.environment === "production"
             ? translate("devCenter.environmentProduction")
-            : translate("devCenter.environmentEmulator")}
+            : access.environment === "sandbox"
+              ? translate("devCenter.environmentSandbox")
+              : translate("devCenter.environmentEmulator")}
         </span>
       </div>
 
-      {!canMutate && <StateCard message={translate("devCenter.mutationsEmulatorOnly")} status="status" />}
+      {!canMutate && <StateCard message={translate("devCenter.mutationsSafeEnvironmentsOnly")} status="status" />}
 
       <section className="dev-center__count" aria-label={translate("devCenter.demoJobCount")}>
         <span>{translate("devCenter.demoJobCount")}</span>
