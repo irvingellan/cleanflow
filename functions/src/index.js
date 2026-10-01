@@ -18,7 +18,10 @@ import {
   isAuthorizedDeveloper,
   requireAuthorizedDeveloper,
 } from "./devCenterAuthorization.js";
-import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
+import {
+  assertDevCenterMutationEnvironment,
+  resolveDevCenterEnvironment,
+} from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import {
   registrationDocumentId as managerPushDeviceDocumentId,
@@ -116,6 +119,7 @@ const feedbackTypes = {
 const pushDeviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
 const pushTokenMaximumLength = 4096;
 const devCenterDeveloperUids = defineSecret("DEV_CENTER_DEVELOPER_UIDS");
+const devCenterSandboxProjectId = defineString("DEV_CENTER_SANDBOX_PROJECT_ID", { default: "" });
 const managerReminderProviderParam = defineString("MANAGER_REMINDER_PROVIDER", { default: "fcm" });
 
 function hashToken(token) {
@@ -146,8 +150,24 @@ function allowedDeveloperUids() {
   return developerUidsFromSecret(devCenterDeveloperUids.value());
 }
 
+function currentFunctionProjectId() {
+  return projectID.value() || process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "";
+}
+
+function devCenterEnvironmentOptions() {
+  return {
+    functionsEmulator: process.env.FUNCTIONS_EMULATOR,
+    currentProjectId: currentFunctionProjectId(),
+    sandboxProjectId: devCenterSandboxProjectId.value(),
+  };
+}
+
 function devCenterEnvironment() {
-  return process.env.FUNCTIONS_EMULATOR === "true" ? "emulator" : "production";
+  return resolveDevCenterEnvironment(devCenterEnvironmentOptions());
+}
+
+function assertDevCenterMutationRuntime() {
+  return assertDevCenterMutationEnvironment(devCenterEnvironmentOptions());
 }
 
 function organizationReference() {
@@ -339,7 +359,7 @@ export const generateDevCenterScenario = onCall(
   async (request) => {
     requireAuthorizedDeveloper(request, allowedDeveloperUids());
     try {
-      assertDevCenterMutationEnvironment();
+      assertDevCenterMutationRuntime();
     } catch (error) {
       throw new HttpsError("failed-precondition", error.message);
     }
@@ -395,7 +415,7 @@ export const clearDevCenterData = onCall(
   async (request) => {
     requireAuthorizedDeveloper(request, allowedDeveloperUids());
     try {
-      assertDevCenterMutationEnvironment();
+      assertDevCenterMutationRuntime();
     } catch (error) {
       throw new HttpsError("failed-precondition", error.message);
     }
