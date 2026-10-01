@@ -169,6 +169,16 @@ const packageMetadata = JSON.parse(
 )
 
 export default defineConfig(({ mode }) => {
+  const environment = loadEnv(mode, process.cwd(), "");
+  if (mode === "sandbox") {
+    const sandboxProjectId = environment.VITE_CLEANFLOW_SANDBOX_PROJECT_ID?.trim();
+    if (!sandboxProjectId
+      || sandboxProjectId === "clean-flow-prototipo"
+      || environment.VITE_FIREBASE_PROJECT_ID !== sandboxProjectId) {
+      throw new Error("Sandbox build requires one explicit non-production Firebase project binding.");
+    }
+  }
+
   const buildInfo = {
     version: `v${packageMetadata.version}`,
     buildId: process.env.GITHUB_SHA || `${packageMetadata.version}-${new Date().toISOString()}`,
