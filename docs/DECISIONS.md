@@ -883,3 +883,20 @@ fallback. A test cannot accept arbitrary push copy, bearer tokens, or Job data.
 FCM acceptance is provider evidence only, never proof that a phone displayed
 the notification. Browser permission must be observed on that browser or via
 its latest reported snapshot; registration metadata alone cannot establish it.
+
+Issue #53 adds an explicit current-device self-test for any active manager,
+separate from the unchanged advanced developer test. Its callable accepts only
+the existing local UUID and confirmation, derives `SHA256(uid:deviceId)`, and
+rechecks membership/registration ownership while claiming a manager-wide
+60-second cooldown. Server-only `currentDeviceNotificationTests` audits and
+`currentDeviceNotificationTestCooldowns` beneath the organization contain no raw
+tokens or customer data; browser access remains default-deny.
+
+The fixed test includes a Web Push notification payload. Foreground display
+requires actual FCM receipt, not an API acceptance response; the worker avoids
+duplicating SDK background display. The provider attempt is bounded to 15
+seconds. Only a durably audited, conclusive invalid-token rejection permits one
+changed-token recovery within the cooldown; UNKNOWN/timeout never does.
+Passive registration cannot overwrite that explicit refresh. Scheduled
+reminders, OneSignal and operational copy remain unchanged. Physical display
+still requires real-device observation.

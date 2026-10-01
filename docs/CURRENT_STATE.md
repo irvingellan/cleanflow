@@ -65,6 +65,30 @@ cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
   the held implementation is not approved for release
   (see [DEC-039](DECISIONS.md#dec-039--enforce-a-bounded-required-cleaner-count-per-job)).
 
+## Issue #53 — current-device notification self-test
+
+Implemented on `feature/current-device-notification-self-test-2026-10-01`, not
+yet deployed. Any active manager can explicitly tap **Enable & test
+notifications** beside the existing notification status. Permission is requested
+from that tap; denied permission instead shows settings guidance. The flow
+refreshes the existing local device UUID's FCM registration before calling
+`sendCurrentManagerTestNotification`. Server authority derives from the signed-in
+UID, active membership and exact owned registration; no arbitrary token,
+registration ID or push copy is accepted.
+
+A fixed visible-capable test uses SDK background display and test-only
+foreground receipt handling, without duplicate worker display or operational
+reminder changes. A server-owned 60-second cooldown/audit permits just one
+changed-token recovery after confirmed invalid-token rejection; ambiguous
+outcomes never auto-retry. Delayed passive registration cannot overwrite the
+explicit refresh. Results distinguish blocked permission, registration failure,
+FCM rejection/acceptance and unknown outcome. Acceptance is not phone-display
+proof. Validation passed 118 focused, 845 unit, 66 security and 35 emulator E2E
+tests, including five narrow mobile UI checks; build, syntax and diff checks
+passed. Real installed-iPhone permission/display remains unvalidated; no real
+test push has been sent during implementation. Release needs only the new
+callable and Hosting, not Rules, indexes, Storage or other Functions.
+
 ## Manager Fast Path V2 — deployed
 
 `5f14d63` was integrated into `main` and deployed on 2026-09-29 with targeted

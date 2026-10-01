@@ -21,9 +21,11 @@ import {
 import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import {
+  registrationDocumentId as managerPushDeviceDocumentId,
   reportManagerDeviceHealth,
   sendDeveloperTestNotification as dispatchDeveloperTestNotification,
 } from "./notificationLab.js";
+import { sendCurrentManagerTestNotification as dispatchCurrentManagerTestNotification } from "./currentDeviceNotificationTest.js";
 import {
   buildPublicChecklistPhotoUploadServerEvent,
   normalizePublicChecklistLoadDiagnostic,
@@ -115,10 +117,6 @@ const managerReminderProviderParam = defineString("MANAGER_REMINDER_PROVIDER", {
 
 function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function managerPushDeviceDocumentId(uid, deviceId) {
-  return createHash("sha256").update(`${uid}:${deviceId}`).digest("hex");
 }
 
 function validPushLanguage(language) {
@@ -320,6 +318,17 @@ export const sendDeveloperTestNotification = onCall(
       logger,
     });
   },
+);
+
+export const sendCurrentManagerTestNotification = onCall(
+  { region: "us-central1", timeoutSeconds: 60 },
+  async (request) => dispatchCurrentManagerTestNotification({
+    database: db,
+    organizationId,
+    request,
+    sendFcm: (message) => getMessaging().send(message),
+    logger,
+  }),
 );
 
 export const generateDevCenterScenario = onCall(

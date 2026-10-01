@@ -1,6 +1,7 @@
 import { before, after, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
 
 // Fail before loading Admin SDK/handlers unless all access is explicitly local and disposable.
@@ -33,6 +34,7 @@ const {
   registerManagerPushDevice,
   reportManagerNotificationHealth,
   sendDeveloperTestNotification,
+  sendCurrentManagerTestNotification,
   submitFeedback,
   publicOffer,
   publicChecklist,
@@ -40,8 +42,14 @@ const {
   rescheduleJob,
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
+const { sendCurrentManagerTestNotification: dispatchCurrentDeviceTest } = await import("../functions/src/currentDeviceNotificationTest.js");
 const { createHash } = await import("node:crypto");
 const admin = getFirestore();
+// Direct service tests must use the Functions dependency's Admin SDK, matching
+// its FieldValue classes; root SDK fixtures remain wire-compatible via emulator.
+const functionDatabase = createRequire(new URL("../functions/src/index.js", import.meta.url))(
+  "firebase-admin/firestore",
+).getFirestore();
 const org = "cleanflow-demo";
 const root = `organizations/${org}`;
 const paths = ["clients/client", "properties/property", "cleaners/cleaner", "jobs/job",
@@ -833,6 +841,139 @@ test("manager notification health is owner-scoped and developer test push reject
     else process.env.DEV_CENTER_DEVELOPER_UIDS = previousDeveloperUids;
   }
   assert.equal((await admin.collection(`${root}/developerNotificationTests`).get()).size, 0);
+});
+
+const currentDeviceUuid = "11111111-2222-4333-8444-555555555555";
+
+function currentDeviceRegistrationId(uid = "manager") {
+  return createHash("sha256").update(`${uid}:${currentDeviceUuid}`).digest("hex");
+}
+
+async function seedCurrentDeviceRegistration(uid = "manager", overrides = {}) {
+  const reference = admin.doc(`managerPushDevices/${currentDeviceRegistrationId(uid)}`);
+  await reference.set({
+    organizationId: org, userId: uid, active: true,
+    token: `synthetic-${uid}-push-token-${"x".repeat(40)}`, ...overrides,
+  });
+  return reference;
+}
+
+test("ordinary active manager tests only the exact UID/UUID registration and server-owned audit stays browser denied", async () => {
+  await registerManagerPushDevice.run(request("manager", {
+    deviceId: currentDeviceUuid, token: `synthetic-manager-push-token-${"x".repeat(40)}`, language: "pt",
+  }));
+  const other = await seedCurrentDeviceRegistration("other-manager");
+  const otherBefore = (await other.get()).data();
+  const registration = await admin.doc(`managerPushDevices/${currentDeviceRegistrationId()}`).get();
+  const messages = [];
+  const result = await dispatchCurrentDeviceTest({
+    database: functionDatabase, organizationId: org,
+    request: request("manager", { deviceId: currentDeviceUuid, confirm: true }),
+    sendFcm: async (message) => { messages.push(message); return "synthetic-message-id"; },
+  });
+  assert.equal(result.status, "FCM_ACCEPTED");
+  assert.equal(result.providerAccepted, true);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].token, registration.data().token);
+  assert.equal(messages[0].notification.title, "CleanFlow Test");
+  assert.equal(messages[0].webpush.notification.body, "Notifications are working on this device.");
+  assert.deepEqual((await other.get()).data(), otherBefore);
+
+  const audits = await admin.collection(`${root}/currentDeviceNotificationTests`).get();
+  assert.equal(audits.size, 1);
+  const audit = audits.docs[0];
+  assert.equal(audit.data().userId, "manager");
+  assert.equal(audit.data().registrationId, currentDeviceRegistrationId());
+  assert.equal(audit.data().status, "FCM_ACCEPTED");
+  assert.equal("token" in audit.data(), false);
+  assert.equal("deviceId" in audit.data(), false);
+  for (const path of [
+    registration.ref.path, audit.ref.path,
+    `${root}/currentDeviceNotificationTestCooldowns/manager`,
+  ]) {
+    const browserReference = account("manager").firestore().doc(path);
+    await assertFails(browserReference.get());
+    await assertFails(browserReference.set({ forged: true }));
+    await assertFails(browserReference.update({ forged: true }));
+    await assertFails(browserReference.delete());
+  }
+});
+
+test("current-device callable rejects unauthorized callers, arbitrary target/token/message fields and malformed local UUID", async () => {
+  const input = { deviceId: currentDeviceUuid, confirm: true };
+  for (const [uid, anonymous, code] of [
+    [null, false, "unauthenticated"], ["anonymous-member", true, "unauthenticated"],
+    ["inactive", false, "permission-denied"], ["cleaner", false, "permission-denied"],
+    ["other-manager", false, "permission-denied"], ["outsider", false, "permission-denied"],
+  ]) {
+    await assert.rejects(sendCurrentManagerTestNotification.run(request(uid, input, anonymous)), { code });
+  }
+  for (const extra of [
+    { targetRegistrationId: currentDeviceRegistrationId("other-manager") },
+    { userId: "other-manager" }, { organizationId: "other" },
+    { token: "synthetic-token" }, { title: "arbitrary message" }, { body: "arbitrary body" },
+    { link: "/jobs/synthetic" },
+  ]) {
+    await assert.rejects(sendCurrentManagerTestNotification.run(request("manager", { ...input, ...extra })),
+      { code: "invalid-argument" });
+  }
+  await assert.rejects(sendCurrentManagerTestNotification.run(request("manager", {
+    ...input, deviceId: "../managerPushDevices/another-target",
+  })), { code: "invalid-argument" });
+  await assert.rejects(sendCurrentManagerTestNotification.run(request("manager", {
+    ...input, confirm: false,
+  })), { code: "invalid-argument" });
+  assert.equal((await admin.collection(`${root}/currentDeviceNotificationTests`).get()).size, 0);
+});
+
+test("current-device server refuses forged ownership, inactive registration and membership removed after enrollment", async () => {
+  let sends = 0;
+  const invoke = () => dispatchCurrentDeviceTest({
+    database: functionDatabase, organizationId: org,
+    request: request("manager", { deviceId: currentDeviceUuid, confirm: true }),
+    sendFcm: async () => { sends += 1; return "synthetic-message-id"; },
+  });
+  await assert.rejects(invoke(), { code: "failed-precondition" });
+  for (const forged of [{ userId: "other-manager" }, { organizationId: "other" }]) {
+    await seedCurrentDeviceRegistration("manager", forged);
+    await assert.rejects(invoke(), { code: "permission-denied" });
+  }
+  await seedCurrentDeviceRegistration("manager", { active: false });
+  await assert.rejects(invoke(), { code: "failed-precondition" });
+  await seedCurrentDeviceRegistration();
+  await admin.doc(`${root}/members/manager`).delete();
+  await assert.rejects(invoke(), { code: "permission-denied" });
+  assert.equal(sends, 0);
+  assert.equal((await admin.collection(`${root}/currentDeviceNotificationTests`).get()).size, 0);
+});
+
+test("current-device transaction prevents concurrent duplicate sends and unknown provider outcome retains cooldown", async () => {
+  await seedCurrentDeviceRegistration();
+  let sends = 0;
+  const invoke = () => dispatchCurrentDeviceTest({
+    database: functionDatabase, organizationId: org,
+    request: request("manager", { deviceId: currentDeviceUuid, confirm: true }),
+    sendFcm: async () => {
+      sends += 1;
+      throw Object.assign(new Error("Synthetic provider uncertainty"), { code: "messaging/server-unavailable" });
+    },
+  });
+  const results = await Promise.allSettled([invoke(), invoke()]);
+  const fulfilled = results.filter((result) => result.status === "fulfilled");
+  const rejected = results.filter((result) => result.status === "rejected");
+  assert.equal(fulfilled.length, 1);
+  assert.equal(fulfilled[0].value.status, "UNKNOWN");
+  assert.equal(fulfilled[0].value.providerAccepted, null);
+  assert.equal(fulfilled[0].value.recoveryAllowed, false);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].reason.code, "resource-exhausted");
+  assert.equal(sends, 1);
+  await seedCurrentDeviceRegistration("manager", { token: `synthetic-new-token-${"y".repeat(40)}` });
+  await assert.rejects(invoke(), { code: "resource-exhausted" });
+  assert.equal(sends, 1);
+  const audits = await admin.collection(`${root}/currentDeviceNotificationTests`).get();
+  assert.equal(audits.size, 1);
+  assert.equal(audits.docs[0].data().status, "UNKNOWN");
 });
 
 async function seedChecklistJob({ checklistSettings } = {}) {

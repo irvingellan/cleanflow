@@ -48,7 +48,7 @@ function nowMillis(now) {
   return value;
 }
 
-function registrationDocumentId(userId, deviceId) {
+export function registrationDocumentId(userId, deviceId) {
   return createHash("sha256").update(`${userId}:${deviceId}`).digest("hex");
 }
 

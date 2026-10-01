@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
-import { getMessaging, getToken, isSupported } from "firebase/messaging";
+import { getAuth } from "firebase/auth";
+import { deleteToken, getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { firebaseApp, functions } from "../../services/firebase/client.js";
 import {
   associateOneSignalUser,
@@ -15,7 +16,15 @@ const messagingWorkerPath = "/firebase-messaging-sw.js";
 const messagingWorkerScope = "/firebase-messaging-push/";
 const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 const registerPushDeviceCall = httpsCallable(functions, "registerManagerPushDevice");
+const currentDeviceTestCall = httpsCallable(functions, "sendCurrentManagerTestNotification", { timeout: 30_000 });
 let fcmRegistrationState = "unknown";
+let fcmRegistrationGeneration = 0;
+let currentDeviceTestInFlight = false;
+const pendingDeviceRegistrationWrites = new Set();
+let currentTestForegroundWorker;
+let currentTestForegroundUnsubscribe;
+export const currentDeviceRegistrationTimeoutMs = 15_000;
+export const currentDeviceTestTimeoutMs = 30_000;
 
 // A passive local observation. It must not fetch a token or register a worker.
 export function getCachedFcmRegistrationState() {
@@ -64,27 +73,169 @@ function browserPermission() {
   return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
 }
 
-async function registerCurrentPushDevice() {
-  const serviceWorkerRegistration = await navigator.serviceWorker.register(
+async function registerCurrentPushDevice({ deadlineAt, assertCurrentUser = () => {} } = {}) {
+  const generation = fcmRegistrationGeneration;
+  const assertRegistrationCurrent = () => {
+    assertCurrentUser();
+    if (generation !== fcmRegistrationGeneration) {
+      throw Object.assign(new Error("Device registration superseded."), { code: "registration-superseded" });
+    }
+    if (deadlineAt != null && Date.now() >= deadlineAt) throw new Error("Device registration timed out.");
+  };
+  const wait = (promise, label) => deadlineAt == null ? promise : withProviderTimeout(
+    promise, label, Math.max(0, deadlineAt - Date.now()),
+  );
+  assertRegistrationCurrent();
+  const serviceWorkerRegistration = await wait(navigator.serviceWorker.register(
     messagingWorkerPath,
     { scope: messagingWorkerScope },
-  );
+  ), "Firebase Messaging worker registration");
+  assertRegistrationCurrent();
   const messaging = getMessaging(firebaseApp);
-  const token = await getToken(messaging, {
+  const token = await wait(getToken(messaging, {
     vapidKey,
     serviceWorkerRegistration,
-  });
+  }), "Firebase Messaging token registration");
 
   if (!token) {
     throw new Error("Unable to get a push token.");
   }
 
-  await registerPushDeviceCall({
+  assertRegistrationCurrent();
+  const registrationWrite = registerPushDeviceCall({
     deviceId: pushDeviceId(),
     token,
     language: managerNotificationLanguage(),
   });
+  pendingDeviceRegistrationWrites.add(registrationWrite);
+  void registrationWrite.then(
+    () => pendingDeviceRegistrationWrites.delete(registrationWrite),
+    () => pendingDeviceRegistrationWrites.delete(registrationWrite),
+  );
+  await wait(registrationWrite, "Manager device registration");
+  assertRegistrationCurrent();
   fcmRegistrationState = "registered";
+  return { messaging, serviceWorkerRegistration };
+}
+
+function receiveCurrentDeviceTest({ messaging, serviceWorkerRegistration }) {
+  currentTestForegroundWorker = serviceWorkerRegistration;
+  if (currentTestForegroundUnsubscribe) return;
+  // Foreground FCM messages do not automatically display. Show only this fixed
+  // test when it actually arrives, never from a provider acceptance response.
+  currentTestForegroundUnsubscribe = onMessage(messaging, (payload) => {
+    if (payload?.data?.eventType !== "CURRENT_DEVICE_TEST" || browserPermission() !== "granted") return;
+    void Promise.resolve().then(() => currentTestForegroundWorker.showNotification("CleanFlow Test", {
+      body: "Notifications are working on this device.",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: "cleanflow-current-device-test",
+      data: { link: "/" },
+    })).catch(() => {});
+  });
+}
+
+function testFailureState(error) {
+  if (["functions/resource-exhausted", "resource-exhausted"].includes(error?.code)) return "cooldown";
+  if (["functions/unauthenticated", "functions/permission-denied", "unauthenticated", "permission-denied"].includes(error?.code)) return "unauthorized";
+  if (["functions/failed-precondition", "failed-precondition"].includes(error?.code)) return "registration-failed";
+  return "unknown";
+}
+
+/** Only an explicit manager click calls this; no diagnostics or mount sends a test. */
+export function testCurrentDeviceNotifications() {
+  if (currentDeviceTestInFlight) return Promise.resolve({ state: "cooldown" });
+  currentDeviceTestInFlight = true;
+  // A passive token read must not overwrite a freshly self-healed registration.
+  fcmRegistrationGeneration += 1;
+  return runCurrentDeviceNotificationTest().finally(() => { currentDeviceTestInFlight = false; });
+}
+
+async function runCurrentDeviceNotificationTest() {
+  if (browserPermission() === "denied") return { state: "permission-blocked" };
+  if (!vapidKey || !window.isSecureContext || !("Notification" in window)
+    || !("serviceWorker" in navigator) || !("PushManager" in window)) return { state: "unsupported" };
+
+  const userId = getAuth(firebaseApp).currentUser?.uid;
+  if (!userId) return { state: "unauthorized" };
+  const assertCurrentUser = () => {
+    if (getAuth(firebaseApp).currentUser?.uid !== userId) {
+      throw Object.assign(new Error("Manager session changed."), { code: "unauthenticated" });
+    }
+  };
+  let permission;
+  try {
+    // Start the native prompt before the first await to retain the iOS tap
+    // gesture. Async SDK support still must pass before registration or send.
+    const permissionRequest = browserPermission() === "default"
+      ? Notification.requestPermission() : Promise.resolve(browserPermission());
+    const [supported, requestedPermission] = await Promise.all([
+      pushNotificationsAvailable(),
+      withProviderTimeout(permissionRequest, "Notification permission", currentDeviceTestTimeoutMs),
+    ]);
+    if (!supported) return { state: "unsupported" };
+    permission = requestedPermission;
+  } catch {
+    return { state: "registration-failed" };
+  }
+  if (permission !== "granted") return { state: permission === "denied" ? "permission-blocked" : "permission-default" };
+
+  let registration;
+  try {
+    const deadlineAt = Date.now() + currentDeviceRegistrationTimeoutMs;
+    // Wait for already-dispatched registration writes before replacing the token.
+    // On uncertainty, stop; do not race a new registration against the old write.
+    await withProviderTimeout(Promise.allSettled([...pendingDeviceRegistrationWrites]),
+      "Previous manager device registration", currentDeviceRegistrationTimeoutMs);
+    registration = await registerCurrentPushDevice({
+      deadlineAt, assertCurrentUser,
+    });
+    receiveCurrentDeviceTest(registration);
+  } catch (error) {
+    fcmRegistrationState = "error";
+    return { state: testFailureState(error) === "unauthorized" ? "unauthorized" : "registration-failed" };
+  }
+
+  const sendTest = async () => {
+    assertCurrentUser();
+    const response = await withProviderTimeout(currentDeviceTestCall({
+      deviceId: pushDeviceId(), confirm: true,
+    }), "Current-device FCM test", currentDeviceTestTimeoutMs);
+    return response?.data;
+  };
+  let result;
+  let recovered = false;
+  let refreshingStaleToken = false;
+  try {
+    result = await sendTest();
+    if (result?.status === "FAILED" && result.recoveryAllowed === true && [
+      "messaging/registration-token-not-registered", "messaging/invalid-registration-token",
+    ].includes(result.failureCode)) {
+      // Conclusive rejection only: a timeout/UNKNOWN may already have sent.
+      assertCurrentUser();
+      refreshingStaleToken = true;
+      const removed = await withProviderTimeout(deleteToken(registration.messaging),
+        "Stale FCM token removal", currentDeviceRegistrationTimeoutMs);
+      if (removed !== true) return { state: "registration-failed" };
+      registration = await registerCurrentPushDevice({
+        deadlineAt: Date.now() + currentDeviceRegistrationTimeoutMs, assertCurrentUser,
+      });
+      receiveCurrentDeviceTest(registration);
+      recovered = true;
+      refreshingStaleToken = false;
+      result = await sendTest();
+    }
+  } catch (error) {
+    const state = testFailureState(error);
+    return { state: refreshingStaleToken && state !== "unauthorized" ? "registration-failed" : state, recovered };
+  }
+  if (result?.status === "FCM_ACCEPTED" && result.providerAccepted === true) {
+    return { state: "fcm-accepted", recovered };
+  }
+  if (result?.status === "FAILED" && result.providerAccepted === false) {
+    return { state: "fcm-rejected", recovered };
+  }
+  return { state: "unknown", recovered };
 }
 
 async function enableFcmPushNotifications() {
@@ -103,22 +254,28 @@ async function enableFcmPushNotifications() {
 }
 
 export async function refreshPushNotifications() {
+  const generation = fcmRegistrationGeneration;
+  if (currentDeviceTestInFlight) return { state: fcmRegistrationState };
   if (!(await pushNotificationsAvailable()) || browserPermission() !== "granted") {
     return { state: "unavailable" };
   }
+  if (currentDeviceTestInFlight || generation !== fcmRegistrationGeneration) return { state: fcmRegistrationState };
 
   try {
     await withProviderTimeout(registerCurrentPushDevice(), "Firebase Messaging registration");
     return { state: "registered" };
-  } catch {
+  } catch (error) {
+    if (error?.code === "registration-superseded") return { state: fcmRegistrationState };
     fcmRegistrationState = "error";
     return { state: "error" };
   }
 }
 
 async function fcmDiagnosticState() {
+  const generation = fcmRegistrationGeneration;
   if (!(await pushNotificationsAvailable())) return { state: "unavailable" };
   if (browserPermission() === "denied") return { state: "unavailable" };
+  if (currentDeviceTestInFlight || generation !== fcmRegistrationGeneration) return { state: fcmRegistrationState };
   return browserPermission() === "granted" ? refreshPushNotifications() : { state: fcmRegistrationState };
 }
 

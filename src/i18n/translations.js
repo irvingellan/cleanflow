@@ -2153,6 +2153,48 @@ Object.assign(messages.es, {
   "devCenter.testFailed": "No se pudo confirmar si FCM aceptó la prueba. Revisa el registro antes de reintentar; no se verificó la visualización en el teléfono.",
 });
 
+Object.assign(messages.en, {
+  "notifications.currentDeviceTest": "Enable & test notifications",
+  "notifications.currentDeviceTesting": "Testing this device…",
+  "notifications.currentDevicePermissionBlocked": "Notifications are blocked on this device. Update browser/app and device settings, then check again.",
+  "notifications.currentDevicePermissionDefault": "Notification permission was not granted. Tap Enable & test notifications to try again.",
+  "notifications.currentDeviceUnsupported": "FCM notifications are not supported here. On iPhone/iPad, open the installed Home Screen app and try again.",
+  "notifications.currentDeviceRegistrationFailed": "This device could not register for FCM. Check your connection and try again.",
+  "notifications.currentDeviceRejected": "FCM rejected this device registration. Try again later.",
+  "notifications.currentDeviceAccepted": "FCM accepted the test. Check whether the notification appeared on this device.",
+  "notifications.currentDeviceUnknown": "The FCM result is unknown. The test may still arrive; do not retry immediately.",
+  "notifications.currentDeviceCooldown": "Please wait before testing this device again.",
+  "notifications.currentDeviceUnauthorized": "Active manager access is required to test notifications. Sign in again or contact your administrator.",
+});
+
+Object.assign(messages.pt, {
+  "notifications.currentDeviceTest": "Ativar e testar notificações",
+  "notifications.currentDeviceTesting": "Testando este dispositivo…",
+  "notifications.currentDevicePermissionBlocked": "As notificações estão bloqueadas neste dispositivo. Ajuste as configurações do navegador/app e do dispositivo e verifique novamente.",
+  "notifications.currentDevicePermissionDefault": "A permissão de notificações não foi concedida. Toque em Ativar e testar notificações para tentar novamente.",
+  "notifications.currentDeviceUnsupported": "As notificações FCM não são compatíveis aqui. No iPhone/iPad, abra o app instalado na Tela de Início e tente novamente.",
+  "notifications.currentDeviceRegistrationFailed": "Não foi possível registrar este dispositivo no FCM. Confira a conexão e tente novamente.",
+  "notifications.currentDeviceRejected": "O FCM rejeitou o registro deste dispositivo. Tente novamente mais tarde.",
+  "notifications.currentDeviceAccepted": "O FCM aceitou o teste. Verifique se a notificação apareceu neste dispositivo.",
+  "notifications.currentDeviceUnknown": "O resultado do FCM é desconhecido. O teste ainda pode chegar; não tente novamente imediatamente.",
+  "notifications.currentDeviceCooldown": "Aguarde antes de testar este dispositivo novamente.",
+  "notifications.currentDeviceUnauthorized": "É necessário acesso de gerente ativo para testar notificações. Entre novamente ou contate o administrador.",
+});
+
+Object.assign(messages.es, {
+  "notifications.currentDeviceTest": "Activar y probar notificaciones",
+  "notifications.currentDeviceTesting": "Probando este dispositivo…",
+  "notifications.currentDevicePermissionBlocked": "Las notificaciones están bloqueadas en este dispositivo. Ajusta la configuración del navegador/app y del dispositivo y comprueba de nuevo.",
+  "notifications.currentDevicePermissionDefault": "No se concedió el permiso de notificaciones. Toca Activar y probar notificaciones para intentarlo de nuevo.",
+  "notifications.currentDeviceUnsupported": "Las notificaciones FCM no son compatibles aquí. En iPhone/iPad, abre la app instalada en la pantalla de inicio e inténtalo de nuevo.",
+  "notifications.currentDeviceRegistrationFailed": "No se pudo registrar este dispositivo en FCM. Comprueba la conexión e inténtalo de nuevo.",
+  "notifications.currentDeviceRejected": "FCM rechazó el registro de este dispositivo. Inténtalo más tarde.",
+  "notifications.currentDeviceAccepted": "FCM aceptó la prueba. Comprueba si la notificación apareció en este dispositivo.",
+  "notifications.currentDeviceUnknown": "El resultado de FCM es desconocido. La prueba aún puede llegar; no la repitas inmediatamente.",
+  "notifications.currentDeviceCooldown": "Espera antes de volver a probar este dispositivo.",
+  "notifications.currentDeviceUnauthorized": "Se requiere acceso de gerente activo para probar notificaciones. Inicia sesión de nuevo o contacta al administrador.",
+});
+
 export function translateInLanguage(language, key, replacements = {}) {
   const safeLanguage = normalizeTranslationLanguage(language);
   const message = messages[safeLanguage][key] || messages.en[key] || key;

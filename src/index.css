@@ -321,6 +321,29 @@ h1 {
   cursor: pointer;
 }
 
+.notification-control__group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  max-width: 340px;
+  min-width: 0;
+}
+
+.notification-control__test {
+  min-height: 44px;
+  max-width: 100%;
+  text-align: left;
+}
+
+.notification-control__result {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-brand-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 .notification-control:hover:not(:disabled) {
   border-color: var(--color-brand);
   background: var(--color-surface-subtle);

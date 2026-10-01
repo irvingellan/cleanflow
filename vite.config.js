@@ -12,7 +12,7 @@ const firebaseConfigKeys = [
   'VITE_FIREBASE_APP_ID',
 ]
 
-function messagingWorkerSource(firebaseConfig) {
+export function messagingWorkerSource(firebaseConfig) {
   return `// Firebase Messaging needs its own worker; the main PWA worker remains network-only.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
@@ -40,6 +40,9 @@ importScripts("https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging-com
 firebase.initializeApp(${JSON.stringify(firebaseConfig)});
 
 firebase.messaging().onBackgroundMessage((payload) => {
+  // Notification payloads already get an SDK display. Keep the existing
+  // data-only operational path, without displaying the current-device test twice.
+  if (payload.notification) return;
   const data = payload.data || {};
 
   return self.registration.showNotification(data.title || "CleanFlow", {
