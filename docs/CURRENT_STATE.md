@@ -15,6 +15,10 @@ the sole system of record for upcoming work. The immediate goal is learning and
 adoption: reduce double entry, represent upcoming work reliably, observe a real
 cleaning end to end, and agree with Gabi on an explicit pilot exit criterion.
 
+## Issue #57 — Sandbox Foundation V0
+
+A dedicated human-review Sandbox is now the selected environment model. The code foundation is prepared on `feature/sandbox-foundation-v0-2026-10-01`, but **no Sandbox Firebase project has been created or deployed yet**. Production remains `clean-flow-prototipo`; Firebase Emulator remains the automated/local test environment. The Sandbox will be a separate Firebase project/origin with synthetic-only data, a permanent `SANDBOX · TEST DATA` banner, build-time Firebase/environment binding, Hosting-origin crossover guards, developer-only cross-origin navigation, and Dev Center mutation access only for Emulator or one exact server-allowlisted Sandbox project ID. The repo now has an explicit `prod` alias; the `sandbox` alias is intentionally deferred until the real globally unique Firebase project ID is known. See [SANDBOX.md](SANDBOX.md) and Issue #57. No production deploy/data/config change is part of this foundation work. Weekly Close V0 remains untouched on `feature/weekly-close-v0-2026-10-01`.
+
 ## Production baseline
 
 - The P0 manager authorization boundary is live. Direct manager access requires
