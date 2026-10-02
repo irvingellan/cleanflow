@@ -462,6 +462,12 @@ only and has no Dashboard stage events. Authorization/data semantics are unchang
 
 ## Fresh-session resume
 
+Issue #51 Workspace V1 is a branch-only, loopback/development UX experiment
+(`feature/operations-workspace-v1-intent-first-2026-10-02`), not deployed or
+integrated. Five synthetic Jobs demonstrate intent-first actions, visible schedule
+blocks and a mobile sticky next step; no backend operations execute. See
+`OPERATIONS_WORKSPACE_V1.md`. V0 remains historical reference only.
+
 1. Read this checkpoint, then the active GitHub Issue.
 2. Read only the relevant source-of-truth docs and current implementation.
 3. Prefer current code, deployment records, and recent pilot evidence over

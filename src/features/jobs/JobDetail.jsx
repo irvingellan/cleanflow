@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
 import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
@@ -355,20 +356,11 @@ export function JobDetail({
     offersSection.focus({ preventScroll: true });
     offersSection.scrollIntoView?.({ block: "start", behavior: "auto" });
   }, [offersCreatedCount, isLoadingOffers, hasOffersError]);
-  const canRescheduleByState = ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus)
-    && !job.archivedAt;
-  const hasChecklistScheduleLock = Boolean(checklistRun);
-  const scheduleAvailabilityMessage = !canRescheduleByState
-    ? translate("jobs.scheduleReadOnlyState")
-    : isLoadingChecklistRun
-      ? translate("jobs.scheduleCheckingChecklist")
-      : hasChecklistRunError
-        ? translate("jobs.scheduleChecklistUnavailable")
-        : hasChecklistScheduleLock
-          ? translate("jobs.scheduleLockedByChecklist")
-          : "";
-  const canReschedule = canRescheduleByState && !isLoadingChecklistRun
-    && !hasChecklistRunError && !hasChecklistScheduleLock;
+  const scheduleBlock = jobScheduleAvailability(job, {
+    run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
+  });
+  const scheduleAvailabilityMessage = scheduleBlock ? translate(scheduleBlock) : "";
+  const canReschedule = !scheduleBlock;
 
   useEffect(() => {
     let isCurrent = true;
