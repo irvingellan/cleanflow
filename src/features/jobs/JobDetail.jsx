@@ -271,15 +271,6 @@ export function JobDetail({
   const sortedOffers = [...offers].sort((firstOffer, secondOffer) =>
     (firstOffer.cleanerName || "").localeCompare(secondOffer.cleanerName || ""),
   );
-  const showTopOfferCta =
-    job.operationalStatus === "UNASSIGNED" &&
-    !job.archivedAt &&
-    !isAssigned &&
-    assignedCleanerIds.length === 0 &&
-    canOfferToCleaners &&
-    !isLoadingOffers &&
-    !hasOffersError &&
-    sortedOffers.length === 0;
   const sortedIssues = [...issues].sort((firstIssue, secondIssue) => {
     const firstCreatedAt = firstIssue.createdAt?.toMillis?.() || 0;
     const secondCreatedAt = secondIssue.createdAt?.toMillis?.() || 0;
@@ -986,13 +977,6 @@ export function JobDetail({
           : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
             : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
       />
-      {showTopOfferCta && (
-        <div className="job-detail__quick-action">
-          <button className="button" type="button" onClick={onOfferToCleaners}>
-            {translate("offers.offerCleaningToCleaners")}
-          </button>
-        </div>
-      )}
       <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
 
       <dl ref={historySectionRef} tabIndex={-1} className="detail-list">
@@ -1898,7 +1882,7 @@ export function JobDetail({
         <div className="offers-section__header">
           <h3 id="offers-title">{translate("offers.title")}</h3>
           <div className="offers-section__actions">
-            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length === 0 && !showTopOfferCta && (
+            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length === 0 && (
               <button
                 className="button button--primary"
                 type="button"

@@ -802,7 +802,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(onRefreshChecklistRun).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the existing Offer shortcut secondary to the suggested assignment", () => {
+  it("uses assignment intent without a duplicate top CTA and preserves the Offers controls", () => {
     const onOfferToCleaners = vi.fn();
     renderJobDetail(
       "UNASSIGNED",
@@ -810,9 +810,11 @@ describe("JobDetail lifecycle actions", () => {
       { onOfferToCleaners },
     );
 
-    const offerButton = screen.getByRole("button", { name: "Offer cleaning to cleaners" });
-    expect(offerButton).not.toHaveClass("button--primary");
-    expect(offerButton.closest(".job-detail__quick-action")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" })).toBeVisible();
+    expect(document.querySelector(".job-detail__quick-action")).not.toBeInTheDocument();
+    const offersSection = screen.getByRole("region", { name: "Offers" });
+    const offerButton = within(offersSection).getByRole("button", { name: "Offer cleaning to cleaners" });
+    expect(offerButton).toHaveClass("button--primary");
     expect(screen.getAllByRole("button", { name: "Offer cleaning to cleaners" })).toHaveLength(1);
     fireEvent.click(offerButton);
 
