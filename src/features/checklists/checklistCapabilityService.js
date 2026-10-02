@@ -188,8 +188,11 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
     uploadBody = await prepareChecklistEvidenceUploadBody(file);
   } catch (error) {
     logPhotoDiagnostic("error", "preflight", "invalid_file");
-    error.diagnosticCode = diagnosticCode;
-    throw error;
+    const uploadError = error instanceof PublicChecklistRequestError
+      ? error
+      : new PublicChecklistRequestError("checklist_photo_unavailable");
+    uploadError.diagnosticCode = diagnosticCode;
+    throw uploadError;
   }
 
   try {
