@@ -288,6 +288,12 @@ and only then design a fix. If the attempt succeeds, record non-reproduction,
 not an invented root cause. No production photo was uploaded or inspected
 during this release.
 
+## iOS Safari transport hotfix — branch prepared, not deployed
+
+Fresh Gabi evidence on 2026-10-01 exposed two iOS/Safari failures that share the current root Service Worker boundary: the installed/Home Screen and direct Safari app path can fail with `FetchEvent.respondWith ... TypeError: Load failed`, while a cleaner's required photo upload failed again with diagnostic code `3EEF8A37`. Current CleanFlow sends the selected disk-backed `File` directly as the PUT body and the root worker re-fetches every request with `respondWith(fetch(event.request))`.
+
+A current WebKit regression report for Safari/iOS 26.x documents disk-backed `File` bodies arriving empty when serialized through affected Service Worker/network paths, while reading `file.arrayBuffer()` and sending a fresh in-memory `Blob` succeeds. The focused branch `hotfix/ios-safari-transport-2026-10-02` therefore makes two deliberately small transport changes: materialize the already-bounded <=5 MiB checklist photo into a fresh in-memory Blob before PUT, and remove the root worker's network-only fetch handler so normal browser networking handles requests directly. The dedicated Firebase Messaging worker is unchanged. Tests were added for the in-memory Blob contract. This branch is **not deployed and not yet claimed production-proven**; it still requires the normal test/build/diff gate and a real Safari/iPhone validation.
+
 ## Unresolved blockers / validation
 
 - Issue #48 manager-access recovery (`d5342e8`) is merged into `main` and
