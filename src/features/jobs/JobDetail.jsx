@@ -952,74 +952,6 @@ export function JobDetail({
         )}
       </dl>
 
-      <section className="job-details-edit" aria-label={translate("jobs.editDetails")}>
-        {!isEditingJobDetails && (
-          <>
-            <button
-              className="button"
-              type="button"
-              disabled={!canEditJobDetails(job)}
-              onClick={startJobDetailsEdit}
-            >
-              {translate("jobs.editDetails")}
-            </button>
-            {!canEditJobDetails(job) && (
-              <p className="form-hint">{translate("jobs.detailsReadOnlyHistorical")}</p>
-            )}
-          </>
-        )}
-        {hasSavedJobDetails && !isEditingJobDetails && (
-          <p className="form-success" role="status">{translate("jobs.detailsSaved")}</p>
-        )}
-        {isEditingJobDetails && (
-          <form className="cleaning-form" noValidate onSubmit={saveJobDetails}>
-            <label>
-              {translate("jobs.guestName")}
-              <input
-                type="text"
-                name="guestName"
-                maxLength={maximumGuestNameLength}
-                value={jobDetailValues.guestName}
-                onChange={(event) => setJobDetailValues((current) => ({
-                  ...current,
-                  guestName: event.target.value,
-                }))}
-              />
-            </label>
-            <label>
-              {translate("common.notes")}
-              <textarea
-                name="notes"
-                rows="4"
-                value={jobDetailValues.notes}
-                onChange={(event) => setJobDetailValues((current) => ({
-                  ...current,
-                  notes: event.target.value,
-                }))}
-              />
-            </label>
-            {jobDetailsSaveError && <p className="form-error" role="alert">{jobDetailsSaveError}</p>}
-            <div className="button-row">
-              <button
-                className="button"
-                type="button"
-                disabled={isSavingJobDetails}
-                onClick={() => {
-                  setIsEditingJobDetails(false);
-                  setJobDetailsSaveError("");
-                  setJobDetailValues({ guestName: job.guestName || "", notes: job.notes || "" });
-                }}
-              >
-                {translate("common.cancel")}
-              </button>
-              <button className="button button--primary" type="submit" disabled={isSavingJobDetails}>
-                {isSavingJobDetails ? translate("jobs.savingDetails") : translate("jobs.saveDetails")}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
-
       <section className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {!isEditingJobSchedule && (
           <button
@@ -1088,6 +1020,75 @@ export function JobDetail({
               </button>
               <button className="button button--primary" type="submit" disabled={isSavingJobSchedule}>
                 {isSavingJobSchedule ? translate("jobs.savingSchedule") : translate("jobs.saveSchedule")}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+
+      <section className="job-details-edit" aria-label={translate("jobs.editDetails")}>
+        {!isEditingJobDetails && (
+          <>
+            <button
+              className="button"
+              type="button"
+              disabled={!canEditJobDetails(job)}
+              onClick={startJobDetailsEdit}
+            >
+              {translate("jobs.editDetails")}
+            </button>
+            {!canEditJobDetails(job) && (
+              <p className="form-hint">{translate("jobs.detailsReadOnlyHistorical")}</p>
+            )}
+          </>
+        )}
+        {hasSavedJobDetails && !isEditingJobDetails && (
+          <p className="form-success" role="status">{translate("jobs.detailsSaved")}</p>
+        )}
+        {isEditingJobDetails && (
+          <form className="cleaning-form" noValidate onSubmit={saveJobDetails}>
+            <label>
+              {translate("jobs.guestName")}
+              <input
+                type="text"
+                name="guestName"
+                maxLength={maximumGuestNameLength}
+                value={jobDetailValues.guestName}
+                onChange={(event) => setJobDetailValues((current) => ({
+                  ...current,
+                  guestName: event.target.value,
+                }))}
+              />
+            </label>
+            <label>
+              {translate("common.notes")}
+              <textarea
+                name="notes"
+                rows="4"
+                value={jobDetailValues.notes}
+                onChange={(event) => setJobDetailValues((current) => ({
+                  ...current,
+                  notes: event.target.value,
+                }))}
+              />
+            </label>
+            {jobDetailsSaveError && <p className="form-error" role="alert">{jobDetailsSaveError}</p>}
+            <div className="button-row">
+              <button
+                className="button"
+                type="button"
+                disabled={isSavingJobDetails}
+                onClick={() => {
+                  setIsEditingJobDetails(false);
+                  setJobDetailsSaveError("");
+                  setJobDetailValues({ guestName: job.guestName || "", notes: job.notes || "" });
+                }}
+              >
+                {translate("common.cancel")}
+              </button>
+              <button className="button button--primary" type="submit" disabled={isSavingJobDetails}>
+                {isSavingJobDetails ? translate("jobs.savingDetails") : translate("jobs.saveDetails")}
               </button>
             </div>
           </form>
