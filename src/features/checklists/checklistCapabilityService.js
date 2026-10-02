@@ -137,6 +137,21 @@ export function validateChecklistEvidenceFile(file) {
   }
 }
 
+/**
+ * Safari/iOS can fail to serialize a disk-backed File directly into fetch()
+ * while a page is controlled by a service worker. The cleaner photo limit is
+ * only 5 MiB, so materialize the selected file into a bounded in-memory Blob
+ * before crossing the network boundary.
+ */
+export async function prepareChecklistEvidenceUploadBody(file) {
+  const bytes = await file.arrayBuffer();
+  const body = new Blob([bytes], { type: file.type });
+  if (body.size !== file.size) {
+    throw new PublicChecklistRequestError("checklist_photo_unavailable");
+  }
+  return body;
+}
+
 export async function uploadPublicChecklistEvidence({ token, requirementId, file }) {
   const startedAt = Date.now();
   const sessionId = getPublicChecklistSessionId();
@@ -168,6 +183,15 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
     throw error;
   }
 
+  let uploadBody;
+  try {
+    uploadBody = await prepareChecklistEvidenceUploadBody(file);
+  } catch (error) {
+    logPhotoDiagnostic("error", "preflight", "invalid_file");
+    error.diagnosticCode = diagnosticCode;
+    throw error;
+  }
+
   try {
     const body = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
       method: "PUT",
@@ -179,7 +203,7 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
         Accept: "application/json",
       },
       credentials: "omit",
-      body: file,
+      body: uploadBody,
     }, async (response) => {
       let result = {};
       try {
