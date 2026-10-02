@@ -3,6 +3,7 @@ import {
   getPublicChecklist,
   maximumChecklistEvidenceSizeBytes,
   publicChecklistRequestTimeoutMilliseconds,
+  prepareChecklistEvidenceUploadBody,
   readyPublicChecklistForReview,
   savePublicChecklistDraft,
   uploadPublicChecklistEvidence,
@@ -34,6 +35,20 @@ describe("public checklist requests", () => {
     }));
   });
 
+  it("materializes a selected File into a fresh in-memory Blob before upload", async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0x11, 0x22]);
+    const file = new File([bytes], "camera-photo.jpg", { type: "image/jpeg" });
+
+    const body = await prepareChecklistEvidenceUploadBody(file);
+
+    expect(body).toBeInstanceOf(Blob);
+    expect(body).not.toBe(file);
+    expect(body).not.toBeInstanceOf(File);
+    expect(body.type).toBe("image/jpeg");
+    expect(body.size).toBe(file.size);
+    expect(Array.from(new Uint8Array(await body.arrayBuffer()))).toEqual(Array.from(bytes));
+  });
+
   it("lets the cleaner retry the identical image after network and server failures", async () => {
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "photo.jpg", { type: "image/jpeg" });
     const putRequest = vi.fn()
@@ -58,7 +73,13 @@ describe("public checklist requests", () => {
 
     expect(putRequest).toHaveBeenCalledTimes(3);
     for (const [, init] of putRequest.mock.calls) {
-      expect(init).toMatchObject({ method: "PUT", credentials: "omit", body: file });
+      expect(init).toMatchObject({ method: "PUT", credentials: "omit" });
+      expect(init.body).toBeInstanceOf(Blob);
+      expect(init.body).not.toBe(file);
+      expect(init.body).not.toBeInstanceOf(File);
+      expect(init.body.type).toBe(file.type);
+      expect(init.body.size).toBe(file.size);
+      expect(Array.from(new Uint8Array(await init.body.arrayBuffer()))).toEqual([0xff, 0xd8, 0xff]);
       expect(init.headers).toMatchObject({ "Content-Type": "image/jpeg", "X-CleanFlow-Checklist-Item": "living-belongings" });
       expect(init.headers["X-CleanFlow-Checklist-Session"]).toMatch(/^[a-f0-9]{36}$/i);
       expect(init.headers["X-CleanFlow-Checklist-Request"]).toMatch(/^[a-f0-9]{36}$/i);
