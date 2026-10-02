@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { JobIntentLayer } from "./JobIntentLayer.jsx";
+import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
 import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
@@ -134,6 +136,13 @@ export function JobDetail({
   const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
   const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
   const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] = useState(false);
+  const [intentNotice, setIntentNotice] = useState(null);
+  const scheduleSectionRef = useRef(null);
+  const assignmentSectionRef = useRef(null);
+  const checklistSectionRef = useRef(null);
+  const completionSectionRef = useRef(null);
+  const reminderSectionRef = useRef(null);
+  const historySectionRef = useRef(null);
   const [isPreparingReminderChecklist, setIsPreparingReminderChecklist] = useState(false);
   const [hasReminderChecklistError, setHasReminderChecklistError] = useState(false);
   const [isEditingPrices, setIsEditingPrices] = useState(false);
@@ -201,6 +210,8 @@ export function JobDetail({
   ].includes(job.operationalStatus);
   const isInProgress = job.operationalStatus === "IN_PROGRESS";
   const isCompleted = job.operationalStatus === "COMPLETED";
+  const canUseCompletionControls = !job.archivedAt
+    && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus);
   const grossMargin = getJobGrossMargin(job);
   const canEditRoster =
     isAssignmentAware &&
@@ -355,20 +366,110 @@ export function JobDetail({
     offersSection.focus({ preventScroll: true });
     offersSection.scrollIntoView?.({ block: "start", behavior: "auto" });
   }, [offersCreatedCount, isLoadingOffers, hasOffersError]);
-  const canRescheduleByState = ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus)
-    && !job.archivedAt;
-  const hasChecklistScheduleLock = Boolean(checklistRun);
-  const scheduleAvailabilityMessage = !canRescheduleByState
-    ? translate("jobs.scheduleReadOnlyState")
-    : isLoadingChecklistRun
-      ? translate("jobs.scheduleCheckingChecklist")
-      : hasChecklistRunError
-        ? translate("jobs.scheduleChecklistUnavailable")
-        : hasChecklistScheduleLock
-          ? translate("jobs.scheduleLockedByChecklist")
-          : "";
-  const canReschedule = canRescheduleByState && !isLoadingChecklistRun
-    && !hasChecklistRunError && !hasChecklistScheduleLock;
+  const scheduleBlock = jobScheduleAvailability(job, {
+    run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
+  });
+  const scheduleAvailabilityMessage = scheduleBlock ? translate(scheduleBlock) : "";
+  const canReschedule = !scheduleBlock;
+
+  // Suggestions are presentation, not a second authorization/state machine.
+  const primaryIntent = job.archivedAt || isCompleted
+    ? { intent: "history", label: "jobs.intentHistory" }
+    : isLoadingChecklistRun || hasChecklistRunError
+      ? { intent: "checklist", label: "jobs.intent.checklist" }
+      : checklistRun
+        ? { intent: "checklist", label: checklistRun.status === "READY_FOR_REVIEW"
+          ? "jobs.intentReview" : "checklists.open" }
+        : job.operationalStatus === "UNASSIGNED" || job.operationalStatus === "OFFERED"
+          ? { intent: "assignment", label: "jobs.assignCleanerDirectly" }
+          : job.operationalStatus === "ASSIGNED"
+            ? { intent: "reminder", label: "jobs.intent.reminder" }
+            : { intent: "completion", label: "jobs.intent.completion" };
+
+  function focusIntentSection(ref) {
+    // Wait for an existing form/preview to render; ignore a switched/unmounted Job.
+    const jobId = job.id;
+    requestAnimationFrame(() => {
+      if (currentJobIdRef.current !== jobId) return;
+      ref.current?.focus({ preventScroll: true });
+      ref.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
+    });
+  }
+
+  function chooseJobIntent(intent) {
+    setIntentNotice(null);
+    if (intent === "history") {
+      setIntentNotice({ key: "jobs.intentHistorical" });
+      if (!isLoadingChecklistRun && !hasChecklistRunError && checklistRun) onOpenChecklistRun?.();
+      else focusIntentSection(historySectionRef);
+      return;
+    }
+    if (intent === "schedule") {
+      if (!canReschedule) {
+        setIntentNotice({ key: scheduleBlock, safe: Boolean(checklistRun) && !isLoadingChecklistRun && !hasChecklistRunError });
+        return;
+      }
+      if (!isEditingJobSchedule) startJobScheduleEdit();
+      focusIntentSection(scheduleSectionRef);
+      return;
+    }
+    if (intent === "checklist") {
+      // Existing controls own loading/error/create/open behavior. No auto-creation.
+      if (!isLoadingChecklistRun && !hasChecklistRunError && checklistRun) onOpenChecklistRun?.();
+      else focusIntentSection(checklistSectionRef);
+      return;
+    }
+    if (job.archivedAt || isCompleted) {
+      setIntentNotice({ key: "jobs.intentHistorical", safe: Boolean(checklistRun) });
+      return;
+    }
+    if (intent === "assignment") {
+      if (canDirectAssign) setIsDirectAssignmentOpen(true);
+      if (canDirectAssign || canEditRoster) focusIntentSection(assignmentSectionRef);
+      else if (canOfferToCleaners && !isAssignmentAware) focusIntentSection(offersSectionRef);
+      else setIntentNotice({ key: "jobs.intentRosterUnavailable", safe: isAssignmentAware ? "roster" : null });
+      return;
+    }
+    if (intent === "reminder") {
+      if (job.operationalStatus !== "ASSIGNED") {
+        setIntentNotice({ key: "jobs.intentReminderUnavailable", safe: canDirectAssign ? "assignment" : null });
+        return;
+      }
+      if (isAssignmentAware) {
+        if (isLoadingAssignments || hasAssignmentsError) {
+          focusIntentSection(assignmentSectionRef);
+          return;
+        }
+        if (activeAssignments.length !== 1) {
+          setIntentNotice({ key: "jobs.intentSelectReminderCleaner", safe: "roster" });
+          return;
+        }
+        const assignment = activeAssignments[0];
+        openReminderPreview(assignment.cleanerId, cleanerNamesById[assignment.cleanerId] || translate("common.notProvided"), assignment.id);
+      } else if (job.assignedCleanerId || job.assignedCleanerName) {
+        openReminderPreview(job.assignedCleanerId || "legacy-assigned-cleaner", assignedCleanerName);
+      } else {
+        setIntentNotice({ key: "jobs.intentReminderUnavailable" });
+        return;
+      }
+      focusIntentSection(reminderSectionRef);
+      return;
+    }
+    if (intent === "completion") {
+      if (!canUseCompletionControls) {
+        setIntentNotice({ key: "jobs.intentCompletionUnavailable", safe: canDirectAssign ? "assignment" : null });
+      } else if (isLoadingChecklistRun || hasChecklistRunError) {
+        focusIntentSection(completionSectionRef);
+      } else if (checklistRun) {
+        setIntentNotice({ key: checklistRun.status === "DRAFT" ? "jobs.completionDraftOptions"
+          : checklistRun.status === "READY_FOR_REVIEW" ? "jobs.completionRequiresChecklistReview"
+            : "jobs.completionChecklistUnavailable", safe: true });
+      } else {
+        setIsCompletionConfirmationVisible(true);
+        focusIntentSection(completionSectionRef);
+      }
+    }
+  }
 
   useEffect(() => {
     let isCurrent = true;
@@ -435,6 +536,7 @@ export function JobDetail({
     setJobScheduleSaveError("");
     setHasSavedJobSchedule(false);
     setScheduleCommunicationMayBeStale(false);
+    setIntentNotice(null);
   }, [job.id]);
 
   useEffect(() => {
@@ -872,6 +974,17 @@ export function JobDetail({
       <h2 id="job-detail-title" className="panel__title">
         {job.propertyName || translate("properties.unnamed")}
       </h2>
+      <JobIntentLayer
+        key={job.id}
+        primary={primaryIntent}
+        onIntent={chooseJobIntent}
+        notice={intentNotice ? translate(intentNotice.key) : null}
+        onSafePath={intentNotice?.safe ? () => intentNotice.safe === "roster"
+          ? focusIntentSection(assignmentSectionRef)
+          : chooseJobIntent(intentNotice.safe === "assignment" ? "assignment" : "checklist") : null}
+        safeLabel={translate(intentNotice?.safe === "roster" ? "jobs.assignedCleaners"
+          : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly" : "jobs.intentExistingChecklist")}
+      />
       {showTopOfferCta && (
         <div className="job-detail__quick-action">
           <button className="button button--primary" type="button" onClick={onOfferToCleaners}>
@@ -882,7 +995,7 @@ export function JobDetail({
       <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
       <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
-      <dl className="detail-list">
+      <dl ref={historySectionRef} tabIndex={-1} className="detail-list">
         <DetailItem
           label={translate("common.property")}
           value={job.propertyName || translate("properties.unnamed")}
@@ -952,7 +1065,7 @@ export function JobDetail({
         )}
       </dl>
 
-      <section className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
+      <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {!isEditingJobSchedule && (
           <button
             className="button"
@@ -976,6 +1089,7 @@ export function JobDetail({
         )}
         {isEditingJobSchedule && (
           <form className="cleaning-form" noValidate onSubmit={saveJobSchedule}>
+            <p className="form-hint">{translate("jobs.scheduleExternalMessageWarning")}</p>
             <label>
               {translate("jobs.scheduledDate")}
               <input
@@ -1159,7 +1273,7 @@ export function JobDetail({
         )}
       </section>
 
-      <section className="job-checklist" aria-labelledby="job-checklist-title">
+      <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
         <div className="issues-section__header">
           <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
           {!isLoadingChecklistRun && checklistRun && (
@@ -1226,8 +1340,8 @@ export function JobDetail({
         />
       </section>
 
-      {!job.archivedAt && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus) && (
-        <section className="job-execution" aria-label={translate("jobs.completeService")}>
+      {canUseCompletionControls && (
+        <section ref={completionSectionRef} tabIndex={-1} className="job-execution" aria-label={translate("jobs.completeService")}>
           {isLoadingChecklistRun && (
             <p className="form-hint">{translate("jobs.completionCheckingChecklist")}</p>
           )}
@@ -1335,7 +1449,7 @@ export function JobDetail({
       )}
 
       {isAssignmentAware && (
-        <section className="assignment-roster" aria-labelledby="assigned-cleaners-title">
+        <section ref={assignmentSectionRef} tabIndex={-1} className="assignment-roster" aria-labelledby="assigned-cleaners-title">
           <div className="assignment-roster__header">
             <div>
               <h3 id="assigned-cleaners-title">{translate("jobs.assignedCleaners")}</h3>
@@ -1518,7 +1632,7 @@ export function JobDetail({
       )}
 
       {reminderPreview && (
-        <section className="job-reminder-preview" aria-labelledby="job-reminder-preview-title">
+        <section ref={reminderSectionRef} tabIndex={-1} className="job-reminder-preview" aria-labelledby="job-reminder-preview-title">
           <div className="job-reminder-preview__header">
             <h3 id="job-reminder-preview-title">
               {translate("jobs.reminderPreviewTitle", { cleaner: reminderPreview.cleanerName })}

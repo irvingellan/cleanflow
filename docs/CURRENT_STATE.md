@@ -462,6 +462,13 @@ only and has no Dashboard stage events. Authorization/data semantics are unchang
 
 ## Fresh-session resume
 
+Issue #64 Job Detail Intent Layer V0 is implemented only on
+`feature/job-detail-intent-layer-v0-2026-10-02`, not deployed/integrated. It adds
+one suggested next step and five visible intentions to the existing Job Detail,
+using current forms, reminder preview, Run-open and completion confirmation.
+Schedule/Run locks and backend rules are unchanged. Draft PR #63 remains separate.
+Synthetic visual checks: `npx playwright test --config playwright.job-intent.config.js`.
+
 1. Read this checkpoint, then the active GitHub Issue.
 2. Read only the relevant source-of-truth docs and current implementation.
 3. Prefer current code, deployment records, and recent pilot evidence over

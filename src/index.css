@@ -3686,6 +3686,23 @@ button.summary-card {
   margin-bottom: 20px;
 }
 
+/* Job Detail intent navigation; all original forms and mutation guards remain. */
+.job-intents { margin: 16px 0 24px; padding: 18px; border: 1px solid var(--color-border); border-radius: 12px; }
+.job-intents__next { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.job-intents__next .eyebrow { margin: 0 0 4px; }
+.job-intents h3 { margin: 0 0 10px; font-size: 1rem; }
+.job-intents__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.job-intents__actions .button { min-height: 44px; }
+.job-intents__notice { margin-top: 12px; padding: 12px; border-left: 3px solid var(--color-brand-text); background: var(--color-surface); }
+.job-intents__notice p { margin: 0 0 10px; }
+@media (max-width: 600px) {
+  .job-intents { padding: 12px; }
+  .job-intents__next { align-items: stretch; }
+  .job-intents__next > .button { width: 100%; min-height: 44px; }
+  .job-intents__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .job-intents__actions .button { min-width: 0; white-space: normal; padding: 10px; font-size: .8125rem; }
+}
+
 .offers-section__success {
   margin: 0 0 14px;
   color: var(--color-brand-text);

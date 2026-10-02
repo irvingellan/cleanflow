@@ -1,0 +1,40 @@
+import { expect, test } from "@playwright/test";
+for (const width of [1440, 390]) test(`real Job Detail intents at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+  const externalRequests = [];
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname !== "127.0.0.1" || url.pathname.startsWith("/api/")) { externalRequests.push(url.hostname); return route.abort(); }
+    return route.continue();
+  });
+  await page.addInitScript(() => localStorage.setItem("cleanflow-language", "pt"));
+  await page.goto("/e2e/intent/job-detail.html");
+  const scenario = page.getByLabel("Local synthetic scenario");
+  const intentions = page.getByRole("region", { name: "O que você quer fazer?" });
+  await expect(intentions.getByRole("button", { name: "Próximo passo: Atribuir cleaner" })).toBeVisible();
+  await intentions.getByRole("button", { name: "Próximo passo: Atribuir cleaner" }).click();
+  await expect(page.locator(".assignment-roster form select")).toBeVisible();
+  await scenario.selectOption("assigned");
+  await expect(intentions.getByRole("button", { name: "Próximo passo: Preparar lembrete" })).toBeVisible();
+  await intentions.getByRole("button", { name: "Escolher intenção: Alterar data / horário" }).click();
+  await expect(page.getByRole("button", { name: "Salvar horário" })).toBeVisible();
+  await scenario.selectOption("draft");
+  await intentions.getByRole("button", { name: "Escolher intenção: Alterar data / horário" }).click();
+  await expect(intentions.getByRole("status")).toContainText("Não apague o serviço");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: `artifacts/visual-smoke/job-detail-intent-${width}-draft.png` });
+  await intentions.getByRole("button", { name: "Revisar checklist existente →" }).click();
+  await expect(page.getByText("Existing Run open callback reached (synthetic).")).toBeVisible();
+  await scenario.selectOption("ready");
+  await expect(intentions.getByRole("button", { name: "Próximo passo: Revisar checklist" })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: `artifacts/visual-smoke/job-detail-intent-${width}.png` });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await scenario.selectOption("completed");
+  await intentions.getByRole("button", { name: "Escolher intenção: Concluir serviço" }).click();
+  await expect(intentions.getByRole("status")).toContainText("histórico");
+  expect(externalRequests).toEqual([]);
+  expect(errors).toEqual([]);
+});

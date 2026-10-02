@@ -84,6 +84,86 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
 }
 
 describe("JobDetail lifecycle actions", () => {
+  it("UNASSIGNED next step opens the current direct-assignment form", () => {
+    renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    expect(screen.getByRole("combobox")).toBeVisible();
+    expect(screen.getByText("Assign an active cleaner without an Offer or interest response.")).toBeVisible();
+  });
+  it("ASSIGNED without Run prepares the current reminder without sending", () => {
+    const complete = vi.fn();
+    renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["cleaner-1"] }, { onCompleteCleaning: complete }, {
+      knownCleaners: [{ id: "cleaner-1", name: "Demo Cleaner" }],
+      assignments: [{ id: "a1", cleanerId: "cleaner-1", isActive: true }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next step: Prepare reminder" }));
+    expect(screen.getByRole("heading", { name: "Review reminder for Demo Cleaner" })).toBeVisible();
+    expect(complete).not.toHaveBeenCalled();
+  });
+  it("DRAFT schedule intention explains protection and opens the existing Run", () => {
+    const open = vi.fn();
+    renderJobDetail("ASSIGNED", { schemaVersion: 2 }, { onOpenChecklistRun: open }, { run: { id: "initial", status: "DRAFT" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(within(screen.getByRole("region", { name: "What do you want to do?" })).getByRole("status")).toHaveTextContent(/Do not delete the service/);
+    fireEvent.click(screen.getByRole("button", { name: "Review existing checklist →" }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
+  });
+  it("READY suggests review through the existing open handler", () => {
+    const open = vi.fn();
+    renderJobDetail("ASSIGNED", {}, { onOpenChecklistRun: open }, { run: { status: "READY_FOR_REVIEW" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next step: Review checklist" }));
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+  it("unknown Run state directs to existing retry/loading controls without creating", () => {
+    const create = vi.fn();
+    const open = vi.fn();
+    renderJobDetail("ASSIGNED", {}, { onCreateChecklistRun: create, onOpenChecklistRun: open }, { isLoading: true });
+    fireEvent.click(screen.getByRole("button", { name: "Next step: Checklist" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(within(screen.getByRole("region", { name: "What do you want to do?" })).getByRole("status")).toHaveTextContent("Checking whether a checklist has been created…");
+    expect(create).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+  });
+  it("multiple assigned cleaners require explicit recipient selection", () => {
+    renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["c1", "c2"] }, {}, {
+      knownCleaners: [{ id: "c1", name: "Demo One" }, { id: "c2", name: "Demo Two" }],
+      assignments: [{ id: "a1", cleanerId: "c1", isActive: true }, { id: "a2", cleanerId: "c2", isActive: true }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next step: Prepare reminder" }));
+    expect(screen.getByRole("status")).toHaveTextContent(/Choose the assigned cleaner below/);
+    expect(screen.queryByRole("heading", { name: /Review reminder for/ })).not.toBeInTheDocument();
+  });
+  it("completed mutation intentions remain visible without invoking mutations", () => {
+    const complete = vi.fn();
+    renderJobDetail("COMPLETED", { schemaVersion: 2 }, { onCompleteCleaning: complete });
+    for (const action of ["Assign / change cleaner", "Prepare reminder", "Complete service"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Choose intention: ${action}` }));
+      expect(screen.getByRole("status")).toHaveTextContent(/historical or archived/);
+    }
+    expect(screen.getByRole("button", { name: "Next step: View saved service" })).toBeEnabled();
+    expect(complete).not.toHaveBeenCalled();
+  });
+  it("completion intention opens confirmation, not an immediate mutation", () => {
+    const complete = vi.fn();
+    renderJobDetail("ASSIGNED", {}, { onCompleteCleaning: complete });
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Complete service" }));
+    expect(complete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Complete service" }));
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+  it("schedule intention uses the original edit/save handler and warning", async () => {
+    const update = vi.fn().mockResolvedValue({ job: { scheduledDate: "2026-10-06", scheduledStart: "12:00" } });
+    renderJobDetail("ASSIGNED", { scheduledDate: "2026-10-05", scheduledStart: "11:00" }, { onUpdateSchedule: update });
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.getByText(/resend the updated details/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-10-06" } });
+    fireEvent.change(screen.getByLabelText("Scheduled time"), { target: { value: "12:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-06");
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ scheduledDate: "2026-10-06", scheduledStart: "12:00" }));
+  });
   it("lets an eligible Job schedule change and warns that an external cleaner message may be stale", async () => {
     const onUpdateSchedule = vi.fn().mockResolvedValue({
       changed: true,

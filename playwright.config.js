@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["**/scenarios/**"],
+  testIgnore: ["**/scenarios/**", "**/intent/**"],
   globalSetup: "./e2e/globalSetup.js",
   timeout: 30_000,
   retries: process.env.CI ? 1 : 0,
