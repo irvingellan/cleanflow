@@ -104,6 +104,20 @@ describe("Dashboard near-term cleaner attention", () => {
     vi.restoreAllMocks();
   });
 
+  it.each(["en", "pt", "es"])("shows a usable localized retry instead of loading after failure (%s)", (language) => {
+    const retry = vi.fn();
+    window.localStorage.setItem("cleanflow-language", language);
+    function Failure() {
+      const { translate } = useTranslation();
+      return <Dashboard isLoading={false} hasError translate={translate} onRefresh={retry} />;
+    }
+    render(<TranslationProvider><Failure /></TranslationProvider>);
+    expect(screen.getByRole("alert")).toBeVisible();
+    fireEvent.click(screen.getByRole("button"));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("makes today and tomorrow unassigned Jobs explicit without flagging assigned Jobs", () => {
     renderDashboard();
 

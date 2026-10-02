@@ -450,6 +450,16 @@ Current evidence priorities:
 4. Test the owner-report hypothesis and gather only the scorecard signals
    needed to evaluate adoption.
 
+## Issue #61 — bounded Dashboard recovery (not deployed)
+
+Issue #61 Dashboard recovery is implemented locally, not deployed: each load
+has a 20-second deadline, then the existing localized error/Refresh action.
+Retry starts a fresh generation; late responses, view changes and unmount cannot
+publish stale data. Resume events check, never renew, the deadline. Synthetic
+stalls cover initial reads, Offers, Issues and Cleaner names. The incident's
+specific pending read is unproven: existing telemetry records completed loads
+only and has no Dashboard stage events. Authorization/data semantics are unchanged.
+
 ## Fresh-session resume
 
 1. Read this checkpoint, then the active GitHub Issue.
