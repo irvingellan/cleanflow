@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "hosting:prepare": "node scripts/prepareHosting.mjs",
     "build:emulators": "VITE_USE_FIREBASE_EMULATORS=true vite build --mode emulator",
     "preview": "vite preview",
     "test": "vitest run",
