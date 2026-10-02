@@ -144,7 +144,20 @@ export function validateChecklistEvidenceFile(file) {
  * before crossing the network boundary.
  */
 export async function prepareChecklistEvidenceUploadBody(file) {
-  const bytes = await file.arrayBuffer();
+  let timeoutId;
+  let bytes;
+  try {
+    bytes = await Promise.race([
+      file.arrayBuffer(),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new PublicChecklistRequestError(
+          "checklist_request_timeout", undefined, null, "preflight",
+        )), publicChecklistRequestTimeoutMilliseconds);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const body = new Blob([bytes], { type: file.type });
   if (body.size !== file.size) {
     throw new PublicChecklistRequestError("checklist_photo_unavailable");
@@ -187,7 +200,7 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
   try {
     uploadBody = await prepareChecklistEvidenceUploadBody(file);
   } catch (error) {
-    logPhotoDiagnostic("error", "preflight", "invalid_file");
+    logPhotoDiagnostic("error", "preflight", error?.code === "checklist_request_timeout" ? "timeout" : "invalid_file");
     const uploadError = error instanceof PublicChecklistRequestError
       ? error
       : new PublicChecklistRequestError("checklist_photo_unavailable");

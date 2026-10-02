@@ -49,6 +49,45 @@ describe("public checklist requests", () => {
     expect(Array.from(new Uint8Array(await body.arrayBuffer()))).toEqual(Array.from(bytes));
   });
 
+  it("bounds a stalled File read without starting a PUT, and retries the same selection", async () => {
+    vi.useFakeTimers();
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "synthetic.jpg", { type: "image/jpeg" });
+    let finishLateRead;
+    const read = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { finishLateRead = resolve; }))
+      .mockResolvedValue(new Uint8Array([0xff, 0xd8, 0xff]).buffer);
+    Object.defineProperty(file, "arrayBuffer", { value: read });
+    const fetchMock = vi.fn((_path, init) => Promise.resolve(init.method === "PUT"
+      ? { ok: true, status: 200, json: async () => ({ evidence: [{ requirementId: "living-belongings" }] }) }
+      : { ok: true, status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    let failure;
+    const selection = { token: "synthetic-token", requirementId: "living-belongings", file };
+    const first = uploadPublicChecklistEvidence(selection).catch((error) => { failure = error; });
+    await vi.advanceTimersByTimeAsync(publicChecklistRequestTimeoutMilliseconds + 1);
+    expect(failure).toMatchObject({ code: "checklist_request_timeout", stage: "preflight" });
+    await first;
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PUT")).toHaveLength(0);
+    finishLateRead(new Uint8Array([0xff, 0xd8, 0xff]).buffer);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PUT")).toHaveLength(0);
+    await expect(uploadPublicChecklistEvidence(selection)).resolves.toHaveProperty("evidence");
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PUT")).toHaveLength(1);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves all 5 MiB at the boundary and rejects a partial File read", async () => {
+    const bytes = new Uint8Array(maximumChecklistEvidenceSizeBytes).fill(0x5a);
+    const file = new File([bytes], "synthetic.png", { type: "image/png" });
+    expect(() => validateChecklistEvidenceFile(file)).not.toThrow();
+    const body = await prepareChecklistEvidenceUploadBody(file);
+    expect(body.type).toBe("image/png");
+    const result = new Uint8Array(await body.arrayBuffer());
+    expect(result.length).toBe(bytes.length);
+    expect(result.every((value, index) => value === bytes[index])).toBe(true);
+    Object.defineProperty(file, "arrayBuffer", { value: vi.fn().mockResolvedValue(new ArrayBuffer(1)) });
+    await expect(prepareChecklistEvidenceUploadBody(file)).rejects.toHaveProperty("code", "checklist_photo_unavailable");
+  });
+
   it("keeps an unreadable selected file retryable and diagnostic-safe", async () => {
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "camera-photo.jpg", { type: "image/jpeg" });
     Object.defineProperty(file, "arrayBuffer", {
