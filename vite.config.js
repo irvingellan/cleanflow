@@ -96,10 +96,9 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
-// Keep authenticated operational data network-only; this worker intentionally does not cache it.
-self.addEventListener("fetch", (event) => {
-  event.respondWith(fetch(event.request));
-});
+// Intentionally no fetch handler. A network-only respondWith(fetch(event.request))
+// adds no caching value and can break Safari/iOS request serialization or navigation.
+// Let the browser perform normal networking; authenticated operational data stays uncached.
 `
 }
 
