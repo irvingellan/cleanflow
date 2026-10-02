@@ -94,7 +94,10 @@ describe("JobDetail lifecycle actions", () => {
       scheduledStart: "10:00",
     }, { onUpdateSchedule });
 
-    fireEvent.click(screen.getByRole("button", { name: "Change date / time" }));
+    const scheduleAction = screen.getByRole("button", { name: "Change date / time" });
+    const detailsAction = screen.getByRole("button", { name: "Edit guest / notes" });
+    expect(scheduleAction.compareDocumentPosition(detailsAction) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(scheduleAction);
     expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Scheduled time")).toHaveValue("10:00");
     fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-10-02" } });
@@ -137,7 +140,7 @@ describe("JobDetail lifecycle actions", () => {
 
     renderJobDetail("ASSIGNED", {}, {}, { run: { id: "initial", status: "DRAFT" } });
     expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
-    expect(screen.getByText(/Checklist Run has frozen/i)).toBeVisible();
+    expect(screen.getByText(/Do not delete the service/i)).toBeVisible();
   });
 
   it.each(["IN_PROGRESS", "COMPLETED"])("does not allow schedule edits for %s Jobs", (status) => {
