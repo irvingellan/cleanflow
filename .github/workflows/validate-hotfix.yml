@@ -1,0 +1,33 @@
+name: Validate hotfix branch
+
+on:
+  push:
+    branches:
+      - hotfix/ios-safari-transport-2026-10-02
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ci-api-key
+          VITE_FIREBASE_AUTH_DOMAIN: ci.example
+          VITE_FIREBASE_PROJECT_ID: ci-cleanflow
+          VITE_FIREBASE_STORAGE_BUCKET: ci-cleanflow.appspot.com
+          VITE_FIREBASE_MESSAGING_SENDER_ID: "1234567890"
+          VITE_FIREBASE_APP_ID: "1:1234567890:web:ci"
+      - run: git diff --check origin/main...HEAD
