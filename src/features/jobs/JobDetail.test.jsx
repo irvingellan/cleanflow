@@ -94,7 +94,7 @@ describe("JobDetail lifecycle actions", () => {
       scheduledStart: "10:00",
     }, { onUpdateSchedule });
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change date / time" }));
     expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Scheduled time")).toHaveValue("10:00");
     fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-10-02" } });
@@ -114,7 +114,7 @@ describe("JobDetail lifecycle actions", () => {
   it("rejects an invalid date before saving and allows leaving the time blank", async () => {
     const onUpdateSchedule = vi.fn();
     renderJobDetail("UNASSIGNED", { scheduledDate: "2026-10-01", scheduledStart: "09:00" }, { onUpdateSchedule });
-    fireEvent.click(screen.getByRole("button", { name: "Edit schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change date / time" }));
     fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-02-30" } });
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid calendar date.");
@@ -131,30 +131,30 @@ describe("JobDetail lifecycle actions", () => {
 
   it("keeps schedule editing disabled while checklist status is unknown or a frozen Run exists", () => {
     const { unmount } = renderJobDetail("ASSIGNED", {}, {}, { isLoading: true });
-    expect(screen.getByRole("button", { name: "Edit schedule" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
     expect(screen.getByText("Checking whether a checklist has been created…")).toBeVisible();
     unmount();
 
     renderJobDetail("ASSIGNED", {}, {}, { run: { id: "initial", status: "DRAFT" } });
-    expect(screen.getByRole("button", { name: "Edit schedule" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
     expect(screen.getByText(/Checklist Run has frozen/i)).toBeVisible();
   });
 
   it.each(["IN_PROGRESS", "COMPLETED"])("does not allow schedule edits for %s Jobs", (status) => {
     renderJobDetail(status, { scheduledDate: "2026-10-01" });
-    expect(screen.getByRole("button", { name: "Edit schedule" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
     expect(screen.getByText(/only before work starts/i)).toBeVisible();
   });
 
   it("does not allow schedule edits on archived Jobs", () => {
     renderJobDetail("ASSIGNED", { archivedAt: { seconds: 1 } });
-    expect(screen.getByRole("button", { name: "Edit schedule" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
   });
 
   it("keeps the schedule form open with a useful error after a callable failure", async () => {
     const onUpdateSchedule = vi.fn().mockRejectedValue(new Error("offline"));
     renderJobDetail("UNASSIGNED", { scheduledDate: "2026-10-01" }, { onUpdateSchedule });
-    fireEvent.click(screen.getByRole("button", { name: "Edit schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change date / time" }));
     fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-10-03" } });
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update the schedule.");
