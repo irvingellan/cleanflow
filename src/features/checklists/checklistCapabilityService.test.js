@@ -49,6 +49,31 @@ describe("public checklist requests", () => {
     expect(Array.from(new Uint8Array(await body.arrayBuffer()))).toEqual(Array.from(bytes));
   });
 
+  it("keeps an unreadable selected file retryable and diagnostic-safe", async () => {
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "camera-photo.jpg", { type: "image/jpeg" });
+    Object.defineProperty(file, "arrayBuffer", {
+      value: vi.fn().mockRejectedValue(new DOMException("File backing store unavailable", "NotReadableError")),
+    });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadPublicChecklistEvidence({
+      token: "opaque-token", requirementId: "living-belongings", file,
+    })).rejects.toMatchObject({
+      code: "checklist_photo_unavailable",
+      diagnosticCode: expect.stringMatching(/^[A-F0-9]{8}$/),
+    });
+
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PUT")).toHaveLength(0);
+    const payload = JSON.parse(fetchMock.mock.calls.find(([, init]) => init.method === "POST")[1].body);
+    expect(payload).toMatchObject({
+      action: "PHOTO_UPLOAD_DIAGNOSTIC",
+      diagnostic: { result: "error", stage: "preflight", errorCode: "invalid_file" },
+    });
+    expect(JSON.stringify(payload)).not.toContain("camera-photo.jpg");
+    expect(JSON.stringify(payload)).not.toContain("File backing store unavailable");
+  });
+
   it("lets the cleaner retry the identical image after network and server failures", async () => {
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "photo.jpg", { type: "image/jpeg" });
     const putRequest = vi.fn()
