@@ -3695,6 +3695,9 @@ button.summary-card {
 .job-intents__actions .button { min-height: 44px; }
 .job-intents__notice { margin-top: 12px; padding: 12px; border-left: 3px solid var(--color-brand-text); background: var(--color-surface); }
 .job-intents__notice p { margin: 0 0 10px; }
+.job-detail__secondary-actions { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+.job-detail__secondary-actions > summary { color: var(--color-text-secondary); cursor: pointer; padding: 10px 0; min-height: 44px; }
+.job-detail__secondary-actions[open] > summary { margin-bottom: 12px; }
 @media (max-width: 600px) {
   .job-intents { padding: 12px; }
   .job-intents__next { align-items: stretch; }

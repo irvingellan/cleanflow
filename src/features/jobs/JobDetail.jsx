@@ -369,7 +369,6 @@ export function JobDetail({
   const scheduleBlock = jobScheduleAvailability(job, {
     run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
   });
-  const scheduleAvailabilityMessage = scheduleBlock ? translate(scheduleBlock) : "";
   const canReschedule = !scheduleBlock;
 
   // Suggestions are presentation, not a second authorization/state machine.
@@ -379,7 +378,8 @@ export function JobDetail({
       ? { intent: "checklist", label: "jobs.intent.checklist" }
       : checklistRun
         ? { intent: "checklist", label: checklistRun.status === "READY_FOR_REVIEW"
-          ? "jobs.intentReview" : "checklists.open" }
+          ? "jobs.intentReview" : checklistRun.status === "DRAFT"
+            ? "jobs.intentExistingChecklist" : "checklists.open" }
         : job.operationalStatus === "UNASSIGNED" || job.operationalStatus === "OFFERED"
           ? { intent: "assignment", label: "jobs.assignCleanerDirectly" }
           : job.operationalStatus === "ASSIGNED"
@@ -983,17 +983,17 @@ export function JobDetail({
           ? focusIntentSection(assignmentSectionRef)
           : chooseJobIntent(intentNotice.safe === "assignment" ? "assignment" : "checklist") : null}
         safeLabel={translate(intentNotice?.safe === "roster" ? "jobs.assignedCleaners"
-          : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly" : "jobs.intentExistingChecklist")}
+          : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
+            : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
       />
       {showTopOfferCta && (
         <div className="job-detail__quick-action">
-          <button className="button button--primary" type="button" onClick={onOfferToCleaners}>
+          <button className="button" type="button" onClick={onOfferToCleaners}>
             {translate("offers.offerCleaningToCleaners")}
           </button>
         </div>
       )}
       <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
-      <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
 
       <dl ref={historySectionRef} tabIndex={-1} className="detail-list">
         <DetailItem
@@ -1066,21 +1066,6 @@ export function JobDetail({
       </dl>
 
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
-        {!isEditingJobSchedule && (
-          <button
-            className="button"
-            type="button"
-            disabled={!canReschedule}
-            onClick={startJobScheduleEdit}
-          >
-            {translate("jobs.editSchedule")}
-          </button>
-        )}
-        {!canReschedule && !isEditingJobSchedule && (
-          <p className="form-hint">
-            {scheduleAvailabilityMessage}
-          </p>
-        )}
         {hasSavedJobSchedule && !isEditingJobSchedule && (
           <p className="form-success" role="status">{translate("jobs.scheduleSaved")}</p>
         )}
@@ -1277,7 +1262,7 @@ export function JobDetail({
         <div className="issues-section__header">
           <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
           {!isLoadingChecklistRun && checklistRun && (
-            <button className="button button--primary" type="button" onClick={onOpenChecklistRun}>
+            <button className="button" type="button" onClick={onOpenChecklistRun}>
               {translate(
                 checklistRun.status === "DRAFT" ? "checklists.viewDraftProgress"
                   : checklistRun.status === "ABANDONED" ? "checklists.viewAbandonedRun"
@@ -1288,7 +1273,7 @@ export function JobDetail({
           {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError
             && !job.archivedAt && !isCompleted && (
             <button
-              className="button button--primary"
+              className="button"
               type="button"
               disabled={isCreatingChecklistRun}
               onClick={onCreateChecklistRun}
@@ -2174,6 +2159,10 @@ export function JobDetail({
           </button>
         )}
       </div>
+      <details className="job-detail__secondary-actions">
+        <summary>{translate("jobs.secondaryActions")}</summary>
+        <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
+      </details>
       <ScrollToTopButton />
     </section>
   );

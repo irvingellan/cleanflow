@@ -78,12 +78,31 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         onUpdateSchedule={callbacks.onUpdateSchedule || noOp}
         onSimulateAssignedCleaner={noOp}
         onResolveIssue={noOp}
+        onArchive={callbacks.onArchive || noOp}
       />
     </TranslationProvider>,
   );
 }
 
 describe("JobDetail lifecycle actions", () => {
+  it("has one schedule entry and no visual fixture controls in the real detail", () => {
+    renderJobDetail("ASSIGNED");
+    expect(screen.getAllByRole("button", { name: /Change date \/ time/ })).toHaveLength(1);
+    expect(screen.queryByText("Local synthetic scenario")).not.toBeInTheDocument();
+  });
+  it("keeps deletion collapsed below operations and preserves its confirmation", () => {
+    const archive = vi.fn();
+    renderJobDetail("ASSIGNED", {}, { onArchive: archive });
+    const summary = screen.getByText("Other service actions");
+    expect(summary.parentElement).not.toHaveAttribute("open");
+    expect(screen.getByRole("button", { name: "Delete" })).not.toBeVisible();
+    fireEvent.click(summary);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(archive).not.toHaveBeenCalled();
+    expect(screen.getByRole("group", { name: "Remove from view?" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(archive).toHaveBeenCalledTimes(1);
+  });
   it("UNASSIGNED next step opens the current direct-assignment form", () => {
     renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] });
     fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
@@ -103,9 +122,10 @@ describe("JobDetail lifecycle actions", () => {
   it("DRAFT schedule intention explains protection and opens the existing Run", () => {
     const open = vi.fn();
     renderJobDetail("ASSIGNED", { schemaVersion: 2 }, { onOpenChecklistRun: open }, { run: { id: "initial", status: "DRAFT" } });
+    expect(screen.getByRole("button", { name: "Next step: Open existing checklist" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
-    expect(within(screen.getByRole("region", { name: "What do you want to do?" })).getByRole("status")).toHaveTextContent(/Do not delete the service/);
-    fireEvent.click(screen.getByRole("button", { name: "Review existing checklist →" }));
+    expect(within(screen.getByRole("region", { name: "What do you want to do?" })).getByRole("status")).toHaveTextContent(/Do not delete and recreate the service/);
+    fireEvent.click(screen.getByRole("button", { name: "Open existing checklist →" }));
     expect(open).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
   });
@@ -114,6 +134,8 @@ describe("JobDetail lifecycle actions", () => {
     renderJobDetail("ASSIGNED", {}, { onOpenChecklistRun: open }, { run: { status: "READY_FOR_REVIEW" } });
     fireEvent.click(screen.getByRole("button", { name: "Next step: Review checklist" }));
     expect(open).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.getByRole("button", { name: "Review checklist →" })).toBeVisible();
   });
   it("unknown Run state directs to existing retry/loading controls without creating", () => {
     const create = vi.fn();
@@ -174,7 +196,7 @@ describe("JobDetail lifecycle actions", () => {
       scheduledStart: "10:00",
     }, { onUpdateSchedule });
 
-    const scheduleAction = screen.getByRole("button", { name: "Change date / time" });
+    const scheduleAction = screen.getByRole("button", { name: "Choose intention: Change date / time" });
     const detailsAction = screen.getByRole("button", { name: "Edit guest / notes" });
     expect(scheduleAction.compareDocumentPosition(detailsAction) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(scheduleAction);
@@ -197,7 +219,7 @@ describe("JobDetail lifecycle actions", () => {
   it("rejects an invalid date before saving and allows leaving the time blank", async () => {
     const onUpdateSchedule = vi.fn();
     renderJobDetail("UNASSIGNED", { scheduledDate: "2026-10-01", scheduledStart: "09:00" }, { onUpdateSchedule });
-    fireEvent.click(screen.getByRole("button", { name: "Change date / time" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
     fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-02-30" } });
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid calendar date.");
@@ -212,32 +234,36 @@ describe("JobDetail lifecycle actions", () => {
     }));
   });
 
-  it("keeps schedule editing disabled while checklist status is unknown or a frozen Run exists", () => {
+  it("explains schedule unavailability without opening the form while Run state is unknown or frozen", () => {
     const { unmount } = renderJobDetail("ASSIGNED", {}, {}, { isLoading: true });
-    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
     expect(screen.getByText("Checking whether a checklist has been created…")).toBeVisible();
     unmount();
 
     renderJobDetail("ASSIGNED", {}, {}, { run: { id: "initial", status: "DRAFT" } });
-    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
-    expect(screen.getByText(/Do not delete the service/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Do not delete and recreate the service/i)).toBeVisible();
   });
 
   it.each(["IN_PROGRESS", "COMPLETED"])("does not allow schedule edits for %s Jobs", (status) => {
     renderJobDetail(status, { scheduledDate: "2026-10-01" });
-    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
     expect(screen.getByText(/only before work starts/i)).toBeVisible();
   });
 
   it("does not allow schedule edits on archived Jobs", () => {
     renderJobDetail("ASSIGNED", { archivedAt: { seconds: 1 } });
-    expect(screen.getByRole("button", { name: "Change date / time" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
   });
 
   it("keeps the schedule form open with a useful error after a callable failure", async () => {
     const onUpdateSchedule = vi.fn().mockRejectedValue(new Error("offline"));
     renderJobDetail("UNASSIGNED", { scheduledDate: "2026-10-01" }, { onUpdateSchedule });
-    fireEvent.click(screen.getByRole("button", { name: "Change date / time" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
     fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-10-03" } });
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update the schedule.");
@@ -776,7 +802,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(onRefreshChecklistRun).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a primary offer CTA for an unassigned v2 Job with no offers", () => {
+  it("keeps the existing Offer shortcut secondary to the suggested assignment", () => {
     const onOfferToCleaners = vi.fn();
     renderJobDetail(
       "UNASSIGNED",
@@ -785,7 +811,7 @@ describe("JobDetail lifecycle actions", () => {
     );
 
     const offerButton = screen.getByRole("button", { name: "Offer cleaning to cleaners" });
-    expect(offerButton).toHaveClass("button--primary");
+    expect(offerButton).not.toHaveClass("button--primary");
     expect(offerButton.closest(".job-detail__quick-action")).not.toBeNull();
     expect(screen.getAllByRole("button", { name: "Offer cleaning to cleaners" })).toHaveLength(1);
     fireEvent.click(offerButton);
