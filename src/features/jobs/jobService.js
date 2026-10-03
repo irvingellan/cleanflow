@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -58,6 +59,15 @@ export async function getJobById(jobId) {
     throw error;
   }
   return jobFromSnapshot(snapshot);
+}
+
+/** Complete service-week read; never substitute cache or a capped worklist. */
+export async function getServiceWeekJobs({ start, end }) {
+  const snapshot = await getDocsFromServer(query(jobsCollection(),
+    where("scheduledDate", ">=", start), where("scheduledDate", "<=", end),
+    orderBy("scheduledDate", "asc")));
+  if (snapshot.metadata?.fromCache || snapshot.metadata?.hasPendingWrites) throw new Error("Unconfirmed weekly Jobs");
+  return snapshot.docs.map(jobFromSnapshot);
 }
 
 function currentLocalDate(date = new Date()) {

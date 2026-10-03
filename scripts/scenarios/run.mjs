@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-const scenarios = new Set(["manager-no-checklist", "manager-with-checklist", "offer-assignment"]);
+const scenarios = new Set(["manager-no-checklist", "manager-with-checklist", "offer-assignment", "weekly-close"]);
 const usage = `CleanFlow local scenarios (demo-cleanflow emulators only)
 
 Usage: npm run scenario -- <scenario> [--fast|--watch|--record] [--mobile] [--repeat N]

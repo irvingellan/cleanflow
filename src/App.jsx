@@ -63,6 +63,7 @@ import { languageOptions, usePublicTranslation, useTranslation } from "./i18n/tr
 import { ThemeProvider, useTheme } from "./theme/theme.js";
 import { useManagerPageLoadTelemetry } from "./features/telemetry/useManagerPageLoadTelemetry.js";
 import { ManagerPageLoadDiagnostics } from "./features/telemetry/ManagerPageLoadDiagnostics.jsx";
+import { WeeklyClosePreview } from "./features/weekly-close/WeeklyClosePreview.jsx";
 import {
   formatCreatedAt,
   formatDate,
@@ -104,6 +105,10 @@ function publicOfferTokenFromPathname(pathname = window.location.pathname) {
 
 function isChecklistPreviewPath(pathname = window.location.pathname) {
   return pathname.replace(/\/+$/, "") === "/checklist-preview";
+}
+
+function isWeeklyClosePreviewPath(pathname = window.location.pathname) {
+  return pathname.replace(/\/+$/, "") === "/weekly-close-preview";
 }
 
 function isManagerLoadDiagnosticsPath(pathname = window.location.pathname) {
@@ -403,10 +408,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const { language, setLanguage, translate } = useTranslation();
   useOneSignalIdentity(authUser?.uid);
   const [activeSection, setActiveSection] = useState(() => (
-    isManagerLoadDiagnosticsPath() ? "dev-center" : "dashboard"
+    isManagerLoadDiagnosticsPath() ? "dev-center" : isWeeklyClosePreviewPath() ? "payouts" : "dashboard"
   ));
   const [view, setView] = useState(() => (
-    isManagerLoadDiagnosticsPath() ? "load-time-diagnostics" : "dashboard"
+    isManagerLoadDiagnosticsPath() ? "load-time-diagnostics" : isWeeklyClosePreviewPath() ? "weekly-close-preview" : "dashboard"
   ));
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
   const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
@@ -418,6 +423,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
   useEffect(() => {
     if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
+      window.history.replaceState(window.history.state, "", "/");
+    }
+    if (view !== "weekly-close-preview" && isWeeklyClosePreviewPath()) {
       window.history.replaceState(window.history.state, "", "/");
     }
   }, [view]);
@@ -883,7 +891,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   return (
     <main className="app-shell">
       <section
-        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}`}
+        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}${view === "weekly-close-preview" ? " foundation--weekly-close" : ""}`}
         aria-labelledby="page-title"
       >
         <header className="foundation__header">
@@ -932,6 +940,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         </header>
 
         <PwaUpdatePrompt />
+        {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
 
         {view === "dashboard" && (
           <Dashboard

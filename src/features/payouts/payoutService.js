@@ -1,7 +1,9 @@
 import {
   collection,
   doc,
+  documentId,
   getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -77,6 +79,23 @@ export async function getRecentPayouts() {
   );
 
   return snapshot.docs.map(jobFromSnapshot);
+}
+
+/** Read all reciprocal payment proof, without the recent-payments directory cap. */
+export async function getPayoutEvidenceForJobs(jobs) {
+  const jobIds = [...new Set(jobs.map(job => job.id).filter(Boolean))];
+  const payoutIds = [...new Set(jobs.map(job => job.payoutId).filter(id => typeof id === "string" && id.trim()))];
+  const reads = [];
+  for (let index = 0; index < jobIds.length; index += 30) {
+    reads.push(getDocsFromServer(query(payoutsCollection(), where("jobIds", "array-contains-any", jobIds.slice(index, index + 30)))));
+  }
+  for (let index = 0; index < payoutIds.length; index += 30) {
+    reads.push(getDocsFromServer(query(payoutsCollection(), where(documentId(), "in", payoutIds.slice(index, index + 30)))));
+  }
+  const snapshots = await Promise.all(reads);
+  if (snapshots.some(snapshot => snapshot.metadata?.fromCache || snapshot.metadata?.hasPendingWrites)) throw new Error("Unconfirmed weekly payouts");
+  // Preserve repeated reads so the model detects contradictory evidence.
+  return snapshots.flatMap(snapshot => snapshot.docs.map(jobFromSnapshot));
 }
 
 export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
