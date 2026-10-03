@@ -1428,7 +1428,7 @@ export function JobDetail({
                   : translate("jobs.cleanersAssignedMany", { count: assignedCleanerIds.length })}
               </span>
             </div>
-            {canDirectAssign && (
+            {canDirectAssign && !isDirectAssignmentOpen && (
               <button className="button" type="button" onClick={() => setIsDirectAssignmentOpen((open) => !open)}>
                 {translate("jobs.assignCleanerDirectly")}
               </button>
@@ -1459,9 +1459,12 @@ export function JobDetail({
                       ))}
                   </fieldset>
                   {directCleanerId && (
-                    <p className="form-hint" role="status">{translate("jobs.cleanerPickerSelected", {
-                      name: availableCleaners.find((cleaner) => cleaner.id === directCleanerId)?.name || translate("common.notProvided"),
-                    })}</p>
+                    <div role="status">
+                      <p className="form-hint">{translate("jobs.cleanerPickerSelected", {
+                        name: availableCleaners.find((cleaner) => cleaner.id === directCleanerId)?.name || translate("common.notProvided"),
+                      })}</p>
+                      <p className="form-hint">{translate("jobs.cleanerPickerPending")}</p>
+                    </div>
                   )}
                   {directCleanerOptions.length === 0 && (
                     <p className="form-hint">{translate("cleaners.searchNoResults")}</p>
@@ -1487,7 +1490,8 @@ export function JobDetail({
           {!isLoadingAssignments && hasAssignmentsError && (
             <StateCard message={translate("jobs.rosterError")} status="alert" isError />
           )}
-          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length === 0 && (
+          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length === 0
+            && !(isDirectAssignmentOpen && directCleanerId) && (
             <StateCard message={translate("jobs.noAssignedCleaners")} />
           )}
           {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length > 0 && (

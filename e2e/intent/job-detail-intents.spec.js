@@ -21,7 +21,10 @@ for (const width of [1440, 390]) test(`real Job Detail intents at ${width}px`, a
   await expect(page.getByRole("radio", { name: "Ingrid Inactive" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Confirmar atribuição" })).toBeDisabled();
   await page.getByRole("radio", { name: "Ingrid Demo" }).check();
-  await expect(page.getByText("Selecionada: Ingrid Demo", { exact: true })).toBeVisible();
+  await expect(page.getByText("Selecionada para atribuição: Ingrid Demo", { exact: true })).toBeVisible();
+  await expect(page.getByText("A atribuição só será feita depois de confirmar.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Nenhuma cleaner atribuída ainda.", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Atribuir cleaner", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Confirmar atribuição" })).toBeEnabled();
   const result = page.locator(".direct-cleaner-picker__option");
   expect((await result.boundingBox()).height).toBeGreaterThanOrEqual(44);

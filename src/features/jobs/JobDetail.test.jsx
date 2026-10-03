@@ -102,7 +102,10 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByRole("button", { name: "Confirm assignment" })).toBeDisabled();
     fireEvent.click(screen.getByRole("radio", { name: "Ingrid Demo" }));
     expect(screen.getByRole("radio", { name: "Ingrid Demo" })).toBeChecked();
-    expect(screen.getByRole("status")).toHaveTextContent("Selected: Ingrid Demo");
+    expect(screen.getByRole("status")).toHaveTextContent("Selected for assignment: Ingrid Demo");
+    expect(screen.getByText("Assignment happens only after you confirm.")).toBeVisible();
+    expect(screen.queryByText("No cleaners assigned yet.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Assign cleaner", exact: true })).not.toBeInTheDocument();
     expect(assign).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm assignment" }));
     await waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith("ingrid-demo"));
@@ -114,6 +117,8 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no-match" } });
     expect(screen.getByText("No cleaners match this search.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
+    expect(screen.getByRole("button", { name: "Assign cleaner", exact: true })).toBeVisible();
+    expect(screen.getByText("No cleaners assigned yet.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
     expect(screen.getByRole("searchbox")).toHaveValue("");
     expect(screen.getByRole("radio", { name: "Ingrid Demo" })).not.toBeChecked();
