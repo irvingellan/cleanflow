@@ -3,18 +3,24 @@
 ## Issue #57 — current-main Sandbox foundation (2026-10-03)
 
 Branch `feature/sandbox-foundation-v1-current-main-2026-10-03` starts from
-`b1c6c9d`; stale V0 is reference only. **READY FOR SANDBOX PROJECT**: authenticated
-read-only Firebase inventory found no clearly designated CleanFlow Sandbox.
-Production stays `clean-flow-prototipo`; `prod` alias is explicit and `sandbox`
-alias is intentionally absent until the real dedicated ID/Web config is supplied.
+`b1c6c9d`; stale V0 is reference only. Explicitly authorized activation created
+exactly one Spark project, `clean-flow-sandbox-irving`, and one separate Web app.
+**CORE PROVISIONED; HOSTING RELEASE PENDING**: Firestore Standard/free-tier `nam5`,
+existing Rules/indexes and email/password Auth are provisioned only in Sandbox.
+Production stays `clean-flow-prototipo`; `prod`/`sandbox` aliases are explicit.
+Real SDK config remains ignored locally, with empty OneSignal/VAPID values.
 Build-time project/origin guards, permanent Sandbox banner, developer-only build
 and full-origin navigation, exact server mutation allowlist and protected marked
 demo cleanup/reset are implemented locally. Existing scenarios plus synthetic
 Weekly Close reuse Dev Center; Hosting preparation reuses `hosting:prepare` with
 optional `sandbox` target and SHA/environment/project manifest checks.
-No merge/deploy, cloud configuration, billing or production data change.
-Next barrier is the dedicated project's verified ID and Web config, not another
-implementation slice. See [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md).
+Independent Sandbox MANAGER account/membership and four Quick Demo baseline
+records (Client/Property/Cleaner/UNASSIGNED Job, all marked DEMO) are readback
+verified. Login awaits user-defined password via Sandbox Auth Console; no password
+was invented/reused. Functions/Storage and remote Dev Center/public capability
+workflows are BILLING-GATED; developer controls keep their existing server gate.
+No merge, billing activation, Production deploy/write or copied production data.
+See [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md) and Draft PR #72.
 
 ## Issue #56 — Weekly Close V0 selective port (2026-10-03)
 

@@ -1,6 +1,7 @@
 {
   "projects": {
     "default": "clean-flow-prototipo",
-    "prod": "clean-flow-prototipo"
+    "prod": "clean-flow-prototipo",
+    "sandbox": "clean-flow-sandbox-irving"
   }
 }
