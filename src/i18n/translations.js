@@ -1933,6 +1933,8 @@ Object.assign(messages.es, {
 
 Object.assign(messages.en, {
   "jobs.assignCleanerDirectly": "Assign cleaner",
+  "jobs.cleanerPickerResults": "Matching cleaners",
+  "jobs.cleanerPickerSelected": "Selected: {name}",
   "jobs.assigningCleanerDirectly": "Assigning…",
   "jobs.confirmDirectAssignment": "Confirm assignment",
   "jobs.directAssignmentExplanation": "Assign an active cleaner without an Offer or interest response.",
@@ -1958,6 +1960,8 @@ Object.assign(messages.en, {
 
 Object.assign(messages.pt, {
   "jobs.assignCleanerDirectly": "Atribuir cleaner",
+  "jobs.cleanerPickerResults": "Cleaners encontradas",
+  "jobs.cleanerPickerSelected": "Selecionada: {name}",
   "jobs.assigningCleanerDirectly": "Atribuindo…",
   "jobs.confirmDirectAssignment": "Confirmar atribuição",
   "jobs.directAssignmentExplanation": "Atribua uma cleaner ativa sem oferta ou resposta de interesse.",
@@ -1983,6 +1987,8 @@ Object.assign(messages.pt, {
 
 Object.assign(messages.es, {
   "jobs.assignCleanerDirectly": "Asignar cleaner",
+  "jobs.cleanerPickerResults": "Cleaners encontradas",
+  "jobs.cleanerPickerSelected": "Seleccionada: {name}",
   "jobs.assigningCleanerDirectly": "Asignando…",
   "jobs.confirmDirectAssignment": "Confirmar asignación",
   "jobs.directAssignmentExplanation": "Asigna una cleaner activa sin oferta ni respuesta de interés.",

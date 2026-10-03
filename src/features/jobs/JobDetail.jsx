@@ -1447,21 +1447,28 @@ export function JobDetail({
                     <input type="search" value={directCleanerSearch}
                       onChange={(event) => setDirectCleanerSearch(event.target.value)} />
                   </label>
-                  <label>
-                    {translate("jobs.assignedCleaner")}
-                    <select value={directCleanerId} onChange={(event) => setDirectCleanerId(event.target.value)}>
-                      <option value="">{translate("common.notProvided")}</option>
+                  <fieldset className="direct-cleaner-picker">
+                    <legend>{translate("jobs.cleanerPickerResults")}</legend>
                       {directCleanerOptions.map((cleaner) => (
-                        <option key={cleaner.id} value={cleaner.id}>{cleaner.name}</option>
+                        <label key={cleaner.id} className={`direct-cleaner-picker__option${directCleanerId === cleaner.id ? " direct-cleaner-picker__option--selected" : ""}`}>
+                          <input type="radio" name="direct-cleaner" value={cleaner.id}
+                            checked={directCleanerId === cleaner.id} disabled={isAssigningDirectly}
+                            onChange={() => setDirectCleanerId(cleaner.id)} />
+                          <span>{cleaner.name}</span>
+                        </label>
                       ))}
-                    </select>
-                  </label>
+                  </fieldset>
+                  {directCleanerId && (
+                    <p className="form-hint" role="status">{translate("jobs.cleanerPickerSelected", {
+                      name: availableCleaners.find((cleaner) => cleaner.id === directCleanerId)?.name || translate("common.notProvided"),
+                    })}</p>
+                  )}
                   {directCleanerOptions.length === 0 && (
                     <p className="form-hint">{translate("cleaners.searchNoResults")}</p>
                   )}
                   <div className="button-row">
                     <button className="button" type="button" disabled={isAssigningDirectly}
-                      onClick={() => setIsDirectAssignmentOpen(false)}>{translate("common.cancel")}</button>
+                      onClick={() => { setIsDirectAssignmentOpen(false); setDirectCleanerId(""); setDirectCleanerSearch(""); }}>{translate("common.cancel")}</button>
                     <button className="button button--primary" type="submit"
                       disabled={!directCleanerId || isAssigningDirectly || !canAssignCleanerDirectly(
                         job, availableCleaners.find((cleaner) => cleaner.id === directCleanerId))}>

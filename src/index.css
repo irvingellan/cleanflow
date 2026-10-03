@@ -3687,6 +3687,10 @@ button.summary-card {
 }
 
 /* Job Detail intent navigation; all original forms and mutation guards remain. */
+.direct-cleaner-picker { min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; }
+.direct-cleaner-picker .direct-cleaner-picker__option { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px; cursor: pointer; overflow-wrap: anywhere; }
+.direct-cleaner-picker .direct-cleaner-picker__option input { width: auto; flex: 0 0 auto; }
+.direct-cleaner-picker__option--selected { background: var(--color-surface); outline: 2px solid var(--color-brand-text); border-radius: 6px; }
 .job-intents { margin: 16px 0 24px; padding: 18px; border: 1px solid var(--color-border); border-radius: 12px; }
 .job-intents__next { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .job-intents__next .eyebrow { margin: 0 0 4px; }
