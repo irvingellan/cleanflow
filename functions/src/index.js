@@ -177,24 +177,41 @@ async function clearDemoData({ requireComplete = false } = {}) {
   const organization = organizationReference();
   const records = [];
   for (const kind of ["jobs", "payouts", "properties", "cleaners", "clients"]) {
-    const snapshot = await organization.collection(kind).get();
+    const collection = organization.collection(kind);
+    const snapshot = await collection.get();
+    const visibleIds = new Set(snapshot.docs.map(document => document.id));
+    if ((await collection.listDocuments()).some(reference => !visibleIds.has(reference.id))) {
+      // Deleted parent documents may still own history. Preserve rather than
+      // recursively traversing/deleting orphaned or concurrently added records.
+      records.push({ kind, data: {}, survives: true, hasUnknownHistory: true });
+    }
     for (const document of snapshot.docs) {
-      const record = { kind, id: document.id, ref: document.ref, updateTime: document.updateTime, data: document.data() };
+      const record = { kind, id: document.id, ref: document.ref, createTime: document.createTime, updateTime: document.updateTime, data: document.data() };
       records.push(record);
-      if (!isDemoSeedRecord(record)) continue;
       // Preserve Runs, Assignments, evidence, capabilities and any unrecognized
-      // child collection. Never recursively remove later human-created history.
+      // child collection. Surviving parents' children are protection evidence too,
+      // even if they carry seed markers. Never recursively remove unknown history.
       for (const collection of await document.ref.listCollections()) {
+        const knownHistory = kind === "jobs" && ["offers", "issues", "assignments"].includes(collection.id);
+        if (!knownHistory) record.hasUnknownHistory = true;
         const children = await collection.get();
-        if (children.empty) continue;
-        if (kind !== "jobs" || !["offers", "issues"].includes(collection.id)) {
-          record.hasProtectedChildren = true;
+        if (knownHistory) {
+          const visibleChildren = new Set(children.docs.map(child => child.id));
+          if ((await collection.listDocuments()).some(reference => !visibleChildren.has(reference.id))) record.hasUnknownHistory = true;
+        }
+        if (children.empty) {
+          // A listed collection can contain missing parent docs with descendants.
+          record.hasUnknownHistory = true;
           continue;
         }
         for (const child of children.docs) {
-          const childRecord = { kind: collection.id, id: child.ref.path, ref: child.ref, updateTime: child.updateTime, data: child.data() };
-          if (!isDemoSeedRecord(childRecord) || childRecord.data.demoSeedBatch !== record.data.demoSeedBatch
-            || (await child.ref.listCollections()).length > 0) record.hasProtectedChildren = true;
+          const childRecord = { kind: collection.id, id: child.ref.path, ref: child.ref, createTime: child.createTime, updateTime: child.updateTime, data: child.data() };
+          const hasNestedHistory = (await child.ref.listCollections()).length > 0;
+          childRecord.survives = !isDemoSeedRecord(record) || kind !== "jobs"
+            || !["offers", "issues"].includes(collection.id) || !isDemoSeedRecord(childRecord)
+            || childRecord.data.demoSeedBatch !== record.data.demoSeedBatch || hasNestedHistory;
+          if (childRecord.survives) record.hasProtectedChildren = true;
+          if (hasNestedHistory) childRecord.hasUnknownHistory = true;
           records.push(childRecord);
         }
       }

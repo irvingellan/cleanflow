@@ -91,6 +91,141 @@ test("existing workflow history blocks reset and is preserved by clear", async (
   assert.equal(await count(), 10);
 });
 
+for (const [label, edit] of [
+  ["prices", { clientPrice: 777, cleanerPayout: 123 }],
+  ["notes", { notes: "Synthetic edited notes", guestName: "Synthetic guest" }],
+]) {
+  test(`editing seed ${label} without data.updatedAt protects the batch from reset and clear`, async () => {
+    await generateDevCenterScenario.run(request({ scenario: "quick" }));
+    const job = (await organization.collection("jobs").limit(1).get()).docs[0];
+    assert.equal(Object.hasOwn(job.data(), "updatedAt"), false);
+    await job.ref.update(edit);
+    const edited = await job.ref.get();
+    assert.equal(Object.hasOwn(edited.data(), "updatedAt"), false);
+    assert.equal(edited.createTime.isEqual(edited.updateTime), false);
+
+    await assert.rejects(generateDevCenterScenario.run(request({ scenario: "quick", resetBaseline: true })), { code: "failed-precondition" });
+    assert.equal(await count(), 10);
+    const result = await clearDevCenterData.run(request());
+    assert.equal(result.skippedBatches, 1);
+    assert.equal(result.deleted, 0);
+    assert.equal(await count(), 10);
+    assert.equal(await count("clients"), 1);
+    assert.equal(await count("properties"), 3);
+    assert.equal(await count("cleaners"), 3);
+    const preserved = (await job.ref.get()).data();
+    for (const [field, value] of Object.entries(edit)) assert.equal(preserved[field], value);
+  });
+}
+
+for (const kind of ["offers", "assignments", "issues"]) {
+  for (const spoofedMarker of [false, true]) {
+    test(`manual Job ${kind} child protects its seeded Cleaner${spoofedMarker ? " even with spoofed seed markers" : ""}`, async () => {
+      await generateDevCenterScenario.run(request({ scenario: "quick" }));
+      const cleaner = (await organization.collection("cleaners").limit(1).get()).docs[0];
+      const manual = organization.collection("jobs").doc("manual-synthetic-job");
+      await manual.set({ operationalStatus: "OFFERED", name: "Synthetic surviving Job" });
+      const child = manual.collection(kind).doc("synthetic-reference");
+      const data = {
+        jobId: manual.id,
+        cleanerId: cleaner.id,
+        ...(spoofedMarker ? {
+          demoSeed: true,
+          demoSeedBatch: cleaner.data().demoSeedBatch,
+          demoSeedScenario: "quick",
+          createdAt: cleaner.data().createdAt,
+        } : {}),
+      };
+      await child.set(data);
+
+      await assert.rejects(generateDevCenterScenario.run(request({ scenario: "quick", resetBaseline: true })), { code: "failed-precondition" });
+      const result = await clearDevCenterData.run(request());
+      assert.equal(result.skippedBatches, 1);
+      assert.equal(result.deleted, 0);
+      assert.equal(await count(), 11);
+      assert.equal((await cleaner.ref.get()).exists, true);
+      assert.equal((await manual.get()).exists, true);
+      assert.deepEqual((await child.get()).data(), data);
+    });
+  }
+}
+
+test("surviving manual reference propagates protection across synthetic seed batches", async () => {
+  await generateDevCenterScenario.run(request({ scenario: "quick" }));
+  const client = (await organization.collection("clients").limit(1).get()).docs[0];
+  const secondBatchProperty = organization.collection("properties").doc("synthetic-cross-batch-property");
+  await secondBatchProperty.set({
+    name: "Synthetic linked Property", clientId: client.id,
+    demoSeed: true, demoSeedBatch: "dev-center-synthetic-reference-chain", demoSeedScenario: "quick",
+    createdAt: client.data().createdAt,
+  });
+  const manual = organization.collection("jobs").doc("manual-synthetic-reference-chain");
+  await manual.set({ propertyId: secondBatchProperty.id, operationalStatus: "UNASSIGNED" });
+
+  await assert.rejects(generateDevCenterScenario.run(request({ scenario: "quick", resetBaseline: true })), { code: "failed-precondition" });
+  const result = await clearDevCenterData.run(request());
+  assert.equal(result.skippedBatches, 2);
+  assert.equal(result.deleted, 0);
+  assert.equal(await count(), 11);
+  assert.equal((await secondBatchProperty.get()).exists, true);
+  assert.equal((await client.ref.get()).exists, true);
+  assert.equal((await manual.get()).exists, true);
+});
+
+test("unknown child collections with seed markers cannot be destructively cleared", async () => {
+  await generateDevCenterScenario.run(request({ scenario: "quick" }));
+  const job = (await organization.collection("jobs").limit(1).get()).docs[0];
+  const child = job.ref.collection("syntheticUnknownHistory").doc("preserved");
+  await child.set({
+    demoSeed: true, demoSeedBatch: job.data().demoSeedBatch, demoSeedScenario: "quick",
+    createdAt: job.data().createdAt, synthetic: true,
+  });
+  await assert.rejects(generateDevCenterScenario.run(request({ scenario: "quick", resetBaseline: true })), { code: "failed-precondition" });
+  const result = await clearDevCenterData.run(request());
+  assert.equal(result.skippedBatches, 1);
+  assert.equal(result.deleted, 0);
+  assert.equal((await child.get()).exists, true);
+  assert.equal(await count(), 10);
+});
+
+test("manual unknown snapshot history preserves referenced seeds without guessing nested fields", async () => {
+  await generateDevCenterScenario.run(request({ scenario: "quick" }));
+  const property = (await organization.collection("properties").limit(1).get()).docs[0];
+  const manual = organization.collection("jobs").doc("manual-synthetic-history");
+  await manual.set({ operationalStatus: "ASSIGNED" });
+  const run = manual.collection("checklistRuns").doc("initial");
+  await run.set({ propertySnapshot: { propertyId: property.id }, state: "DRAFT", synthetic: true });
+  await assert.rejects(generateDevCenterScenario.run(request({ scenario: "quick", resetBaseline: true })), { code: "failed-precondition" });
+  const result = await clearDevCenterData.run(request());
+  assert.equal(result.deleted, 0);
+  assert.equal((await property.ref.get()).exists, true);
+  assert.equal((await run.get()).exists, true);
+});
+
+test("missing Job parents with surviving children fail closed without recursive deletion", async () => {
+  await generateDevCenterScenario.run(request({ scenario: "quick" }));
+  const cleaner = (await organization.collection("cleaners").limit(1).get()).docs[0];
+  const child = organization.collection("jobs").doc("missing-synthetic-parent").collection("offers").doc("surviving");
+  await child.set({ cleanerId: cleaner.id, synthetic: true });
+  await assert.rejects(generateDevCenterScenario.run(request({ scenario: "quick", resetBaseline: true })), { code: "failed-precondition" });
+  const result = await clearDevCenterData.run(request());
+  assert.equal(result.deleted, 0);
+  assert.equal((await cleaner.ref.get()).exists, true);
+  assert.equal((await child.get()).exists, true);
+});
+
+test("missing child documents with deeper history preserve the seed batch", async () => {
+  await generateDevCenterScenario.run(request({ scenario: "quick" }));
+  const job = (await organization.collection("jobs").limit(1).get()).docs[0];
+  const evidence = job.ref.collection("offers").doc("missing-synthetic-child").collection("syntheticHistory").doc("preserved");
+  await evidence.set({ synthetic: true });
+  await assert.rejects(generateDevCenterScenario.run(request({ scenario: "quick", resetBaseline: true })), { code: "failed-precondition" });
+  const result = await clearDevCenterData.run(request());
+  assert.equal(result.deleted, 0);
+  assert.equal((await job.ref.get()).exists, true);
+  assert.equal((await evidence.get()).exists, true);
+});
+
 test("exact Sandbox guard is exercised with synthetic runtime identity over LOCAL emulator only", async () => {
   environment("synthetic-sandbox", false, "synthetic-sandbox");
   await generateDevCenterScenario.run(request({ scenario: "quick" }));

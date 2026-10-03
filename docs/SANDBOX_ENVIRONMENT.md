@@ -106,12 +106,19 @@ requires `demo-cleanflow`; Sandbox requires its exact server allowlist. No new
 callable is introduced. Reset uses the existing generate callable with explicit
 `resetBaseline: true`, confirms before clearing, then generates Quick Demo.
 
-Clear/reset affect only untouched marked batches. Modified records, workflow
-children (Assignments/Runs/evidence/capabilities), foreign references and unknown
-children protect entire batches. Reset refuses protected history before deleting;
-clear reports skipped batches. Update-time preconditions reject changed delete
-targets. This is deliberately **not** a recursive wipe of manually edited history;
-concurrent Sandbox editing should stop before a confirmed reset.
+Clear/reset affect only untouched marked batches. Deletion requires exact,
+nanosecond-safe equality of Firestore document `createTime` and `updateTime`;
+business timestamps are not edit authority. Missing/malformed metadata preserves
+the batch. Children of all surviving Jobs are reference evidence, never deletion
+targets; their known links protect demo targets and propagate between batches.
+Modified records and workflow children (Assignments/Runs/evidence/capabilities)
+also protect batches. Unknown schemas, deeper history or missing parent documents
+preserve all candidate batches rather than guessing their references or deleting
+recursively. Reset refuses protected history before deleting; clear reports skipped
+batches. Untouched, unreferenced batches remain clearable. Update-time preconditions
+reject changed delete targets. Read/plan/delete is not an organization-wide atomic
+lock against newly created references; concurrent Sandbox editing should stop
+before a confirmed clear/reset.
 
 ## Spark core versus billing-gated workflows
 

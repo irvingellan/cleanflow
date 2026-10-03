@@ -411,7 +411,9 @@ allowlist; production and unknown projects fail closed. Frontend bindings and
 full-origin navigation cannot hot-swap Firebase projects. Hosting preparation
 reuses the SHA-pinned existing pipeline, validating environment/project as well.
 Cleanup preserves modified batches, workflow children and surviving references;
-reset refuses protected history instead of recursively erasing it. Synthetic
+edit authority is exact document creation/update metadata, not business fields.
+Surviving Job children protect references transitively; unknown history fails
+closed. Reset refuses protected history instead of recursively erasing it. Synthetic
 Weekly Close fixtures may carry REAL provenance solely to exercise the existing
 REAL-only view, but retain every demo seed marker. See
 [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md); its Spark Hosting/Auth/

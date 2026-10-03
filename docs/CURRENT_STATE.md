@@ -29,8 +29,14 @@ Sandbox Hosting only was released at `2026-10-03T20:06:49.801Z` from `0b93582f`:
 <https://clean-flow-sandbox-irving.web.app>. All 13 manifest hashes and the live
 Sandbox marker match; anonymous mobile browser smoke confirms banner/login,
 no overflow/runtime errors, zero Production requests and zero non-read requests.
-The navigation fix is prepared for Sandbox-only Hosting release; the updated
-release and authenticated verification evidence are recorded in Draft PR #72.
+The navigation fix is live in Sandbox at `cb102a25`; the operator confirmed
+authenticated navigation and the synthetic baseline. Evidence is in Draft PR #72.
+The final review's two cleanup blockers are fixed locally: exact Firestore
+document `createTime`/`updateTime` equality is required for deletion, and children
+of surviving/manual Jobs now protect referenced demo batches transitively.
+Missing/malformed metadata and unknown/deeper/orphaned history fail closed.
+Untouched, unreferenced synthetic batches remain clearable. This hardening is
+branch-only, not deployed; Production and billing remain unchanged.
 See [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md) and Draft PR #72.
 
 ## Issue #56 — Weekly Close V0 selective port (2026-10-03)

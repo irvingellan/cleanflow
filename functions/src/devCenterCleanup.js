@@ -11,10 +11,19 @@ function recordReferences(data = {}) {
   ].filter(([, id]) => typeof id === "string" && id).map(([kind, id]) => `${kind}:${id}`);
 }
 
-function sameTimestamp(left, right) {
-  if (left === right) return true;
-  if (typeof left?.isEqual === "function") return left.isEqual(right);
-  return false;
+function unchangedDocument(createTime, updateTime) {
+  // Snapshot metadata is authoritative. Business timestamps and millisecond
+  // rounding cannot establish that a document has never been edited.
+  try {
+    const valid = (time) => time && typeof time === "object"
+      && Number.isSafeInteger(time.seconds) && Number.isInteger(time.nanoseconds)
+      && time.seconds >= -62135596800 && time.seconds <= 253402300799
+      && time.nanoseconds >= 0 && time.nanoseconds < 1_000_000_000;
+    return Boolean(valid(createTime) && valid(updateTime)
+      && createTime.seconds === updateTime.seconds && createTime.nanoseconds === updateTime.nanoseconds);
+  } catch {
+    return false;
+  }
 }
 
 export function planDemoCleanup(records) {
@@ -22,12 +31,14 @@ export function planDemoCleanup(records) {
     && typeof record.data.demoSeedBatch === "string" && record.data.demoSeedBatch.startsWith("dev-center-")
     ? record.data.demoSeedBatch : null;
   const batches = new Set(records.map(batchOf).filter(Boolean));
-  const protectedBatches = new Set();
+  // Unknown schemas/deeper history may contain links outside the known fields.
+  // Never guess or recursively delete it: conservatively preserve all batches.
+  const protectedBatches = new Set(records.some(record => record.hasUnknownHistory) ? batches : []);
   const byKey = new Map(records.map((record) => [`${record.kind}:${record.id}`, record]));
   for (const record of records) {
     const batch = batchOf(record);
-    if (batch && (record.hasProtectedChildren
-      || (record.data.updatedAt !== undefined && !sameTimestamp(record.data.updatedAt, record.data.createdAt)))) {
+    if (batch && (record.survives === true || record.hasProtectedChildren
+      || !unchangedDocument(record.createTime, record.updateTime))) {
       protectedBatches.add(batch);
     }
   }
@@ -49,7 +60,7 @@ export function planDemoCleanup(records) {
     }
   } while (changed);
   return {
-    targets: records.filter((record) => batchOf(record) && !protectedBatches.has(batchOf(record))),
+    targets: records.filter((record) => record.survives !== true && batchOf(record) && !protectedBatches.has(batchOf(record))),
     skippedBatches: [...batches].filter((batch) => protectedBatches.has(batch)).length,
   };
 }
