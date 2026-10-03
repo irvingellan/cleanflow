@@ -5,7 +5,7 @@
 Branch `feature/sandbox-foundation-v1-current-main-2026-10-03` starts from
 `b1c6c9d`; stale V0 is reference only. Explicitly authorized activation created
 exactly one Spark project, `clean-flow-sandbox-irving`, and one separate Web app.
-**CORE PROVISIONED; HOSTING RELEASE PENDING**: Firestore Standard/free-tier `nam5`,
+**PARTIALLY LIVE**: Firestore Standard/free-tier `nam5`,
 existing Rules/indexes and email/password Auth are provisioned only in Sandbox.
 Production stays `clean-flow-prototipo`; `prod`/`sandbox` aliases are explicit.
 Real SDK config remains ignored locally, with empty OneSignal/VAPID values.
@@ -20,6 +20,11 @@ verified. Login awaits user-defined password via Sandbox Auth Console; no passwo
 was invented/reused. Functions/Storage and remote Dev Center/public capability
 workflows are BILLING-GATED; developer controls keep their existing server gate.
 No merge, billing activation, Production deploy/write or copied production data.
+Sandbox Hosting only was released at `2026-10-03T20:06:49.801Z` from `0b93582f`:
+<https://clean-flow-sandbox-irving.web.app>. All 13 manifest hashes and the live
+Sandbox marker match; anonymous mobile browser smoke confirms banner/login,
+no overflow/runtime errors, zero Production requests and zero non-read requests.
+Manager login awaits separate password setup; no authenticated cloud E2E claim.
 See [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md) and Draft PR #72.
 
 ## Issue #56 — Weekly Close V0 selective port (2026-10-03)

@@ -1,6 +1,7 @@
 # Developer Sandbox — Issue #57
 
-Status: **CORE PROVISIONED; HOSTING RELEASE PENDING** (2026-10-03).
+Status: **PARTIALLY LIVE** (2026-10-03): no-billing Hosting/Auth/Firestore core
+is provisioned; manager password setup and Functions/Storage remain pending.
 Explicit authorization created exactly one dedicated project:
 `clean-flow-sandbox-irving` (CleanFlow Sandbox), project number `202424558771`.
 Its one Web app is `1:202424558771:web:87199fd59220e078647cc6`
@@ -129,5 +130,18 @@ callable; they remain fail-closed while Functions are absent. The Production bui
 knows only the Sandbox ID/origin locally; no Production Hosting release occurred.
 The permanent Sandbox banner and `version.json` remain available without login.
 
+Sandbox Hosting was released at `2026-10-03T20:06:49.801Z` from
+`0b93582f5a1dc0c5e65be144af1ad8d17e68ccbd`, using the existing preparation
+pipeline and an explicit Sandbox-only Hosting deployment. URL:
+<https://clean-flow-sandbox-irving.web.app>. All 13 published SHA-256 hashes
+match the prepared manifest and the Sandbox environment/project marker.
+Unauthenticated Chromium smoke at 390px confirmed the permanent banner/login,
+no horizontal overflow/runtime errors, zero Production requests and zero
+non-read requests. Manager sign-in and real-device flows were not exercised.
+The root worker still has no fetch handler. The subsequent checkpoint changes
+documentation only; its SHA is not the deployed application build marker.
+
 No cloud end-to-end availability is claimed by provisioning core services alone.
-Production remains unchanged. Deployment evidence is recorded in Draft PR #72.
+Production remains unchanged; `main` is not merged/deployed. Deployment evidence
+is recorded in Draft PR #72. Functions/Storage billing authorization is still
+required before remote scenario generation/reset or photo/capability flows.
