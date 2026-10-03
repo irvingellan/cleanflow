@@ -1440,6 +1440,10 @@ export function JobDetail({
               <p className="form-hint">{translate("jobs.directAssignmentExplanation")}</p>
               {isLoadingCleaners && <StateCard message={translate("offers.loadingCleaners")} status="status" />}
               {hasCleanerError && <StateCard message={translate("offers.cleanerError")} status="alert" isError />}
+              {(isLoadingCleaners || hasCleanerError) && (
+                <button className="button" type="button" disabled={isAssigningDirectly}
+                  onClick={() => { setIsDirectAssignmentOpen(false); setDirectCleanerId(""); setDirectCleanerSearch(""); }}>{translate("common.cancel")}</button>
+              )}
               {!isLoadingCleaners && !hasCleanerError && (
                 <>
                   <label className="cleaner-name-search">

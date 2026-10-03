@@ -90,6 +90,15 @@ describe("JobDetail lifecycle actions", () => {
     { id: "karina-demo", name: "Karina Demo", active: true },
     { id: "inactive-demo", name: "Ingrid Inactive", active: false },
   ];
+  it.each([{ isLoadingCleaners: true }, { hasCleanerError: true }])("picker remains cancellable while cleaner data is unavailable: %j", state => {
+    const assign = vi.fn();
+    renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] }, { onAssignCleanerDirectly: assign }, state);
+    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    expect(screen.queryByRole("button", { name: "Assign cleaner", exact: true })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
+    expect(screen.getByRole("button", { name: "Assign cleaner", exact: true })).toBeVisible();
+    expect(assign).not.toHaveBeenCalled();
+  });
   it("search and explicit selection never assign until confirmation", async () => {
     const assign = vi.fn().mockResolvedValue({});
     renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] }, { onAssignCleanerDirectly: assign }, { availableCleaners: pickerCleaners });
