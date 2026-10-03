@@ -2,42 +2,43 @@
 
 ## Issue #57 — current-main Sandbox foundation (2026-10-03)
 
-Branch `feature/sandbox-foundation-v1-current-main-2026-10-03` starts from
-`b1c6c9d`; stale V0 is reference only. Explicitly authorized activation created
-exactly one Spark project, `clean-flow-sandbox-irving`, and one separate Web app.
-**PARTIALLY LIVE**: Firestore Standard/free-tier `nam5`,
-existing Rules/indexes and email/password Auth are provisioned only in Sandbox.
-Production stays `clean-flow-prototipo`; `prod`/`sandbox` aliases are explicit.
-Real SDK config remains ignored locally, with empty OneSignal/VAPID values.
-Build-time project/origin guards, permanent Sandbox banner, developer-only build
-and full-origin navigation, exact server mutation allowlist and protected marked
-demo cleanup/reset are implemented locally. Existing scenarios plus synthetic
-Weekly Close reuse Dev Center; Hosting preparation reuses `hosting:prepare` with
-optional `sandbox` target and SHA/environment/project manifest checks.
-Independent Sandbox MANAGER account/membership and four Quick Demo baseline
-records (Client/Property/Cleaner/UNASSIGNED Job, all marked DEMO) are readback
-verified. The operator confirmed authenticated Sandbox login, permanent banner
-and synthetic baseline on 2026-10-03. No password was invented/reused.
-Environment navigation/build visibility now uses an exact build-time developer
-email allowlist (public UI metadata only), independently of Functions availability.
-It neither grants manager access nor authorizes Dev Center. Privileged Dev Center
-remains server-authorized/hidden without Functions; Functions/Storage and remote
-public capability workflows remain BILLING-GATED. Navigation is full-origin only:
-Sandbox → Production and Production → the dedicated Sandbox; no provider fallback.
-No merge, billing activation, Production deploy/write or copied production data.
-Sandbox Hosting only was released at `2026-10-03T20:06:49.801Z` from `0b93582f`:
-<https://clean-flow-sandbox-irving.web.app>. All 13 manifest hashes and the live
-Sandbox marker match; anonymous mobile browser smoke confirms banner/login,
-no overflow/runtime errors, zero Production requests and zero non-read requests.
-The navigation fix is live in Sandbox at `cb102a25`; the operator confirmed
-authenticated navigation and the synthetic baseline. Evidence is in Draft PR #72.
-The final review's two cleanup blockers are fixed locally: exact Firestore
-document `createTime`/`updateTime` equality is required for deletion, and children
-of surviving/manual Jobs now protect referenced demo batches transitively.
-Missing/malformed metadata and unknown/deeper/orphaned history fail closed.
-Untouched, unreferenced synthetic batches remain clearable. This hardening is
-branch-only, not deployed; Production and billing remain unchanged.
-See [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md) and Draft PR #72.
+**IMPLEMENTED / HOSTING DEPLOYED / AUTHENTICATED SANDBOX PROVEN.** PR #72 was
+reviewed and fast-forward merged from `b1c6c9d` to `6f275ea1baaac86a1aa666a69a8b696d30170fdf`;
+the stale V0 branch was not merged. Production Hosting released that exact build
+at `2026-10-03T23:10:03.144Z` (version `97664dcdbf4f355b`). HTTPS, version marker,
+HTML and all 13 prepared file hashes passed; Firebase remains bound exclusively
+to `clean-flow-prototipo`. Rollback: Hosting version `7b59fd2c72347614`, build
+`b1c6c9d5404e44ec9e1f6303155d122e569b8083`. Production anonymous browser smoke
+passed with no runtime errors, Sandbox data/Auth requests or non-read requests.
+
+Sandbox remains <https://clean-flow-sandbox-irving.web.app>, build `cb102a25`,
+without redeployment this round. Spark Hosting, email/password Auth, Firestore
+Standard/free-tier `nam5`, existing Rules/indexes and the four-record DEMO baseline
+are available. The operator confirmed real manager login, permanent
+`SANDBOX · TEST DATA`, baseline and **Back to Production** on 2026-10-03.
+Production is <https://clean-flow-prototipo.web.app>; aliases `prod`/`sandbox`
+and build-time project/origin binding prevent in-place provider hot-swap.
+SDK config remains ignored locally; Sandbox OneSignal/VAPID values remain empty.
+
+**Open Sandbox** is now published in Production for the presentation-only developer
+allowlist; its exact link/rendering is covered by synthetic focused tests and the
+verified live bundle. No authenticated Production QA was performed. Environment
+navigation grants neither ManagerAccess nor Dev Center authorization. Privileged
+Dev Center stays server-authorized/fail-closed; Functions/Storage and remote demo
+mutation, public capability/photo workflows remain **BILLING-GATED** in Sandbox.
+There is no Production fallback. No Functions/Rules/Storage/indexes/secrets were
+deployed this round, no billing enabled and no real data copied or mutated.
+
+Cleanup hardening is merged and emulator-proven, **not cloud-deployed**: exact
+document `createTime`/`updateTime` equality is required; surviving Job children
+protect references transitively. Missing/malformed metadata and unknown/deeper/
+orphaned history preserve batches; untouched, unreferenced batches still clear.
+V1 does not lock against new references created after planning. **Pause manual
+Sandbox editing during clear/reset**; no distributed locking is implemented.
+Final validation: 56 focused, 107 files / 1,082 unit, 19 isolated cleanup and
+78 security tests, 21 build/preparation guards, Sandbox/Production builds and
+exact-SHA Hosting preparations, syntax and diff checks passed. See
+[Sandbox boundary](SANDBOX_ENVIRONMENT.md), merged PR #72 and completed Issue #57.
 
 ## Issue #56 — Weekly Close V0 selective port (2026-10-03)
 
