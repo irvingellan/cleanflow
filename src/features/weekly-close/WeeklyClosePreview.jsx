@@ -71,7 +71,7 @@ export function WeeklyClosePreview({ onBack }) {
     ? translate("weeklyClose.incomplete") : money(amount);
   const pendingCount = (totals, key) => key === "clientCharges" ? totals.missingClientPriceCount
     : key === "cleanerPayoutTotal" ? totals.missingCleanerPayoutCount
-    : key === "grossOperationalMargin" ? totals.attentionCount : totals.unknownPayoutCount;
+    : key === "grossOperationalMargin" ? totals.missingGrossMarginCount : totals.unknownPayoutCount;
   const pendingCopy = (count) => translate(count === 1
     ? "weeklyClose.pendingService" : "weeklyClose.pendingServices", { count });
   const exclusionCount = model ? Object.values(model.excluded).reduce((total, count) => total + count, 0) : 0;

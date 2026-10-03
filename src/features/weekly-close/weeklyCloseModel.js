@@ -160,6 +160,7 @@ function totals(rows) {
     knownGrossOperationalMargin: dollars(sum("marginCents")),
     missingClientPriceCount: rows.filter((row) => row.clientCents === null).length,
     missingCleanerPayoutCount: rows.filter((row) => row.payoutCents === null).length,
+    missingGrossMarginCount: rows.filter((row) => row.clientCents === null || row.payoutCents === null).length,
     unknownPayoutCount: rows.filter((row) => row.payoutStatus === "UNKNOWN").length,
     attentionCount: rows.filter((row) => row.attentionReasons.length > 0).length,
   };

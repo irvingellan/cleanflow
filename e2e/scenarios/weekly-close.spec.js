@@ -60,6 +60,8 @@ async function verifyFinancialRows(root, language) {
   await expect(metric(root, translate, "clientCharges")).toContainText(translate("weeklyClose.pendingService", { count: 1 }));
   await expect(root.locator(".weekly-close-attention")).toContainText(translate("weeklyClose.attentionSummary", { count: 4 }));
   await expect(metric(root, translate, "clientCharges")).toContainText(currency(870));
+  await expect(metric(root, translate, "grossOperationalMargin")).toContainText(translate("weeklyClose.pendingServices", { count: 2 }));
+  await expect(metric(root, translate, "grossOperationalMargin")).not.toContainText(translate("weeklyClose.pendingServices", { count: 4 }));
   await expect(metric(root, translate, "cleanerPayoutTotal")).toContainText(currency(460));
   await expect(metric(root, translate, "cleanerPaidTotal")).toContainText(currency(100));
   await expect(metric(root, translate, "cleanerOutstandingTotal")).toContainText(currency(170));

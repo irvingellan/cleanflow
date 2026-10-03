@@ -28,6 +28,26 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe("Weekly Close manager preview", () => {
+  it("shows one missing margin service while general readiness has two attention services", async () => {
+    const base = {
+      dataProvenance: "REAL", operationalStatus: "COMPLETED", scheduledDate: "2026-09-22",
+      clientId: "client", clientName: "Example Client", assignedCleanerId: "cleaner",
+      assignedCleanerName: "Example Cleaner", cleanerPayout: 100, legacyPayoutEligible: true,
+    };
+    const model = buildWeeklyClose({ weekStart, jobs: [
+      { ...base, id: "missing-charge" },
+      { ...base, id: "unknown-payment", schemaVersion: 2, assignedCleanerIds: ["cleaner"], clientPrice: 200 },
+    ], cleanerNamesById: { cleaner: "Example Cleaner" } });
+    expect(model.overall).toMatchObject({ attentionCount: 2, missingGrossMarginCount: 1 });
+    loadWeeklyClose.mockResolvedValueOnce(model);
+    mount(); await screen.findByText("Example Client");
+    const margin = within(document.querySelector(".weekly-close-metrics"))
+      .getByText("Gross operational margin").parentElement;
+    expect(margin).toHaveTextContent("1 service missing data");
+    expect(margin).not.toHaveTextContent("2 services missing data");
+    expect(document.querySelector(".weekly-close-client summary")).toHaveTextContent("1 service missing data");
+    expect(document.querySelector(".weekly-close-attention")).toHaveTextContent("2 services need attention");
+  });
   it("shows known client subtotals without presenting incomplete totals as complete", async () => {
     const model = result();
     model.clients[0].clientCharges = null;

@@ -54,6 +54,17 @@ describe("weekly close service-week semantics", () => {
 });
 
 describe("weekly close truthful financial projection", () => {
+  it("counts missing margin inputs separately from non-monetary attention", () => {
+    const result = close([
+      job({ id: "missing-charge", clientPrice: undefined }),
+      job({ id: "unknown-payment", schemaVersion: 2 }),
+    ]);
+    expect(result.overall.attentionCount).toBe(2);
+    expect(result.overall.missingGrossMarginCount).toBe(1);
+    expect(result.overall.knownGrossOperationalMargin).toBe(100);
+    expect(result.overall.grossOperationalMargin).toBeNull();
+    expect(result.clients[0].missingGrossMarginCount).toBe(1);
+  });
   it("never merges identical client names with different IDs and flags inconsistent linkage", () => {
     const result = close([job(), job({ id: "other", clientId: "client-2" })], {
       clients: [{ id: "client-1", name: "Harbor client" }],
