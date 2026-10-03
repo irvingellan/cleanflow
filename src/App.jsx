@@ -730,6 +730,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("payout-review");
   }
 
+  function showWeeklyClose() {
+    showPayouts();
+    window.history.pushState(window.history.state, "", "/weekly-close-preview");
+    setView("weekly-close-preview");
+  }
+
   function showRecordedPayout(payout) {
     recordPayoutComplete(payout);
     setView("payout-list");
@@ -1125,6 +1131,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             hasError={hasPayoutsError}
             paidSummary={paidPayoutSummary}
             onRefresh={refreshPayouts}
+            onWeeklyClose={showWeeklyClose}
             onReview={openPayoutReview}
             onUploadProof={attachProof}
             onOpenProof={getProofUrl}

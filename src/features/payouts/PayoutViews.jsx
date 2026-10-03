@@ -58,6 +58,7 @@ export function PayoutDirectory({
   hasError,
   paidSummary,
   onRefresh,
+  onWeeklyClose,
   onReview,
   onUploadProof,
   onOpenProof,
@@ -77,6 +78,13 @@ export function PayoutDirectory({
         </div>
         <button className="button" type="button" disabled={isLoading} onClick={onRefresh}>
           {translate("payouts.refresh")}
+        </button>
+      </div>
+
+      <div className="directory-heading">
+        <p className="property-history-state">{translate("weeklyClose.entryDescription")}</p>
+        <button className="button button--secondary" type="button" onClick={onWeeklyClose}>
+          {translate("weeklyClose.entry")}
         </button>
       </div>
 

@@ -91,7 +91,16 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
     await step(20, "Open authorized manager Weekly Close", async () => {
       await loginManager(page);
       await page.clock.setFixedTime(new Date("2026-10-01T12:00:00.000Z"));
-      await page.goto("/weekly-close-preview");
+      await page.getByRole("button", { name: "Payouts", exact: true }).click();
+      await page.getByRole("button", { name: "Weekly close · Preview", exact: true }).click();
+      await expect(page).toHaveURL(/\/weekly-close-preview$/);
+      await expect(page.getByRole("button", { name: "Payouts", exact: true })).toHaveAttribute("aria-current", "page");
+      await expect(page.locator(".weekly-close-preview")).toBeVisible();
+      await page.locator(".weekly-close-preview").getByRole("button", { name: /Back/ }).click();
+      await expect(page).toHaveURL(baseURL + "/");
+      await expect(page.getByRole("heading", { name: "Cleaner payouts", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Weekly close · Preview", exact: true }).click();
+      await page.reload();
       await expect(page.locator(".weekly-close-preview")).toBeVisible();
       await page.getByLabel("Week starting", { exact: true }).fill("2026-09-21");
       await verifyFinancialRows(page.locator(".weekly-close-preview"), "en");

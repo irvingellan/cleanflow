@@ -28,6 +28,14 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe("Weekly Close manager preview", () => {
+  it("does not expire a completed load when the browser resumes after its deadline", async () => {
+    mount(); await screen.findByText("Example Client");
+    vi.setSystemTime(new Date("2026-10-01T12:00:16Z"));
+    fireEvent(window, new Event("pageshow"));
+    fireEvent(window, new Event("online"));
+    expect(screen.getByText("Example Client")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
   it("shows one missing margin service while general readiness has two attention services", async () => {
     const base = {
       dataProvenance: "REAL", operationalStatus: "COMPLETED", scheduledDate: "2026-09-22",

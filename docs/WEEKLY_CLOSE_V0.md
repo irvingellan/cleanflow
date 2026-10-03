@@ -1,8 +1,10 @@
 # Weekly Close V0 — read-only review
 
 Issue #56, selectively ported from `6d2de2b` onto current main `ff14c2b`.
-Draft route: `/weekly-close-preview`, behind existing manager authorization.
-No mutation, invoice generation, payout editing, migration or deployment.
+Preview route: `/weekly-close-preview`, behind existing manager authorization,
+reachable from the read-only Preview entry in Payouts. Back clears the route;
+refresh/deep-link preserves the view and Payouts navigation.
+No mutation, invoice generation, payout editing or migration.
 
 ## Semantics
 
@@ -56,7 +58,7 @@ access, week navigation, exact totals, EN/PT/ES at desktop/tablet/390px and
 unchanged Job/Payout records. No composite index is added: the new Job query
 uses only scheduledDate range/order; payout queries use existing single fields.
 
-Port validation: 61 focused tests; full unit suite 102 files / 1,029 tests;
+Release validation: 69 focused tests; full unit suite 103 files / 1,041 tests;
 78 security/emulator tests; Scenario Runner FAST 1/1, repeat-3 3/3 and mobile
 1/1. Visual matrix includes 1440px and 390x844, EN/PT/ES. Build and diff check
 pass. Emulators ran in an isolated temporary mirror on separate ports because

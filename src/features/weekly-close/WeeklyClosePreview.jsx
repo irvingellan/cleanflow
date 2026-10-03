@@ -19,10 +19,11 @@ export function WeeklyClosePreview({ onBack }) {
 
   useEffect(() => {
     let current = true;
+    let pending = true;
     let timer;
     const expiresAt = Date.now() + loadDeadlineMs;
     const checkDeadline = () => {
-      if (current && Date.now() >= expiresAt) {
+      if (current && pending && Date.now() >= expiresAt) {
         current = false;
         clearTimeout(timer);
         setModel(null);
@@ -46,6 +47,7 @@ export function WeeklyClosePreview({ onBack }) {
     }).catch(() => {
       if (current) setHasError(true);
     }).finally(() => {
+      pending = false;
       clearTimeout(timer);
       if (current) setIsLoading(false);
     });

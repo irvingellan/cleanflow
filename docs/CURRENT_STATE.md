@@ -4,7 +4,10 @@
 
 Branch `feature/weekly-close-v0-current-main-2026-10-03` selectively ports the
 validated older implementation onto `ff14c2b`; the old branch is not merged.
-Manager-only `/weekly-close-preview` is read-only and not deployed. It groups
+Manager-only `/weekly-close-preview` is read-only, with one visible
+**Weekly close · Preview** entry in Payouts. Back returns to Payouts and clears
+the deep-link route. The port is approved for Hosting-only release; deployment
+evidence is recorded in PR #70. It groups
 REAL, non-archived COMPLETED Jobs by saved Client identity and Monday–Sunday
 service date, using Job price snapshots and explicit known subtotals. Paid
 payout proof requires a unique reciprocal single-Job link, matching amount,
@@ -12,7 +15,9 @@ cleaner/organization and valid paid timestamp. Team/v2/batch ambiguity remains
 UNKNOWN; no client payment or invoice status is inferred. Server-only financial
 reads reject cache/pending writes; loads have a 15-second absolute deadline,
 retry and stale-response protection. See [data gaps](WEEKLY_CLOSE_V0.md).
-No backend/schema/Rules/index changes, production reads/writes or deployment.
+Aggregate null totals say Incomplete with known subtotals and existing pending
+counts; margin uses only missing monetary inputs. Readiness never implies client
+payment. No backend/schema/Rules/index changes or production financial QA.
 
 - **Updated:** 2026-10-01
 - **Repository:** `main` remains the release source of truth. Manager Fast
