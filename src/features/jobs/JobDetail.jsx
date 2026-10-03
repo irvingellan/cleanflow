@@ -984,9 +984,10 @@ export function JobDetail({
         {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
           <strong>{translate(attention.key, { count: attention.count })}</strong>
           <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
-            ? focusIntentSection(issuesSectionRef) : chooseJobIntent("checklist")}>
+            ? focusIntentSection(issuesSectionRef) : attention.kind === "stale-link"
+              ? focusIntentSection(checklistSectionRef) : chooseJobIntent("checklist")}>
             {translate(attention.kind === "issues" ? "dashboard.reviewIssue"
-              : attention.kind === "review" ? "jobs.intentReview" : "jobs.intentExistingChecklist")} →
+              : attention.kind === "review" ? "jobs.intentReview" : "lifecycle.linkControls")} →
           </button>
         </div>)}
       </aside>}

@@ -45,6 +45,16 @@ describe("Job Detail lifecycle integration", () => {
     expect(open).toHaveBeenCalledOnce();
     expect(mutation).not.toHaveBeenCalled();
   });
+  it("stale-link attention focuses existing link controls, never opens a different view or replaces a link", () => {
+    const { container, open, mutation } = renderScenario("stale");
+    const frame = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 0; });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "View link controls →" }));
+      expect(container.querySelector(".job-checklist")).toHaveFocus();
+      expect(open).not.toHaveBeenCalled();
+      expect(mutation).not.toHaveBeenCalled();
+    } finally { frame.mockRestore(); }
+  });
   it("unavailable Run evidence never becomes a synthetic progress fallback", () => {
     const { container } = renderScenario("assigned-draft", { hasChecklistRunError: true, hasChecklistCapabilityError: true });
     const summary = within(container.querySelector(".service-checklist-summary"));

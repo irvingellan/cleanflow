@@ -16,7 +16,7 @@ never Runs, live capabilities, tokens or photos. Production remains on the #57
 release; this feature is not merged or Production-deployed. See
 [visual contract and validation commands](SERVICE_LIFECYCLE_RAIL_V0.md) and the
 Issue #71 Draft PR for Sandbox publication and authenticated smoke evidence.
-Validation: 127 focused, 110 files / 1,141 unit, 12 synthetic Playwright
+Validation: 128 focused, 110 files / 1,142 unit, 12 synthetic Playwright
 desktop/mobile and 37 seed/build/preparation guards passed. The create-only
 Sandbox seed created 30 DEMO records; an exact read-back repeat skipped all 30.
 Production builds exclude the synthetic preview/harness implementation.

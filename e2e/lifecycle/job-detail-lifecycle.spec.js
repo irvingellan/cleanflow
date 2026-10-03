@@ -134,6 +134,11 @@ for (const { scenario, width } of screenshotCases) {
       fullPage: true,
       style: ".lifecycle-fixture-toolbar { display: none; }",
     });
+    if (scenario === "stale") {
+      await page.getByRole("button", { name: "Ver controles do link →" }).click();
+      await expect(page.locator(".job-checklist")).toBeFocused();
+      await expectNoDomainCalls(page, failures);
+    }
   });
 }
 
