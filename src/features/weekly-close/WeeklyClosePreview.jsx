@@ -67,6 +67,13 @@ export function WeeklyClosePreview({ onBack }) {
     ["cleanerOutstandingTotal", model.overall.cleanerOutstandingTotal, model.overall.knownCleanerOutstandingTotal],
     ["grossOperationalMargin", model.overall.grossOperationalMargin, model.overall.knownGrossOperationalMargin],
   ] : [];
+  const aggregateMoney = (amount) => amount === null
+    ? translate("weeklyClose.incomplete") : money(amount);
+  const pendingCount = (totals, key) => key === "clientCharges" ? totals.missingClientPriceCount
+    : key === "cleanerPayoutTotal" ? totals.missingCleanerPayoutCount
+    : key === "grossOperationalMargin" ? totals.attentionCount : totals.unknownPayoutCount;
+  const pendingCopy = (count) => translate(count === 1
+    ? "weeklyClose.pendingService" : "weeklyClose.pendingServices", { count });
   const exclusionCount = model ? Object.values(model.excluded).reduce((total, count) => total + count, 0) : 0;
 
   return (
@@ -101,15 +108,18 @@ export function WeeklyClosePreview({ onBack }) {
         <dl className="weekly-close-metrics">
           <div><dt>{translate("weeklyClose.completedServiceCount")}</dt><dd>{model.overall.completedServiceCount}</dd></div>
           {metrics.map(([key, amount, known]) => <div key={key}>
-            <dt>{translate(`weeklyClose.${key}`)}</dt><dd>{money(amount)}</dd>
+            <dt>{translate(`weeklyClose.${key}`)}</dt><dd>{aggregateMoney(amount)}</dd>
             {amount === null && <small>{translate("weeklyClose.knownSubtotal", { amount: money(known) })}</small>}
+            {amount === null && pendingCount(model.overall, key) > 0 && <small>{pendingCopy(pendingCount(model.overall, key))}</small>}
           </div>)}
         </dl>
-        <p className="weekly-close-note">{translate("weeklyClose.marginNote")}</p>
-        {model.overall.attentionCount > 0 && <p className="weekly-close-attention" role="status">
-          {translate("weeklyClose.attentionSummary", { count: model.overall.attentionCount })}
+        <p className={model.overall.attentionCount > 0 ? "weekly-close-attention" : "weekly-close-note"} role="status">
+          {model.overall.attentionCount > 0
+            ? translate("weeklyClose.attentionSummary", { count: model.overall.attentionCount })
+            : translate("weeklyClose.completeData")}
           {model.overall.unknownPayoutCount > 0 && ` ${translate("weeklyClose.unknownPayoutSummary", { count: model.overall.unknownPayoutCount })}`}
-        </p>}
+        </p>
+        <p className="weekly-close-note">{translate("weeklyClose.marginNote")}</p>
         {exclusionCount > 0 && <details className="weekly-close-exclusions">
           <summary>{translate("weeklyClose.excludedSummary", { count: exclusionCount })}</summary>
           <ul>{Object.entries(model.excluded).filter(([, count]) => count > 0).map(([reason, count]) =>
@@ -125,8 +135,9 @@ export function WeeklyClosePreview({ onBack }) {
               </span>
               {[["clientCharges", "knownClientCharges"], ["cleanerPayoutTotal", "knownCleanerPayoutTotal"],
                 ["grossOperationalMargin", "knownGrossOperationalMargin"]].map(([key, knownKey]) => <span key={key}>
-                <small>{translate(`weeklyClose.${key}`)}</small><strong>{money(client[key])}</strong>
+                <small>{translate(`weeklyClose.${key}`)}</small><strong>{aggregateMoney(client[key])}</strong>
                 {client[key] === null && <small>{translate("weeklyClose.knownSubtotal", { amount: money(client[knownKey]) })}</small>}
+                {client[key] === null && pendingCount(client, key) > 0 && <small>{pendingCopy(pendingCount(client, key))}</small>}
               </span>)}
             </summary>
             <ul className="weekly-close-services">

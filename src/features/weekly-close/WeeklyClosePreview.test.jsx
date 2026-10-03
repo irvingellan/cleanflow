@@ -34,8 +34,41 @@ describe("Weekly Close manager preview", () => {
     loadWeeklyClose.mockResolvedValueOnce(model);
     mount(); await screen.findByText("Example Client");
     const summary = document.querySelector(".weekly-close-client summary");
-    expect(summary.textContent).toContain("Unknown");
+    expect(summary.textContent).toContain("Incomplete");
+    expect(summary.textContent).not.toContain("Unknown");
     expect(summary.textContent).toContain("200");
+  });
+  it.each([
+    ["en", "Incomplete", "Unknown", "1 service missing data", "before this week can be fully reconciled"],
+    ["pt", "Incompleto", "Desconhecido", "1 serviço com dados pendentes", "antes que esta semana possa ser totalmente reconciliada"],
+    ["es", "Incompleto", "Desconocido", "1 servicio con datos pendientes", "antes de que esta semana pueda conciliarse completamente"],
+  ])("separates incomplete aggregates from factual unknown rows in %s", async (language, incomplete, unknown, pending, readiness) => {
+    window.localStorage.setItem("cleanflow-language", language);
+    const model = buildWeeklyClose({ weekStart, jobs: [{
+      id: "incomplete", dataProvenance: "REAL", operationalStatus: "COMPLETED",
+      scheduledDate: "2026-09-22", clientId: "client", clientName: "Example Client",
+      clientPrice: undefined, cleanerPayout: 100, schemaVersion: 2,
+    }] });
+    loadWeeklyClose.mockResolvedValueOnce(model);
+    mount(); await screen.findByText("Example Client");
+    const metrics = document.querySelector(".weekly-close-metrics");
+    expect(metrics.textContent).toContain(incomplete);
+    expect(metrics.textContent).not.toContain(unknown);
+    expect(metrics.textContent).toContain(pending);
+    expect(document.querySelector(".weekly-close-client summary").textContent).toContain(incomplete);
+    expect(document.querySelector(".weekly-close-status").textContent).toBe(unknown);
+    expect(document.querySelector(".weekly-close-attention").textContent).toContain(readiness);
+    expect(document.querySelector(".weekly-close-preview").textContent).not.toContain("weeklyClose.");
+  });
+  it.each([
+    ["en", "All included services have complete reconciliation data for this CleanFlow view."],
+    ["pt", "Todos os serviços incluídos têm dados completos de reconciliação para esta visão do CleanFlow."],
+    ["es", "Todos los servicios incluidos tienen datos completos de conciliación para esta vista de CleanFlow."],
+  ])("zero attention communicates complete view data only in %s", async (language, copy) => {
+    window.localStorage.setItem("cleanflow-language", language);
+    mount(); await screen.findByText("Example Client");
+    expect(screen.getByText(copy)).toBeInTheDocument();
+    expect(screen.getByText(copy).textContent).not.toMatch(/paid|invoice|week closed/i);
   });
   it("resume checks the absolute deadline without renewing a suspended load", async () => {
     const pending = deferred(); loadWeeklyClose.mockReturnValueOnce(pending.promise);

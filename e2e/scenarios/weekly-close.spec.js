@@ -54,9 +54,11 @@ async function verifyFinancialRows(root, language) {
     await expect(row.locator(".weekly-close-status")).toHaveText(translate(`weeklyClose.status.${status}`));
   }
   await expect(metric(root, translate, "completedServiceCount").locator("dd")).toHaveText("6");
-  // Incomplete financial totals stay unknown; only explicitly labelled known
+  // Incomplete financial totals are labelled incomplete; only explicitly labelled known
   // subtotals reconcile with the available rows, never fabricated zero values.
-  await expect(metric(root, translate, "clientCharges").locator("dd")).toHaveText(translate("weeklyClose.unknown"));
+  await expect(metric(root, translate, "clientCharges").locator("dd")).toHaveText(translate("weeklyClose.incomplete"));
+  await expect(metric(root, translate, "clientCharges")).toContainText(translate("weeklyClose.pendingService", { count: 1 }));
+  await expect(root.locator(".weekly-close-attention")).toContainText(translate("weeklyClose.attentionSummary", { count: 4 }));
   await expect(metric(root, translate, "clientCharges")).toContainText(currency(870));
   await expect(metric(root, translate, "cleanerPayoutTotal")).toContainText(currency(460));
   await expect(metric(root, translate, "cleanerPaidTotal")).toContainText(currency(100));
