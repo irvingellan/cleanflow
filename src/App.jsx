@@ -927,7 +927,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <NotificationControl userId={authUser.uid} />
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
-                <DeveloperEnvironmentControls authorized={devCenterController.access.authorized} />
+                <DeveloperEnvironmentControls user={authUser} />
                 <button
                   className="header-sign-out"
                   type="button"

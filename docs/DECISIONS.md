@@ -414,8 +414,12 @@ Cleanup preserves modified batches, workflow children and surviving references;
 reset refuses protected history instead of recursively erasing it. Synthetic
 Weekly Close fixtures may carry REAL provenance solely to exercise the existing
 REAL-only view, but retain every demo seed marker. See
-[Sandbox activation boundary](SANDBOX_ENVIRONMENT.md); the actual project is not
-yet provisioned or deployed.
+[Sandbox activation boundary](SANDBOX_ENVIRONMENT.md); its Spark Hosting/Auth/
+Firestore core is provisioned, while Functions/Storage remain billing-gated.
+Environment navigation/build visibility has a separate exact build-time developer
+email allowlist, solely public UI metadata. It does not depend on Functions, grant
+data access or authorize Dev Center. Manager membership and privileged server
+authorization remain independent and unchanged; no production provider fallback.
 
 ---
 

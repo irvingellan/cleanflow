@@ -64,8 +64,22 @@ export const cleanflowSandboxOrigin = resolveSandboxOrigin({
   sandboxProjectId: values.VITE_CLEANFLOW_SANDBOX_PROJECT_ID,
   sandboxOrigin: values.VITE_CLEANFLOW_SANDBOX_ORIGIN,
 });
-export function environmentNavigationTarget(environment = cleanflowEnvironment) {
-  if (environment === "production" && cleanflowSandboxOrigin) return { href: cleanflowSandboxOrigin, labelKey: "environment.openSandbox" };
+// Presentation only: this does not authorize manager data or Dev Center mutations.
+export function canShowEnvironmentNavigation(user, environment = cleanflowEnvironment, allowedEmails = import.meta.env.VITE_CLEANFLOW_ENV_NAVIGATION_EMAILS) {
+  if (!["production", "sandbox"].includes(environment) || !user?.uid || user.isAnonymous === true || typeof user.email !== "string" || typeof allowedEmails !== "string") return false;
+  const emails = allowedEmails.split(",").map(email => email.trim().toLowerCase())
+    .filter(email => /^[^\s@*]+@[^\s@*]+\.[^\s@*]+$/.test(email));
+  return emails.includes(user.email.trim().toLowerCase());
+}
+
+export function environmentNavigationTarget(environment = cleanflowEnvironment, sandboxBinding = {
+  sandboxProjectId: import.meta.env.VITE_CLEANFLOW_SANDBOX_PROJECT_ID,
+  sandboxOrigin: import.meta.env.VITE_CLEANFLOW_SANDBOX_ORIGIN,
+}) {
+  if (environment === "production") {
+    const origin = resolveSandboxOrigin(sandboxBinding);
+    if (origin) return { href: origin, labelKey: "environment.openSandbox" };
+  }
   if (environment === "sandbox") return { href: productionHostingOrigin, labelKey: "environment.backToProduction" };
   return null;
 }

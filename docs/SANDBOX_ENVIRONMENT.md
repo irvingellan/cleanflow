@@ -1,7 +1,8 @@
 # Developer Sandbox — Issue #57
 
 Status: **PARTIALLY LIVE** (2026-10-03): no-billing Hosting/Auth/Firestore core
-is provisioned; manager password setup and Functions/Storage remain pending.
+is provisioned and operator-confirmed manager login works; Functions/Storage remain
+billing-gated.
 Explicit authorization created exactly one dedicated project:
 `clean-flow-sandbox-irving` (CleanFlow Sandbox), project number `202424558771`.
 Its one Web app is `1:202424558771:web:87199fd59220e078647cc6`
@@ -13,9 +14,8 @@ the read-only production database metadata. Existing Firestore Rules and indexes
 were deployed exclusively to Sandbox. Email/password Auth is enabled, with
 the two dedicated Firebase Hosting domains authorized. An independent Sandbox
 manager Auth account and active MANAGER membership exist; no password was
-invented, imported or reused. The remaining login action is to set this account's
-password through Sandbox Authentication Console (password reset) and sign in
-at the separate origin. Actual manager login has not yet been verified.
+invented, imported or reused. The operator confirmed actual manager login at the
+separate origin, permanent Sandbox banner and synthetic baseline on 2026-10-03.
 
 ## Three separate targets
 
@@ -50,6 +50,11 @@ Local configuration:
 - The production build can receive only the non-secret Sandbox ID/origin for
   **Open Sandbox**. **Back to Production** is a full-origin navigation. There
   is no query/localStorage project selector or Firebase hot-swap inside the SPA.
+- Ignored per-mode local config may set `VITE_CLEANFLOW_ENV_NAVIGATION_EMAILS`
+  to comma-separated exact developer emails. This allowlist is public build-time
+  presentation metadata: it shows environment links/build only. It is **not**
+  a backend security boundary, membership check or Dev Center authorization.
+  Empty configuration hides those controls; no wildcard/domain matching is used.
 - Future server configuration uses non-secret `DEV_CENTER_SANDBOX_PROJECT_ID`
   (default empty) plus the existing independent developer UID authorization.
   Configuring those server values/secrets remains pending separately authorized
@@ -85,8 +90,9 @@ and preparation; it neither configures a real Sandbox nor calls cloud APIs.
 
 Every Sandbox route, including unauthenticated public routes, has permanent
 **SANDBOX · TEST DATA** signage. Build/commit and environment navigation controls
-appear only for an authorized developer, using existing server authorization.
+appear only for a signed-in developer in the UI-only exact email allowlist.
 Ordinary manager access and protected records still require the existing boundary.
+Dev Center visibility/mutations retain their separate existing server authorization.
 
 Quick Demo, Busy Week, Payout Test, Manager Training and Weekly Close use fabricated
 batch-scoped records. Weekly Close intentionally gives synthetic completed Jobs
@@ -125,9 +131,11 @@ photos, server-mediated Job actions and Dev Center generate/clear/reset are not
 available remotely yet. Hosting rewrites retain the existing same-project targets;
 they never route to production. Unavailable Functions do not grant access.
 
-Developer build/navigation controls also require the existing `getDevCenterAccess`
-callable; they remain fail-closed while Functions are absent. The Production build
-knows only the Sandbox ID/origin locally; no Production Hosting release occurred.
+Developer build/navigation controls do not call or depend on `getDevCenterAccess`;
+they remain visible to the allowlisted signed-in developer when Functions return
+404. Privileged Dev Center remains hidden/fail-closed in that situation. The
+Production build knows only the Sandbox ID/origin and UI allowlist locally; no
+Production Hosting release occurred.
 The permanent Sandbox banner and `version.json` remain available without login.
 
 Sandbox Hosting was released at `2026-10-03T20:06:49.801Z` from
@@ -137,11 +145,13 @@ pipeline and an explicit Sandbox-only Hosting deployment. URL:
 match the prepared manifest and the Sandbox environment/project marker.
 Unauthenticated Chromium smoke at 390px confirmed the permanent banner/login,
 no horizontal overflow/runtime errors, zero Production requests and zero
-non-read requests. Manager sign-in and real-device flows were not exercised.
+non-read requests. That initial anonymous smoke did not exercise manager sign-in
+or real-device flows.
 The root worker still has no fetch handler. The subsequent checkpoint changes
 documentation only; its SHA is not the deployed application build marker.
 
 No cloud end-to-end availability is claimed by provisioning core services alone.
 Production remains unchanged; `main` is not merged/deployed. Deployment evidence
-is recorded in Draft PR #72. Functions/Storage billing authorization is still
+including the separate navigation-fix release is recorded in Draft PR #72.
+Functions/Storage billing authorization is still
 required before remote scenario generation/reset or photo/capability flows.

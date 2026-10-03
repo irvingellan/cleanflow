@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertBuildEnvironment, assertFirebaseEnvironmentBinding, assertHostingOriginBinding, resolveCleanFlowEnvironment, resolveSandboxOrigin } from "./environment.js";
+import { assertBuildEnvironment, assertFirebaseEnvironmentBinding, assertHostingOriginBinding, canShowEnvironmentNavigation, environmentNavigationTarget, resolveCleanFlowEnvironment, resolveSandboxOrigin } from "./environment.js";
 
 const projectId = "cleanflow-sandbox-fixture";
 const config = {
@@ -11,6 +11,25 @@ const config = {
 };
 
 describe("environment isolation", () => {
+  it("limits the UI navigation allowlist to exact emails and known environments", () => {
+    const user = { uid: "synthetic-developer", email: " Developer@Example.test " };
+    expect(canShowEnvironmentNavigation(user, "sandbox", " other@example.test, developer@example.test ")).toBe(true);
+    expect(canShowEnvironmentNavigation(user, "production", "developer@example.test")).toBe(true);
+    for (const emails of ["", "*", "*@example.test", "example.test", "xdeveloper@example.test", null]) {
+      expect(canShowEnvironmentNavigation(user, "sandbox", emails)).toBe(false);
+    }
+    for (const account of [null, {}, { email: user.email }, { uid: user.uid, email: null }, { ...user, isAnonymous: true }]) {
+      expect(canShowEnvironmentNavigation(account, "sandbox", "developer@example.test")).toBe(false);
+    }
+    expect(canShowEnvironmentNavigation(user, "unknown", "developer@example.test")).toBe(false);
+    expect(canShowEnvironmentNavigation(user, "emulator", "developer@example.test")).toBe(false);
+  });
+  it("keeps navigation origins explicit and rejects a cross-project destination", () => {
+    expect(environmentNavigationTarget("sandbox")).toEqual({ href: "https://clean-flow-prototipo.web.app", labelKey: "environment.backToProduction" });
+    expect(environmentNavigationTarget("production", { sandboxProjectId: projectId })).toEqual({ href: `https://${projectId}.web.app`, labelKey: "environment.openSandbox" });
+    expect(environmentNavigationTarget("unknown")).toBeNull();
+    expect(() => environmentNavigationTarget("production", { sandboxProjectId: projectId, sandboxOrigin: "https://clean-flow-prototipo.web.app" })).toThrow();
+  });
   it("classifies production, Sandbox and automated emulators without runtime switching", () => {
     expect(resolveCleanFlowEnvironment({ firebaseProjectId: "clean-flow-prototipo" })).toBe("production");
     expect(resolveCleanFlowEnvironment({ mode: "sandbox", firebaseProjectId: projectId })).toBe("sandbox");

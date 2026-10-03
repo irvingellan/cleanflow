@@ -16,15 +16,21 @@ Weekly Close reuse Dev Center; Hosting preparation reuses `hosting:prepare` with
 optional `sandbox` target and SHA/environment/project manifest checks.
 Independent Sandbox MANAGER account/membership and four Quick Demo baseline
 records (Client/Property/Cleaner/UNASSIGNED Job, all marked DEMO) are readback
-verified. Login awaits user-defined password via Sandbox Auth Console; no password
-was invented/reused. Functions/Storage and remote Dev Center/public capability
-workflows are BILLING-GATED; developer controls keep their existing server gate.
+verified. The operator confirmed authenticated Sandbox login, permanent banner
+and synthetic baseline on 2026-10-03. No password was invented/reused.
+Environment navigation/build visibility now uses an exact build-time developer
+email allowlist (public UI metadata only), independently of Functions availability.
+It neither grants manager access nor authorizes Dev Center. Privileged Dev Center
+remains server-authorized/hidden without Functions; Functions/Storage and remote
+public capability workflows remain BILLING-GATED. Navigation is full-origin only:
+Sandbox → Production and Production → the dedicated Sandbox; no provider fallback.
 No merge, billing activation, Production deploy/write or copied production data.
 Sandbox Hosting only was released at `2026-10-03T20:06:49.801Z` from `0b93582f`:
 <https://clean-flow-sandbox-irving.web.app>. All 13 manifest hashes and the live
 Sandbox marker match; anonymous mobile browser smoke confirms banner/login,
 no overflow/runtime errors, zero Production requests and zero non-read requests.
-Manager login awaits separate password setup; no authenticated cloud E2E claim.
+The navigation fix is prepared for Sandbox-only Hosting release; the updated
+release and authenticated verification evidence are recorded in Draft PR #72.
 See [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md) and Draft PR #72.
 
 ## Issue #56 — Weekly Close V0 selective port (2026-10-03)
