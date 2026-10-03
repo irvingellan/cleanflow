@@ -1,5 +1,21 @@
 # CleanFlow — Current State
 
+## Issue #57 — current-main Sandbox foundation (2026-10-03)
+
+Branch `feature/sandbox-foundation-v1-current-main-2026-10-03` starts from
+`b1c6c9d`; stale V0 is reference only. **READY FOR SANDBOX PROJECT**: authenticated
+read-only Firebase inventory found no clearly designated CleanFlow Sandbox.
+Production stays `clean-flow-prototipo`; `prod` alias is explicit and `sandbox`
+alias is intentionally absent until the real dedicated ID/Web config is supplied.
+Build-time project/origin guards, permanent Sandbox banner, developer-only build
+and full-origin navigation, exact server mutation allowlist and protected marked
+demo cleanup/reset are implemented locally. Existing scenarios plus synthetic
+Weekly Close reuse Dev Center; Hosting preparation reuses `hosting:prepare` with
+optional `sandbox` target and SHA/environment/project manifest checks.
+No merge/deploy, cloud configuration, billing or production data change.
+Next barrier is the dedicated project's verified ID and Web config, not another
+implementation slice. See [Sandbox activation boundary](SANDBOX_ENVIRONMENT.md).
+
 ## Issue #56 — Weekly Close V0 selective port (2026-10-03)
 
 Branch `feature/weekly-close-v0-current-main-2026-10-03` selectively ports the

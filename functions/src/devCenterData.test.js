@@ -3,6 +3,7 @@ import {
   buildDemoScenario,
   selectDemoCleanupTargets,
 } from "./devCenterData.js";
+import { buildWeeklyClose, previousServiceWeek } from "../../src/features/weekly-close/weeklyCloseModel.js";
 
 const createdAt = "test-timestamp";
 const batch = "dev-center-test";
@@ -124,5 +125,35 @@ describe("Dev Center demo scenarios", () => {
       ...records,
       { id: "normal-record", data: { demoSeed: false } },
     ])).toHaveLength(records.length);
+  });
+
+  it("creates a synthetic Weekly Close week with financial gaps and marked payout evidence", () => {
+    const timestamp = new Date("2026-10-03T14:00:00Z");
+    const scenario = buildDemoScenario({ scenario: "weeklyClose", batch, createdAt: timestamp, now: timestamp });
+    const records = [...scenario.clients, ...scenario.properties, ...scenario.cleaners, ...scenario.jobs, ...scenario.payouts];
+    expect(scenario.jobs).toHaveLength(12);
+    expect(scenario.payouts).toHaveLength(2);
+    records.forEach(({ data }) => expect(data).toMatchObject({ demoSeed: true, demoSeedBatch: batch, demoSeedScenario: "weeklyClose" }));
+    expect(scenario.jobs.find((job) => job.id.endsWith("missing-charge")).data).not.toHaveProperty("clientPrice");
+    expect(scenario.jobs.find((job) => job.id.endsWith("missing-payout")).data).not.toHaveProperty("cleanerPayout");
+    expect(scenario.jobs.find((job) => job.id.endsWith("zero")).data).toMatchObject({ clientPrice: 0, cleanerPayout: 0 });
+    const model = buildWeeklyClose({
+      jobs: scenario.jobs.map(({ id, data }) => ({ id, ...data })),
+      payouts: scenario.payouts.map(({ id, data }) => ({ id, ...data })),
+      clients: scenario.clients.map(({ id, data }) => ({ id, ...data })),
+      properties: scenario.properties.map(({ id, data }) => ({ id, ...data })),
+      weekStart: previousServiceWeek(timestamp).start,
+      organizationId: "cleanflow-demo",
+    });
+    expect(model.overall).toMatchObject({ completedServiceCount: 8, knownClientCharges: 960, knownCleanerPayoutTotal: 500, missingClientPriceCount: 1, missingCleanerPayoutCount: 1 });
+    expect(model.jobs.find((job) => job.id.endsWith("v2")).payoutStatus).toBe("UNKNOWN");
+    expect(model.jobs.find((job) => job.id.endsWith("batch-a")).payoutStatus).toBe("UNKNOWN");
+  });
+
+  it("Weekly Close demo week follows Los Angeles Sunday/Monday instead of the UTC boundary", () => {
+    const sunday = buildDemoScenario({ scenario: "weeklyClose", batch, createdAt, now: new Date("2026-10-05T06:30:00Z") });
+    const monday = buildDemoScenario({ scenario: "weeklyClose", batch, createdAt, now: new Date("2026-10-05T07:30:00Z") });
+    expect(sunday.jobs[0].data.scheduledDate).toBe("2026-09-21");
+    expect(monday.jobs[0].data.scheduledDate).toBe("2026-09-28");
   });
 });

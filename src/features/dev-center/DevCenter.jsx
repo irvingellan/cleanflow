@@ -10,6 +10,7 @@ const scenarios = [
   { id: "busyWeek", label: "devCenter.busyWeek", description: "devCenter.busyWeekDescription" },
   { id: "payoutTest", label: "devCenter.payoutTest", description: "devCenter.payoutTestDescription" },
   { id: "managerTraining", label: "devCenter.managerTraining", description: "devCenter.managerTrainingDescription" },
+  { id: "weeklyClose", label: "devCenter.weeklyClose", description: "devCenter.weeklyCloseDescription" },
 ];
 
 export function DevCenter({
@@ -29,8 +30,9 @@ export function DevCenter({
 }) {
   const { translate } = useTranslation();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+  const [isResettingBaseline, setIsResettingBaseline] = useState(false);
   const [advancedNotificationCheck, setAdvancedNotificationCheck] = useState(0);
-  const canMutate = access.environment === "emulator";
+  const canMutate = access.authorized && ["emulator", "sandbox"].includes(access.environment);
   const canPreview = access.authorized;
   const isPreviewPending = (type) => pendingPreviewType === type;
 
@@ -39,7 +41,8 @@ export function DevCenter({
   }
 
   async function clear() {
-    await onClear();
+    if (isResettingBaseline) await onGenerate("quick", { resetBaseline: true });
+    else await onClear();
     setIsConfirmingClear(false);
   }
 
@@ -52,13 +55,11 @@ export function DevCenter({
           <p>{translate("devCenter.intro")}</p>
         </div>
         <span className={`dev-center__environment dev-center__environment--${access.environment || "unknown"}`}>
-          {access.environment === "production"
-            ? translate("devCenter.environmentProduction")
-            : translate("devCenter.environmentEmulator")}
+          {translate(`devCenter.environment.${access.environment || "unknown"}`)}
         </span>
       </div>
 
-      {!canMutate && <StateCard message={translate("devCenter.mutationsEmulatorOnly")} status="status" />}
+      {!canMutate && <StateCard message={translate("devCenter.mutationsSafeOnly")} status="status" />}
 
       <section className="dev-center__count" aria-label={translate("devCenter.demoJobCount")}>
         <span>{translate("devCenter.demoJobCount")}</span>
@@ -105,20 +106,25 @@ export function DevCenter({
         </div>
         {isConfirmingClear ? (
           <div className="dev-center__confirm" role="alert">
-            <p>{translate("devCenter.clearConfirmation")}</p>
+            <p>{translate(isResettingBaseline ? "devCenter.resetConfirmation" : "devCenter.clearConfirmation")}</p>
             <div className="button-row">
               <button className="button" type="button" disabled={isWorking} onClick={() => setIsConfirmingClear(false)}>
                 {translate("common.cancel")}
               </button>
               <button className="button button--danger" type="button" disabled={isWorking || !canMutate} onClick={clear}>
-                {isWorking ? translate("devCenter.working") : translate("devCenter.clearAction")}
+                {isWorking ? translate("devCenter.working") : translate(isResettingBaseline ? "devCenter.resetAction" : "devCenter.clearAction")}
               </button>
             </div>
           </div>
         ) : (
-          <button className="button button--danger" type="button" disabled={isWorking || !canMutate} onClick={() => setIsConfirmingClear(true)}>
+          <div className="button-row">
+          <button className="button button--danger" type="button" disabled={isWorking || !canMutate} onClick={() => { setIsResettingBaseline(false); setIsConfirmingClear(true); }}>
             {translate("devCenter.clearAction")}
           </button>
+          <button className="button button--secondary" type="button" disabled={isWorking || !canMutate} onClick={() => { setIsResettingBaseline(true); setIsConfirmingClear(true); }}>
+            {translate("devCenter.resetAction")}
+          </button>
+          </div>
         )}
       </section>
 

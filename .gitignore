@@ -9,6 +9,8 @@ dist/
 .env.*
 *.local
 !.env.e2e
+!.env.emulator
+!.env.sandbox.example
 
 # Package manager logs
 npm-debug.log*

@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "clean-flow-prototipo"
+    "default": "clean-flow-prototipo",
+    "prod": "clean-flow-prototipo"
   }
 }

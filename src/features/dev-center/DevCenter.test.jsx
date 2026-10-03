@@ -7,17 +7,17 @@ vi.mock("../notifications/NotificationChannelDiagnostics.jsx", () => ({
   NotificationChannelDiagnostics: () => <p>Advanced provider diagnostics mounted</p>,
 }));
 
-function buildDevCenter({ environment = "emulator", pendingPreviewType = null, onPreviewReminder = vi.fn() } = {}) {
+function buildDevCenter({ environment = "emulator", authorized = true, pendingPreviewType = null, onPreviewReminder = vi.fn(), onGenerate = vi.fn(), onClear = vi.fn() } = {}) {
   return (
     <TranslationProvider>
       <DevCenter
-        access={{ authorized: true, environment, demoJobCount: 0 }}
+        access={{ authorized, environment, demoJobCount: 0 }}
         isWorking={false}
         pendingPreviewType={pendingPreviewType}
         hasError={false}
         lastResult={null}
-        onGenerate={vi.fn()}
-        onClear={vi.fn()}
+        onGenerate={onGenerate}
+        onClear={onClear}
         onPreviewReminder={onPreviewReminder}
       />
     </TranslationProvider>
@@ -43,7 +43,7 @@ describe("DevCenter action states", () => {
       fireEvent.scroll(window);
       expect(screen.getByRole("button", { name: "Back to top" })).toBeVisible();
       const generateButtons = screen.getAllByRole("button", { name: "Generate" });
-      expect(generateButtons).toHaveLength(4);
+      expect(generateButtons).toHaveLength(5);
       generateButtons.forEach((button) => expect(button).toBeEnabled());
       expect(screen.getByRole("button", { name: "Clear demo data" })).toBeEnabled();
       expect(screen.getByRole("button", { name: "Preview today" })).toBeEnabled();
@@ -81,14 +81,14 @@ describe("DevCenter action states", () => {
     expect(screen.getByRole("button", { name: "Preview today" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Preview tomorrow" })).toBeEnabled();
     const generateButtons = screen.getAllByRole("button", { name: "Generate" });
-    expect(generateButtons).toHaveLength(4);
+    expect(generateButtons).toHaveLength(5);
     generateButtons.forEach((button) => expect(button).toBeEnabled());
 
     rerender(buildDevCenter({ pendingPreviewType: "TODAY_07" }));
 
     expect(screen.getByRole("button", { name: "Working…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Preview tomorrow" })).toBeEnabled();
-    expect(screen.getAllByRole("button", { name: "Generate" })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Generate" })).toHaveLength(5);
   });
 
   it("keeps production demo mutations blocked while allowing authorized read-only previews", () => {
@@ -104,5 +104,28 @@ describe("DevCenter action states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview tomorrow" }));
     expect(onPreviewReminder).toHaveBeenNthCalledWith(1, "TODAY_07");
     expect(onPreviewReminder).toHaveBeenNthCalledWith(2, "TOMORROW_19");
+  });
+
+  it("allows confirmed baseline reset only in the authorized Sandbox and keeps weekly scenario available", () => {
+    const onGenerate = vi.fn().mockResolvedValue({});
+    render(buildDevCenter({ environment: "sandbox", onGenerate }));
+    expect(screen.getByText("Weekly Close")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Reset test data to Quick Demo" }));
+    expect(onGenerate).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/protected/i);
+    fireEvent.click(screen.getByRole("button", { name: "Reset test data to Quick Demo" }));
+    expect(onGenerate).toHaveBeenCalledExactlyOnceWith("quick", { resetBaseline: true });
+  });
+
+  it.each(["production", "unknown"])("blocks generate, clear and reset on %s", environment => {
+    render(buildDevCenter({ environment }));
+    screen.getAllByRole("button", { name: "Generate" }).forEach(button => expect(button).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Clear demo data" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reset test data to Quick Demo" })).toBeDisabled();
+  });
+
+  it("never grants mutation UI solely because the environment is Sandbox", () => {
+    render(buildDevCenter({ environment: "sandbox", authorized: false }));
+    screen.getAllByRole("button", { name: "Generate" }).forEach(button => expect(button).toBeDisabled());
   });
 });

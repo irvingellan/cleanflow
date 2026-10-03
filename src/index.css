@@ -3688,6 +3688,9 @@ button.summary-card {
 
 
 /* Isolated read-only reconciliation preview; other manager shells stay unchanged. */
+.environment-banner { position: sticky; top: 0; z-index: 100; padding: 12px 16px; text-align: center; background: #582f00; color: #fff6dc; font-weight: 800; letter-spacing: 0.06em; }
+.developer-environment { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
+.developer-environment small { overflow-wrap: anywhere; }
 .foundation--weekly-close { width: min(100%, 1280px); }
 .weekly-close-preview { min-width: 0; }
 .weekly-close-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }

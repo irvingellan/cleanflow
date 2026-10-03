@@ -13,8 +13,8 @@ export async function getDevCenterAccess() {
   return result.data;
 }
 
-export async function generateDevCenterScenario(scenario) {
-  const result = await generateScenarioCall({ scenario });
+export async function generateDevCenterScenario(scenario, options = {}) {
+  const result = await generateScenarioCall({ scenario, ...(options.resetBaseline ? { resetBaseline: true } : {}) });
   return result.data;
 }
 

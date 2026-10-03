@@ -69,9 +69,9 @@ export function useDevCenterController({ view }) {
     }
   }
 
-  async function generate(scenario) {
+  async function generate(scenario, options) {
     return runMutation(async () => {
-      const result = await generateDevCenterScenario(scenario);
+      const result = await generateDevCenterScenario(scenario, options);
       setAccess((current) => ({ ...current, demoJobCount: result.demoJobCount }));
       setLastResult({ type: "generated", ...result });
       return result;

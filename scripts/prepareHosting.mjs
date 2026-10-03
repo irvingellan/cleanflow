@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-export function inspectHostingBuild(dist, expectedSha, publicFiles) {
+export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBinding) {
   const files = [];
   function walk(directory, prefix = "") {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -31,8 +31,12 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles) {
     }
   }
   for (const file of required) if (!files.includes(file)) throw new Error(`Missing Hosting file: ${file}`);
-  if (JSON.parse(fs.readFileSync(path.join(dist, "version.json"), "utf8")).buildId !== expectedSha) {
+  const version = JSON.parse(fs.readFileSync(path.join(dist, "version.json"), "utf8"));
+  if (version.buildId !== expectedSha) {
     throw new Error("Hosting build ID does not match intended SHA");
+  }
+  if (expectedBinding && (version.environment !== expectedBinding.environment || version.projectId !== expectedBinding.projectId)) {
+    throw new Error("Hosting environment/project does not match intended alias");
   }
   return files.sort().map(file => ({
     file,
@@ -45,6 +49,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   const head = git("rev-parse", "HEAD");
   const expectedSha = process.argv[2] || head;
+  const environment = process.argv[3] || "production";
+  if (!["production", "sandbox"].includes(environment)) throw new Error("Hosting preparation requires production or sandbox");
+  const alias = environment === "production" ? "prod" : "sandbox";
+  const projectId = JSON.parse(fs.readFileSync(path.join(root, ".firebaserc"), "utf8")).projects[alias];
+  if (!projectId || environment === "sandbox" && projectId === "clean-flow-prototipo"
+    || environment === "production" && projectId !== "clean-flow-prototipo") {
+    throw new Error("Missing or unsafe Hosting project alias. No build or deploy performed.");
+  }
   if (expectedSha !== head) throw new Error("Expected SHA must equal checked-out HEAD");
   if (git("status", "--porcelain", "--untracked-files=no")) throw new Error("Tracked working tree must be clean");
   const publicFiles = git("ls-files", "public").split("\n").filter(Boolean).map(file => file.slice(7));
@@ -52,8 +64,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const manifestPath = path.join(root, ".firebase", "hosting-prepared-manifest.json");
   fs.rmSync(manifestPath, { force: true });
   fs.rmSync(dist, { recursive: true, force: true });
-  execFileSync("npm", ["run", "build"], { cwd: root, stdio: "inherit", env: { ...process.env, GITHUB_SHA: expectedSha } });
-  const manifest = { buildId: expectedSha, files: inspectHostingBuild(dist, expectedSha, publicFiles) };
+  execFileSync("npm", ["run", environment === "sandbox" ? "build:sandbox" : "build"], { cwd: root, stdio: "inherit", env: { ...process.env, GITHUB_SHA: expectedSha } });
+  const binding = { environment, projectId };
+  const manifest = { buildId: expectedSha, ...binding, files: inspectHostingBuild(dist, expectedSha, publicFiles, binding) };
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   console.log(JSON.stringify(manifest, null, 2));

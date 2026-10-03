@@ -8,6 +8,7 @@ export const demoScenarios = {
   busyWeek: { jobCount: 35, label: "Busy Week" },
   payoutTest: { jobCount: 5, label: "Payout Test" },
   managerTraining: { jobCount: 36, label: "Manager Training" },
+  weeklyClose: { jobCount: 12, label: "Weekly Close" },
 };
 
 function localDateKey(date) {
@@ -189,6 +190,89 @@ function buildManagerTrainingScenario({ batch, createdAt, now }) {
   return { client: clients[0], clients, properties, cleaners, jobs, offers, issues };
 }
 
+function buildWeeklyCloseScenario({ batch, createdAt, now }) {
+  const marker = demoFields({ batch, scenario: "weeklyClose", createdAt });
+  // Match the Weekly Close view's date-only America/Los_Angeles service week.
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now);
+  const value = (type) => parts.find((part) => part.type === type).value;
+  const monday = new Date(`${value("year")}-${value("month")}-${value("day")}T12:00:00Z`);
+  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7 - 7);
+  const serviceDate = (offset) => {
+    const date = new Date(monday);
+    date.setUTCDate(date.getUTCDate() + offset);
+    return date.toISOString().slice(0, 10);
+  };
+  const clients = ["Alpha", "Beta", "Gamma"].map((name) => ({
+    id: `${batch}-client-${name.toLowerCase()}`,
+    data: { organizationId, name: `Weekly Demo Client ${name}`, active: true, updatedAt: createdAt, ...marker },
+  }));
+  const cleaner = {
+    id: `${batch}-cleaner`,
+    data: { organizationId, name: "Weekly Demo Cleaner", active: true, preferredLanguage: "en", updatedAt: createdAt, ...marker },
+  };
+  const rows = [
+    ["paid", 0, 200, 100, 0],
+    ["outstanding", 0, 180, 80, 1],
+    ["v2", 1, 240, 120, 2],
+    ["batch-a", 1, 140, 70, 3],
+    ["batch-b", 1, 90, 40, 4],
+    ["missing-charge", 2, null, 90, 5],
+    ["missing-payout", 2, 110, null, 6],
+    ["zero", 2, 0, 0, 6],
+    ["archived", 0, 900, 400, 3],
+    ["unfinished", 0, 800, 350, 3],
+    ["unknown-provenance", 0, 700, 300, 3],
+    ["outside-week", 1, 100, 50, 7],
+  ];
+  const properties = rows.map(([key, clientIndex]) => ({
+    id: `${batch}-property-${key}`,
+    data: { organizationId, name: `Weekly Demo ${key}`, clientId: clients[clientIndex].id, clientName: clients[clientIndex].data.name, active: true, updatedAt: createdAt, ...marker },
+  }));
+  const jobs = rows.map(([key, clientIndex, clientPrice, cleanerPayout, offset], index) => {
+    const property = properties[index];
+    const data = {
+      organizationId, clientId: clients[clientIndex].id, clientName: clients[clientIndex].data.name,
+      propertyId: property.id, propertyName: property.data.name,
+      scheduledDate: serviceDate(offset), scheduledStart: "11:00", operationalStatus: "COMPLETED",
+      completedAt: createdAt, assignedCleanerId: cleaner.id, assignedCleanerName: cleaner.data.name,
+      schemaVersion: 1, legacyPayoutEligible: true,
+      ...(clientPrice === null ? {} : { clientPrice }),
+      ...(cleanerPayout === null ? {} : { cleanerPayout }),
+      ...marker,
+      // REAL is solely a synthetic eligibility fixture; demoSeed remains the reset authority.
+      dataProvenance: "REAL",
+    };
+    if (key === "paid") {
+      data.payoutId = `${batch}-payout-paid`;
+      data.payoutPaidAt = createdAt;
+    }
+    if (key.startsWith("batch-")) {
+      data.payoutId = `${batch}-payout-batch`;
+      data.payoutPaidAt = createdAt;
+    }
+    if (key === "v2") {
+      data.schemaVersion = 2;
+      data.assignedCleanerIds = [cleaner.id];
+      delete data.assignedCleanerId;
+      delete data.assignedCleanerName;
+      delete data.legacyPayoutEligible;
+    }
+    if (key === "archived") data.archivedAt = createdAt;
+    if (key === "unfinished") data.operationalStatus = "ASSIGNED";
+    if (key === "unknown-provenance") data.dataProvenance = "UNKNOWN";
+    return { id: `${batch}-job-${key}`, data };
+  });
+  const payouts = [
+    { id: `${batch}-payout-paid`, amount: 100, jobIds: [`${batch}-job-paid`] },
+    { id: `${batch}-payout-batch`, amount: 110, jobIds: [`${batch}-job-batch-a`, `${batch}-job-batch-b`] },
+  ].map(({ id, ...payment }) => ({
+    id, data: { organizationId, cleanerId: cleaner.id, cleanerNameSnapshot: cleaner.data.name, status: "PAID", paymentMethod: "CASH", paidAt: createdAt, ...payment, ...marker },
+  }));
+  return { client: clients[0], clients, properties, cleaners: [cleaner], jobs, payouts, offers: [], issues: [] };
+}
+
 export function buildDemoScenario({ scenario, batch, createdAt, now = new Date() }) {
   if (!demoScenarios[scenario]) {
     throw new Error("Unsupported demo scenario.");
@@ -196,6 +280,10 @@ export function buildDemoScenario({ scenario, batch, createdAt, now = new Date()
 
   if (scenario === "managerTraining") {
     return buildManagerTrainingScenario({ batch, createdAt, now });
+  }
+
+  if (scenario === "weeklyClose") {
+    return buildWeeklyCloseScenario({ batch, createdAt, now });
   }
 
   const marker = demoFields({ batch, scenario, createdAt });

@@ -64,6 +64,7 @@ import { ThemeProvider, useTheme } from "./theme/theme.js";
 import { useManagerPageLoadTelemetry } from "./features/telemetry/useManagerPageLoadTelemetry.js";
 import { ManagerPageLoadDiagnostics } from "./features/telemetry/ManagerPageLoadDiagnostics.jsx";
 import { WeeklyClosePreview } from "./features/weekly-close/WeeklyClosePreview.jsx";
+import { DeveloperEnvironmentControls } from "./components/EnvironmentBanner.jsx";
 import {
   formatCreatedAt,
   formatDate,
@@ -926,6 +927,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <NotificationControl userId={authUser.uid} />
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
+                <DeveloperEnvironmentControls authorized={devCenterController.access.authorized} />
                 <button
                   className="header-sign-out"
                   type="button"

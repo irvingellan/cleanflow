@@ -405,8 +405,17 @@ generation/cleanup functions enforce that check again so hiding the interface is
 the authorization boundary.
 
 Generated reference Clients, Properties, and Cleaners are separate from normal
-operational records. Cleanup refuses to remove a demo Job with non-demo child data or
-a payout link, preserving data created outside the Dev Center for manual review.
+operational records. As of Issue #57 (2026-10-03), generation/clear/reset are
+restricted to `demo-cleanflow` emulators or an exact dedicated Sandbox project
+allowlist; production and unknown projects fail closed. Frontend bindings and
+full-origin navigation cannot hot-swap Firebase projects. Hosting preparation
+reuses the SHA-pinned existing pipeline, validating environment/project as well.
+Cleanup preserves modified batches, workflow children and surviving references;
+reset refuses protected history instead of recursively erasing it. Synthetic
+Weekly Close fixtures may carry REAL provenance solely to exercise the existing
+REAL-only view, but retain every demo seed marker. See
+[Sandbox activation boundary](SANDBOX_ENVIRONMENT.md); the actual project is not
+yet provisioned or deployed.
 
 ---
 

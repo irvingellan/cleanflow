@@ -17,6 +17,15 @@ afterEach(() => {
 });
 
 describe("useDevCenterController", () => {
+  it("passes explicit reset confirmation through the existing generate service", async () => {
+    services.getDevCenterAccess.mockResolvedValue({ authorized: true, environment: "sandbox" });
+    services.generateDevCenterScenario.mockResolvedValue({ demoJobCount: 10 });
+    const { result } = renderHook(() => useDevCenterController({ view: "jobs" }));
+    await waitFor(() => expect(result.current.access.authorized).toBe(true));
+    await act(async () => result.current.generate("quick", { resetBaseline: true }));
+    expect(services.generateDevCenterScenario).toHaveBeenCalledExactlyOnceWith("quick", { resetBaseline: true });
+    expect(result.current.access.demoJobCount).toBe(10);
+  });
   it("clears the preview pending state after a preview error", async () => {
     services.getDevCenterAccess.mockResolvedValue({ authorized: true, environment: "emulator" });
     services.getManagerNotificationDiagnostics.mockResolvedValue({ devices: [], deliveries: [] });

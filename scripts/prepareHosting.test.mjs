@@ -42,3 +42,13 @@ test("Hosting ignores Finder artifacts even if recreated after preparation", () 
   assert.ok(config.hosting.ignore.includes(".DS_Store"));
   assert.ok(config.hosting.ignore.includes("**/.DS_Store"));
 });
+
+test("same preparation validates Sandbox and production binding, not only SHA", t => {
+  const dir = fixture(t);
+  const binding = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...binding }));
+  assert.ok(inspectHostingBuild(dir, "expected", [], binding).length);
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /environment\/project/);
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", environment: "sandbox", projectId: "clean-flow-prototipo" }));
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], binding), /environment\/project/);
+});

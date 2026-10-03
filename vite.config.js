@@ -1,7 +1,10 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { parseEnv } from 'node:util'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { assertBuildEnvironment } from './src/environment.js'
 
 const firebaseConfigKeys = [
   'VITE_FIREBASE_API_KEY',
@@ -168,9 +171,25 @@ const packageMetadata = JSON.parse(
 )
 
 export default defineConfig(({ mode }) => {
+  const environment = loadEnv(mode, process.cwd(), "");
+  const binding = assertBuildEnvironment(mode, environment);
+  if (mode === "sandbox") {
+    // API keys route Firebase Auth independently of projectId. Reject known
+    // local production credentials without logging or embedding them in Sandbox.
+    for (const file of [".env", ".env.local", ".env.production", ".env.production.local"]) {
+      const filename = path.join(process.cwd(), file);
+      if (!existsSync(filename)) continue;
+      const values = parseEnv(readFileSync(filename, "utf8"));
+      if (values.VITE_FIREBASE_PROJECT_ID === "clean-flow-prototipo"
+        && values.VITE_FIREBASE_API_KEY === environment.VITE_FIREBASE_API_KEY) {
+        throw new Error("Sandbox must use its own verified Firebase Web configuration, not the production API key.");
+      }
+    }
+  }
   const buildInfo = {
     version: `v${packageMetadata.version}`,
     buildId: process.env.GITHUB_SHA || `${packageMetadata.version}-${new Date().toISOString()}`,
+    ...binding,
   }
 
   return {

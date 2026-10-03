@@ -11,14 +11,14 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   buildDemoScenario,
   isDemoSeedRecord,
-  selectDemoCleanupTargets,
 } from "./devCenterData.js";
+import { planDemoCleanup } from "./devCenterCleanup.js";
 import {
   developerUidsFromSecret,
   isAuthorizedDeveloper,
   requireAuthorizedDeveloper,
 } from "./devCenterAuthorization.js";
-import { assertDevCenterMutationEnvironment } from "./devCenterSafety.js";
+import { assertDevCenterMutationEnvironment, resolveDevCenterEnvironment, resolveDevCenterProjectId } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import {
   registrationDocumentId as managerPushDeviceDocumentId,
@@ -116,6 +116,7 @@ const feedbackTypes = {
 const pushDeviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
 const pushTokenMaximumLength = 4096;
 const devCenterDeveloperUids = defineSecret("DEV_CENTER_DEVELOPER_UIDS");
+const devCenterSandboxProjectId = defineString("DEV_CENTER_SANDBOX_PROJECT_ID", { default: "" });
 const managerReminderProviderParam = defineString("MANAGER_REMINDER_PROVIDER", { default: "fcm" });
 
 function hashToken(token) {
@@ -146,8 +147,16 @@ function allowedDeveloperUids() {
   return developerUidsFromSecret(devCenterDeveloperUids.value());
 }
 
+function devCenterEnvironmentOptions() {
+  return {
+    functionsEmulator: process.env.FUNCTIONS_EMULATOR,
+    currentProjectId: resolveDevCenterProjectId({ projectIdValue: () => projectID.value(), environment: process.env }),
+    sandboxProjectId: devCenterSandboxProjectId.value(),
+  };
+}
+
 function devCenterEnvironment() {
-  return process.env.FUNCTIONS_EMULATOR === "true" ? "emulator" : "production";
+  return resolveDevCenterEnvironment(devCenterEnvironmentOptions());
 }
 
 function organizationReference() {
@@ -164,53 +173,46 @@ async function demoJobCount() {
   return snapshot.data().count;
 }
 
-async function clearDemoData() {
+async function clearDemoData({ requireComplete = false } = {}) {
   const organization = organizationReference();
-  const demoJobs = (await organization.collection("jobs").where("demoSeed", "==", true).get()).docs;
-  const deletes = [];
-  const protectedBatches = new Set();
-
-  for (const job of demoJobs) {
-    const jobData = job.data();
-    const [offers, issues] = await Promise.all([
-      job.ref.collection("offers").get(),
-      job.ref.collection("issues").get(),
-    ]);
-    const hasNonDemoChild = [...offers.docs, ...issues.docs].some(
-      (child) => !isDemoSeedRecord({ data: child.data() }),
-    );
-
-    if (jobData.payoutId || hasNonDemoChild) {
-      protectedBatches.add(jobData.demoSeedBatch);
-      continue;
+  const records = [];
+  for (const kind of ["jobs", "payouts", "properties", "cleaners", "clients"]) {
+    const snapshot = await organization.collection(kind).get();
+    for (const document of snapshot.docs) {
+      const record = { kind, id: document.id, ref: document.ref, updateTime: document.updateTime, data: document.data() };
+      records.push(record);
+      if (!isDemoSeedRecord(record)) continue;
+      // Preserve Runs, Assignments, evidence, capabilities and any unrecognized
+      // child collection. Never recursively remove later human-created history.
+      for (const collection of await document.ref.listCollections()) {
+        const children = await collection.get();
+        if (children.empty) continue;
+        if (kind !== "jobs" || !["offers", "issues"].includes(collection.id)) {
+          record.hasProtectedChildren = true;
+          continue;
+        }
+        for (const child of children.docs) {
+          const childRecord = { kind: collection.id, id: child.ref.path, ref: child.ref, updateTime: child.updateTime, data: child.data() };
+          if (!isDemoSeedRecord(childRecord) || childRecord.data.demoSeedBatch !== record.data.demoSeedBatch
+            || (await child.ref.listCollections()).length > 0) record.hasProtectedChildren = true;
+          records.push(childRecord);
+        }
+      }
     }
-
-    deletes.push(...selectDemoCleanupTargets(offers.docs.map((doc) => ({ ref: doc.ref, data: doc.data() }))));
-    deletes.push(...selectDemoCleanupTargets(issues.docs.map((doc) => ({ ref: doc.ref, data: doc.data() }))));
-    deletes.push({ ref: job.ref, data: jobData });
   }
-
-  const references = await Promise.all([
-    organization.collection("properties").where("demoSeed", "==", true).get(),
-    organization.collection("cleaners").where("demoSeed", "==", true).get(),
-    organization.collection("clients").where("demoSeed", "==", true).get(),
-  ]);
-  references.flatMap((snapshot) => snapshot.docs).forEach((document) => {
-    const data = document.data();
-    if (!protectedBatches.has(data.demoSeedBatch)) {
-      deletes.push({ ref: document.ref, data });
-    }
-  });
-
-  for (let start = 0; start < deletes.length; start += 400) {
+  const { targets, skippedBatches } = planDemoCleanup(records);
+  if (requireComplete && skippedBatches > 0) {
+    throw new HttpsError("failed-precondition", "Reset cannot erase protected demo history. Clear only untouched generated batches.");
+  }
+  for (let start = 0; start < targets.length; start += 400) {
     const batch = db.batch();
-    deletes.slice(start, start + 400).forEach(({ ref }) => batch.delete(ref));
+    targets.slice(start, start + 400).forEach(({ ref, updateTime }) => batch.delete(ref, { lastUpdateTime: updateTime }));
     await batch.commit();
   }
 
   return {
-    deleted: deletes.length,
-    skippedBatches: protectedBatches.size,
+    deleted: targets.length,
+    skippedBatches,
     demoJobCount: await demoJobCount(),
   };
 }
@@ -339,7 +341,7 @@ export const generateDevCenterScenario = onCall(
   async (request) => {
     requireAuthorizedDeveloper(request, allowedDeveloperUids());
     try {
-      assertDevCenterMutationEnvironment();
+      assertDevCenterMutationEnvironment(devCenterEnvironmentOptions());
     } catch (error) {
       throw new HttpsError("failed-precondition", error.message);
     }
@@ -355,6 +357,10 @@ export const generateDevCenterScenario = onCall(
       });
     } catch {
       throw new HttpsError("invalid-argument", "Demo scenario is invalid.");
+    }
+
+    if (request.data?.resetBaseline === true) {
+      await clearDemoData({ requireComplete: true });
     }
 
     const organization = organizationReference();
@@ -383,6 +389,9 @@ export const generateDevCenterScenario = onCall(
         issue.data,
       );
     });
+    (records.payouts || []).forEach((payout) => {
+      writeBatch.set(organization.collection("payouts").doc(payout.id), payout.data);
+    });
     await writeBatch.commit();
 
     logger.info("Dev Center scenario generated.", { scenario, batchId, jobs: records.jobs.length });
@@ -395,7 +404,7 @@ export const clearDevCenterData = onCall(
   async (request) => {
     requireAuthorizedDeveloper(request, allowedDeveloperUids());
     try {
-      assertDevCenterMutationEnvironment();
+      assertDevCenterMutationEnvironment(devCenterEnvironmentOptions());
     } catch (error) {
       throw new HttpsError("failed-precondition", error.message);
     }
