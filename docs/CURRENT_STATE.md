@@ -1,5 +1,26 @@
 # CleanFlow — Current State
 
+## Issue #71 — Service Lifecycle Rail V0 (2026-10-03)
+
+Branch-only visual slice based on `d1f6a2e`: real Job Detail separates the five
+authoritative operational stages, saved checklist-item progress, existing next
+action and Job financial snapshots. Proven stale/review/Open Issue attention
+stays parallel to the rail; existing guards/handlers and backend are unchanged.
+Unknown data fails safely, without fabricated progress or a fixture fallback.
+
+Sandbox-only developer visual preview renders nine explicitly synthetic,
+read-only projections through the same Job Detail. Functions remain billing-gated;
+real Run/link reads remain Unknown when unavailable. The guarded create-only
+seeder writes DEMO Jobs/references/known children only to the dedicated Sandbox,
+never Runs, live capabilities, tokens or photos. Production remains on the #57
+release; this feature is not merged or Production-deployed. See
+[visual contract and validation commands](SERVICE_LIFECYCLE_RAIL_V0.md) and the
+Issue #71 Draft PR for Sandbox publication and authenticated smoke evidence.
+Validation: 127 focused, 110 files / 1,141 unit, 12 synthetic Playwright
+desktop/mobile and 37 seed/build/preparation guards passed. The create-only
+Sandbox seed created 30 DEMO records; an exact read-back repeat skipped all 30.
+Production builds exclude the synthetic preview/harness implementation.
+
 ## Issue #57 — current-main Sandbox foundation (2026-10-03)
 
 **IMPLEMENTED / HOSTING DEPLOYED / AUTHENTICATED SANDBOX PROVEN.** PR #72 was

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
+import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
+import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
+import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
 import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
@@ -143,6 +146,7 @@ export function JobDetail({
   const completionSectionRef = useRef(null);
   const reminderSectionRef = useRef(null);
   const historySectionRef = useRef(null);
+  const issuesSectionRef = useRef(null);
   const [isPreparingReminderChecklist, setIsPreparingReminderChecklist] = useState(false);
   const [hasReminderChecklistError, setHasReminderChecklistError] = useState(false);
   const [isEditingPrices, setIsEditingPrices] = useState(false);
@@ -277,6 +281,17 @@ export function JobDetail({
 
     return secondCreatedAt - firstCreatedAt;
   });
+  const lifecyclePresentation = serviceLifecyclePresentation({
+    job, checklistRun, capability: checklistCapability,
+    runLoading: isLoadingChecklistRun, runError: hasChecklistRunError,
+    capabilityLoading: isLoadingChecklistCapability, capabilityError: hasChecklistCapabilityError,
+    issues, issuesLoading: isLoadingIssues, issuesError: hasIssuesError,
+  });
+  const summaryCleanerIds = isAssignmentAware ? assignedCleanerIds : [job.assignedCleanerId].filter(Boolean);
+  const summaryCleanerNames = summaryCleanerIds.map((id) => currentCleanerName(
+    id, activeAssignments.find((assignment) => assignment.cleanerId === id)?.cleanerName,
+    cleanerNamesById, translate("common.notProvided"),
+  ));
   const eligibleReplacementOffers = sortedOffers.filter(
     (offer) =>
       offer.status === "INTERESTED" &&
@@ -965,21 +980,19 @@ export function JobDetail({
       <h2 id="job-detail-title" className="panel__title">
         {job.propertyName || translate("properties.unnamed")}
       </h2>
-      <JobIntentLayer
-        key={job.id}
-        primary={primaryIntent}
-        onIntent={chooseJobIntent}
-        notice={intentNotice ? translate(intentNotice.key) : null}
-        onSafePath={intentNotice?.safe ? () => intentNotice.safe === "roster"
-          ? focusIntentSection(assignmentSectionRef)
-          : chooseJobIntent(intentNotice.safe === "assignment" ? "assignment" : "checklist") : null}
-        safeLabel={translate(intentNotice?.safe === "roster" ? "jobs.assignedCleaners"
-          : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
-            : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
-      />
-      <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
+      {lifecyclePresentation.attention.length > 0 && <aside className="service-attention" aria-label={translate("dashboard.needsAttention")}>
+        {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
+          <strong>{translate(attention.key, { count: attention.count })}</strong>
+          <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
+            ? focusIntentSection(issuesSectionRef) : chooseJobIntent("checklist")}>
+            {translate(attention.kind === "issues" ? "dashboard.reviewIssue"
+              : attention.kind === "review" ? "jobs.intentReview" : "jobs.intentExistingChecklist")} →
+          </button>
+        </div>)}
+      </aside>}
+      <ServiceLifecycleRail lifecycle={lifecyclePresentation.lifecycle} />
 
-      <dl ref={historySectionRef} tabIndex={-1} className="detail-list">
+      <dl ref={historySectionRef} tabIndex={-1} className="detail-list service-essential-summary">
         <DetailItem
           label={translate("common.property")}
           value={job.propertyName || translate("properties.unnamed")}
@@ -1001,24 +1014,6 @@ export function JobDetail({
         <DetailItem
           label={translate("jobs.operationalStatus")}
           value={formatOperationalStatus(job.operationalStatus, translate)}
-        />
-        <DetailItem
-          label={translate("jobs.clientPrice")}
-          value={hasValue(job.clientPrice)
-            ? formatPrice(job.clientPrice, translate, language)
-            : translate("jobs.notSet")}
-        />
-        <DetailItem
-          label={translate("jobs.cleanerPayout")}
-          value={hasValue(job.cleanerPayout)
-            ? formatPrice(job.cleanerPayout, translate, language)
-            : translate("jobs.notSet")}
-        />
-        <DetailItem
-          label={translate("jobs.grossMargin")}
-          value={grossMargin === null
-            ? translate("jobs.notSet")
-            : formatPrice(grossMargin, translate, language)}
         />
         {!isAssignmentAware && isAssigned && (
           <DetailItem
@@ -1048,6 +1043,39 @@ export function JobDetail({
           <DetailItem label={translate("jobs.createdTime")} value={createdAt} />
         )}
       </dl>
+
+      <div className="service-cleaner-summary">
+        <span>{translate("common.cleaner")}</span>
+        <strong>{isLoadingAssignments ? translate("offers.loadingCleaners")
+          : hasAssignmentsError ? translate("common.notProvided")
+            : summaryCleanerNames.length ? summaryCleanerNames.join(", ")
+              : job.assignedCleanerName || translate("dashboard.notAssigned")}</strong>
+      </div>
+      <ChecklistProgressSummary checklist={lifecyclePresentation.checklist} />
+      <JobIntentLayer
+        key={job.id}
+        primary={primaryIntent}
+        onIntent={chooseJobIntent}
+        notice={intentNotice ? translate(intentNotice.key) : null}
+        onSafePath={intentNotice?.safe ? () => intentNotice.safe === "roster"
+          ? focusIntentSection(assignmentSectionRef)
+          : chooseJobIntent(intentNotice.safe === "assignment" ? "assignment" : "checklist") : null}
+        safeLabel={translate(intentNotice?.safe === "roster" ? "jobs.assignedCleaners"
+          : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
+            : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
+      />
+      <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
+        <h3>{translate("lifecycle.financialSnapshot")}</h3>
+        <dl className="detail-list">
+          <DetailItem label={translate("jobs.clientPrice")} value={hasValue(job.clientPrice)
+            ? formatPrice(job.clientPrice, translate, language) : translate("jobs.notSet")} />
+          <DetailItem label={translate("jobs.cleanerPayout")} value={hasValue(job.cleanerPayout)
+            ? formatPrice(job.cleanerPayout, translate, language) : translate("jobs.notSet")} />
+          <DetailItem label={translate("jobs.grossMargin")} value={grossMargin === null
+            ? translate("jobs.notSet") : formatPrice(grossMargin, translate, language)} />
+        </dl>
+      </section>
+      <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
 
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (
@@ -1751,7 +1779,7 @@ export function JobDetail({
         </section>
       )}
 
-      <section className="issues-section" aria-labelledby="issues-title">
+      <section ref={issuesSectionRef} tabIndex={-1} className="issues-section" aria-labelledby="issues-title">
         <div className="issues-section__header">
           <h3 id="issues-title">{translate("issues.title")}</h3>
           <button

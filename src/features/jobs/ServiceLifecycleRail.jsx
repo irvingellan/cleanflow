@@ -1,0 +1,22 @@
+import { useTranslation } from "../../i18n/translations.js";
+import "./serviceLifecycle.css";
+
+export function ServiceLifecycleRail({ lifecycle }) {
+  const { translate } = useTranslation();
+  return <section className="service-lifecycle" aria-label={translate("lifecycle.execution")}>
+    <div className="service-lifecycle__heading">
+      <h3>{translate("lifecycle.execution")}</h3>
+      <strong>{translate(lifecycle.statusKey)}</strong>
+      {lifecycle.archived && <span className="service-lifecycle__archived">{translate("lifecycle.archived")}</span>}
+    </div>
+    <ol className="service-lifecycle__rail">
+      {lifecycle.stages.map((stage, index) => <li key={stage.status}
+        className={`service-lifecycle__stage service-lifecycle__stage--${stage.state}`}
+        aria-current={stage.state === "current" ? "step" : undefined}>
+        <span className="service-lifecycle__marker" aria-hidden="true">{stage.state === "completed" ? "✓" : index + 1}</span>
+        <span className="service-lifecycle__label">{translate(stage.labelKey)}</span>
+        <span className="service-lifecycle__stage-state">{translate(`lifecycle.position.${stage.state}`)}</span>
+      </li>)}
+    </ol>
+  </section>;
+}

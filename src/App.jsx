@@ -40,6 +40,8 @@ import { useDashboardController } from "./features/dashboard/useDashboardControl
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
 import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
+import { SandboxLifecyclePreview } from "./features/jobs/SandboxLifecyclePreview.jsx";
+import { canShowEnvironmentNavigation } from "./environment.js";
 import { CreateCleaningForm } from "./features/jobs/JobForm.jsx";
 import { JobsPage } from "./features/jobs/JobsPage.jsx";
 import {
@@ -421,6 +423,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const devCenterController = useDevCenterController({ view });
   const canManageExcludedRecords = devCenterController.access.authorized;
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
+  const canPreviewLifecycle = import.meta.env.MODE === "sandbox"
+    && canShowEnvironmentNavigation(authUser, "sandbox");
 
   useEffect(() => {
     if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
@@ -928,6 +932,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
                 <DeveloperEnvironmentControls user={authUser} />
+                {canPreviewLifecycle && <button className="button button--small" type="button"
+                  onClick={() => setView("sandbox-lifecycle-preview")}>
+                  {translate("lifecycle.previewEntry")}
+                </button>}
                 <button
                   className="header-sign-out"
                   type="button"
@@ -948,6 +956,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         </header>
 
         <PwaUpdatePrompt />
+        {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
+          && <SandboxLifecyclePreview onBack={showDashboard} />}
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
 
         {view === "dashboard" && (

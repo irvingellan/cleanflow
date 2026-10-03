@@ -81,6 +81,26 @@ test("Sandbox build binds synthetic client and messaging worker to its separate 
   assert.doesNotMatch(rootWorker, /addEventListener\(\s*["']fetch["']/);
 });
 
+test("Production build excludes the synthetic lifecycle preview and local harness", (t) => {
+  const root = fixture(t);
+  const output = path.join(root, "dist-lifecycle-production-guard");
+  const result = spawnSync("npm", ["run", "build", "--", "--outDir", output], {
+    cwd: root, env: syntheticEnvironment({
+      VITE_CLEANFLOW_ENV: "production",
+      VITE_FIREBASE_PROJECT_ID: "clean-flow-prototipo",
+      VITE_FIREBASE_AUTH_DOMAIN: "clean-flow-prototipo.firebaseapp.com",
+      VITE_FIREBASE_STORAGE_BUCKET: "clean-flow-prototipo.firebasestorage.app",
+    }), encoding: "utf8", timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const javascript = fs.readdirSync(path.join(output, "assets"))
+    .filter(file => file.endsWith(".js"))
+    .map(file => fs.readFileSync(path.join(output, "assets", file), "utf8")).join("\n");
+  for (const value of ["lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
+    assert.equal(javascript.includes(value), false, `Synthetic preview implementation leaked: ${value}`);
+  }
+});
+
 const rejectedBindings = [
   ["production-project", { VITE_FIREBASE_PROJECT_ID: "clean-flow-prototipo" }],
   ["production-allowlist", {

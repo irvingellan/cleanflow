@@ -194,7 +194,8 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next step: Review checklist" }));
     expect(open).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
-    expect(screen.getByRole("button", { name: "Review checklist →" })).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "What do you want to do?" }))
+      .getByRole("button", { name: "Review checklist →" })).toBeVisible();
   });
   it("unknown Run state directs to existing retry/loading controls without creating", () => {
     const create = vi.fn();
