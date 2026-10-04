@@ -1,8 +1,8 @@
 # CleanFlow — Current State
 
-## Issue #76 — Compact Lifecycle V0 (2026-10-04, Sandbox review)
+## Issue #76 — Compact Lifecycle V0 (released 2026-10-04)
 
-Branch-only presentation slice from `0b1dff1`: compact five-stage strip on Jobs
+Presentation slice from `0b1dff1`: compact five-stage strip on Jobs
 and Dashboard Next 48 hours, using only already-loaded Job/Offer evidence and
 the existing lifecycle projection. No per-card reads, backend or business-rule
 changes. Missing Offer history is unknown-past; filtered-empty Dashboard Offers
@@ -14,10 +14,16 @@ Checklist progress remains available in Job Detail. List-level checklist summary
 requires an efficient canonical read model and is not introduced in V0.
 Existing Sandbox developer lifecycle preview adds Dashboard/Jobs memory-only
 synthetic views (10 Jobs); Production excludes the preview/fixtures. No seeding.
-Validation: 127 focused, 113 files / 1,237 unit tests, 25 desktop/mobile Playwright,
+Validation: 219 focused, 113 files / 1,237 unit tests, 25 desktop/mobile Playwright,
 Production/Sandbox builds, fixture-exclusion check and diff check passed.
-Draft PR and Sandbox-only Hosting evidence will record the exact release SHA;
-Production is not merged/deployed. See [review contract](COMPACT_LIFECYCLE_V0.md).
+Human Sandbox multi-service scan passed. PR #77 integrated by fast-forward;
+Production Hosting-only build `5c2e52492331577a7cbdc4aa41a8f1a6b9771b45`
+released at `2026-10-04T22:44:58.087Z`, version `6130ee0f019cbff4`.
+HTTPS 200, exact build marker and all 13 prepared asset hashes verified read-only.
+Rollback Hosting version: `ddd7b28f6ad54828`. No real Jobs opened or mutated;
+no Functions/Rules/Storage/index/billing changes. Real operator feedback is pending;
+no further visual polish before that feedback. Issue #76 implemented/deployed.
+See [review contract](COMPACT_LIFECYCLE_V0.md).
 
 ## Issue #74 — Job Detail V1 progressive disclosure (released 2026-10-04)
 
