@@ -1058,6 +1058,7 @@ export function JobDetail({
       <JobIntentLayer
         key={job.id}
         primary={primaryIntent}
+        showOperationalIntents={!job.archivedAt && !isCompleted}
         onIntent={chooseJobIntent}
         notice={intentNotice ? translate(intentNotice.key) : null}
         onSafePath={intentNotice?.safe ? () => intentNotice.safe === "roster"

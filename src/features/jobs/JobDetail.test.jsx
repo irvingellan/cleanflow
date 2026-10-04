@@ -216,14 +216,27 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/Choose the assigned cleaner below/);
     expect(screen.queryByRole("heading", { name: /Review reminder for/ })).not.toBeInTheDocument();
   });
-  it("completed mutation intentions remain visible without invoking mutations", () => {
+  it.each([
+    ["COMPLETED", {}],
+    ["ASSIGNED", { archivedAt: { seconds: 1 } }],
+  ])("%s historical service hides the operational grid and retains read-only navigation: %j", (status, overrides) => {
     const complete = vi.fn();
-    renderJobDetail("COMPLETED", { schemaVersion: 2 }, { onCompleteCleaning: complete });
-    for (const action of ["Assign / change cleaner", "Prepare reminder", "Complete service"]) {
-      fireEvent.click(screen.getByRole("button", { name: `Choose intention: ${action}` }));
-      expect(screen.getByRole("status")).toHaveTextContent(/historical or archived/);
-    }
-    expect(screen.getByRole("button", { name: "Next step: View saved service" })).toBeEnabled();
+    const open = vi.fn();
+    const { container } = renderJobDetail(status, { schemaVersion: 2, ...overrides }, {
+      onCompleteCleaning: complete, onOpenChecklistRun: open,
+    }, { run: { id: "initial", status: "READY_FOR_REVIEW" } });
+    expect(screen.queryByRole("heading", { name: "What do you want to do?" })).not.toBeInTheDocument();
+    expect(container.querySelector(".job-intents__actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Choose intention:/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next step: View saved service" }));
+    expect(open).toHaveBeenCalledOnce();
+    expect(complete).not.toHaveBeenCalled();
+  });
+  it.each(["UNASSIGNED", "ASSIGNED", "IN_PROGRESS"])("%s retains all five operational intentions without mutating on render", (status) => {
+    const complete = vi.fn();
+    const { container } = renderJobDetail(status, {}, { onCompleteCleaning: complete });
+    expect(screen.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
+    expect(within(container.querySelector(".job-intents__actions")).getAllByRole("button")).toHaveLength(5);
     expect(complete).not.toHaveBeenCalled();
   });
   it("completion intention opens confirmation, not an immediate mutation", () => {
@@ -307,8 +320,8 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByText(/Do not delete and recreate the service/i)).toBeVisible();
   });
 
-  it.each(["IN_PROGRESS", "COMPLETED"])("does not allow schedule edits for %s Jobs", (status) => {
-    renderJobDetail(status, { scheduledDate: "2026-10-01" });
+  it("does not allow schedule edits for IN_PROGRESS Jobs", () => {
+    renderJobDetail("IN_PROGRESS", { scheduledDate: "2026-10-01" });
     fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
     expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
     expect(screen.getByText(/only before work starts/i)).toBeVisible();
@@ -316,7 +329,7 @@ describe("JobDetail lifecycle actions", () => {
 
   it("does not allow schedule edits on archived Jobs", () => {
     renderJobDetail("ASSIGNED", { archivedAt: { seconds: 1 } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    expect(screen.queryByRole("button", { name: "Choose intention: Change date / time" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
   });
 

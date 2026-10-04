@@ -44,6 +44,23 @@ const positionLabels = {
   skipped: "Não usado", "unknown-past": "Histórico não verificado",
 };
 
+async function expectIntentControls(page, scenario) {
+  const intentions = page.locator(".job-intents");
+  const historical = ["completed", "completed-with-started", "completed-without-started", "completed-reviewed", "archived"].includes(scenario);
+  await expect(intentions.locator(".job-intents__next button")).toBeVisible();
+  const heading = intentions.getByRole("heading", { name: "O que você quer fazer?", exact: true });
+  const grid = intentions.locator(".job-intents__actions");
+  if (historical) {
+    await expect(heading).toHaveCount(0);
+    await expect(grid).toHaveCount(0);
+    await expect(intentions.getByRole("button", { name: /^Escolher intenção:/ })).toHaveCount(0);
+  } else {
+    await expect(heading).toBeVisible();
+    await expect(grid).toBeVisible();
+    await expect(grid.getByRole("button")).toHaveCount(5);
+  }
+}
+
 async function openFixture(page, scenario, width) {
   await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
   const failures = { errors: [], externalRequests: [], sdkRequests: [] };
@@ -66,6 +83,7 @@ async function openFixture(page, scenario, width) {
   await expect(page.locator(".service-lifecycle")).toBeVisible();
   await expect(page.locator(".service-checklist-summary")).toBeVisible();
   await expect(page.locator(".job-intents__next button")).toHaveAccessibleName(primaryLabels[scenario]);
+  await expectIntentControls(page, scenario);
   await expect(page.locator(".panel")).not.toContainText(/lifecycle\./);
   return failures;
 }
@@ -154,6 +172,13 @@ for (const { scenario, width } of screenshotCases) {
       expect(attention.y + attention.height).toBeLessThanOrEqual(rail.y);
     }
     if (scenario === "archived") await expect(page.locator(".service-lifecycle__archived")).toBeVisible();
+    if (scenario === "unknown") {
+      await expect(page.locator(".panel")).not.toContainText("Not provided");
+      const status = page.locator(".service-essential-summary > div").filter({
+        has: page.getByText("Status operacional", { exact: true }),
+      }).locator("dd");
+      await expect(status).toHaveText("Não informado");
+    }
     if (["completed", "completed-with-started", "completed-without-started", "completed-reviewed", "archived"].includes(scenario)) {
       await expect(page.locator(".service-attention")).toHaveCount(0);
     }
@@ -203,6 +228,7 @@ test("existing primary intentions still open their existing safe paths", async (
   const selector = page.getByLabel("Local synthetic scenario");
   await selector.selectOption("assigned");
   await expect(page.locator(".job-intents__next button")).toHaveAccessibleName(primaryLabels.assigned);
+  await expectIntentControls(page, "assigned");
   await page.locator(".job-intents__next button").click();
   await expect(page.getByRole("heading", { name: "Revisar lembrete para Demo Cleaner Alpha" })).toBeVisible();
   await expectNoDomainCalls(page, failures);
@@ -210,6 +236,7 @@ test("existing primary intentions still open their existing safe paths", async (
   for (const scenario of ["assigned-draft", "in-progress", "ready"]) {
     await selector.selectOption(scenario);
     await expect(page.locator(".job-intents__next button")).toHaveAccessibleName(primaryLabels[scenario]);
+    await expectIntentControls(page, scenario);
     await page.locator(".job-intents__next button").click();
     expect(await page.evaluate(() => window.__lifecycleHarness.readCalls)).toEqual([
       { name: "onOpenChecklistRun", argumentCount: 0 },
@@ -218,6 +245,7 @@ test("existing primary intentions still open their existing safe paths", async (
   }
   await selector.selectOption("completed");
   await expect(page.locator(".job-intents__next button")).toHaveAccessibleName(primaryLabels.completed);
+  await expectIntentControls(page, "completed");
   await page.locator(".job-intents__next button").click();
   expect(await page.evaluate(() => window.__lifecycleHarness.readCalls)).toEqual([
     { name: "onOpenChecklistRun", argumentCount: 0 },

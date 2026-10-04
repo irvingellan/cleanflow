@@ -17,6 +17,12 @@ COMPLETED + READY_FOR_REVIEW displays **Saved checklist / Checklist salvo**,
 not pending review: no universal approval receipt is persisted, and the real
 Run status remains unchanged. Assignment evidence uses the existing Job/roster.
 
+Final visual refinement preserves the existing **View saved service** primary
+path for COMPLETED/archived Jobs, without the five operational-intention grid.
+Active states retain that grid and all guards/handlers. Unknown operational
+status uses the existing localized missing-value copy (EN/PT/ES); PT shows
+**Não informado**. No evidence mapping or lifecycle behavior changes.
+
 Sandbox-only developer visual preview renders fifteen explicitly synthetic,
 read-only projections through the same Job Detail. Functions remain billing-gated;
 real Run/link reads remain Unknown when unavailable. The guarded create-only
@@ -25,7 +31,7 @@ never Runs, live capabilities, tokens or photos. Production remains on the #57
 release; this feature is not merged or Production-deployed. See
 [visual contract and validation commands](SERVICE_LIFECYCLE_RAIL_V0.md) and the
 Issue #71 Draft PR for Sandbox publication and verification limits.
-Validation: 174 focused, 110 files / 1,188 unit, 18 synthetic Playwright
+Validation: 185 focused, 111 files / 1,199 unit, 18 synthetic Playwright
 desktop/mobile and 39 seed/build/preparation guards passed. The create-only
 Sandbox seed created 30 DEMO records; an exact read-back repeat skipped all 30.
 Production builds exclude the synthetic preview/harness implementation.

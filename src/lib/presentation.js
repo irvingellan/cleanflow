@@ -85,13 +85,14 @@ const statusFallbackMessages = {
 };
 
 export function formatStatus(status, translate = null) {
-  const key = statusTranslationKeys[status];
+  const key = typeof status === "string" && Object.hasOwn(statusTranslationKeys, status)
+    ? statusTranslationKeys[status] : null;
 
   return key && translate
     ? translate(key)
     : key
       ? statusFallbackMessages[key]
-      : missingValue;
+      : translate ? translate("common.notProvided") : missingValue;
 }
 
 export function formatOperationalStatus(status, translate = null) {
