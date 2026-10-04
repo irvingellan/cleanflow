@@ -1,8 +1,8 @@
 # CleanFlow — Current State
 
-## Issue #74 — Job Detail V1 progressive disclosure (2026-10-03)
+## Issue #74 — Job Detail V1 progressive disclosure (released 2026-10-04)
 
-Branch-only presentation review from released `230c6b3`: compact service context,
+Presentation-only release from baseline `230c6b3`: compact service context,
 unchanged rail/checklist/attention and existing primary intent remain visible.
 Seven groups plus secondary intents start closed. Intents reveal their original
 controls before focus/scroll; no mutation occurs from opening a group. Completed/
@@ -12,10 +12,19 @@ Human IA review approved the hierarchy. Final refinement keeps review attention
 text but omits its duplicate button when the primary already opens that checklist;
 distinct stale-link controls and Issue actions remain visible and unchanged.
 See [inventory and visual-review commands](JOB_DETAIL_V1.md). Validation: 209
-focused, 112 files / 1,223 unit tests, 21 synthetic desktop/mobile Playwright and
-39 seed/environment/Hosting guards. Production/Sandbox builds pass. Sandbox-only
-Hosting publication and static hash verification are recorded in the Draft PR;
-no Production merge/deploy or seed/data write is authorized for this slice.
+focused, 112 files / 1,223 unit tests and 21 synthetic desktop/mobile Playwright
+(including keyboard/focus) rerun successfully. Production/Sandbox builds,
+exact-SHA Hosting preparation and diff check pass. All 64 original JSX event/
+handler bindings are preserved; no backend, authorization or business-rule changes.
+Human Sandbox IA smoke and visual/product review passed before release.
+PR #75 was fast-forward merged at `71c7642e4fd1bc0b3abd540ee0437851dfa86c90`.
+Production **Hosting only** released that SHA at `2026-10-04T21:41:15.492Z`,
+version `ddd7b28f6ad54828`. HTTP 200, version/project binding, HTML bundle and
+all 13 prepared live file hashes passed; synthetic preview/harness is excluded.
+Rollback: Hosting version `88fbcf60d9296982`, build `230c6b3`.
+No real Job was opened for QA, no production data mutation or billing change,
+and no Functions/Rules/Storage/indexes/secrets deployment. Issue #74 is complete;
+no further visual polish is included in this release.
 
 ## Issue #71 — Service Lifecycle Rail V0 (2026-10-03)
 
