@@ -19,14 +19,16 @@ function renderScenario(id, overrides = {}) {
 }
 
 describe("Job Detail lifecycle integration", () => {
-  it("orders rail, essentials, cleaner, saved progress, existing intents and finances", () => {
+  it("orders compact context, rail, cleaner, saved progress, next action and closed details", () => {
     const { container, mutation } = renderScenario("in-progress");
-    const selectors = [".service-lifecycle", ".detail-list", ".service-cleaner-summary", ".service-checklist-summary", ".job-intents", ".service-financial-summary"];
+    const selectors = [".job-detail__context", ".service-lifecycle", ".service-cleaner-summary", ".service-checklist-summary", ".job-intents", ".job-detail-section"];
     const nodes = selectors.map((selector) => container.querySelector(selector));
     for (let index = 1; index < nodes.length; index += 1) {
       expect(nodes[index - 1].compareDocumentPosition(nodes[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
     expect(within(container.querySelector(".service-cleaner-summary")).getByText("Demo Cleaner Alpha")).toBeVisible();
+    expect(container.querySelectorAll(".job-detail-section[open]")).toHaveLength(0);
+    expect(container.querySelector(".service-financial-summary")).not.toBeVisible();
     expect(mutation).not.toHaveBeenCalled();
   });
   it.each([
@@ -38,19 +40,41 @@ describe("Job Detail lifecycle integration", () => {
     expect(screen.getByRole("button", { name: `Next step: ${action}` })).toBeVisible();
     expect(mutation).not.toHaveBeenCalled();
   });
-  it("review attention navigates only through the existing open handler", () => {
-    const { open, mutation } = renderScenario("ready");
-    const attention = screen.getByRole("complementary", { name: "Needs attention" });
-    fireEvent.click(within(attention).getByRole("button", { name: "Review checklist →" }));
-    expect(open).toHaveBeenCalledOnce();
-    expect(mutation).not.toHaveBeenCalled();
+  it.each(["en", "pt", "es"])("review attention remains visible without duplicating the checklist primary in %s", (language) => {
+    localStorage.setItem("cleanflow-language", language);
+    try {
+      const { container, open, mutation } = renderScenario("ready");
+      const attention = container.querySelector(".service-attention");
+      expect(attention).toBeVisible();
+      expect(attention.querySelector("strong")).not.toBeEmptyDOMElement();
+      expect(within(attention).queryByRole("button")).not.toBeInTheDocument();
+      const primary = container.querySelector(".job-intents__next button");
+      expect(primary).toBeVisible();
+      expect(open).not.toHaveBeenCalled();
+      fireEvent.click(primary);
+      expect(open).toHaveBeenCalledOnce();
+      expect(mutation).not.toHaveBeenCalled();
+    } finally { localStorage.removeItem("cleanflow-language"); }
   });
   it("stale-link attention focuses existing link controls, never opens a different view or replaces a link", () => {
     const { container, open, mutation } = renderScenario("stale");
+    expect(screen.getByRole("button", { name: "Next step: Open existing checklist" })).toBeVisible();
     const frame = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 0; });
     try {
       fireEvent.click(screen.getByRole("button", { name: "View link controls →" }));
       expect(container.querySelector(".job-checklist")).toHaveFocus();
+      expect(open).not.toHaveBeenCalled();
+      expect(mutation).not.toHaveBeenCalled();
+    } finally { frame.mockRestore(); }
+  });
+  it("open-Issue attention preserves its distinct action beside the checklist primary", () => {
+    const { container, open, mutation } = renderScenario("open-issue");
+    expect(screen.getByRole("button", { name: "Next step: Open existing checklist" })).toBeVisible();
+    const attention = screen.getByRole("complementary", { name: "Needs attention" });
+    const frame = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 0; });
+    try {
+      fireEvent.click(within(attention).getByRole("button"));
+      expect(container.querySelector(".issues-section")).toHaveFocus();
       expect(open).not.toHaveBeenCalled();
       expect(mutation).not.toHaveBeenCalled();
     } finally { frame.mockRestore(); }

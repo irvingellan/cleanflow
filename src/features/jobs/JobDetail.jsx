@@ -1,3 +1,4 @@
+import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
@@ -371,6 +372,7 @@ export function JobDetail({
     const offersSection = offersSectionRef.current;
     if (!offersSection) return;
     didFocusNewOffersRef.current = true;
+    revealJobDetailSection(offersSection);
     offersSection.focus({ preventScroll: true });
     offersSection.scrollIntoView?.({ block: "start", behavior: "auto" });
   }, [offersCreatedCount, isLoadingOffers, hasOffersError]);
@@ -399,6 +401,7 @@ export function JobDetail({
     const jobId = job.id;
     requestAnimationFrame(() => {
       if (currentJobIdRef.current !== jobId) return;
+      revealJobDetailSection(ref.current);
       ref.current?.focus({ preventScroll: true });
       ref.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
     });
@@ -408,7 +411,10 @@ export function JobDetail({
     setIntentNotice(null);
     if (intent === "history") {
       setIntentNotice({ key: "jobs.intentHistorical" });
-      if (!isLoadingChecklistRun && !hasChecklistRunError && checklistRun) onOpenChecklistRun?.();
+      if (!isLoadingChecklistRun && !hasChecklistRunError && checklistRun) {
+        revealJobDetailSection(historySectionRef.current);
+        onOpenChecklistRun?.();
+      }
       else focusIntentSection(historySectionRef);
       return;
     }
@@ -423,7 +429,10 @@ export function JobDetail({
     }
     if (intent === "checklist") {
       // Existing controls own loading/error/create/open behavior. No auto-creation.
-      if (!isLoadingChecklistRun && !hasChecklistRunError && checklistRun) onOpenChecklistRun?.();
+      if (!isLoadingChecklistRun && !hasChecklistRunError && checklistRun) {
+        revealJobDetailSection(checklistSectionRef.current);
+        onOpenChecklistRun?.();
+      }
       else focusIntentSection(checklistSectionRef);
       return;
     }
@@ -975,77 +984,34 @@ export function JobDetail({
   }
 
   return (
-    <section className="panel" aria-labelledby="job-detail-title">
+    <section className="panel job-detail" aria-labelledby="job-detail-title">
       <BackButton onClick={onBack} />
 
-      <p className="eyebrow">{translate("jobs.details")}</p>
       <h2 id="job-detail-title" className="panel__title">
         {job.propertyName || translate("properties.unnamed")}
       </h2>
+
+      <p className="job-detail__context">
+        <span>{formatDate(job.scheduledDate, translate, language)}</span>
+        {job.scheduledStart && <span>{job.scheduledStart}</span>}
+        <span>{job.clientName || translate("common.notProvided")}</span>
+      </p>
+      {isCompleted && <p className="job-detail__completion">
+        {translate("jobs.completedTime")}: {completedAt || translate("common.notProvided")}
+      </p>}
       {lifecyclePresentation.attention.length > 0 && <aside className="service-attention" aria-label={translate("dashboard.needsAttention")}>
         {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
           <strong>{translate(attention.key, { count: attention.count })}</strong>
-          <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
+          {/* Review opens the same Run as the checklist primary; link controls and Issues are distinct targets. */}
+          {(attention.kind !== "review" || primaryIntent.intent !== "checklist") && <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
             ? focusIntentSection(issuesSectionRef) : attention.kind === "stale-link"
               ? focusIntentSection(checklistSectionRef) : chooseJobIntent("checklist")}>
             {translate(attention.kind === "issues" ? "dashboard.reviewIssue"
               : attention.kind === "review" ? "jobs.intentReview" : "lifecycle.linkControls")} →
-          </button>
+          </button>}
         </div>)}
       </aside>}
       <ServiceLifecycleRail lifecycle={lifecyclePresentation.lifecycle} />
-
-      <dl ref={historySectionRef} tabIndex={-1} className="detail-list service-essential-summary">
-        <DetailItem
-          label={translate("common.property")}
-          value={job.propertyName || translate("properties.unnamed")}
-        />
-        <DetailItem
-          label={translate("common.client")}
-          value={job.clientName || translate("common.notProvided")}
-        />
-        {job.guestName && (
-          <DetailItem label={translate("jobs.guestName")} value={job.guestName} />
-        )}
-        <DetailItem
-          label={translate("jobs.scheduledDate")}
-          value={formatDate(job.scheduledDate, translate, language)}
-        />
-        {job.scheduledStart && (
-          <DetailItem label={translate("jobs.scheduledTime")} value={job.scheduledStart} />
-        )}
-        <DetailItem
-          label={translate("jobs.operationalStatus")}
-          value={formatOperationalStatus(job.operationalStatus, translate)}
-        />
-        {!isAssignmentAware && isAssigned && (
-          <DetailItem
-            label={translate("jobs.assignedCleaner")}
-            value={assignedCleanerName}
-          />
-        )}
-        {!isAssignmentAware && isAssigned && (
-          <DetailItem
-            label={translate("jobs.assignedTime")}
-            value={assignedAt || translate("common.notProvided")}
-          />
-        )}
-        {["IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus) && (
-          <DetailItem
-            label={translate("jobs.startedTime")}
-            value={startedAt || translate("common.notProvided")}
-          />
-        )}
-        {job.operationalStatus === "COMPLETED" && (
-          <DetailItem
-            label={translate("jobs.completedTime")}
-            value={completedAt || translate("common.notProvided")}
-          />
-        )}
-        {createdAt && (
-          <DetailItem label={translate("jobs.createdTime")} value={createdAt} />
-        )}
-      </dl>
 
       <div className="service-cleaner-summary">
         <span>{translate("common.cleaner")}</span>
@@ -1068,19 +1034,7 @@ export function JobDetail({
           : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
             : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
       />
-      <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
-        <h3>{translate("lifecycle.financialSnapshot")}</h3>
-        <dl className="detail-list">
-          <DetailItem label={translate("jobs.clientPrice")} value={hasValue(job.clientPrice)
-            ? formatPrice(job.clientPrice, translate, language) : translate("jobs.notSet")} />
-          <DetailItem label={translate("jobs.cleanerPayout")} value={hasValue(job.cleanerPayout)
-            ? formatPrice(job.cleanerPayout, translate, language) : translate("jobs.notSet")} />
-          <DetailItem label={translate("jobs.grossMargin")} value={grossMargin === null
-            ? translate("jobs.notSet") : formatPrice(grossMargin, translate, language)} />
-        </dl>
-      </section>
-      <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
-
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (
           <p className="form-success" role="status">{translate("jobs.scheduleSaved")}</p>
@@ -1210,224 +1164,16 @@ export function JobDetail({
         )}
       </section>
 
-      <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
-        {!isEditingPrices && (
-          <button className="button" type="button" onClick={startPriceEdit}>
-            {translate("jobs.editPrices")}
-          </button>
-        )}
-        {hasSavedPrices && !isEditingPrices && (
-          <p className="form-success" role="status">{translate("jobs.pricesSaved")}</p>
-        )}
-        {isEditingPrices && (
-          <form className="cleaning-form" noValidate onSubmit={savePrices}>
-            <div className="form-row">
-              <label>
-                {translate("jobs.clientPrice")}
-                <input
-                  type="number"
-                  name="clientPrice"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={priceValues.clientPrice}
-                  onChange={(event) => setPriceValues((current) => ({
-                    ...current,
-                    clientPrice: event.target.value,
-                  }))}
-                />
-              </label>
-              <label>
-                {translate("jobs.cleanerPayout")}
-                <input
-                  type="number"
-                  name="cleanerPayout"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={priceValues.cleanerPayout}
-                  onChange={(event) => setPriceValues((current) => ({
-                    ...current,
-                    cleanerPayout: event.target.value,
-                  }))}
-                />
-              </label>
-            </div>
-            {priceSaveError && <p className="form-error" role="alert">{priceSaveError}</p>}
-            <div className="button-row">
-              <button
-                className="button"
-                type="button"
-                disabled={isSavingPrices}
-                onClick={() => {
-                  setIsEditingPrices(false);
-                  setPriceSaveError("");
-                }}
-              >
-                {translate("common.cancel")}
-              </button>
-              <button className="button button--primary" type="submit" disabled={isSavingPrices}>
-                {isSavingPrices ? translate("jobs.savingPrices") : translate("jobs.savePrices")}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
-
-      <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
-        <div className="issues-section__header">
-          <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
-          {!isLoadingChecklistRun && checklistRun && (
-            <button className="button" type="button" onClick={onOpenChecklistRun}>
-              {translate(
-                checklistRun.status === "DRAFT" ? "checklists.viewDraftProgress"
-                  : checklistRun.status === "ABANDONED" ? "checklists.viewAbandonedRun"
-                    : "checklists.open",
-              )}
-            </button>
-          )}
-          {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError
-            && !job.archivedAt && !isCompleted && (
-            <button
-              className="button"
-              type="button"
-              disabled={isCreatingChecklistRun}
-              onClick={onCreateChecklistRun}
-            >
-              {isCreatingChecklistRun
-                ? translate("checklists.creating")
-                : translate("checklists.create")}
-            </button>
-          )}
-        </div>
-        {isLoadingChecklistRun && (
-          <StateCard message={translate("checklists.loading")} status="status" />
-        )}
-        {!isLoadingChecklistRun && hasChecklistRunError && (
-          <>
-            <StateCard message={translate("checklists.loadError")} status="alert" isError />
-            <button className="button" type="button" onClick={onRefreshChecklistRun}>
-              {translate("common.retry")}
-            </button>
-          </>
-        )}
-        {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
-          <p className="job-checklist__summary">{translate("checklists.noRun")}</p>
-        )}
-        {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-          <p className="job-checklist__summary">{translate(
-            checklistRun.status === "DRAFT" ? "checklists.existingDraft"
-              : checklistRun.status === "READY_FOR_REVIEW" ? "checklists.existingRun"
-                : checklistRun.status === "ABANDONED" ? "checklists.existingAbandoned"
-                  : "checklists.existingRunUnknown",
-          )}</p>
-        )}
-        {hasCreateChecklistRunError && (
-          <p className="form-error" role="alert">{translate("checklists.createError")}</p>
-        )}
-        <ChecklistCapabilityControls
-          job={job}
-          checklistRun={checklistRun}
-          capability={checklistCapability}
-          isLoading={isLoadingChecklistCapability}
-          hasError={hasChecklistCapabilityError}
-          isIssuing={isIssuingChecklistCapability}
-          hasIssueError={hasIssueChecklistCapabilityError}
-          isRevoking={isRevokingChecklistCapability}
-          hasRevokeError={hasRevokeChecklistCapabilityError}
-          onRefresh={onRefreshChecklistCapability}
-          onIssue={onIssueChecklistCapability}
-          onRevoke={onRevokeChecklistCapability}
-        />
-      </section>
-
-      {canUseCompletionControls && (
-        <section ref={completionSectionRef} tabIndex={-1} className="job-execution" aria-label={translate("jobs.completeService")}>
-          {isLoadingChecklistRun && (
-            <p className="form-hint">{translate("jobs.completionCheckingChecklist")}</p>
-          )}
-          {hasChecklistRunError && !isLoadingChecklistRun && (
-            <p className="form-error" role="alert">{translate("jobs.completionChecklistUnavailable")}</p>
-          )}
-          {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-            <p className="form-hint">{translate(
-              checklistRun.status === "DRAFT" ? "jobs.completionDraftOptions"
-                : checklistRun.status === "READY_FOR_REVIEW" ? "jobs.completionRequiresChecklistReview"
-                  : "jobs.completionChecklistUnavailable",
-            )}</p>
-          )}
-          {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
-            <>
-              {!isCompletionConfirmationVisible ? (
-                <button className="button button--primary" type="button"
-                  onClick={() => setIsCompletionConfirmationVisible(true)}>
-                  {translate("jobs.completeService")}
-                </button>
-              ) : (
-                <div>
-                  <p>{translate("jobs.completeWithoutChecklistConfirm")}</p>
-                  <div className="button-row">
-                    <button className="button" type="button" disabled={isCompletingCleaning}
-                      onClick={() => setIsCompletionConfirmationVisible(false)}>
-                      {translate("common.cancel")}
-                    </button>
-                    <button className="button button--primary" type="button"
-                      disabled={isCompletingCleaning} onClick={completeCleaning}>
-                      {isCompletingCleaning ? translate("jobs.completingCleaning")
-                        : translate("jobs.completeService")}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          {hasCompleteCleaningError && (
-            <p className="form-error" role="alert">{translate("jobs.completeCleaningError")}</p>
-          )}
+      {job.notes && (
+        <section className="notes-section" aria-label={translate("common.notes")}>
+          <h3>{translate("common.notes")}</h3>
+          <p>{job.notes}</p>
         </section>
       )}
 
-      {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
-        isInProgress ||
-        isCompleted) && (
-        <section
-          className="job-execution"
-          aria-label={translate("jobs.operationalStatus")}
-        >
-          {isInProgress && (
-            <p className="job-execution__state job-execution__state--in-progress">
-              <OperationalIcon name="clock" />
-              {translate("jobs.executionInProgress")}
-            </p>
-          )}
-          {isCompleted && (
-            <p className="job-execution__state job-execution__state--completed">
-              <OperationalIcon name="check-circle" />
-              {translate("jobs.executionCompleted")}
-            </p>
-          )}
-          {job.operationalStatus === "ASSIGNED" && (
-            <div className="button-row job-execution__actions">
-              <button
-                className="button button--primary"
-                type="button"
-                disabled={isStartingCleaning}
-                onClick={startCleaning}
-              >
-                {isStartingCleaning
-                  ? translate("jobs.startingCleaning")
-                  : translate("jobs.startCleaning")}
-              </button>
-            </div>
-          )}
-          {hasStartCleaningError && (
-            <p className="form-error" role="alert">
-              {translate("jobs.startCleaningError")}
-            </p>
-          )}
-        </section>
-      )}
+      </JobDetailSection>
 
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.cleaner")}>
       {!isAssignmentAware &&
         job.operationalStatus === "ASSIGNED" &&
         (job.assignedCleanerId || job.assignedCleanerName) && (
@@ -1776,155 +1522,166 @@ export function JobDetail({
         </section>
       )}
 
-      {job.notes && (
-        <section className="notes-section" aria-label={translate("common.notes")}>
-          <h3>{translate("common.notes")}</h3>
-          <p>{job.notes}</p>
+      </JobDetailSection>
+
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")}>
+      <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
+        <div className="issues-section__header">
+          <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
+          {!isLoadingChecklistRun && checklistRun && (
+            <button className="button" type="button" onClick={onOpenChecklistRun}>
+              {translate(
+                checklistRun.status === "DRAFT" ? "checklists.viewDraftProgress"
+                  : checklistRun.status === "ABANDONED" ? "checklists.viewAbandonedRun"
+                    : "checklists.open",
+              )}
+            </button>
+          )}
+          {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError
+            && !job.archivedAt && !isCompleted && (
+            <button
+              className="button"
+              type="button"
+              disabled={isCreatingChecklistRun}
+              onClick={onCreateChecklistRun}
+            >
+              {isCreatingChecklistRun
+                ? translate("checklists.creating")
+                : translate("checklists.create")}
+            </button>
+          )}
+        </div>
+        {isLoadingChecklistRun && (
+          <StateCard message={translate("checklists.loading")} status="status" />
+        )}
+        {!isLoadingChecklistRun && hasChecklistRunError && (
+          <>
+            <StateCard message={translate("checklists.loadError")} status="alert" isError />
+            <button className="button" type="button" onClick={onRefreshChecklistRun}>
+              {translate("common.retry")}
+            </button>
+          </>
+        )}
+        {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
+          <p className="job-checklist__summary">{translate("checklists.noRun")}</p>
+        )}
+        {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
+          <p className="job-checklist__summary">{translate(
+            checklistRun.status === "DRAFT" ? "checklists.existingDraft"
+              : checklistRun.status === "READY_FOR_REVIEW" ? "checklists.existingRun"
+                : checklistRun.status === "ABANDONED" ? "checklists.existingAbandoned"
+                  : "checklists.existingRunUnknown",
+          )}</p>
+        )}
+        {hasCreateChecklistRunError && (
+          <p className="form-error" role="alert">{translate("checklists.createError")}</p>
+        )}
+        <ChecklistCapabilityControls
+          job={job}
+          checklistRun={checklistRun}
+          capability={checklistCapability}
+          isLoading={isLoadingChecklistCapability}
+          hasError={hasChecklistCapabilityError}
+          isIssuing={isIssuingChecklistCapability}
+          hasIssueError={hasIssueChecklistCapabilityError}
+          isRevoking={isRevokingChecklistCapability}
+          hasRevokeError={hasRevokeChecklistCapabilityError}
+          onRefresh={onRefreshChecklistCapability}
+          onIssue={onIssueChecklistCapability}
+          onRevoke={onRevokeChecklistCapability}
+        />
+      </section>
+
+      {canUseCompletionControls && (
+        <section ref={completionSectionRef} tabIndex={-1} className="job-execution" aria-label={translate("jobs.completeService")}>
+          {isLoadingChecklistRun && (
+            <p className="form-hint">{translate("jobs.completionCheckingChecklist")}</p>
+          )}
+          {hasChecklistRunError && !isLoadingChecklistRun && (
+            <p className="form-error" role="alert">{translate("jobs.completionChecklistUnavailable")}</p>
+          )}
+          {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
+            <p className="form-hint">{translate(
+              checklistRun.status === "DRAFT" ? "jobs.completionDraftOptions"
+                : checklistRun.status === "READY_FOR_REVIEW" ? "jobs.completionRequiresChecklistReview"
+                  : "jobs.completionChecklistUnavailable",
+            )}</p>
+          )}
+          {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
+            <>
+              {!isCompletionConfirmationVisible ? (
+                <button className="button button--primary" type="button"
+                  onClick={() => setIsCompletionConfirmationVisible(true)}>
+                  {translate("jobs.completeService")}
+                </button>
+              ) : (
+                <div>
+                  <p>{translate("jobs.completeWithoutChecklistConfirm")}</p>
+                  <div className="button-row">
+                    <button className="button" type="button" disabled={isCompletingCleaning}
+                      onClick={() => setIsCompletionConfirmationVisible(false)}>
+                      {translate("common.cancel")}
+                    </button>
+                    <button className="button button--primary" type="button"
+                      disabled={isCompletingCleaning} onClick={completeCleaning}>
+                      {isCompletingCleaning ? translate("jobs.completingCleaning")
+                        : translate("jobs.completeService")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          {hasCompleteCleaningError && (
+            <p className="form-error" role="alert">{translate("jobs.completeCleaningError")}</p>
+          )}
         </section>
       )}
 
-      <section ref={issuesSectionRef} tabIndex={-1} className="issues-section" aria-labelledby="issues-title">
-        <div className="issues-section__header">
-          <h3 id="issues-title">{translate("issues.title")}</h3>
-          <button
-            className="button"
-            type="button"
-            onClick={onRefreshIssues}
-            disabled={isLoadingIssues}
-          >
-            {translate("issues.refresh")}
-          </button>
-        </div>
+      {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
+        isInProgress ||
+        isCompleted) && (
+        <section
+          className="job-execution"
+          aria-label={translate("jobs.operationalStatus")}
+        >
+          {isInProgress && (
+            <p className="job-execution__state job-execution__state--in-progress">
+              <OperationalIcon name="clock" />
+              {translate("jobs.executionInProgress")}
+            </p>
+          )}
+          {isCompleted && (
+            <p className="job-execution__state job-execution__state--completed">
+              <OperationalIcon name="check-circle" />
+              {translate("jobs.executionCompleted")}
+            </p>
+          )}
+          {job.operationalStatus === "ASSIGNED" && (
+            <div className="button-row job-execution__actions">
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={isStartingCleaning}
+                onClick={startCleaning}
+              >
+                {isStartingCleaning
+                  ? translate("jobs.startingCleaning")
+                  : translate("jobs.startCleaning")}
+              </button>
+            </div>
+          )}
+          {hasStartCleaningError && (
+            <p className="form-error" role="alert">
+              {translate("jobs.startCleaningError")}
+            </p>
+          )}
+        </section>
+      )}
 
-        {isLoadingIssues && (
-          <StateCard message={translate("issues.loading")} status="status" />
-        )}
+      </JobDetailSection>
 
-        {!isLoadingIssues && hasIssuesError && (
-          <StateCard
-            message={translate("issues.error")}
-            status="alert"
-            isError
-          />
-        )}
-
-        {!isLoadingIssues && !hasIssuesError && sortedIssues.length === 0 && (
-          <StateCard message={translate("issues.empty")} />
-        )}
-
-        {!isLoadingIssues && !hasIssuesError && sortedIssues.length > 0 && (
-          <div className="issue-list">
-            {sortedIssues.map((issue) => {
-              const issueCreatedAt = formatCreatedAt(issue.createdAt, language);
-              const resolvedAt = formatCreatedAt(issue.resolvedAt, language);
-              const isOpen = issue.status === "OPEN";
-              const isResolutionFormVisible = resolvingIssueId === issue.id;
-
-              return (
-                <article key={issue.id} className="issue-card">
-                  <div className="issue-card__header">
-                    <strong>
-                      {formatIssueCategory(issue.category, translate)}
-                    </strong>
-                    <span className="status-badge">
-                      {issue.status === "RESOLVED"
-                        ? translate("status.resolved")
-                        : translate("status.open")}
-                    </span>
-                  </div>
-                  <p>{issue.description || translate("common.notProvided")}</p>
-                  <span>
-                    {translate("issues.reportedBy", {
-                      cleaner:
-                        issue.cleanerName || translate("common.notProvided"),
-                    })}
-                  </span>
-                  {issueCreatedAt && (
-                    <span>
-                      {translate("issues.reported")} {issueCreatedAt}
-                    </span>
-                  )}
-                  {resolvedAt && (
-                    <span>
-                      {translate("issues.resolved")} {resolvedAt}
-                    </span>
-                  )}
-                  {issue.status === "RESOLVED" &&
-                    hasValue(issue.resolutionNote) && (
-                      <p className="issue-card__resolution-note">
-                        {translate("issues.resolution")}: {issue.resolutionNote}
-                      </p>
-                    )}
-
-                  {isOpen && !isResolutionFormVisible && (
-                    <div>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => openResolutionForm(issue)}
-                      >
-                        {translate("issues.resolve")}
-                      </button>
-                    </div>
-                  )}
-
-                  {isOpen && isResolutionFormVisible && (
-                    <form
-                      className="issue-resolution-form"
-                      onSubmit={resolveSelectedIssue}
-                    >
-                      <p className="issue-resolution-form__summary">
-                        <strong>
-                          {formatIssueCategory(issue.category, translate)}
-                        </strong>
-                        <span>
-                          {issue.description || translate("common.notProvided")}
-                        </span>
-                      </p>
-                      <label>
-                        {translate("issues.resolutionNote")}
-                        <textarea
-                          name="resolutionNote"
-                          value={resolutionNote}
-                          onChange={(event) =>
-                            setResolutionNote(event.target.value)
-                          }
-                          rows="3"
-                        />
-                      </label>
-                      {resolutionError && (
-                        <p className="form-error" role="alert">
-                          {resolutionError}
-                        </p>
-                      )}
-                      <div className="button-row">
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={isResolvingIssue}
-                          onClick={closeResolutionForm}
-                        >
-                          {translate("common.cancel")}
-                        </button>
-                        <button
-                          className="button button--primary"
-                          type="submit"
-                          disabled={isResolvingIssue}
-                        >
-                          {isResolvingIssue
-                            ? translate("issues.resolving")
-                            : translate("issues.resolve")}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")}>
       <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
         <div className="offers-section__header">
           <h3 id="offers-title">{translate("offers.title")}</h3>
@@ -2190,10 +1947,289 @@ export function JobDetail({
           </button>
         )}
       </div>
-      <details className="job-detail__secondary-actions">
-        <summary>{translate("jobs.secondaryActions")}</summary>
-        <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
-      </details>
+      </JobDetailSection>
+
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.issues")}>
+      <section ref={issuesSectionRef} tabIndex={-1} className="issues-section" aria-labelledby="issues-title">
+        <div className="issues-section__header">
+          <h3 id="issues-title">{translate("issues.title")}</h3>
+          <button
+            className="button"
+            type="button"
+            onClick={onRefreshIssues}
+            disabled={isLoadingIssues}
+          >
+            {translate("issues.refresh")}
+          </button>
+        </div>
+
+        {isLoadingIssues && (
+          <StateCard message={translate("issues.loading")} status="status" />
+        )}
+
+        {!isLoadingIssues && hasIssuesError && (
+          <StateCard
+            message={translate("issues.error")}
+            status="alert"
+            isError
+          />
+        )}
+
+        {!isLoadingIssues && !hasIssuesError && sortedIssues.length === 0 && (
+          <StateCard message={translate("issues.empty")} />
+        )}
+
+        {!isLoadingIssues && !hasIssuesError && sortedIssues.length > 0 && (
+          <div className="issue-list">
+            {sortedIssues.map((issue) => {
+              const issueCreatedAt = formatCreatedAt(issue.createdAt, language);
+              const resolvedAt = formatCreatedAt(issue.resolvedAt, language);
+              const isOpen = issue.status === "OPEN";
+              const isResolutionFormVisible = resolvingIssueId === issue.id;
+
+              return (
+                <article key={issue.id} className="issue-card">
+                  <div className="issue-card__header">
+                    <strong>
+                      {formatIssueCategory(issue.category, translate)}
+                    </strong>
+                    <span className="status-badge">
+                      {issue.status === "RESOLVED"
+                        ? translate("status.resolved")
+                        : translate("status.open")}
+                    </span>
+                  </div>
+                  <p>{issue.description || translate("common.notProvided")}</p>
+                  <span>
+                    {translate("issues.reportedBy", {
+                      cleaner:
+                        issue.cleanerName || translate("common.notProvided"),
+                    })}
+                  </span>
+                  {issueCreatedAt && (
+                    <span>
+                      {translate("issues.reported")} {issueCreatedAt}
+                    </span>
+                  )}
+                  {resolvedAt && (
+                    <span>
+                      {translate("issues.resolved")} {resolvedAt}
+                    </span>
+                  )}
+                  {issue.status === "RESOLVED" &&
+                    hasValue(issue.resolutionNote) && (
+                      <p className="issue-card__resolution-note">
+                        {translate("issues.resolution")}: {issue.resolutionNote}
+                      </p>
+                    )}
+
+                  {isOpen && !isResolutionFormVisible && (
+                    <div>
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => openResolutionForm(issue)}
+                      >
+                        {translate("issues.resolve")}
+                      </button>
+                    </div>
+                  )}
+
+                  {isOpen && isResolutionFormVisible && (
+                    <form
+                      className="issue-resolution-form"
+                      onSubmit={resolveSelectedIssue}
+                    >
+                      <p className="issue-resolution-form__summary">
+                        <strong>
+                          {formatIssueCategory(issue.category, translate)}
+                        </strong>
+                        <span>
+                          {issue.description || translate("common.notProvided")}
+                        </span>
+                      </p>
+                      <label>
+                        {translate("issues.resolutionNote")}
+                        <textarea
+                          name="resolutionNote"
+                          value={resolutionNote}
+                          onChange={(event) =>
+                            setResolutionNote(event.target.value)
+                          }
+                          rows="3"
+                        />
+                      </label>
+                      {resolutionError && (
+                        <p className="form-error" role="alert">
+                          {resolutionError}
+                        </p>
+                      )}
+                      <div className="button-row">
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={isResolvingIssue}
+                          onClick={closeResolutionForm}
+                        >
+                          {translate("common.cancel")}
+                        </button>
+                        <button
+                          className="button button--primary"
+                          type="submit"
+                          disabled={isResolvingIssue}
+                        >
+                          {isResolvingIssue
+                            ? translate("issues.resolving")
+                            : translate("issues.resolve")}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      </JobDetailSection>
+
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")}>
+      <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
+        <h3>{translate("lifecycle.financialSnapshot")}</h3>
+        <dl className="detail-list">
+          <DetailItem label={translate("jobs.clientPrice")} value={hasValue(job.clientPrice)
+            ? formatPrice(job.clientPrice, translate, language) : translate("jobs.notSet")} />
+          <DetailItem label={translate("jobs.cleanerPayout")} value={hasValue(job.cleanerPayout)
+            ? formatPrice(job.cleanerPayout, translate, language) : translate("jobs.notSet")} />
+          <DetailItem label={translate("jobs.grossMargin")} value={grossMargin === null
+            ? translate("jobs.notSet") : formatPrice(grossMargin, translate, language)} />
+        </dl>
+      </section>
+      <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
+        {!isEditingPrices && (
+          <button className="button" type="button" onClick={startPriceEdit}>
+            {translate("jobs.editPrices")}
+          </button>
+        )}
+        {hasSavedPrices && !isEditingPrices && (
+          <p className="form-success" role="status">{translate("jobs.pricesSaved")}</p>
+        )}
+        {isEditingPrices && (
+          <form className="cleaning-form" noValidate onSubmit={savePrices}>
+            <div className="form-row">
+              <label>
+                {translate("jobs.clientPrice")}
+                <input
+                  type="number"
+                  name="clientPrice"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={priceValues.clientPrice}
+                  onChange={(event) => setPriceValues((current) => ({
+                    ...current,
+                    clientPrice: event.target.value,
+                  }))}
+                />
+              </label>
+              <label>
+                {translate("jobs.cleanerPayout")}
+                <input
+                  type="number"
+                  name="cleanerPayout"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={priceValues.cleanerPayout}
+                  onChange={(event) => setPriceValues((current) => ({
+                    ...current,
+                    cleanerPayout: event.target.value,
+                  }))}
+                />
+              </label>
+            </div>
+            {priceSaveError && <p className="form-error" role="alert">{priceSaveError}</p>}
+            <div className="button-row">
+              <button
+                className="button"
+                type="button"
+                disabled={isSavingPrices}
+                onClick={() => {
+                  setIsEditingPrices(false);
+                  setPriceSaveError("");
+                }}
+              >
+                {translate("common.cancel")}
+              </button>
+              <button className="button button--primary" type="submit" disabled={isSavingPrices}>
+                {isSavingPrices ? translate("jobs.savingPrices") : translate("jobs.savePrices")}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+      </JobDetailSection>
+
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.history")}>
+      <dl ref={historySectionRef} tabIndex={-1} className="detail-list job-detail__history-summary">
+        <DetailItem
+          label={translate("common.property")}
+          value={job.propertyName || translate("properties.unnamed")}
+        />
+        <DetailItem
+          label={translate("common.client")}
+          value={job.clientName || translate("common.notProvided")}
+        />
+        {job.guestName && (
+          <DetailItem label={translate("jobs.guestName")} value={job.guestName} />
+        )}
+        <DetailItem
+          label={translate("jobs.scheduledDate")}
+          value={formatDate(job.scheduledDate, translate, language)}
+        />
+        {job.scheduledStart && (
+          <DetailItem label={translate("jobs.scheduledTime")} value={job.scheduledStart} />
+        )}
+        <DetailItem
+          label={translate("jobs.operationalStatus")}
+          value={formatOperationalStatus(job.operationalStatus, translate)}
+        />
+        {!isAssignmentAware && isAssigned && (
+          <DetailItem
+            label={translate("jobs.assignedCleaner")}
+            value={assignedCleanerName}
+          />
+        )}
+        {!isAssignmentAware && isAssigned && (
+          <DetailItem
+            label={translate("jobs.assignedTime")}
+            value={assignedAt || translate("common.notProvided")}
+          />
+        )}
+        {["IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus) && (
+          <DetailItem
+            label={translate("jobs.startedTime")}
+            value={startedAt || translate("common.notProvided")}
+          />
+        )}
+        {job.operationalStatus === "COMPLETED" && (
+          <DetailItem
+            label={translate("jobs.completedTime")}
+            value={completedAt || translate("common.notProvided")}
+          />
+        )}
+        {createdAt && (
+          <DetailItem label={translate("jobs.createdTime")} value={createdAt} />
+        )}
+      </dl>
+
+      <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
+
+      <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
+      </JobDetailSection>
+
       <ScrollToTopButton />
     </section>
   );

@@ -9,6 +9,15 @@ vi.mock("../cleaners/cleanerService.js", () => ({
   getCleanerContactsById: cleanerService.getCleanerContactsById,
 }));
 
+// These legacy tests exercise the unchanged controls after revealing them.
+// Default-collapsed presentation is tested separately in JobDetailDisclosure.
+function renderExpanded(...args) {
+  const result = render(...args);
+  const reveal = () => result.container.querySelectorAll("details").forEach((section) => { section.open = true; });
+  reveal();
+  return { ...result, rerender: (...next) => { result.rerender(...next); reveal(); } };
+}
+
 function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {}, property = null) {
   const noOp = vi.fn();
   const {
@@ -19,7 +28,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
     ...jobOverrides
   } = overrides;
 
-  return render(
+  return renderExpanded(
     <TranslationProvider>
       <JobDetail
         job={{
@@ -152,7 +161,8 @@ describe("JobDetail lifecycle actions", () => {
   it("keeps deletion collapsed below operations and preserves its confirmation", () => {
     const archive = vi.fn();
     renderJobDetail("ASSIGNED", {}, { onArchive: archive });
-    const summary = screen.getByText("Other service actions");
+    const summary = screen.getByText("History & administration");
+    summary.parentElement.open = false;
     expect(summary.parentElement).not.toHaveAttribute("open");
     expect(screen.getByRole("button", { name: "Delete" })).not.toBeVisible();
     fireEvent.click(summary);
@@ -1380,7 +1390,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByText("Guest name (optional)")).toBeVisible();
     expect(screen.getByText("Taylor Morgan")).toBeVisible();
     expect(screen.getByText("Scheduled time")).toBeVisible();
-    expect(screen.getByText("10:00")).toBeVisible();
+    expect(screen.getAllByText("10:00").some((node) => node.closest(".job-detail__context"))).toBe(true);
 
     rerender(
       <TranslationProvider>
@@ -1423,7 +1433,7 @@ describe("JobDetail lifecycle actions", () => {
 
   it("shows a v2 team roster and keeps multiple interested offers assignable", () => {
     const onAssignCleaner = vi.fn();
-    render(
+    renderExpanded(
       <TranslationProvider>
         <JobDetail
           job={{
@@ -1506,7 +1516,7 @@ describe("JobDetail lifecycle actions", () => {
       value: { writeText },
     });
 
-    render(
+    renderExpanded(
       <TranslationProvider>
         <JobDetail
           job={{
