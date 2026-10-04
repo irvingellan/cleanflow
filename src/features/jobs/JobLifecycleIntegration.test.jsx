@@ -40,19 +40,41 @@ describe("Job Detail lifecycle integration", () => {
     expect(screen.getByRole("button", { name: `Next step: ${action}` })).toBeVisible();
     expect(mutation).not.toHaveBeenCalled();
   });
-  it("review attention navigates only through the existing open handler", () => {
-    const { open, mutation } = renderScenario("ready");
-    const attention = screen.getByRole("complementary", { name: "Needs attention" });
-    fireEvent.click(within(attention).getByRole("button", { name: "Review checklist →" }));
-    expect(open).toHaveBeenCalledOnce();
-    expect(mutation).not.toHaveBeenCalled();
+  it.each(["en", "pt", "es"])("review attention remains visible without duplicating the checklist primary in %s", (language) => {
+    localStorage.setItem("cleanflow-language", language);
+    try {
+      const { container, open, mutation } = renderScenario("ready");
+      const attention = container.querySelector(".service-attention");
+      expect(attention).toBeVisible();
+      expect(attention.querySelector("strong")).not.toBeEmptyDOMElement();
+      expect(within(attention).queryByRole("button")).not.toBeInTheDocument();
+      const primary = container.querySelector(".job-intents__next button");
+      expect(primary).toBeVisible();
+      expect(open).not.toHaveBeenCalled();
+      fireEvent.click(primary);
+      expect(open).toHaveBeenCalledOnce();
+      expect(mutation).not.toHaveBeenCalled();
+    } finally { localStorage.removeItem("cleanflow-language"); }
   });
   it("stale-link attention focuses existing link controls, never opens a different view or replaces a link", () => {
     const { container, open, mutation } = renderScenario("stale");
+    expect(screen.getByRole("button", { name: "Next step: Open existing checklist" })).toBeVisible();
     const frame = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 0; });
     try {
       fireEvent.click(screen.getByRole("button", { name: "View link controls →" }));
       expect(container.querySelector(".job-checklist")).toHaveFocus();
+      expect(open).not.toHaveBeenCalled();
+      expect(mutation).not.toHaveBeenCalled();
+    } finally { frame.mockRestore(); }
+  });
+  it("open-Issue attention preserves its distinct action beside the checklist primary", () => {
+    const { container, open, mutation } = renderScenario("open-issue");
+    expect(screen.getByRole("button", { name: "Next step: Open existing checklist" })).toBeVisible();
+    const attention = screen.getByRole("complementary", { name: "Needs attention" });
+    const frame = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 0; });
+    try {
+      fireEvent.click(within(attention).getByRole("button"));
+      expect(container.querySelector(".issues-section")).toHaveFocus();
       expect(open).not.toHaveBeenCalled();
       expect(mutation).not.toHaveBeenCalled();
     } finally { frame.mockRestore(); }

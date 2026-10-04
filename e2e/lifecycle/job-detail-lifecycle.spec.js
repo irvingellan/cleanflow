@@ -168,6 +168,15 @@ for (const { scenario, width } of screenshotCases) {
       await expect(progress).toHaveAttribute("aria-valuetext", /7.*28/);
     }
     if (scenario === "stale") await expect(page.locator(".service-checklist-summary__warning")).toBeVisible();
+    if (scenario === "ready") {
+      await expect(page.locator(".service-attention strong")).toHaveText("O checklist está aguardando revisão do manager.");
+      await expect(page.locator(".service-attention button")).toHaveCount(0);
+      await expect(page.locator(".job-intents__next button")).toBeVisible();
+    }
+    if (scenario === "stale") {
+      await expect(page.locator(".service-attention").getByRole("button", { name: "Ver controles do link →" })).toBeVisible();
+      await expect(page.locator(".job-intents__next button")).toBeVisible();
+    }
     if (["ready", "stale"].includes(scenario)) {
       await expect(page.locator(".service-attention")).toBeVisible();
       const attention = await page.locator(".service-attention").boundingBox();
@@ -307,6 +316,8 @@ test("offered and open issues preserve the five operational stages", async ({ pa
   await expect(page.locator(".job-intents__next button")).toHaveAccessibleName(primaryLabels["open-issue"]);
   await expectRailState(page, "open-issue");
   await expect(page.locator(".service-attention")).toBeVisible();
+  await expect(page.locator(".service-attention button")).toBeVisible();
+  await expect(page.locator(".job-intents__next button")).toBeVisible();
   await expectMobileFit(page);
   await expectNoDomainCalls(page, failures);
 });

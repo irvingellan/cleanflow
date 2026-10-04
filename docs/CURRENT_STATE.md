@@ -8,8 +8,11 @@ Seven groups plus secondary intents start closed. Intents reveal their original
 controls before focus/scroll; no mutation occurs from opening a group. Completed/
 archived services retain the historical primary path. All handlers, guards,
 provenance and archive confirmations remain intact; no backend changes.
-See [inventory and visual-review commands](JOB_DETAIL_V1.md). Validation: 206
-focused, 112 files / 1,220 unit tests, 21 synthetic desktop/mobile Playwright and
+Human IA review approved the hierarchy. Final refinement keeps review attention
+text but omits its duplicate button when the primary already opens that checklist;
+distinct stale-link controls and Issue actions remain visible and unchanged.
+See [inventory and visual-review commands](JOB_DETAIL_V1.md). Validation: 209
+focused, 112 files / 1,223 unit tests, 21 synthetic desktop/mobile Playwright and
 39 seed/environment/Hosting guards. Production/Sandbox builds pass. Sandbox-only
 Hosting publication and static hash verification are recorded in the Draft PR;
 no Production merge/deploy or seed/data write is authorized for this slice.

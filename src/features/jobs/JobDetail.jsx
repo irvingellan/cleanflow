@@ -1002,12 +1002,13 @@ export function JobDetail({
       {lifecyclePresentation.attention.length > 0 && <aside className="service-attention" aria-label={translate("dashboard.needsAttention")}>
         {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
           <strong>{translate(attention.key, { count: attention.count })}</strong>
-          <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
+          {/* Review opens the same Run as the checklist primary; link controls and Issues are distinct targets. */}
+          {(attention.kind !== "review" || primaryIntent.intent !== "checklist") && <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
             ? focusIntentSection(issuesSectionRef) : attention.kind === "stale-link"
               ? focusIntentSection(checklistSectionRef) : chooseJobIntent("checklist")}>
             {translate(attention.kind === "issues" ? "dashboard.reviewIssue"
               : attention.kind === "review" ? "jobs.intentReview" : "lifecycle.linkControls")} →
-          </button>
+          </button>}
         </div>)}
       </aside>}
       <ServiceLifecycleRail lifecycle={lifecyclePresentation.lifecycle} />
