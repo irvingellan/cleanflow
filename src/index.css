@@ -3751,6 +3751,22 @@ button.summary-card {
 .job-intents__actions .button { min-height: 44px; }
 .job-intents__notice { margin-top: 12px; padding: 12px; border-left: 3px solid var(--color-brand-text); background: var(--color-surface); }
 .job-intents__notice p { margin: 0 0 10px; }
+.job-intents__secondary > summary { min-height: 44px; padding: 12px 0; cursor: pointer; color: var(--color-text-secondary); }
+.job-intents__secondary[open] > summary { margin-bottom: 8px; }
+.job-detail .panel__title { margin-bottom: 6px; overflow-wrap: anywhere; }
+.job-detail__context { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 12px; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.job-detail__context > span + span::before { content: "·"; margin-right: 10px; }
+.job-detail__completion { margin: 0 0 12px; font-size: .875rem; }
+.job-detail .job-intents { margin-bottom: 16px; }
+.job-detail .job-intents__next { margin-bottom: 0; }
+.job-detail-section { min-width: 0; border-top: 1px solid var(--color-border); }
+.job-detail-section > summary { min-height: 48px; padding: 14px 0; cursor: pointer; font-weight: 600; color: var(--color-heading); overflow-wrap: anywhere; }
+.job-detail-section > summary:focus-visible,
+.job-intents__secondary > summary:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
+.job-detail-section__content { padding: 4px 0 20px; min-width: 0; }
+.job-detail-section__content > :first-child { margin-top: 0; }
+.job-detail-section .detail-list > div { min-width: 0; }
+.job-detail-section .detail-list dd { overflow-wrap: anywhere; }
 .job-detail__secondary-actions { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--color-border); }
 .job-detail__secondary-actions > summary { color: var(--color-text-secondary); cursor: pointer; padding: 10px 0; min-height: 44px; }
 .job-detail__secondary-actions[open] > summary { margin-bottom: 12px; }

@@ -9,10 +9,11 @@ export function JobIntentLayer({ primary, onIntent, notice, onSafePath, safeLabe
       <div><p className="eyebrow">{translate("jobs.intentNext")}</p><strong>{translate(primary.label)}</strong></div>
       <button className="button button--primary" type="button" aria-label={translate("jobs.intentNextAction", { action: translate(primary.label) })} onClick={() => onIntent(primary.intent)}>{translate(primary.label)} →</button>
     </div>
-    {showOperationalIntents && <>
+    {showOperationalIntents && <details className="job-intents__secondary">
+      <summary>{translate("jobs.moreActions")}</summary>
       <h3>{translate("jobs.intentTitle")}</h3>
       <div className="job-intents__actions">{["schedule", "assignment", "reminder", "checklist", "completion"].map((intent) => <button key={intent} className="button" type="button" aria-label={translate("jobs.intentChoose", { action: translate(`jobs.intent.${intent}`) })} onClick={() => onIntent(intent)}>{translate(`jobs.intent.${intent}`)}</button>)}</div>
-    </>}
+    </details>}
     {notice && <div className="job-intents__notice" role="status"><p>{notice}</p>{onSafePath && <button className="button" type="button" onClick={onSafePath}>{safeLabel} →</button>}</div>}
   </section>;
 }

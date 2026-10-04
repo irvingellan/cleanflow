@@ -1,8 +1,22 @@
 # CleanFlow — Current State
 
+## Issue #74 — Job Detail V1 progressive disclosure (2026-10-03)
+
+Branch-only presentation review from released `230c6b3`: compact service context,
+unchanged rail/checklist/attention and existing primary intent remain visible.
+Seven groups plus secondary intents start closed. Intents reveal their original
+controls before focus/scroll; no mutation occurs from opening a group. Completed/
+archived services retain the historical primary path. All handlers, guards,
+provenance and archive confirmations remain intact; no backend changes.
+See [inventory and visual-review commands](JOB_DETAIL_V1.md). Validation: 206
+focused, 112 files / 1,220 unit tests, 21 synthetic desktop/mobile Playwright and
+39 seed/environment/Hosting guards. Production/Sandbox builds pass. Sandbox-only
+Hosting publication and static hash verification are recorded in the Draft PR;
+no Production merge/deploy or seed/data write is authorized for this slice.
+
 ## Issue #71 — Service Lifecycle Rail V0 (2026-10-03)
 
-Branch-only visual slice based on `d1f6a2e`: real Job Detail separates the five
+Released visual slice based on `d1f6a2e`: real Job Detail separates the five
 operational stages, saved checklist-item progress, existing next
 action and Job financial snapshots. Proven stale/review/Open Issue attention
 stays parallel to the rail; existing guards/handlers and backend are unchanged.
@@ -27,8 +41,8 @@ Sandbox-only developer visual preview renders fifteen explicitly synthetic,
 read-only projections through the same Job Detail. Functions remain billing-gated;
 real Run/link reads remain Unknown when unavailable. The guarded create-only
 seeder writes DEMO Jobs/references/known children only to the dedicated Sandbox,
-never Runs, live capabilities, tokens or photos. Production remains on the #57
-release; this feature is not merged or Production-deployed. See
+never Runs, live capabilities, tokens or photos. PR #73 is merged and Production
+Hosting released `230c6b3`; no backend surfaces were deployed. See
 [visual contract and validation commands](SERVICE_LIFECYCLE_RAIL_V0.md) and the
 Issue #71 Draft PR for Sandbox publication and verification limits.
 Validation: 185 focused, 111 files / 1,199 unit, 18 synthetic Playwright
@@ -37,8 +51,8 @@ Sandbox seed created 30 DEMO records; an exact read-back repeat skipped all 30.
 Production builds exclude the synthetic preview/harness implementation.
 The six additional evidence cases are memory-only and excluded from seeding;
 the original 30-document seed is hash-verified unchanged. No data write belongs
-to this refinement. Publication remains Hosting-only in Sandbox, recorded in
-Draft PR #73; never a Production release or merge.
+to this refinement. The authenticated Sandbox human smoke passed before the
+approved Hosting-only Production release; no real operational QA mutation ran.
 
 ## Issue #57 — current-main Sandbox foundation (2026-10-03)
 

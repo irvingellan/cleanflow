@@ -17,6 +17,10 @@ export function normalizeTranslationLanguage(language) {
 
 const messages = {
   en: {
+    "jobs.moreActions": "More actions",
+    "jobs.section.details": "Service details", "jobs.section.cleaner": "Cleaner & assignment",
+    "jobs.section.checklist": "Checklist", "jobs.section.offers": "Offers", "jobs.section.issues": "Issues",
+    "jobs.section.financial": "Financial", "jobs.section.history": "History & administration",
     "jobs.intentTitle": "What do you want to do?", "jobs.intentNext": "Suggested next step", "jobs.intentNextAction": "Next step: {action}", "jobs.intentChoose": "Choose intention: {action}",
     "jobs.intent.schedule": "Change date / time", "jobs.intent.assignment": "Assign / change cleaner", "jobs.intent.reminder": "Prepare reminder", "jobs.intent.checklist": "Checklist", "jobs.intent.completion": "Complete service",
     "jobs.intentReview": "Review checklist", "jobs.intentHistory": "View saved service", "jobs.intentExistingChecklist": "Open existing checklist", "jobs.secondaryActions": "Other service actions",
@@ -63,6 +67,10 @@ const messages = {
     "clients.title": "Clients", "clients.new": "New client", "clients.loading": "Loading clients…", "clients.error": "Unable to load clients.", "clients.empty": "No clients found.", "clients.createTitle": "New client", "clients.name": "Client name", "clients.save": "Save client", "clients.creating": "Saving…", "clients.nameRequired": "Enter a client name.", "clients.createError": "Unable to create client.", "clients.view": "View {client}", "clients.details": "Client details", "clients.linkedProperties": "Linked properties", "clients.propertiesLoading": "Loading linked properties…", "clients.propertiesError": "Unable to load linked properties.", "clients.noLinkedProperties": "No linked properties.", "clients.openProperty": "Open property", "clients.upcomingService": "Upcoming service", "clients.upcomingServices": "Upcoming services", "clients.noUpcomingService": "No upcoming service", "clients.recentHistory": "Recent history", "clients.historyLoading": "Loading client history…", "clients.historyError": "Unable to load client history.", "clients.noRecentHistory": "No recent service history.",
   },
   pt: {
+    "jobs.moreActions": "Mais ações",
+    "jobs.section.details": "Detalhes do serviço", "jobs.section.cleaner": "Cleaner e atribuição",
+    "jobs.section.checklist": "Checklist", "jobs.section.offers": "Ofertas", "jobs.section.issues": "Problemas",
+    "jobs.section.financial": "Financeiro", "jobs.section.history": "Histórico e administração",
     "jobs.intentTitle": "O que você quer fazer?", "jobs.intentNext": "Próximo passo sugerido", "jobs.intentNextAction": "Próximo passo: {action}", "jobs.intentChoose": "Escolher intenção: {action}",
     "jobs.intent.schedule": "Alterar data / horário", "jobs.intent.assignment": "Atribuir / trocar cleaner", "jobs.intent.reminder": "Preparar lembrete", "jobs.intent.checklist": "Checklist", "jobs.intent.completion": "Concluir serviço",
     "jobs.intentReview": "Revisar checklist", "jobs.intentHistory": "Ver serviço salvo", "jobs.intentExistingChecklist": "Abrir checklist existente", "jobs.secondaryActions": "Outras ações do serviço",
@@ -110,6 +118,10 @@ const messages = {
     "dashboard.needsAttentionDescription": "Principais prioridades operacionais entre atribuições, interesse de cleaners e problemas.",
   },
   es: {
+    "jobs.moreActions": "Más acciones",
+    "jobs.section.details": "Detalles del servicio", "jobs.section.cleaner": "Cleaner y asignación",
+    "jobs.section.checklist": "Checklist", "jobs.section.offers": "Ofertas", "jobs.section.issues": "Problemas",
+    "jobs.section.financial": "Finanzas", "jobs.section.history": "Historial y administración",
     "jobs.intentTitle": "¿Qué quieres hacer?", "jobs.intentNext": "Próximo paso sugerido", "jobs.intentNextAction": "Próximo paso: {action}", "jobs.intentChoose": "Elegir intención: {action}",
     "jobs.intent.schedule": "Cambiar fecha / hora", "jobs.intent.assignment": "Asignar / cambiar cleaner", "jobs.intent.reminder": "Preparar recordatorio", "jobs.intent.checklist": "Checklist", "jobs.intent.completion": "Completar servicio",
     "jobs.intentReview": "Revisar checklist", "jobs.intentHistory": "Ver servicio guardado", "jobs.intentExistingChecklist": "Abrir checklist existente", "jobs.secondaryActions": "Otras acciones del servicio",

@@ -19,14 +19,16 @@ function renderScenario(id, overrides = {}) {
 }
 
 describe("Job Detail lifecycle integration", () => {
-  it("orders rail, essentials, cleaner, saved progress, existing intents and finances", () => {
+  it("orders compact context, rail, cleaner, saved progress, next action and closed details", () => {
     const { container, mutation } = renderScenario("in-progress");
-    const selectors = [".service-lifecycle", ".detail-list", ".service-cleaner-summary", ".service-checklist-summary", ".job-intents", ".service-financial-summary"];
+    const selectors = [".job-detail__context", ".service-lifecycle", ".service-cleaner-summary", ".service-checklist-summary", ".job-intents", ".job-detail-section"];
     const nodes = selectors.map((selector) => container.querySelector(selector));
     for (let index = 1; index < nodes.length; index += 1) {
       expect(nodes[index - 1].compareDocumentPosition(nodes[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
     expect(within(container.querySelector(".service-cleaner-summary")).getByText("Demo Cleaner Alpha")).toBeVisible();
+    expect(container.querySelectorAll(".job-detail-section[open]")).toHaveLength(0);
+    expect(container.querySelector(".service-financial-summary")).not.toBeVisible();
     expect(mutation).not.toHaveBeenCalled();
   });
   it.each([

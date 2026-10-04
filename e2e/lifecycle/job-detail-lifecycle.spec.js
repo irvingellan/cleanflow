@@ -55,9 +55,10 @@ async function expectIntentControls(page, scenario) {
     await expect(grid).toHaveCount(0);
     await expect(intentions.getByRole("button", { name: /^Escolher intenção:/ })).toHaveCount(0);
   } else {
-    await expect(heading).toBeVisible();
-    await expect(grid).toBeVisible();
-    await expect(grid.getByRole("button")).toHaveCount(5);
+    await expect(heading).not.toBeVisible();
+    await expect(grid).not.toBeVisible();
+    await expect(grid.locator("button")).toHaveCount(5);
+    await expect(intentions.getByText("Mais ações", { exact: true })).toBeVisible();
   }
 }
 
@@ -151,12 +152,14 @@ async function expectMobileFit(page) {
 const screenshotCases = [
   ...["unassigned", "assigned-draft", "in-progress", "ready", "completed"].map(scenario => ({ scenario, width: 1440 })),
   ...["direct-assigned", "direct-in-progress", "completed-with-started", "completed-without-started", "completed-reviewed", "offer-error"].map(scenario => ({ scenario, width: 1440 })),
-  ...["unassigned", "in-progress", "stale", "unknown", "archived"].map(scenario => ({ scenario, width: 390 })),
+  ...["unassigned", "in-progress", "stale", "completed", "unknown", "archived"].map(scenario => ({ scenario, width: 390 })),
 ];
 
 for (const { scenario, width } of screenshotCases) {
   test(`real Job Detail lifecycle: ${scenario} at ${width}px`, async ({ page }) => {
     const failures = await openFixture(page, scenario, width);
+    await expect(page.locator(".job-detail-section")).toHaveCount(7);
+    await expect(page.locator(".job-detail-section[open]")).toHaveCount(0);
     await expectNoDomainCalls(page, failures);
     await expectRailState(page, scenario);
     if (["in-progress", "direct-in-progress", "stale", "archived"].includes(scenario)) {
@@ -174,10 +177,12 @@ for (const { scenario, width } of screenshotCases) {
     if (scenario === "archived") await expect(page.locator(".service-lifecycle__archived")).toBeVisible();
     if (scenario === "unknown") {
       await expect(page.locator(".panel")).not.toContainText("Not provided");
-      const status = page.locator(".service-essential-summary > div").filter({
+      await page.getByText("Histórico e administração", { exact: true }).click();
+      const status = page.locator(".job-detail__history-summary > div").filter({
         has: page.getByText("Status operacional", { exact: true }),
       }).locator("dd");
       await expect(status).toHaveText("Não informado");
+      await page.getByText("Histórico e administração", { exact: true }).click();
     }
     if (["completed", "completed-with-started", "completed-without-started", "completed-reviewed", "archived"].includes(scenario)) {
       await expect(page.locator(".service-attention")).toHaveCount(0);
@@ -187,20 +192,28 @@ for (const { scenario, width } of screenshotCases) {
       expect(await page.evaluate(() => window.__lifecycleFixture.checklistRun.status)).toBe("READY_FOR_REVIEW");
     }
     if (["direct-in-progress", "completed-with-started", "completed-reviewed"].includes(scenario)) {
-      const started = page.locator(".service-essential-summary > div").filter({
+      await page.getByText("Histórico e administração", { exact: true }).click();
+      const started = page.locator(".job-detail__history-summary > div").filter({
         has: page.getByText("Horário de início", { exact: true }),
       }).locator("dd");
       await expect(started).not.toHaveText("Não informado");
+      await page.getByText("Histórico e administração", { exact: true }).click();
     }
     if (["completed-with-started", "completed-without-started", "completed-reviewed"].includes(scenario)) {
-      const completed = page.locator(".service-essential-summary > div").filter({
+      await page.getByText("Histórico e administração", { exact: true }).click();
+      const completed = page.locator(".job-detail__history-summary > div").filter({
         has: page.getByText("Horário de conclusão", { exact: true }),
       }).locator("dd");
       await expect(completed).not.toHaveText("Não informado");
+      await page.getByText("Histórico e administração", { exact: true }).click();
     }
     await expectMobileFit(page);
     await expectNoDomainCalls(page, failures);
     await page.evaluate(() => window.scrollTo(0, 0));
+    if (width === 1440) {
+      const primary = await page.locator(".job-intents__next button").boundingBox();
+      expect(primary.y + primary.height).toBeLessThan(page.viewportSize().height);
+    }
     await page.screenshot({
       path: `artifacts/visual-smoke/lifecycle-${width === 390 ? "mobile" : "desktop"}-${scenario}.png`,
       style: ".lifecycle-fixture-toolbar { display: none; }",
@@ -215,6 +228,38 @@ for (const { scenario, width } of screenshotCases) {
       await expect(page.locator(".job-checklist")).toBeFocused();
       await expectNoDomainCalls(page, failures);
     }
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`V1 keyboard disclosure and intent routing at ${width}px`, async ({ page }) => {
+    const failures = await openFixture(page, "unassigned", width);
+    const more = page.locator(".job-intents__secondary > summary");
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".job-intents__actions")).toBeVisible();
+    await page.getByRole("button", { name: "Escolher intenção: Alterar data / horário" }).click();
+    await expect(page.locator(".job-details-edit").first()).toBeFocused();
+    const service = page.locator(".job-detail-section").filter({ has: page.getByText("Detalhes do serviço", { exact: true }) });
+    await expect(service).toHaveAttribute("open", "");
+    await expect(page.getByRole("button", { name: "Salvar horário" })).toBeVisible();
+    await expectMobileFit(page);
+    await service.locator(":scope > summary").focus();
+    await page.keyboard.press("Space");
+    await expect(service).not.toHaveAttribute("open", "");
+    await expect(page.getByRole("button", { name: "Salvar horário" })).not.toBeVisible();
+    await more.click();
+    await page.locator(".job-intents__next button").click();
+    await expect(page.locator(".assignment-roster")).toBeFocused();
+    await expect(page.getByRole("radio", { name: "Demo Cleaner Alpha" })).toBeVisible();
+    await expect(page.locator(".job-detail-section[open]")).toHaveCount(1);
+    for (const summary of await page.locator(".job-detail-section > summary").all()) {
+      expect((await summary.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    }
+    await expectMobileFit(page);
+    await expectNoDomainCalls(page, failures);
+    await page.screenshot({ path: `artifacts/visual-smoke/job-detail-v1-${width}-assignment-open.png`, fullPage: true,
+      style: ".lifecycle-fixture-toolbar { display: none; }" });
   });
 }
 
