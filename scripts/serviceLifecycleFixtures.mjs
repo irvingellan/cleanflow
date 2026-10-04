@@ -50,7 +50,7 @@ function checklistProjection(job, status, answered) {
   };
 }
 
-export function buildServiceLifecycleFixtures() {
+function buildSeedableServiceLifecycleFixtures() {
   const client = { id: "lifecycle-v0-client", name: "Lifecycle Demo Client", active: true, ...marker() };
   const knownCleaners = ["Alpha", "Beta"].map(label => ({
     id: `lifecycle-v0-cleaner-${label.toLowerCase()}`, name: `Demo Cleaner ${label}`,
@@ -103,6 +103,71 @@ export function buildServiceLifecycleFixtures() {
   });
 }
 
+const previewScenarioDefinitions = [
+  { id: "direct-assigned", label: "Direct assignment · No Offer", source: "assigned" },
+  { id: "direct-in-progress", label: "Direct assignment · In progress", source: "in-progress" },
+  { id: "completed-with-started", label: "Completed · Cleaning started", source: "completed" },
+  { id: "completed-without-started", label: "Completed · No cleaning start", source: "completed" },
+  { id: "completed-reviewed", label: "Completed · Saved checklist", source: "completed" },
+  { id: "offer-error", label: "Assigned · Offer history unavailable", source: "assigned" },
+];
+
+function memoryTimestamp(value) {
+  const milliseconds = value.getTime();
+  return {
+    seconds: Math.floor(milliseconds / 1000),
+    nanoseconds: (milliseconds % 1000) * 1_000_000,
+    toDate: () => new Date(milliseconds),
+    toMillis: () => milliseconds,
+  };
+}
+
+export function buildServiceLifecycleFixtures() {
+  const seedable = buildSeedableServiceLifecycleFixtures();
+  const previews = previewScenarioDefinitions.map(({ id, label, source }) => {
+    const fixture = structuredClone(seedable.find(item => item.id === source));
+    fixture.id = id;
+    fixture.label = label;
+    fixture.previewOnly = true;
+    fixture.job.id = `lifecycle-v0-preview-job-${id}`;
+    fixture.property.id = `lifecycle-v0-preview-property-${id}`;
+    fixture.property.name = `Lifecycle Demo ${label}`;
+    fixture.job.propertyId = fixture.property.id;
+    fixture.job.propertyName = fixture.property.name;
+    fixture.offers = [];
+    delete fixture.job.offeredAt;
+    for (const assignment of fixture.assignments) {
+      assignment.id = `lifecycle-v0-preview-assignment-${id}`;
+      assignment.jobId = fixture.job.id;
+      assignment.propertyId = fixture.property.id;
+      assignment.propertyName = fixture.property.name;
+    }
+    if (fixture.checklistRun) {
+      fixture.checklistRun.jobId = fixture.job.id;
+      fixture.checklistRun.property.id = fixture.property.id;
+      fixture.checklistRun.property.name = fixture.property.name;
+    }
+    if (id === "completed-without-started") {
+      delete fixture.job.startedAt;
+      // This is the existing eligible no-Run completion path, represented only
+      // in memory. Do not fabricate a Draft/approved checklist or a start time.
+      fixture.checklistRun = null;
+      fixture.checklistCapability = { syntheticPreview: true, state: "NONE" };
+    }
+    if (id === "offer-error") {
+      fixture.isLoadingOffers = false;
+      fixture.hasOffersError = true;
+    }
+    // New previews use the same synthetic instants in the Timestamp interface
+    // understood by the actual detail formatter. No SDK or seed mutation.
+    for (const [key, value] of Object.entries(fixture.job)) {
+      if (value instanceof Date) fixture.job[key] = memoryTimestamp(value);
+    }
+    return fixture;
+  });
+  return [...seedable, ...previews];
+}
+
 export function getServiceLifecycleFixture(id) {
   const fixture = buildServiceLifecycleFixtures().find(item => item.id === id);
   if (!fixture) throw new Error("Unknown synthetic lifecycle scenario.");
@@ -115,7 +180,9 @@ export function buildServiceLifecycleSeedDocuments() {
     const { id, ...data } = record;
     records.set(path, { path, data });
   };
-  for (const fixture of buildServiceLifecycleFixtures()) {
+  // Preserve the exact previously seeded nine-scenario/30-document dataset.
+  // Evidence regressions above are preview-only and never become cloud writes.
+  for (const fixture of buildServiceLifecycleFixtures().filter(item => !item.previewOnly)) {
     add(`clients/${fixture.client.id}`, fixture.client);
     add(`properties/${fixture.property.id}`, fixture.property);
     for (const cleaner of fixture.knownCleaners) add(`cleaners/${cleaner.id}`, cleaner);

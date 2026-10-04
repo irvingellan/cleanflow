@@ -283,6 +283,8 @@ export function JobDetail({
   });
   const lifecyclePresentation = serviceLifecyclePresentation({
     job, checklistRun, capability: checklistCapability,
+    offers, offersLoading: isLoadingOffers, offersError: hasOffersError,
+    assignments,
     runLoading: isLoadingChecklistRun, runError: hasChecklistRunError,
     capabilityLoading: isLoadingChecklistCapability, capabilityError: hasChecklistCapabilityError,
     issues, issuesLoading: isLoadingIssues, issuesError: hasIssuesError,

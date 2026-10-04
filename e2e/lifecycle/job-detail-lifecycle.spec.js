@@ -12,11 +12,36 @@ const primaryLabels = {
   "open-issue": "Próximo passo: Abrir checklist existente",
   unknown: "Próximo passo: Checklist",
   archived: "Próximo passo: Ver serviço salvo",
+  "direct-assigned": "Próximo passo: Preparar lembrete",
+  "direct-in-progress": "Próximo passo: Abrir checklist existente",
+  "completed-with-started": "Próximo passo: Ver serviço salvo",
+  "completed-without-started": "Próximo passo: Ver serviço salvo",
+  "completed-reviewed": "Próximo passo: Ver serviço salvo",
+  "offer-error": "Próximo passo: Preparar lembrete",
 };
 
-const currentPositions = {
-  unassigned: 0, offered: 1, assigned: 2, "assigned-draft": 2,
-  "in-progress": 3, ready: 3, completed: 4, stale: 2, "open-issue": 3, archived: 3,
+const expectedStates = {
+  unassigned: ["current", "future", "future", "future", "future"],
+  offered: ["completed", "current", "future", "future", "future"],
+  assigned: ["completed", "skipped", "current", "future", "future"],
+  "assigned-draft": ["completed", "skipped", "current", "future", "future"],
+  "in-progress": ["completed", "skipped", "completed", "current", "future"],
+  ready: ["completed", "skipped", "completed", "current", "future"],
+  completed: ["completed", "skipped", "completed", "completed", "current"],
+  stale: ["completed", "skipped", "current", "future", "future"],
+  "open-issue": ["completed", "skipped", "completed", "current", "future"],
+  archived: ["completed", "skipped", "completed", "current", "future"],
+  "direct-assigned": ["completed", "skipped", "current", "future", "future"],
+  "direct-in-progress": ["completed", "skipped", "completed", "current", "future"],
+  "completed-with-started": ["completed", "skipped", "completed", "completed", "current"],
+  "completed-without-started": ["completed", "skipped", "completed", "skipped", "current"],
+  "completed-reviewed": ["completed", "skipped", "completed", "completed", "current"],
+  "offer-error": ["completed", "unknown-past", "current", "future", "future"],
+};
+
+const positionLabels = {
+  completed: "Etapa comprovada", current: "Atual", future: "Próxima",
+  skipped: "Não usado", "unknown-past": "Histórico não verificado",
 };
 
 async function openFixture(page, scenario, width) {
@@ -64,14 +89,21 @@ async function expectRailState(page, scenario) {
   await expect(stages).toHaveCount(5);
   await expect(rail.getByRole("button")).toHaveCount(0);
   await expect(rail.getByRole("link")).toHaveCount(0);
+  await expect(rail.locator(".service-lifecycle__marker")).toHaveCount(0);
+  await expect(rail.getByText(/^(Etapa comprovada|Atual|Próxima)$/)).toHaveCount(0);
   if (scenario === "unknown") {
     await expect(rail.locator("[aria-current]")).toHaveCount(0);
     await expect(rail.locator(".service-lifecycle__stage--completed")).toHaveCount(0);
     await expect(page.getByRole("progressbar")).toHaveCount(0);
   } else {
     await expect(rail.locator("[aria-current='step']")).toHaveCount(1);
-    await expect(stages.nth(currentPositions[scenario])).toHaveAttribute("aria-current", "step");
-    await expect(rail.locator(".service-lifecycle__stage--completed")).toHaveCount(currentPositions[scenario]);
+    for (let index = 0; index < 5; index += 1) {
+      const state = expectedStates[scenario][index];
+      await expect(stages.nth(index)).toHaveClass(new RegExp(`service-lifecycle__stage--${state}(?:\\s|$)`));
+      await expect(stages.nth(index)).toHaveAttribute("aria-label", new RegExp(`: ${positionLabels[state]}$`));
+      if (state === "current") await expect(stages.nth(index)).toHaveAttribute("aria-current", "step");
+      if (["skipped", "unknown-past"].includes(state)) await expect(stages.nth(index)).not.toContainText("✓");
+    }
   }
   for (let index = 0; index < 5; index += 1) await stages.nth(index).click();
 }
@@ -100,6 +132,7 @@ async function expectMobileFit(page) {
 
 const screenshotCases = [
   ...["unassigned", "assigned-draft", "in-progress", "ready", "completed"].map(scenario => ({ scenario, width: 1440 })),
+  ...["direct-assigned", "direct-in-progress", "completed-with-started", "completed-without-started", "completed-reviewed", "offer-error"].map(scenario => ({ scenario, width: 1440 })),
   ...["unassigned", "in-progress", "stale", "unknown", "archived"].map(scenario => ({ scenario, width: 390 })),
 ];
 
@@ -108,7 +141,7 @@ for (const { scenario, width } of screenshotCases) {
     const failures = await openFixture(page, scenario, width);
     await expectNoDomainCalls(page, failures);
     await expectRailState(page, scenario);
-    if (["in-progress", "stale", "archived"].includes(scenario)) {
+    if (["in-progress", "direct-in-progress", "stale", "archived"].includes(scenario)) {
       const progress = page.locator(".service-checklist-summary").getByRole("progressbar");
       await expect(progress).toHaveAttribute("aria-valuenow", "25");
       await expect(progress).toHaveAttribute("aria-valuetext", /7.*28/);
@@ -121,7 +154,25 @@ for (const { scenario, width } of screenshotCases) {
       expect(attention.y + attention.height).toBeLessThanOrEqual(rail.y);
     }
     if (scenario === "archived") await expect(page.locator(".service-lifecycle__archived")).toBeVisible();
-    if (["completed", "archived"].includes(scenario)) await expect(page.locator(".service-attention")).toHaveCount(0);
+    if (["completed", "completed-with-started", "completed-without-started", "completed-reviewed", "archived"].includes(scenario)) {
+      await expect(page.locator(".service-attention")).toHaveCount(0);
+    }
+    if (["completed", "completed-with-started", "completed-reviewed"].includes(scenario)) {
+      await expect(page.locator(".service-checklist-summary__heading strong")).toHaveText("Checklist salvo");
+      expect(await page.evaluate(() => window.__lifecycleFixture.checklistRun.status)).toBe("READY_FOR_REVIEW");
+    }
+    if (["direct-in-progress", "completed-with-started", "completed-reviewed"].includes(scenario)) {
+      const started = page.locator(".service-essential-summary > div").filter({
+        has: page.getByText("Horário de início", { exact: true }),
+      }).locator("dd");
+      await expect(started).not.toHaveText("Não informado");
+    }
+    if (["completed-with-started", "completed-without-started", "completed-reviewed"].includes(scenario)) {
+      const completed = page.locator(".service-essential-summary > div").filter({
+        has: page.getByText("Horário de conclusão", { exact: true }),
+      }).locator("dd");
+      await expect(completed).not.toHaveText("Não informado");
+    }
     await expectMobileFit(page);
     await expectNoDomainCalls(page, failures);
     await page.evaluate(() => window.scrollTo(0, 0));

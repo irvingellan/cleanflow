@@ -27,6 +27,37 @@ describe("service lifecycle presentation components", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getByText("No checklist created")).toBeVisible();
     expect(screen.getByText("No link issued")).toBeVisible();
+    expect(rail.querySelector(".service-lifecycle__marker")).toBeNull();
+    expect(rail.querySelector(".service-lifecycle__stage-state")).toBeNull();
+    expect(within(rail).queryByText("Current")).not.toBeInTheDocument();
+    expect(within(rail).queryByText("Upcoming")).not.toBeInTheDocument();
+  });
+
+  it("describes skipped, unknown past, completed, current and future states accessibly without fake checks", () => {
+    const { rerender } = renderPresentation({ job: { operationalStatus: "ASSIGNED" }, offers: [], checklistRun: null });
+    const rail = screen.getByRole("region", { name: "Service progress" });
+    expect(within(rail).getByRole("listitem", { name: "Unassigned: Completed stage" })).toHaveClass("service-lifecycle__stage--completed");
+    expect(within(rail).getByRole("listitem", { name: "Offered: Not used" })).toHaveClass("service-lifecycle__stage--skipped");
+    expect(within(rail).getByRole("listitem", { name: "Assigned: Current" })).toHaveAttribute("aria-current", "step");
+    expect(within(rail).getByRole("listitem", { name: "In progress: Upcoming" })).toHaveClass("service-lifecycle__stage--future");
+    const model = serviceLifecyclePresentation({ job: { operationalStatus: "ASSIGNED" }, offers: [], offersError: true });
+    rerender(<TranslationProvider><ServiceLifecycleRail lifecycle={model.lifecycle} /></TranslationProvider>);
+    const unknown = screen.getByRole("listitem", { name: "Offered: History not verified" });
+    expect(unknown).toHaveClass("service-lifecycle__stage--unknown-past");
+    expect(unknown).not.toHaveTextContent("✓");
+    expect(unknown).toHaveTextContent("?");
+  });
+
+  it.each([
+    ["en", "Saved checklist", "Ready for manager review"],
+    ["pt", "Checklist salvo", "Pronto para revisão do manager"],
+    ["es", "Checklist guardado", "Listo para revisión del manager"],
+  ])("COMPLETED + READY uses neutral %s saved copy instead of claiming a pending review", (language, saved, ready) => {
+    const run = { status: "READY_FOR_REVIEW" };
+    renderPresentation({ job: { operationalStatus: "COMPLETED" }, checklistRun: run }, language);
+    expect(screen.getByText(saved)).toBeVisible();
+    expect(screen.queryByText(ready)).not.toBeInTheDocument();
+    expect(run.status).toBe("READY_FOR_REVIEW");
   });
 
   it("shows archived and unknown status text without fabricating a stage or progress", () => {
@@ -89,11 +120,11 @@ describe("service lifecycle presentation components", () => {
   });
 
   it("has EN/PT/ES copy for every emitted state and preview key, without untranslated keys", () => {
-    const keys = ["execution", "unknown", "archived", "checklistTitle", "savedItems", "savedProgress", "progressUnknown", "lastSaved", "noSavedTime", "cleanerLink",
+    const keys = ["execution", "unknown", "archived", "accessibleStage", "checklistTitle", "savedItems", "savedProgress", "progressUnknown", "lastSaved", "noSavedTime", "cleanerLink",
       "attention.staleLink", "attention.review", "attention.openIssues", "review", "openChecklist", "openIssues", "financialSnapshot", "cleanerSummary", "previewTitle", "previewDescription", "scenario", "previewAction", "previewEntry",
       ...["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS", "COMPLETED"].map((state) => `stage.${state}`),
-      ...["completed", "current", "future"].map((state) => `position.${state}`),
-      ...["NONE", "LOADING", "UNKNOWN", "DRAFT", "READY_FOR_REVIEW", "ABANDONED"].map((state) => `checklist.${state}`),
+      ...["completed", "current", "future", "skipped", "unknown-past"].map((state) => `position.${state}`),
+      ...["NONE", "LOADING", "UNKNOWN", "DRAFT", "READY_FOR_REVIEW", "ABANDONED", "SAVED"].map((state) => `checklist.${state}`),
       ...["NONE", "LOADING", "UNKNOWN", "ACTIVE", "STALE", "REVOKED", "EXPIRED", "UNAVAILABLE"].map((state) => `link.${state}`)];
     for (const language of ["en", "pt", "es"]) for (const suffix of keys) {
       const key = `lifecycle.${suffix}`;

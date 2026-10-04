@@ -3,23 +3,36 @@
 ## Issue #71 — Service Lifecycle Rail V0 (2026-10-03)
 
 Branch-only visual slice based on `d1f6a2e`: real Job Detail separates the five
-authoritative operational stages, saved checklist-item progress, existing next
+operational stages, saved checklist-item progress, existing next
 action and Job financial snapshots. Proven stale/review/Open Issue attention
 stays parallel to the rail; existing guards/handlers and backend are unchanged.
 Unknown data fails safely, without fabricated progress or a fixture fallback.
 
-Sandbox-only developer visual preview renders nine explicitly synthetic,
+Second visual-review refinement uses evidence rather than ordinal history:
+past OFFERED requires valid `offeredAt` or loaded Offers; loaded-empty means
+skipped, failed/loading/unverified means unknown-past. Past IN_PROGRESS requires
+`startedAt`; a COMPLETED Job without it shows skipped. Compact segments retain
+accessible state labels without numbered circles or visible position captions.
+COMPLETED + READY_FOR_REVIEW displays **Saved checklist / Checklist salvo**,
+not pending review: no universal approval receipt is persisted, and the real
+Run status remains unchanged. Assignment evidence uses the existing Job/roster.
+
+Sandbox-only developer visual preview renders fifteen explicitly synthetic,
 read-only projections through the same Job Detail. Functions remain billing-gated;
 real Run/link reads remain Unknown when unavailable. The guarded create-only
 seeder writes DEMO Jobs/references/known children only to the dedicated Sandbox,
 never Runs, live capabilities, tokens or photos. Production remains on the #57
 release; this feature is not merged or Production-deployed. See
 [visual contract and validation commands](SERVICE_LIFECYCLE_RAIL_V0.md) and the
-Issue #71 Draft PR for Sandbox publication and authenticated smoke evidence.
-Validation: 128 focused, 110 files / 1,142 unit, 12 synthetic Playwright
-desktop/mobile and 37 seed/build/preparation guards passed. The create-only
+Issue #71 Draft PR for Sandbox publication and verification limits.
+Validation: 174 focused, 110 files / 1,188 unit, 18 synthetic Playwright
+desktop/mobile and 39 seed/build/preparation guards passed. The create-only
 Sandbox seed created 30 DEMO records; an exact read-back repeat skipped all 30.
 Production builds exclude the synthetic preview/harness implementation.
+The six additional evidence cases are memory-only and excluded from seeding;
+the original 30-document seed is hash-verified unchanged. No data write belongs
+to this refinement. Publication remains Hosting-only in Sandbox, recorded in
+Draft PR #73; never a Production release or merge.
 
 ## Issue #57 — current-main Sandbox foundation (2026-10-03)
 

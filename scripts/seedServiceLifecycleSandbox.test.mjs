@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   buildServiceLifecycleFixtures, buildServiceLifecycleSeedDocuments,
   getServiceLifecycleFixture, serviceLifecycleScenarios, serviceLifecycleSandboxProjectId,
@@ -9,10 +10,13 @@ import { firestoreValue, seedServiceLifecycleSandbox, serviceLifecycleSeedPlan }
 const projectId = serviceLifecycleSandboxProjectId;
 const snapshot = expected => ({ ...structuredClone(expected), createTime: "2026-10-03T23:00:00.123456789Z", updateTime: "2026-10-03T23:00:00.123456789Z" });
 
-test("nine synthetic scenario projections use current independent Job/Checklist fields", () => {
+test("original nine scenario projections remain first; six evidence previews are memory-only", () => {
   const fixtures = buildServiceLifecycleFixtures();
-  assert.deepEqual(fixtures.map(item => item.id), ["unassigned", "offered", "assigned", "assigned-draft", "in-progress", "ready", "completed", "stale", "open-issue"]);
-  assert.equal(serviceLifecycleScenarios.length, 9);
+  assert.deepEqual(fixtures.slice(0, 9).map(item => item.id), ["unassigned", "offered", "assigned", "assigned-draft", "in-progress", "ready", "completed", "stale", "open-issue"]);
+  assert.deepEqual(fixtures.slice(9).map(item => item.id), ["direct-assigned", "direct-in-progress", "completed-with-started", "completed-without-started", "completed-reviewed", "offer-error"]);
+  assert.equal(serviceLifecycleScenarios.length, 15);
+  assert.equal(fixtures.slice(0, 9).every(item => !item.previewOnly), true);
+  assert.equal(fixtures.slice(9).every(item => item.previewOnly === true), true);
   for (const fixture of fixtures) {
     assert.equal(fixture.syntheticPreview, true);
     assert.equal(fixture.job.schemaVersion, 2);
@@ -36,6 +40,36 @@ test("nine synthetic scenario projections use current independent Job/Checklist 
   assert.equal(getServiceLifecycleFixture("stale").checklistCapability.state, "STALE");
   assert.equal(getServiceLifecycleFixture("open-issue").issues[0].status, "OPEN");
   assert.throws(() => getServiceLifecycleFixture("unknown"));
+});
+
+test("new evidence previews do not invent Offers, starts or backend Run states", () => {
+  for (const id of ["direct-assigned", "direct-in-progress", "offer-error"]) {
+    const fixture = getServiceLifecycleFixture(id);
+    assert.deepEqual(fixture.offers, []);
+    assert.equal(Object.hasOwn(fixture.job, "offeredAt"), false);
+    assert.equal(fixture.assignments[0].source, "MANAGER_DIRECT");
+  }
+  const noStart = getServiceLifecycleFixture("completed-without-started");
+  assert.equal(noStart.job.operationalStatus, "COMPLETED");
+  assert.equal(Object.hasOwn(noStart.job, "startedAt"), false);
+  assert.equal(noStart.checklistRun, null);
+  for (const id of ["completed-with-started", "completed-reviewed"]) {
+    const fixture = getServiceLifecycleFixture(id);
+    assert.equal(fixture.job.startedAt.toDate() instanceof Date, true);
+    assert.equal(fixture.job.startedAt.toDate().toISOString(), getServiceLifecycleFixture("completed").job.startedAt.toISOString());
+    assert.equal(fixture.job.completedAt.toDate().toISOString(), getServiceLifecycleFixture("completed").job.completedAt.toISOString());
+    assert.equal(fixture.checklistRun.status, "READY_FOR_REVIEW");
+  }
+  assert.equal(getServiceLifecycleFixture("offer-error").hasOffersError, true);
+  assert.equal(getServiceLifecycleFixture("offer-error").isLoadingOffers, false);
+});
+
+test("preview-only additions preserve the exact original 30 seed documents", () => {
+  const documents = buildServiceLifecycleSeedDocuments();
+  assert.equal(documents.length, 30);
+  assert.equal(createHash("sha256").update(JSON.stringify(documents)).digest("hex"),
+    "cbc441c3ab295f7202b4ae6a8c6bb928725446708e9101c693889fe7ddb98c49");
+  assert.equal(documents.some(({ path }) => path.includes("preview")), false);
 });
 
 test("seed documents exclude Runs/capabilities/progress and contain no private contact/access data", () => {

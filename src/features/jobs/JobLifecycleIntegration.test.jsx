@@ -62,6 +62,39 @@ describe("Job Detail lifecycle integration", () => {
     expect(summary.getByText("Checklist status unavailable")).toBeVisible();
     expect(summary.getByText("Link status unavailable")).toBeVisible();
   });
+  it("direct assignment with loaded empty Offers does not fabricate an offered stage", () => {
+    const { container, mutation } = renderScenario("assigned", { isLoadingOffers: false, hasOffersError: false });
+    const offered = container.querySelectorAll(".service-lifecycle__stage")[1];
+    expect(offered).toHaveClass("service-lifecycle__stage--skipped");
+    expect(offered).not.toHaveTextContent("✓");
+    expect(mutation).not.toHaveBeenCalled();
+  });
+  it.each([
+    { isLoadingOffers: true, hasOffersError: false },
+    { isLoadingOffers: false, hasOffersError: true },
+  ])("propagates unavailable Offer evidence to the rail: %j", (flags) => {
+    const { container } = renderScenario("assigned", flags);
+    const offered = container.querySelectorAll(".service-lifecycle__stage")[1];
+    expect(offered).toHaveClass("service-lifecycle__stage--unknown-past");
+    expect(offered).not.toHaveTextContent("✓");
+  });
+  it("does not treat a late Offer from another Job as history of the selected Job", () => {
+    const { container } = renderScenario("assigned", {
+      offers: [{ id: "synthetic-other-offer", jobId: "synthetic-other-job", cleanerId: "synthetic-cleaner" }],
+      isLoadingOffers: false, hasOffersError: false,
+    });
+    expect(container.querySelectorAll(".service-lifecycle__stage")[1])
+      .toHaveClass("service-lifecycle__stage--unknown-past");
+  });
+  it("completed service displays saved checklist without inventing an approval receipt or changing Run state", () => {
+    const fixture = buildServiceLifecycleFixtures().find((scenario) => scenario.id === "completed");
+    const { container, mutation } = renderScenario("completed", { checklistRun: fixture.checklistRun });
+    const summary = within(container.querySelector(".service-checklist-summary"));
+    expect(summary.getByText("Saved checklist")).toBeVisible();
+    expect(summary.queryByText("Ready for manager review")).not.toBeInTheDocument();
+    expect(fixture.checklistRun.status).toBe("READY_FOR_REVIEW");
+    expect(mutation).not.toHaveBeenCalled();
+  });
   it("the labelled Sandbox preview navigates without invoking a data mutation", () => {
     render(<TranslationProvider><SandboxLifecyclePreview onBack={vi.fn()} /></TranslationProvider>);
     expect(screen.getByText(/synthetic/i, { selector: ".service-preview-notice p" })).toBeVisible();

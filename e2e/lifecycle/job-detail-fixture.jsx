@@ -49,6 +49,7 @@ const readNames = [
 function Fixture() {
   const [scenario, setScenario] = useState("unassigned");
   const fixture = scenarioFixture(scenario);
+  window.__lifecycleFixture = fixture;
   const handlers = Object.fromEntries([
     ...mutationNames.map((name) => [name, (...args) => {
       window.__lifecycleHarness.mutationCalls.push({ name, argumentCount: args.length });
@@ -85,8 +86,8 @@ function Fixture() {
         availableCleaners={fixture.knownCleaners.map((cleaner) => ({ ...cleaner, active: true }))}
         isLoadingCleaners={false}
         hasCleanerError={false}
-        isLoadingOffers={false}
-        hasOffersError={false}
+        isLoadingOffers={Boolean(fixture.isLoadingOffers)}
+        hasOffersError={Boolean(fixture.hasOffersError)}
         isLoadingAssignments={false}
         hasAssignmentsError={false}
         isLoadingIssues={false}
