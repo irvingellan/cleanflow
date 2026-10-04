@@ -7,8 +7,9 @@ and Dashboard Next 48 hours, using only already-loaded Job/Offer evidence and
 the existing lifecycle projection. No per-card reads, backend or business-rule
 changes. Missing Offer history is unknown-past; filtered-empty Dashboard Offers
 never prove skipped. Text/symbols plus accessible descriptions supplement color.
-Attention/recently completed stay unchanged; pricing/provenance/archive remain
-secondary. Filters, sorting, pagination and scroll restoration are preserved.
+Attention/recently completed stay unchanged; provenance/archive remain secondary.
+Jobs cards omit financial values for operational scanning; unchanged Job snapshots
+remain available in Job Detail Financial. Filters, sorting, pagination and scroll restoration are preserved.
 Checklist progress remains available in Job Detail. List-level checklist summary
 requires an efficient canonical read model and is not introduced in V0.
 Existing Sandbox developer lifecycle preview adds Dashboard/Jobs memory-only

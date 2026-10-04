@@ -426,6 +426,8 @@ describe("JobDetail lifecycle actions", () => {
     }, { onUpdatePrices });
 
     expect(screen.getByText("Gross margin")).toBeVisible();
+    expect(screen.getByText("$350.00")).toBeVisible();
+    expect(screen.getByText("$200.00")).toBeVisible();
     expect(screen.getByText("$150.00")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Edit prices" }));
     const clientPriceInputs = screen.getAllByLabelText("Client price");

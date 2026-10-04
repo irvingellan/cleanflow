@@ -133,7 +133,7 @@ describe("JobsPage filters", () => {
     expect(onCreate).toHaveBeenCalledOnce();
   });
 
-  it("shows the operational schedule, assigned cleaner name, and available job financials", () => {
+  it("shows the operational schedule, cleaner and lifecycle without competing financial values", () => {
     render(
       <TranslationProvider>
         <JobsPage
@@ -166,9 +166,8 @@ describe("JobsPage filters", () => {
 
     expect(screen.getByText("Scheduled time: 11:00")).toBeVisible();
     expect(screen.getByText("Ana")).toBeVisible();
-    expect(screen.getByText(/Client price.*\$200\.00/)).toBeVisible();
-    expect(screen.getByText(/Cleaner payout.*\$100\.00/)).toBeVisible();
-    expect(screen.getByText(/Gross margin.*\$100\.00/)).toBeVisible();
+    expect(screen.getByText("Assigned")).toBeVisible();
+    expect(screen.queryByText(/Client price|Cleaner payout|Gross margin|\$200\.00|\$100\.00/)).not.toBeInTheDocument();
   });
 
   it("waits for asynchronous Jobs content, then restores the originating row", () => {

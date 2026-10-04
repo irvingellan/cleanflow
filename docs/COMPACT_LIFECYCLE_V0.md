@@ -25,8 +25,10 @@ requires an efficient canonical read model and is not introduced in V0.
 ## Information hierarchy
 
 Jobs retains date/time, Property, Client and Cleaner. The compact stage replaces
-the duplicate status badge; pricing/margin and provenance/archive remain visible
-as secondary information. Card touch targets and keyboard activation stay intact.
+the duplicate status badge; provenance/archive remain compact secondary information.
+Client price, cleaner payout and margin are omitted from list cards and remain
+available in Job Detail Financial, with unchanged snapshot semantics.
+Card touch targets and keyboard activation stay intact.
 Dashboard attention remains urgent and unchanged, without extra strip/height;
 recently completed retains its existing lightweight historical representation.
 Only Next 48 hours receives the compact strip, replacing its status badge.

@@ -2,14 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
-import {
-  formatDate,
-  formatPrice,
-  hasValue,
-} from "../../lib/presentation.js";
+import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { createJobListFilters } from "./jobListFilters.js";
-import { getAssignedCleanerIds, getJobGrossMargin } from "./jobCompatibility.js";
+import { getAssignedCleanerIds } from "./jobCompatibility.js";
 import { assignedCleanerSummary } from "./assignmentPresentation.js";
 import { CompactServiceLifecycle } from "./CompactServiceLifecycle.jsx";
 
@@ -438,28 +434,6 @@ export function JobsPage({
                   <span className="job-card__provenance"><DataProvenanceBadge record={job} /></span>
                   {job.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
                 </span>
-                {(hasValue(job.clientPrice) || hasValue(job.cleanerPayout)) && (
-                  <span className="job-card__prices">
-                    {hasValue(job.clientPrice) && (
-                      <span>
-                        {translate("jobs.clientPrice")}{" "}
-                        {formatPrice(job.clientPrice, translate, language)}
-                      </span>
-                    )}
-                    {hasValue(job.cleanerPayout) && (
-                      <span>
-                        {translate("jobs.cleanerPayout")}{" "}
-                        {formatPrice(job.cleanerPayout, translate, language)}
-                      </span>
-                    )}
-                    {getJobGrossMargin(job) !== null && (
-                      <span>
-                        {translate("jobs.grossMargin")}{" "}
-                        {formatPrice(getJobGrossMargin(job), translate, language)}
-                      </span>
-                    )}
-                  </span>
-                )}
               </button>
             ))}
           </div>

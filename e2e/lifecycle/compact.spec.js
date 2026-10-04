@@ -17,6 +17,10 @@ for (const width of [1440, 390]) for (const surface of ["dashboard", "jobs"]) {
     const cards = page.locator(surface === "jobs" ? ".job-card" : ".dashboard-next-item");
     await expect(cards).toHaveCount(surface === "jobs" ? 10 : 8);
     await expect(page.locator(".compact-lifecycle")).toHaveCount(surface === "jobs" ? 10 : 8);
+    if (surface === "jobs") {
+      await expect(page.locator(".job-card__prices")).toHaveCount(0);
+      await expect(cards.filter({ hasText: /Preço do cliente|Pagamento da cleaner|Margem bruta|\$200|\$100/ })).toHaveCount(0);
+    }
     for (const card of await cards.all()) {
       await expect(card.locator("[role=listitem]")).toHaveCount(5);
       expect((await card.boundingBox()).height).toBeGreaterThanOrEqual(44);

@@ -56,7 +56,7 @@ describe("compact truthful lifecycle without provider reads", () => {
       expect(node.getAttribute("aria-label")).not.toMatch(/lifecycle\./);
     }
   });
-  it("Jobs keeps filters, archive, money and selection; render does not invoke actions", () => {
+  it("Jobs keeps filters, archive and selection without financial rows; render does not invoke actions", () => {
     const fixture = buildCompactLifecycleFixtures();
     const select = vi.fn(), mutate = vi.fn();
     const { container } = render(<TranslationProvider><JobsPage {...fixture}
@@ -66,7 +66,7 @@ describe("compact truthful lifecycle without provider reads", () => {
     expect(container.querySelectorAll(".compact-lifecycle")).toHaveLength(11);
     expect(screen.getByText("Archived Demo")).toBeVisible();
     expect(container.querySelector(".record-archive-badge")).toBeVisible();
-    expect(container.querySelector(".job-card__prices")).toHaveTextContent("200");
+    expect(container.querySelector(".job-card__prices")).toBeNull();
     expect(container.querySelector(".status-badge")).toBeNull();
     fireEvent.click(container.querySelector(".job-card"));
     expect(select).toHaveBeenCalledOnce(); expect(mutate).not.toHaveBeenCalled();
