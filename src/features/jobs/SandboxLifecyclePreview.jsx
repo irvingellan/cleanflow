@@ -2,6 +2,7 @@ import { useState } from "react";
 import { JobDetail } from "./JobDetail.jsx";
 import { buildServiceLifecycleFixtures } from "../../../scripts/serviceLifecycleFixtures.mjs";
 import { useTranslation } from "../../i18n/translations.js";
+import { SandboxMultiServicePreview } from "./SandboxMultiServicePreview.jsx";
 
 // A labelled visual fixture, never a data-service fallback. Mounted only inside
 // the authenticated manager boundary in the dedicated Sandbox build.
@@ -9,6 +10,7 @@ export function SandboxLifecyclePreview({ onBack }) {
   const { translate } = useTranslation();
   const [scenarioId, setScenarioId] = useState("unassigned");
   const [notice, setNotice] = useState(false);
+  const [surface, setSurface] = useState("detail");
   const scenarios = buildServiceLifecycleFixtures();
   const fixture = scenarios.find((scenario) => scenario.id === scenarioId);
   const inspectOnly = () => setNotice(true);
@@ -20,14 +22,23 @@ export function SandboxLifecyclePreview({ onBack }) {
     <aside className="service-preview-notice">
       <h2>{translate("lifecycle.previewTitle")}</h2>
       <p>{translate("lifecycle.previewDescription")}</p>
+      <label>{translate("compact.previewSurface")}
+        <select value={surface} onChange={event => setSurface(event.target.value)}>
+          <option value="detail">{translate("jobs.details")}</option>
+          <option value="dashboard">{translate("navigation.dashboard")}</option>
+          <option value="jobs">{translate("navigation.jobs")}</option>
+        </select>
+      </label>
+      {surface === "detail" && <>
       <label>{translate("lifecycle.scenario")}
         <select value={scenarioId} onChange={(event) => { setScenarioId(event.target.value); setNotice(false); }}>
           {scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label}</option>)}
         </select>
       </label>
       {notice && <p role="status">{translate("lifecycle.previewAction")}</p>}
+      </>}
     </aside>
-    <JobDetail key={fixture.job.id} {...fixture} property={null}
+    {surface !== "detail" ? <SandboxMultiServicePreview key={surface} surface={surface} /> : <JobDetail key={fixture.job.id} {...fixture} property={null}
       availableCleaners={fixture.knownCleaners} checklistCapability={fixture.checklistCapability}
       onBack={onBack} onOpenChecklistRun={inspectOnly} onOfferToCleaners={inspectOnly}
       onRefreshOffers={inspectOnly} onRefreshIssues={inspectOnly} onRefreshChecklistRun={inspectOnly}
@@ -39,6 +50,6 @@ export function SandboxLifecyclePreview({ onBack }) {
       onReplaceAssignment={rejectWrite} onStartCleaning={rejectWrite} onCompleteCleaning={rejectWrite}
       onUpdatePrices={rejectWrite} onUpdateDetails={rejectWrite} onUpdateSchedule={rejectWrite}
       onSaveDataProvenance={rejectWrite} onResolveIssue={rejectWrite}
-      onArchive={rejectWrite} onRestore={rejectWrite} />
+      onArchive={rejectWrite} onRestore={rejectWrite} />}
   </>;
 }

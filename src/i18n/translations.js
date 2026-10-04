@@ -17,6 +17,7 @@ export function normalizeTranslationLanguage(language) {
 
 const messages = {
   en: {
+    "compact.previewSurface": "Synthetic preview screen",
     "jobs.moreActions": "More actions",
     "jobs.section.details": "Service details", "jobs.section.cleaner": "Cleaner & assignment",
     "jobs.section.checklist": "Checklist", "jobs.section.offers": "Offers", "jobs.section.issues": "Issues",
@@ -67,6 +68,7 @@ const messages = {
     "clients.title": "Clients", "clients.new": "New client", "clients.loading": "Loading clients…", "clients.error": "Unable to load clients.", "clients.empty": "No clients found.", "clients.createTitle": "New client", "clients.name": "Client name", "clients.save": "Save client", "clients.creating": "Saving…", "clients.nameRequired": "Enter a client name.", "clients.createError": "Unable to create client.", "clients.view": "View {client}", "clients.details": "Client details", "clients.linkedProperties": "Linked properties", "clients.propertiesLoading": "Loading linked properties…", "clients.propertiesError": "Unable to load linked properties.", "clients.noLinkedProperties": "No linked properties.", "clients.openProperty": "Open property", "clients.upcomingService": "Upcoming service", "clients.upcomingServices": "Upcoming services", "clients.noUpcomingService": "No upcoming service", "clients.recentHistory": "Recent history", "clients.historyLoading": "Loading client history…", "clients.historyError": "Unable to load client history.", "clients.noRecentHistory": "No recent service history.",
   },
   pt: {
+    "compact.previewSurface": "Tela da prévia sintética",
     "jobs.moreActions": "Mais ações",
     "jobs.section.details": "Detalhes do serviço", "jobs.section.cleaner": "Cleaner e atribuição",
     "jobs.section.checklist": "Checklist", "jobs.section.offers": "Ofertas", "jobs.section.issues": "Problemas",
@@ -118,6 +120,7 @@ const messages = {
     "dashboard.needsAttentionDescription": "Principais prioridades operacionais entre atribuições, interesse de cleaners e problemas.",
   },
   es: {
+    "compact.previewSurface": "Pantalla de vista previa sintética",
     "jobs.moreActions": "Más acciones",
     "jobs.section.details": "Detalles del servicio", "jobs.section.cleaner": "Cleaner y asignación",
     "jobs.section.checklist": "Checklist", "jobs.section.offers": "Ofertas", "jobs.section.issues": "Problemas",

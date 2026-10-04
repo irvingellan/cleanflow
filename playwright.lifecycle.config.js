@@ -4,7 +4,7 @@ const baseURL = "http://127.0.0.1:4188";
 
 export default defineConfig({
   testDir: "./e2e/lifecycle",
-  testMatch: "job-detail-lifecycle.spec.js",
+  testMatch: ["job-detail-lifecycle.spec.js", "compact.spec.js"],
   fullyParallel: false,
   workers: 1,
   retries: 0,

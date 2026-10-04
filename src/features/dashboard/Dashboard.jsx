@@ -3,6 +3,7 @@ import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
+import { CompactServiceLifecycle } from "../jobs/CompactServiceLifecycle.jsx";
 import {
   formatIssueCategory,
   issueIconName,
@@ -314,6 +315,7 @@ export function Dashboard({
                     key={job.id}
                     job={job}
                     cleanerNamesById={cleanerNamesById}
+                    offers={offersByJob[job.id]}
                     onOpen={onOpenJob}
                   />
                 ))}
@@ -329,7 +331,7 @@ export function Dashboard({
   );
 }
 
-function DashboardNextJob({ job, cleanerNamesById, onOpen }) {
+function DashboardNextJob({ job, cleanerNamesById, offers, onOpen }) {
   const { language, translate } = useTranslation();
   const schedule = [
     formatDate(job.scheduledDate, translate, language),
@@ -339,13 +341,11 @@ function DashboardNextJob({ job, cleanerNamesById, onOpen }) {
     .join(" · ");
 
   return (
-    <button className="dashboard-next-item" type="button" onClick={() => onOpen(job)}>
+    <button className="dashboard-next-item dashboard-next-item--lifecycle" type="button"
+      aria-describedby={`dashboard-lifecycle-${job.id}`} onClick={() => onOpen(job)}>
       <span>{schedule}</span>
       <strong>{job.propertyName || translate("properties.unnamed")}</strong>
-      <span className="dashboard-next-item__status">
-        {formatOperationalStatus(job.operationalStatus, translate)}
-      </span>
-      <span>
+      <span className="dashboard-next-item__cleaner">
         {assignedCleanerSummary(
           job,
           cleanerNamesById,
@@ -353,6 +353,8 @@ function DashboardNextJob({ job, cleanerNamesById, onOpen }) {
           translate("dashboard.needsAssignment"),
         )}
       </span>
+      {/* Dashboard Offers are filtered: empty cannot prove no Offer history. */}
+      <CompactServiceLifecycle job={job} offers={offers?.length ? offers : undefined} descriptionId={`dashboard-lifecycle-${job.id}`} />
     </button>
   );
 }

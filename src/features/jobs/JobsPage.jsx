@@ -4,7 +4,6 @@ import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import {
   formatDate,
-  formatOperationalStatus,
   formatPrice,
   hasValue,
 } from "../../lib/presentation.js";
@@ -12,6 +11,7 @@ import { useTranslation } from "../../i18n/translations.js";
 import { createJobListFilters } from "./jobListFilters.js";
 import { getAssignedCleanerIds, getJobGrossMargin } from "./jobCompatibility.js";
 import { assignedCleanerSummary } from "./assignmentPresentation.js";
+import { CompactServiceLifecycle } from "./CompactServiceLifecycle.jsx";
 
 export { createJobListFilters, dashboardJobListFilters } from "./jobListFilters.js";
 
@@ -389,13 +389,14 @@ export function JobsPage({
             {sortedJobs.map((job) => (
               <button
                 key={job.id}
-                className="job-card"
+                className="job-card job-card--lifecycle"
                 type="button"
                 aria-label={translate("properties.view", {
                   property:
                     job.propertyName || translate("properties.unnamed"),
                 })}
                 data-job-id={job.id}
+                aria-describedby={`jobs-lifecycle-${job.id}`}
                 ref={(element) => {
                   if (element) {
                     jobCardElements.current.set(job.id, element);
@@ -432,11 +433,11 @@ export function JobsPage({
                     )}
                   </span>
                 </span>
-                <span className="status-badge">
-                  {formatOperationalStatus(job.operationalStatus, translate)}
+                <CompactServiceLifecycle job={job} descriptionId={`jobs-lifecycle-${job.id}`} />
+                <span className="job-card__secondary">
+                  <span className="job-card__provenance"><DataProvenanceBadge record={job} /></span>
+                  {job.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
                 </span>
-                <span className="job-card__provenance"><DataProvenanceBadge record={job} /></span>
-                {job.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
                 {(hasValue(job.clientPrice) || hasValue(job.cleanerPayout)) && (
                   <span className="job-card__prices">
                     {hasValue(job.clientPrice) && (

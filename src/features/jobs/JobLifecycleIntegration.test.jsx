@@ -122,7 +122,7 @@ describe("Job Detail lifecycle integration", () => {
   it("the labelled Sandbox preview navigates without invoking a data mutation", () => {
     render(<TranslationProvider><SandboxLifecyclePreview onBack={vi.fn()} /></TranslationProvider>);
     expect(screen.getByText(/synthetic/i, { selector: ".service-preview-notice p" })).toBeVisible();
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "ready" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Synthetic scenario" }), { target: { value: "ready" } });
     fireEvent.click(screen.getByRole("button", { name: "Next step: Review checklist" }));
     expect(screen.getByRole("status")).toHaveTextContent(/no data is saved/i);
   });

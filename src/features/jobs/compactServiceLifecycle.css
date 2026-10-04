@@ -1,0 +1,28 @@
+.compact-lifecycle { display: grid; gap: 3px; min-width: 0; width: 150px; max-width: 100%; }
+.compact-lifecycle__rail { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.compact-lifecycle__stage { border-top: 2px solid var(--color-border-strong); text-align: center; font-size: 10px; line-height: 12px; color: var(--color-text-secondary); }
+.compact-lifecycle__stage--completed { border-top: 3px solid var(--color-success); color: var(--color-success); }
+.compact-lifecycle__stage--current { border-top: 4px solid var(--color-brand); color: var(--color-heading); font-weight: 800; }
+.compact-lifecycle__stage--skipped { border-top-style: dashed; }
+.compact-lifecycle__stage--unknown-past { border-top-style: dotted; }
+.compact-lifecycle__status { color: var(--color-heading); font-size: .75rem; font-weight: 700; overflow-wrap: anywhere; }
+.job-card.job-card--lifecycle { grid-template-columns: minmax(110px, .65fr) minmax(0, 1.6fr) minmax(130px, .8fr); gap: 10px 16px; }
+.job-card__summary, .job-card__schedule { min-width: 0; overflow-wrap: anywhere; }
+.job-card__secondary { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: center; }
+.job-card .job-card__prices { grid-column: 1 / -1; grid-row: auto; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .75rem; font-weight: 400; }
+.job-card .job-card__provenance { grid-row: auto; }
+.dashboard-next-item.dashboard-next-item--lifecycle { grid-template-columns: minmax(100px, .9fr) minmax(0, 1.4fr) minmax(0, 1fr) 150px; }
+.dashboard-next-item .compact-lifecycle { font-size: inherit; }
+@media (max-width: 700px) {
+  .job-card.job-card--lifecycle { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; gap: 8px; }
+  .job-card .job-card__schedule { grid-column: 1; grid-row: 1; display: flex; flex-wrap: wrap; gap: 5px 10px; align-items: baseline; }
+  .job-card .job-card__summary { grid-column: 1; grid-row: 2; }
+  .job-card .compact-lifecycle { grid-column: 1; grid-row: 3; }
+  .job-card__secondary { grid-row: 4; }
+  .job-card .job-card__prices { grid-row: 5; }
+  .dashboard-next-item.dashboard-next-item--lifecycle { grid-template-columns: minmax(0, 1fr) 150px; gap: 6px 10px; }
+  .dashboard-next-item.dashboard-next-item--lifecycle > span:first-child { grid-column: 1 / -1; grid-row: 1; }
+  .dashboard-next-item.dashboard-next-item--lifecycle > strong { grid-column: 1 / -1; grid-row: 2; overflow-wrap: anywhere; }
+  .dashboard-next-item > .dashboard-next-item__cleaner { grid-column: 1; grid-row: 3; overflow-wrap: anywhere; }
+  .dashboard-next-item > .compact-lifecycle:last-child { grid-column: 2; grid-row: 3; }
+}

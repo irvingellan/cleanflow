@@ -9,7 +9,7 @@ export default defineConfig({
   // This presentation harness has no credentials, SDK configuration or backend.
   envDir: false,
   cacheDir: "node_modules/.vite-lifecycle",
-  optimizeDeps: { entries: ["e2e/lifecycle/job-detail.html"] },
+  optimizeDeps: { entries: ["e2e/lifecycle/job-detail.html", "e2e/lifecycle/compact.html"] },
   define: { __CLEANFLOW_BUILD_ID__: JSON.stringify("synthetic-lifecycle-harness") },
   plugins: [
     react(),
