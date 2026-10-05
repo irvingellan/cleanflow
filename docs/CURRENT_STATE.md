@@ -612,6 +612,27 @@ only and has no Dashboard stage events. Authorization/data semantics are unchang
 
 ## Fresh-session resume
 
+Issue #79 Reservation Intake Bridge V0 is branch-only on
+`feature/reservation-intake-bridge-v0-2026-10-04`: local iCal ingestion,
+atomic shadow state, passive synthetic-contract MV3 prototype and a
+Sandbox-only read-only Inbox. No Production/Hosting/backend deployment or
+cloud data write. Real provider selectors/feed completeness are not validated;
+unknown layouts fail closed. See `RESERVATION_INTAKE_BRIDGE_V0.md` for the
+future authorized discovery checklist and residual risks. No candidate creates
+a Reservation or Job.
+First-feed trial preparation remains local-only: explicit Hospitable candidate
+vs Guesty calendar-event semantics, non-persistent `probe.mjs`, placeholder
+templates and an ignored local acceptance ledger. Probe never opens shadow
+state or advances disappearance; Guesty disappearance is never cancellation
+evidence. No real feed/session connected and no merge/deploy performed.
+Trial-preparation validation: 64 focused, 120 files / 1,301 unit tests,
+23 environment/release guards, two synthetic Playwright checks, both builds
+and diff check passed. The authorized real-feed trial has not run.
+Validation: 54 focused, 119 files / 1,291 unit tests, two synthetic
+desktop/mobile Playwright checks and 23 environment/release guards passed.
+One intermediate full-suite run hit the preexisting Offer-message timing test;
+its 71-test file and the subsequent complete suite passed unchanged.
+
 Issue #64 Job Detail Intent Layer V0 is implemented only on
 `feature/job-detail-intent-layer-v0-2026-10-02`, not deployed/integrated. It adds
 one suggested next step and five visible intentions to the existing Job Detail,

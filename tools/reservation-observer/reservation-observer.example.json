@@ -1,0 +1,8 @@
+{
+  "target": { "projectId": "clean-flow-sandbox-irving", "origin": "https://clean-flow-sandbox-irving.web.app" },
+  "organizationId": "synthetic-observer-org",
+  "sources": [{ "id": "demo-calendar", "provider": "GENERIC_ICAL", "type": "ICAL", "enabled": false,
+    "url": "https://calendar.example.invalid/REPLACE_LOCALLY", "allowedHosts": ["calendar.example.invalid"],
+    "listingExternalId": "demo-listing", "propertyAlias": "Demo Listing", "completeSnapshot": false, "pollIntervalMs": 300000 }],
+  "mappings": []
+}

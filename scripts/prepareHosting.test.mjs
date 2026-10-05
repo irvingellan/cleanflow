@@ -42,6 +42,14 @@ test("Hosting ignores Finder artifacts even if recreated after preparation", () 
   assert.ok(config.hosting.ignore.includes(".DS_Store"));
   assert.ok(config.hosting.ignore.includes("**/.DS_Store"));
 });
+test("lazy intake chunk is allowed only with explicit Sandbox binding", t => {
+  const dir = fixture(t);
+  const binding = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...binding }));
+  fs.writeFileSync(path.join(dir, "assets/ReservationInboxPreview-demo.js"), "synthetic");
+  assert.ok(inspectHostingBuild(dir, "expected", [], binding).length);
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected/);
+});
 
 test("same preparation validates Sandbox and production binding, not only SHA", t => {
   const dir = fixture(t);

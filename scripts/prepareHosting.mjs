@@ -23,7 +23,9 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
   const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
   const allowed = new Set(required);
   for (const file of files) {
-    if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file)) {
+    const sandboxIntakeChunk = expectedBinding?.environment === "sandbox"
+      && /^assets\/ReservationInboxPreview-[A-Za-z0-9_-]+\.(js|css)$/.test(file);
+    if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file) && !sandboxIntakeChunk) {
       throw new Error(`Unexpected Hosting file: ${file}`);
     }
     if (file.split("/").some(part => part.startsWith(".")) || /(?:\.tmp|\.temp|\.swp|\.swo|~)$/.test(file)) {
