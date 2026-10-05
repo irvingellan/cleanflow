@@ -29,12 +29,35 @@ test("real Firestore transaction makes concurrent approvals exactly one durable 
   const call = (operation, extra = {}) => reviewReservationIntake(database, { auth: { uid: "manager", token: {} }, data: {
     operation, observation, candidateId: candidate.id, signal: "NEW", ...extra,
   } }, org);
+  const counts = async () => ({ reservations: (await database.collection(`organizations/${org}/reservations`).get()).size,
+    jobs: (await database.collection(`organizations/${org}/jobs`).get()).size,
+    assignments: (await database.collectionGroup("assignments").get()).size,
+    offers: (await database.collectionGroup("offers").get()).size,
+    payouts: (await database.collection(`organizations/${org}/payouts`).get()).size });
+  assert.deepEqual(await counts(), { reservations: 0, jobs: 0, assignments: 0, offers: 0, payouts: 0 });
+  await assert.rejects(call("PROMOTE", { confirmed: true, expectedRevision: 0 }), error => error.details.reason === "property-unresolved");
   await call("RESOLVE", { propertyId: "house", expectedRevision: 0 });
+  await assert.rejects(call("PROMOTE", { confirmed: true, expectedRevision: 0 }), error => error.details.reason === "review-changed-reload");
+  await assert.rejects(call("PROMOTE", { confirmed: true, expectedRevision: 1, signal: "CONFLICT" }), error => error.details.reason === "external-state-needs-review");
   const results = await Promise.all(Array.from({ length: 4 }, () => call("PROMOTE", { confirmed: true, expectedRevision: 1 })));
   assert.equal(new Set(results.map(r => r.reservationId)).size, 1);
   assert.equal((await database.collection(`organizations/${org}/reservations`).get()).size, 1);
   assert.equal((await database.collection(`organizations/${org}/jobs`).get()).size, 0);
   assert.equal((await call("READ")).state, "PROMOTED");
+  const before = (await database.doc(`organizations/${org}/reservations/${results[0].reservationId}`).get()).data();
+  await call("PROMOTE", { confirmed: true, expectedRevision: 1 });
+  for (const [signal, update] of [["DATES_CHANGED", { checkOut: "2026-10-14" }], ["STATUS_CHANGED", { sourceReservationStatus: "CANCELLED" }], ["SOURCE_DISAPPEARED", {}]]) {
+    assert.equal((await call("READ", { signal, observation: { ...observation, ...update } })).discrepancy.reviewRequired, true);
+    assert.deepEqual((await database.doc(`organizations/${org}/reservations/${results[0].reservationId}`).get()).data(), before);
+  }
+  assert.deepEqual(await counts(), { reservations: 1, jobs: 0, assignments: 0, offers: 0, payouts: 0 });
+  const ignoredObservation = { ...observation, sourceEventUid: "synthetic-ignored" };
+  const ignored = await normalizeReservationObservation(ignoredObservation, { organizationId: org });
+  const ignoredCall = operation => call(operation, { observation: ignoredObservation, candidateId: ignored.id, expectedRevision: 0 });
+  await ignoredCall("IGNORE");
+  assert.equal((await ignoredCall("READ")).state, "IGNORED");
+  await assert.rejects(ignoredCall("PROMOTE"), error => error.details.reason === "ignored");
+  console.log("SYNTHETIC_ACCEPTANCE: Reservation 0→1→1; Job/Assignment/Offer/Payout 0→0→0; changes/cancel/missing unchanged; ignore reload durable.");
   assert.equal((await database.collection(`organizations/${org}/reservationIntakeReviews/${candidate.id}/history`).get()).size, 2);
   const client = rules.authenticatedContext("manager").firestore();
   await assertFails(getDoc(doc(client, `organizations/${org}/reservations/${results[0].reservationId}`)));

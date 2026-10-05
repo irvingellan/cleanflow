@@ -98,6 +98,36 @@ Read endpoints: `/health`, `/candidates`, `/candidates/:id`, `/observations` (bo
 
 ## Sandbox UI / Production exclusion
 
+### Review Gate V0.1 operator acceptance
+
+Selecting an Inbox row opens a separate detail panel, never an expanded grid cell
+that stretches its sibling. Mobile places the detail above the list. Selection,
+filtering and viewing details do not mutate operational data. Read the saved review
+explicitly; PROMOTED/IGNORED triage includes only decisions read in this session,
+and unread decisions are labeled unknown. Triage also exposes unresolved Property,
+changed observations and possible cancellation without claiming authoritative state.
+
+Promotion requires an explicit active Property and confirmation of the displayed
+source, guest and dates. It creates exactly one frozen Reservation and no Job;
+future source changes require human review and never silently update that Reservation.
+Ignore opens a consequence confirmation before the existing server action. Ignore
+is terminal in V0: reload preserves it, no UI undo exists. Accidental ignore requires
+a separately authorized support review; do not invent a new source identity to evade
+the saved decision. Dates are localized; date-only observations never gain a guessed
+time. Instant displays explicitly use UTC; exact source values remain in closed
+technical details.
+
+Synthetic acceptance uses two distinct layers: the browser harness proves operator
+interaction/reload/layout with mocked transport; isolated Firestore tests prove
+canonical persistence, concurrent/repeated promotion, stale/unresolved/conflicting
+rejection and durable ignore. Counts reconcile Reservations 0→1→1 and Jobs,
+Assignments, Offers and Payouts 0→0→0. Date changes, source cancellation and
+disappearance produce discrepancies while the saved Reservation stays identical.
+Fresh desktop/mobile images are `artifacts/reservation-acceptance-*.png` (synthetic,
+local only). Next: human review of this local acceptance flow; real feeds and live
+Sandbox callable enablement require separate authorization. No cloud deployment
+or real-source trial occurred in this round.
+
 ManagerAccess remains required. The preview entry is additionally developer-navigation gated, and lazy-imported only in Sandbox builds. Production tree-shakes the experiment UI, CSS, fixtures, parser/tooling and local controls. No Firebase collection is added. UI filtering/details/JSON reads do not create Jobs, offers, assignments, messages or reservations. The normal Sandbox shell's existing auth/telemetry behavior is unchanged.
 
 This delivery uses local synthetic visual proof, **no Hosting deployment**. A future Sandbox publication must use existing release hygiene: the separately named Inbox chunk is permitted only with explicit Sandbox binding. Production still rejects it. Do not bypass manifest checks or publish Production for this experiment.

@@ -15,9 +15,9 @@ describe("read-only Reservation Inbox", () => {
     expect(screen.getByText(t.POSSIBLE_CANCELLED, { selector: "strong" })).toBeVisible(); expect(screen.getAllByText(t.unknownMapping).length).toBeGreaterThan(0);
     expect(container.querySelectorAll("article")).toHaveLength(5);
     const changed = [...container.querySelectorAll("article")].find(card => card.textContent.includes(t.DATES_CHANGED));
-    expect(changed).toHaveTextContent("2026-10-12 → 2026-10-13");
+    expect(changed).toHaveTextContent(language === "en" ? "Oct 12, 2026 → Oct 13, 2026" : language === "pt" ? "12 de out. de 2026 → 13 de out. de 2026" : "12 oct 2026 → 13 oct 2026");
     fireEvent.click(within(changed).getByRole("button", { name: t.details }));
-    expect(within(changed).getByText(t.previous)).toBeVisible(); expect(within(changed).getByText("Demo Guest Alpha")).toBeVisible();
+    expect(screen.getByText(t.previous)).toBeVisible(); expect(screen.getByText("Demo Guest Alpha")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Create Job|Assign|Invoice|Send message|Criar serviço|Atribuir/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: language === "en" ? "Back" : language === "pt" ? "Voltar" : "Volver" }));
     expect(onBack).toHaveBeenCalledOnce(); expect(container.textContent).not.toContain("reservationIntake.");
@@ -38,7 +38,7 @@ describe("read-only Reservation Inbox", () => {
   it("filtering is local, not an observation or operational mutation", async () => {
     const { container } = render(<TranslationProvider><ReservationInboxPreview onBack={vi.fn()} /></TranslationProvider>);
     await screen.findByText("Dates changed", { selector: "strong" });
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "DATES_CHANGED" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "What changed?" }), { target: { value: "DATES_CHANGED" } });
     await waitFor(() => expect(container.querySelectorAll("article")).toHaveLength(1));
   });
   it("translation catalogs contain identical keys", () => {

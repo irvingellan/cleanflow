@@ -42,7 +42,7 @@ describe("explicit human review UI", () => {
     expect(screen.getByRole("button", { name: "Save Property selection" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Read saved review" }));
     await screen.findByText("External change requires review. Saved Reservation has not been changed.");
-    expect(screen.getByText("checkOut: 2026-10-12 → 2026-10-13")).toBeVisible();
+    expect(screen.getByText("Check-out: Oct 12, 2026 → Oct 13, 2026")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Promote to Reservation" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ignore candidate" })).toBeNull();
   });
@@ -53,6 +53,17 @@ describe("explicit human review UI", () => {
     view.rerender(<ReservationReviewPanel row={{ ...row, id: "different" }} language="en" review={review} />);
     resolve({ state: "PROMOTED", revision: 2 });
     await waitFor(() => expect(screen.queryByText("Promoted to Reservation")).toBeNull());
+  });
+  it("ignore needs a second explicit decision; cancel never calls the server", async () => {
+    const review = vi.fn().mockResolvedValueOnce({ state: "NEW", revision: 0 }).mockResolvedValueOnce({ state: "IGNORED", revision: 1 });
+    render(<ReservationReviewPanel row={row} language="en" review={review} />);
+    fireEvent.click(screen.getByRole("button", { name: "Read saved review" })); await screen.findByText("New");
+    fireEvent.click(screen.getByRole("button", { name: "Ignore candidate" }));
+    expect(review).toHaveBeenCalledTimes(1); expect(screen.getByRole("alertdialog")).toHaveTextContent("No undo");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" })); expect(screen.queryByRole("alertdialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ignore candidate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm ignore" })); await screen.findByText("Ignored");
+    expect(review).toHaveBeenLastCalledWith(row, "IGNORE", { expectedRevision: 0 });
   });
   it.each(["en", "pt", "es"])("%s has complete localized review copy", language => {
     expect(Object.keys(reviewMessages[language]).sort()).toEqual(Object.keys(reviewMessages.en).sort());

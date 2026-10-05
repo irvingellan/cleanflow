@@ -1,5 +1,8 @@
 .reservation-inbox { min-width: 0; }
-.reservation-inbox__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.reservation-inbox__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.reservation-inbox__workspace--selected { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 20px; align-items: start; }
+.reservation-inbox__workspace--selected .reservation-inbox__grid { grid-template-columns: minmax(0, 1fr); }
+.reservation-inbox__workspace--selected .reservation-inbox__detail { align-self: start; }
 .reservation-inbox__card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
 .reservation-inbox__card h2 { font-size: 1.1rem; }
 .reservation-inbox__card dl, .reservation-inbox__detail dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px 12px; }
@@ -10,10 +13,17 @@
 .reservation-inbox__tools summary { cursor: pointer; min-height: 44px; }
 .reservation-inbox__tools label, .reservation-inbox__filter { display: grid; gap: 8px; margin: 12px 0; }
 .reservation-inbox input, .reservation-inbox select { min-width: 0; max-width: 100%; min-height: 44px; }
-.reservation-inbox__detail { border-top: 1px solid var(--color-border); margin-top: 16px; }
+.reservation-inbox__detail { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
+.reservation-inbox__detail dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; }
+.reservation-inbox__detail dd { margin: 0; }
+.reservation-state { display: inline-block; border: 1px solid var(--color-border); border-radius: 8px; padding: 6px 10px; font-weight: 700; }
+.reservation-state--PROMOTED { border-left: 5px solid #237247; }
+.reservation-state--IGNORED { border-left: 5px solid #59636c; }
+.reservation-state--NEEDS_REVIEW { border-left: 5px solid #996000; }
+.reservation-confirmation { border: 1px solid var(--color-border); padding: 12px; border-radius: 8px; margin: 12px 0; }
 .reservation-inbox__review-panel { padding: 12px 0; border-bottom: 1px solid var(--color-border); }
 .reservation-inbox__review-panel label { display: grid; gap: 8px; margin: 12px 0; }
 .reservation-inbox__review-panel .button { min-height: 44px; margin: 4px 8px 4px 0; white-space: normal; }
 .reservation-inbox__review-panel label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; min-height: 44px; }
 .reservation-inbox__review-panel input[type="checkbox"] { flex: 0 0 22px; width: 22px; min-height: 22px; height: 22px; }
-@media (max-width: 700px) { .reservation-inbox__grid { grid-template-columns: minmax(0, 1fr); } .reservation-inbox__card { padding: 16px; } }
+@media (max-width: 700px) { .reservation-inbox__workspace--selected { display: flex; flex-direction: column; } .reservation-inbox__workspace--selected .reservation-inbox__detail { position: static; max-height: none; overflow-y: visible; order: -1; width: 100%; box-sizing: border-box; } .reservation-inbox__grid { grid-template-columns: minmax(0, 1fr); width: 100%; } .reservation-inbox__card { padding: 16px; } }

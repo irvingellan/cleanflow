@@ -1,5 +1,24 @@
 # CleanFlow — Current State
 
+## Reservation Intake Review Gate V0.1 — operator acceptance, branch-only (2026-10-05)
+
+The Inbox now uses a separate desktop review panel and stacked mobile detail,
+explicit saved-state/triage labels, friendly localized dates and closed technical
+details. Saved-state filters apply only to decisions explicitly read in this session;
+unread decisions remain visibly unknown. Promotion recaps Property/source/guest/dates
+and exactly one Reservation/no Job. Ignore requires a second explicit confirmation;
+it is terminal in V0, with no UI undo or alternate-identity workaround.
+Synthetic Firestore acceptance proves Reservations 0→1→1 and Jobs/Assignments/
+Offers/Payouts 0→0→0; later date/status/disappearance observations leave the frozen
+Reservation unchanged. Browser acceptance separately verifies reload, confirmation,
+triage and desktop/mobile containment with mocked transport. No backend behavior,
+real feed, credential, Production access, push, merge or deployment changed.
+Validation: 109 focused (including cleanup); 124 files / 1,330 unit tests; 2 browser
+acceptance tests; 2 isolated Firestore tests; 17 environment/build guards; Production
+and Sandbox builds and diff check passed. Fresh synthetic screenshots are local
+artifacts. Human operator trial remains next; live Sandbox callable remains
+billing-gated and fails visibly without Production fallback.
+
 ## Reservation Intake Review Gate V0 — branch-only (2026-10-05)
 
 Extends the Issue #79 shadow bridge with explicit human Property selection,
