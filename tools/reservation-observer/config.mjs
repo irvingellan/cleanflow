@@ -1,4 +1,4 @@
-import { assertShadowTarget, providers, sourceTypes } from "../../src/features/reservation-intake/reservationCandidateModel.js";
+import { assertShadowTarget, providers, sourceTypes, icalSourceSemantics } from "../../src/features/reservation-intake/reservationCandidateModel.js";
 
 export function validateConfig(config) {
   if (!config || typeof config !== "object") throw new Error("INVALID_CONFIG");
@@ -12,6 +12,8 @@ export function validateConfig(config) {
     ids.add(source.id);
     if (typeof source.enabled !== "boolean" || source.completeSnapshot != null && typeof source.completeSnapshot !== "boolean") throw new Error("INVALID_SOURCE");
     if (source.type === "ICAL") {
+      if (!["HOSPITABLE", "GUESTY", "GENERIC_ICAL"].includes(source.provider)
+        || source.semantics != null && source.semantics !== icalSourceSemantics(source.provider)) throw new Error("INVALID_SOURCE_SEMANTICS");
       let url; try { url = new URL(source.url); } catch { throw new Error("INVALID_FEED_CONFIG"); }
       if (url.protocol !== "https:" || url.username || url.password || url.port
         || !Array.isArray(source.allowedHosts) || source.allowedHosts.length !== 1

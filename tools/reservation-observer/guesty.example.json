@@ -1,0 +1,10 @@
+{
+  "_comment": "LOCAL TEMPLATE ONLY. Guesty VEVENTs may be blocks/rules, NOT proven reservations. Review-only. Never share the real feed URL.",
+  "target": { "projectId": "clean-flow-sandbox-irving", "origin": "https://clean-flow-sandbox-irving.web.app" },
+  "organizationId": "synthetic-shadow-org",
+  "sources": [{ "id": "trial-guesty", "type": "ICAL", "provider": "GUESTY", "semantics": "GUESTY_LISTING_ICAL",
+    "enabled": true, "url": "https://calendar.example.invalid/REPLACE_LOCALLY", "allowedHosts": ["calendar.example.invalid"],
+    "propertyAlias": "Synthetic listing alias", "listingExternalId": "REPLACE_LOCAL_LISTING_ID",
+    "completeSnapshot": false, "pollIntervalMs": 300000 }],
+  "mappings": []
+}

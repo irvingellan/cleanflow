@@ -1,0 +1,10 @@
+{
+  "_comment": "LOCAL TEMPLATE ONLY. Copy into ignored reservation-observer.local.json. Paste the secret URL there, never in chat/GitHub. Validate coverage before changing completeSnapshot.",
+  "target": { "projectId": "clean-flow-sandbox-irving", "origin": "https://clean-flow-sandbox-irving.web.app" },
+  "organizationId": "synthetic-shadow-org",
+  "sources": [{ "id": "trial-hospitable", "type": "ICAL", "provider": "HOSPITABLE", "semantics": "HOSPITABLE_PROPERTY_ICAL",
+    "enabled": true, "url": "https://calendar.example.invalid/REPLACE_LOCALLY", "allowedHosts": ["calendar.example.invalid"],
+    "propertyAlias": "Synthetic property alias", "listingExternalId": "REPLACE_LOCAL_LISTING_ID",
+    "completeSnapshot": false, "pollIntervalMs": 300000 }],
+  "mappings": []
+}

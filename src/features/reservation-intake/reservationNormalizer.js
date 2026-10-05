@@ -1,4 +1,4 @@
-import { parserVersion, validateObservation, validInstant } from "./reservationCandidateModel.js";
+import { parserVersion, validateObservation, validInstant, icalSourceSemantics } from "./reservationCandidateModel.js";
 import { hashValue, reservationIdentity } from "./reservationFingerprint.js";
 
 export function normalizeDate(value) {
@@ -32,6 +32,8 @@ export async function normalizeReservationObservation(input, { organizationId, m
   const checkIn = normalizeDate(cleaned.checkIn), checkOut = normalizeDate(cleaned.checkOut);
   const identity = await reservationIdentity({ ...cleaned, checkIn, checkOut });
   const semantic = {
+    sourceSemantics: cleaned.sourceType === "ICAL" ? icalSourceSemantics(cleaned.sourceProvider) : null,
+    sourceEvidenceType: cleaned.sourceType === "ICAL" && cleaned.sourceProvider === "HOSPITABLE" ? "RESERVATION_CALENDAR_CANDIDATE" : "CALENDAR_EVENT",
     sourceProvider: cleaned.sourceProvider, sourceType: cleaned.sourceType, sourceId: cleaned.sourceId,
     sourceAccountExternalId: cleaned.sourceAccountExternalId || null,
     sourceListingExternalId: cleaned.sourceListingExternalId || null,
@@ -51,6 +53,8 @@ export async function normalizeReservationObservation(input, { organizationId, m
     confidence: !checkIn || !checkOut || invalidRange || identity.identityStrategy === "CONSERVATIVE_FINGERPRINT" ? "LOW" : "HIGH",
     reviewState: "REQUIRED", changeType: "NEW", changeSet: {},
     sourceEvidenceSummary: { dateBasis: checkIn?.length === 10 ? "DATE_ONLY" : cleaned.timezone ? "EXPLICIT_TIMEZONE" : "UNKNOWN",
-      partial: !checkIn || !checkOut || Boolean(invalidRange), authoritativeCancellation: cleaned.sourceReservationStatus === "CANCELLED" },
+      partial: !checkIn || !checkOut || Boolean(invalidRange), reservationProven: false,
+      calendarCancellationReported: cleaned.sourceReservationStatus === "CANCELLED",
+      authoritativeCancellation: cleaned.sourceProvider === "HOSPITABLE" && cleaned.sourceType === "ICAL" && cleaned.sourceReservationStatus === "CANCELLED" },
   };
 }

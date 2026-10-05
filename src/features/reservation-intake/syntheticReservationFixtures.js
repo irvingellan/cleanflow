@@ -6,7 +6,7 @@ export async function buildSyntheticReservationState() {
   const rows = [
     { ...base, sourceEventUid: "synthetic-new", checkIn: "2026-10-20", checkOut: "2026-10-23" },
     { ...base, sourceEventUid: "synthetic-change", guestName: "Demo Guest Alpha" },
-    { ...base, sourceEventUid: "synthetic-missing", checkIn: "2026-10-15", checkOut: "2026-10-18" },
+    { ...base, sourceProvider: "GENERIC_ICAL", sourceEventUid: "synthetic-missing", checkIn: "2026-10-15", checkOut: "2026-10-18" },
     { ...base, sourceProvider: "HOSPITABLE", sourceEventUid: "synthetic-unknown", sourceListingExternalId: "unmapped-listing", sourcePropertyName: "Demo Garden Studio", checkIn: "2026-10-25", checkOut: "2026-10-28" },
   ];
   const poll = (observations, observedAt) => ({ sourceId: base.sourceId, observedAt, result: "SUCCESS", complete: true,

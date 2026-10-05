@@ -3,6 +3,10 @@ export const shadowOrigin = "https://clean-flow-sandbox-irving.web.app";
 export const providers = ["HOSPITABLE", "GUESTY", "GENERIC_ICAL", "BROWSER_DOM_HOSPITABLE", "BROWSER_DOM_GUESTY"];
 export const sourceTypes = ["ICAL", "BROWSER_DOM", "MANUAL_IMPORT"];
 export const parserVersion = "reservation-bridge-v0.1";
+export function icalSourceSemantics(provider) {
+  return provider === "HOSPITABLE" ? "HOSPITABLE_PROPERTY_ICAL"
+    : provider === "GUESTY" ? "GUESTY_LISTING_ICAL" : "GENERIC_CALENDAR_ICAL";
+}
 
 // A local shadow store is not permission to write Firebase operational data.
 export function assertShadowTarget({ projectId, origin }) {

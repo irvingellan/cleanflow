@@ -43,6 +43,8 @@ export async function applyShadowPoll(state, poll, context) {
     if (diff.changeType === "UNCHANGED") {
       // Duplicate polls may refresh last-seen, never downgrade source ordering.
       next.candidates[candidate.id] = { ...previous, observedAt: [previous.observedAt, candidate.observedAt].sort().at(-1),
+        sourceSemantics: candidate.sourceSemantics, sourceEvidenceType: candidate.sourceEvidenceType,
+        sourceEvidenceSummary: candidate.sourceEvidenceSummary,
         missingCount: 0, changeType: "UNCHANGED", changeSet: {},
         sourceUpdatedAt: [previous.sourceUpdatedAt, candidate.sourceUpdatedAt].filter(Boolean).sort().at(-1) || null,
         sourceSequence: previous.sourceSequence == null ? candidate.sourceSequence
@@ -66,6 +68,7 @@ export async function applyShadowPoll(state, poll, context) {
   if (poll.complete === true && (!lastPoll || Date.parse(poll.observedAt) > Date.parse(lastPoll))) {
     for (const candidate of Object.values(next.candidates)) {
       if (candidate.sourceId !== poll.sourceId || seen.has(candidate.id)
+        || candidate.sourceProvider === "GUESTY" && candidate.sourceType === "ICAL"
         || Date.parse(poll.observedAt) <= Date.parse(candidate.observedAt)) continue;
       candidate.missingCount = (candidate.missingCount || 0) + 1;
       candidate.changeType = candidate.missingCount >= 3 ? "POSSIBLE_CANCELLED" : "SOURCE_DISAPPEARED";

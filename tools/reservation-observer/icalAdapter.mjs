@@ -17,7 +17,7 @@ export function parseIcal(text, source, observedAt) {
   const lines = text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "").split(/\r?\n/).filter(Boolean);
   if (lines[0] !== "BEGIN:VCALENDAR" || lines.at(-1) !== "END:VCALENDAR") throw new Error("MALFORMED_ICAL");
   if (lines.filter(line => line.startsWith("VERSION:")).length !== 1 || !lines.includes("VERSION:2.0")) throw new Error("MALFORMED_ICAL");
-  const events = []; let event = null, depth = 0, complete = source.completeSnapshot === true;
+  const events = []; let event = null, depth = 0, complete = source.provider !== "GUESTY" && source.completeSnapshot === true;
   for (const line of lines.slice(1, -1)) {
     if (line === "BEGIN:VEVENT") { if (event) throw new Error("MALFORMED_ICAL"); event = {}; depth = 0; continue; }
     if (line === "END:VEVENT") {

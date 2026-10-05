@@ -620,6 +620,14 @@ cloud data write. Real provider selectors/feed completeness are not validated;
 unknown layouts fail closed. See `RESERVATION_INTAKE_BRIDGE_V0.md` for the
 future authorized discovery checklist and residual risks. No candidate creates
 a Reservation or Job.
+First-feed trial preparation remains local-only: explicit Hospitable candidate
+vs Guesty calendar-event semantics, non-persistent `probe.mjs`, placeholder
+templates and an ignored local acceptance ledger. Probe never opens shadow
+state or advances disappearance; Guesty disappearance is never cancellation
+evidence. No real feed/session connected and no merge/deploy performed.
+Trial-preparation validation: 64 focused, 120 files / 1,301 unit tests,
+23 environment/release guards, two synthetic Playwright checks, both builds
+and diff check passed. The authorized real-feed trial has not run.
 Validation: 54 focused, 119 files / 1,291 unit tests, two synthetic
 desktop/mobile Playwright checks and 23 environment/release guards passed.
 One intermediate full-suite run hit the preexisting Offer-message timing test;

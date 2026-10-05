@@ -53,7 +53,8 @@ export function ReservationInboxPreview({ onBack }) {
     {!loading && !rows.length && <p>{t("empty")}</p>}
     <div className="reservation-inbox__grid">{rows.filter(row => !filter || row.changeType === filter).map(row => <article className="reservation-inbox__card" key={row.id}>
       <span className="eyebrow">{row.sourceProvider}</span><h2>{value(row.sourcePropertyName)}</h2>
-      <strong className="reservation-inbox__change">{t(row.changeType)}</strong>
+      <strong className="reservation-inbox__change">{t(row.changeType === "NEW" && row.sourceEvidenceType === "CALENDAR_EVENT" ? "newCalendarEvent" : row.changeType)}</strong>
+      {row.sourceSemantics === "GUESTY_LISTING_ICAL" && <p>{t("calendarOnly")}</p>}
       <dl><dt>{t("checkIn")}</dt><dd>{value(row.checkIn)}</dd><dt>{t("checkOut")}</dt><dd>{value(row.checkOut)}</dd>
         {row.changeSet.checkOut && <><dt>{t("before")} → {t("after")}</dt><dd>{value(row.changeSet.checkOut.before)} → {value(row.changeSet.checkOut.after)}</dd></>}
         <dt>{t("mapping")}</dt><dd>{mapping(row)}</dd><dt>{t("confidence")}</dt><dd>{t(row.confidence?.toLowerCase())}</dd>

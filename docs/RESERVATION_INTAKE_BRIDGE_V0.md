@@ -31,6 +31,8 @@ Mapping uses exact configured source + listing ID. One distinct target = MATCHED
 
 ## iCal adapter
 
+Provider semantics are explicit: `HOSPITABLE_PROPERTY_ICAL` is a reservation-calendar **candidate** source, never a proven/automatic Reservation. `GUESTY_LISTING_ICAL` yields `sourceEvidenceType=CALENDAR_EVENT`: exports may also contain blocks/rules. Every candidate has `reservationProven=false` and requires review. A Guesty explicit CANCELLED status is calendar-source evidence, not authoritative reservation cancellation; Guesty disappearance never advances cancellation counters, even with completeSnapshot configured true. Hospitable completeness defaults false until a manually validated full/stable feed is established. No contact/description/summary fields are ingested.
+
 Bounded HTTPS GET, exact configured host, no redirects/auth cookies, 10-second whole-operation deadline, 2 MiB body limit, ETag/Last-Modified support. Extracts only UID, DTSTART, DTEND, STATUS, LAST-MODIFIED, SEQUENCE. Summary/description/alarms/contact fields are discarded. Supports simple all-day and UTC VEVENTs; recurrence, exceptions and duration are explicitly unsupported and invalidate the poll. Synthetic fixtures cover change, restore, duplicates and failures. No real-provider feed availability is claimed.
 
 Calendar subset follows [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545); it is not a complete RFC parser.
@@ -67,6 +69,37 @@ This delivery uses local synthetic visual proof, **no Hosting deployment**. A fu
 - Local state retention is bounded by operator scope: up to 1000 observations per batch, 100 diagnostic entries, bounded previous/conflict snapshots; inspect/archive local state before growth exceeds the 10 MiB reload guard. This is not a canonical reservation database.
 
 ## Validation and next authorized discovery
+
+### First authorized real-feed trial
+
+This implementation round uses synthetic tests only. The following steps are for a future explicitly authorized session on the operator's Mac, not a request to connect a feed now.
+
+**Step A — Hospitable**
+
+1. The operations manager logs into Hospitable normally; no automated login/MFA handling.
+2. Open one low-risk property manually and find Export Calendar / Copy iCal if available. Actual labels/availability must be verified in that account; this is not proof that every account has an export.
+3. Copy `tools/reservation-observer/hospitable.example.json` to ignored `reservation-observer.local.json`. Paste the URL **directly into that local file** and set allowedHosts to the exact URL hostname. Keep provider/profile and completeSnapshot=false; use a local alias/listing ID. Never paste the secret URL into chat, GitHub, shell arguments or committed docs.
+4. Run from this checkout on the Mac:
+
+   ```sh
+   node tools/reservation-observer/probe.mjs reservation-observer.local.json trial-hospitable
+   ```
+
+5. Probe validates target/config/public-network guards, performs one bounded HTTPS GET, parses and normalizes. It prints only dates/timezone/evidence type and aggregate identity/format counts; no UID, guest, source URL, raw ICS or auth data. `SHADOW_ONLY`, `Persistent writes: NONE` and unchanged disappearance counters are explicit. It does not open a local store, create a lock/pairing/server, update candidates or run a poll loop. Unsupported/malformed/network failures produce allowlisted error categories and nonzero exit status; unsupported counts are UNKNOWN rather than invented.
+6. Compare candidate dates against the visible calendar and fill a **local** copy of `acceptance-ledger.example.md`. Missing/floating dates require review, not guessed timezone conversion. Versionless date changes remain ordering conflicts; acceptance must explicitly distinguish detection from automatic authoritative update.
+7. Only if correct and separately accepted, start the normal local shadow observer:
+
+   ```sh
+   node tools/reservation-observer/run.mjs reservation-observer.local.json
+   ```
+
+   This normal mode DOES persist local shadow state, never operational data. Keep completeSnapshot=false until full/stable coverage is proven; a possible cancellation still requires manual review. Do not create/change external bookings just to test.
+
+**Step B — Guesty**
+
+Repeat the same manual login/export/local-config/probe/date comparison using `guesty.example.json` and source `trial-guesty`. Guesty may not expose an export in every account/setup. A successful fetch does NOT prove that its events are reservations: identify non-reservation blocks/rules in the local ledger. Source status is not proof of booking state; disappearance does not infer cancellation. Remain review-only even if the feed appears complete.
+
+**Browser fallback remains unchanged and synthetic-only.** A real DOM profile is created only after a future authorized session demonstrates which required fields iCal actually lacks. No guessed selectors, arbitrary page-text scraping, screenshots, HTML capture, platform storage/cookies, automated navigation/login or MFA bypass.
 
 `npm test -- src/features/reservation-intake`; `npx playwright test --config playwright.reservation-intake.config.js`; full `npm test`; environment guard tests; Production and Sandbox builds; diff check. Tests cover A–L: new/repeated/change/disappearance/network/out-of-order/unknown mapping/ambiguous mapping/multi-source/layout change/guest absent, plus loopback, pairing, forbidden schema, restart/corruption, deadline and manual-writer collision. Screenshots under ignored `artifacts/reservation-intake-*.png` contain only synthetic data.
 

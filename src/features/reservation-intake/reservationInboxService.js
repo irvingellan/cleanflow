@@ -1,5 +1,5 @@
 import { assertShadowTarget, shadowProjectId, shadowOrigin, providers } from "./reservationCandidateModel.js";
-const displayed = ["id", "sourceProvider", "sourcePropertyName", "guestName", "checkIn", "checkOut", "sourceReservationStatus", "observedAt", "identityStrategy", "confidence", "reviewState", "changeType", "propertyMappingState"];
+const displayed = ["id", "sourceProvider", "sourcePropertyName", "guestName", "checkIn", "checkOut", "sourceReservationStatus", "observedAt", "identityStrategy", "confidence", "reviewState", "changeType", "propertyMappingState", "sourceSemantics", "sourceEvidenceType"];
 export function sanitizeInboxSnapshot(value) {
   if (!value || !Array.isArray(value.candidates) || value.candidates.length > 1000) throw new Error("INVALID_SHADOW_SNAPSHOT");
   return value.candidates.map(row => {

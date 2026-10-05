@@ -1,5 +1,6 @@
 export const reservationIntakeMessages = {
   en: {
+    newCalendarEvent: "New calendar event", calendarOnly: "Calendar event · reservation not proven. Review blocks/rules before interpreting it.",
     title: "Reservation intake · Shadow preview", description: "Read-only research bridge. Reservations are not cleaning Jobs. No operational data is changed.",
     entry: "Reservation intake · Preview", synthetic: "SYNTHETIC SHADOW DATA", provider: "Provider", listing: "Listing / property candidate", guest: "Guest display name",
     checkIn: "Check-in", checkOut: "Check-out", status: "Source status", change: "What changed?", observed: "Last observed", identity: "Identity strategy",
@@ -13,6 +14,7 @@ export const reservationIntakeMessages = {
     EXTERNAL_ID: "Stable external ID", LISTING_EVENT_UID: "Listing + event UID", CONSERVATIVE_FINGERPRINT: "Fallback fingerprint · low confidence", none: "Not provided",
   },
   pt: {
+    newCalendarEvent: "Novo evento de calendário", calendarOnly: "Evento de calendário · reserva não comprovada. Revise bloqueios/regras antes de interpretar.",
     title: "Entrada de reservas · Prévia shadow", description: "Experimento somente leitura. Reservas não são serviços de limpeza. Nenhum dado operacional é alterado.",
     entry: "Entrada de reservas · Prévia", synthetic: "DADOS SHADOW SINTÉTICOS", provider: "Origem", listing: "Imóvel / propriedade candidata", guest: "Nome exibido do hóspede",
     checkIn: "Check-in", checkOut: "Check-out", status: "Status na origem", change: "O que mudou?", observed: "Última observação", identity: "Estratégia de identidade",
@@ -26,6 +28,7 @@ export const reservationIntakeMessages = {
     EXTERNAL_ID: "ID externo estável", LISTING_EVENT_UID: "Imóvel + UID do evento", CONSERVATIVE_FINGERPRINT: "Fingerprint fallback · baixa confiança", none: "Não informado",
   },
   es: {
+    newCalendarEvent: "Nuevo evento de calendario", calendarOnly: "Evento de calendario · reserva no comprobada. Revisa bloqueos/reglas antes de interpretar.",
     title: "Entrada de reservas · Vista previa shadow", description: "Experimento de solo lectura. Las reservas no son servicios de limpieza. Ningún dato operativo se modifica.",
     entry: "Entrada de reservas · Vista previa", synthetic: "DATOS SHADOW SINTÉTICOS", provider: "Origen", listing: "Alojamiento / propiedad candidata", guest: "Nombre visible del huésped",
     checkIn: "Check-in", checkOut: "Check-out", status: "Estado en origen", change: "¿Qué cambió?", observed: "Última observación", identity: "Estrategia de identidad",
