@@ -100,6 +100,18 @@ sync metadata.
 
 Provider-specific statuses must not be copied into the Job lifecycle.
 
+Branch-only Intake Review V0 implements `organizations/{org}/reservations/{identity}`
+in Sandbox/emulator only. A server-authorized human promotion stores Property,
+optional existing Client reference, check-in/out, timezone, guest label, ACTIVE
+status, DEMO provenance, server creation time, and frozen `intakeProvenance`
+(source observation, parser version, candidate, manager, mapping and promotion time).
+Source metadata is isolated from domain fields. Date-only values remain date-only.
+`reservationIntakeReviews/{candidate}` and its revision history record decisions;
+`reservationIntakeIdentities/{identity}` claims the source identity transactionally.
+These collections remain server-only under existing default-deny Rules. Later
+external changes are discrepancies, never Reservation updates/cancellations.
+There is no Reservation-to-Job trigger or Job creation in this path.
+
 ## Cleaning Job
 
 A Job is the operational aggregate for one cleaning/turnover event. It owns

@@ -11,4 +11,9 @@
 .reservation-inbox__tools label, .reservation-inbox__filter { display: grid; gap: 8px; margin: 12px 0; }
 .reservation-inbox input, .reservation-inbox select { min-width: 0; max-width: 100%; min-height: 44px; }
 .reservation-inbox__detail { border-top: 1px solid var(--color-border); margin-top: 16px; }
+.reservation-inbox__review-panel { padding: 12px 0; border-bottom: 1px solid var(--color-border); }
+.reservation-inbox__review-panel label { display: grid; gap: 8px; margin: 12px 0; }
+.reservation-inbox__review-panel .button { min-height: 44px; margin: 4px 8px 4px 0; white-space: normal; }
+.reservation-inbox__review-panel label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; min-height: 44px; }
+.reservation-inbox__review-panel input[type="checkbox"] { flex: 0 0 22px; width: 22px; min-height: 22px; height: 22px; }
 @media (max-width: 700px) { .reservation-inbox__grid { grid-template-columns: minmax(0, 1fr); } .reservation-inbox__card { padding: 16px; } }

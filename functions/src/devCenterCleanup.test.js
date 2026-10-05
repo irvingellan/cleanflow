@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { planDemoCleanup } from "./devCenterCleanup.js";
 
+it("a surviving intake Reservation protects referenced synthetic Property/Client batches", () => {
+  const stamp = { seconds: 100, nanoseconds: 0 };
+  const property = { kind: "properties", id: "house", createTime: stamp, updateTime: stamp,
+    data: { demoSeed: true, demoSeedBatch: "dev-center-intake", clientId: "client" } };
+  const client = { kind: "clients", id: "client", createTime: stamp, updateTime: stamp,
+    data: { demoSeed: true, demoSeedBatch: "dev-center-client" } };
+  const reservation = { kind: "reservations", id: "approved", survives: true, data: { propertyId: "house" } };
+  expect(planDemoCleanup([property, client, reservation])).toEqual({ targets: [], skippedBatches: 2 });
+});
+
 const seed = (kind, id, data = {}) => ({
   createTime: { seconds: 10, nanoseconds: 123 },
   updateTime: { seconds: 10, nanoseconds: 123 },

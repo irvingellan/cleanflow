@@ -35,6 +35,7 @@ import {
 } from "./publicChecklistDiagnostics.js";
 import { processChecklistReviewNotification } from "./checklistReviewNotifications.js";
 import { requireOrganizationManager } from "./managerAuthorization.js";
+import { reviewReservationIntake as handleReservationIntakeReview } from "./reservationIntakeReviewService.js";
 import { deactivateInvalidManagerDevices, loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
 import { processManagerOperationalNotification } from "./managerOperationalNotifications.js";
 import { canUsePublicOffer, publicOfferState as offerState, respondToPublicOffer } from "./publicOfferResponseService.js";
@@ -176,7 +177,7 @@ async function demoJobCount() {
 async function clearDemoData({ requireComplete = false } = {}) {
   const organization = organizationReference();
   const records = [];
-  for (const kind of ["jobs", "payouts", "properties", "cleaners", "clients"]) {
+  for (const kind of ["jobs", "payouts", "properties", "cleaners", "clients", "reservations", "reservationIntakeReviews"]) {
     const collection = organization.collection(kind);
     const snapshot = await collection.get();
     const visibleIds = new Set(snapshot.docs.map(document => document.id));
@@ -187,6 +188,7 @@ async function clearDemoData({ requireComplete = false } = {}) {
     }
     for (const document of snapshot.docs) {
       const record = { kind, id: document.id, ref: document.ref, createTime: document.createTime, updateTime: document.updateTime, data: document.data() };
+      if (["reservations", "reservationIntakeReviews"].includes(kind)) record.survives = true;
       records.push(record);
       // Preserve Runs, Assignments, evidence, capabilities and any unrecognized
       // child collection. Surviving parents' children are protection evidence too,
@@ -857,6 +859,9 @@ export const rescheduleJob = onCall(
     });
   },
 );
+
+export const reviewReservationIntake = onCall({ region: "us-central1" }, request =>
+  handleReservationIntakeReview(db, request, organizationId));
 
 export const getChecklistCapability = onCall(
   { region: "us-central1" },

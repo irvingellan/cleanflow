@@ -1,5 +1,20 @@
 # CleanFlow — Decision Log
 
+## DEC-046 — Human intake promotion is separate from external observation
+
+Reservation Intake Review V0 is branch-only, synthetic, Sandbox/emulator-only.
+The observer has no Firebase mutation path. Only an authenticated active manager,
+explicit Property resolution and human confirmation can create a Reservation.
+One transaction claims the stable source identity, creates the frozen Reservation
+and writes the review/revision history; membership is rechecked in the transaction.
+Fallback fingerprints cannot promote. Ambiguous/unresolved mapping is never guessed.
+Subsequent source changes/cancellation/disappearance are discrepancy signals only.
+No connector or Reservation trigger creates a Job; that gate remains future work.
+Production/unknown projects fail before database reads. Direct browser persistence
+remains denied. Sandbox Functions availability/billing is an explicit integration
+barrier, not permission for a client fallback. Different providers/accounts are
+not automatically merged. No real-source trial is authorized by this implementation.
+
 This file records architectural/product decisions and why they were made.
 
 Decisions can be revised, but changes should be documented rather than silently replacing previous reasoning.

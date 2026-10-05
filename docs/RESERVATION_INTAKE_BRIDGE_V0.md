@@ -2,6 +2,50 @@
 
 Temporary, branch-only research bridge. Browser DOM extraction is a fallback/validation bridge, not the desired canonical integration. No candidate becomes a Reservation or Cleaning Job automatically.
 
+## Human Review Gate V0 (branch-only, synthetic)
+
+Observation → Shadow Candidate → Human Review Gate → Reservation → [future] Cleaning Job.
+Ingestion and promotion are separate trust boundaries. Opening/filtering/importing
+the Inbox does not write operational records. Read saved review explicitly;
+select an active, non-archived existing Property, save that resolution, then check
+the guest-stay confirmation and Promote. Ignore is an explicit terminal decision.
+NEW/NEEDS_REVIEW/PROMOTED/IGNORED survive reload in the server review ledger.
+Configured mapping is a suggestion, never sufficient approval; ambiguous/unresolved
+candidates require explicit selection. Missing dates, fallback identity, unresolved
+Property, cancellation/disappearance/conflict and stale review reject promotion.
+
+`reviewReservationIntake` reuses active-manager authorization, checks the exact
+Sandbox/emulator project and transactionally rechecks membership and Property.
+It creates `organizations/{org}/reservations/{sourceIdentityHash}`, the identity
+claim and review/history together. Stable provider + account/source + external ID
+or listing/event UID owns one Reservation. Retries/concurrency return the same
+Reservation. Different sources with no common account and different providers
+remain independent: cross-provider duplicate detection is a human responsibility.
+An identity collision with different Property/values fails closed.
+Frozen provenance includes normalized values, parser, candidate, source, actor,
+server time and explicit mapping method. Source fields stay in intake provenance.
+No auto-Job creation path existed; none is added. No Job/Assignment/payment is written.
+Demo cleanup reads Reservations/review decisions as surviving protection evidence,
+never deletion targets, so referenced synthetic Property/Client batches are preserved.
+
+Later observations compare to the frozen source projection: dates, Property alias,
+guest, status/timezone and missing/cancel/conflict signals become review discrepancies.
+They never update/cancel the Reservation. This V0 does not apply discrepancy proposals.
+Local shadow audit keeps the most recent 1,000 observed/changed events; it is bounded
+research evidence, not a complete permanent ledger. First-observed remains on the
+candidate. Human decisions have immutable server revision-history entries with actor
+and server timestamp. Server firstObservedAt means first observation presented to
+review; earlier shadow first-observed is displayed separately.
+
+The Production bundle excludes the Inbox; direct browser access to the new paths
+remains default-denied under unchanged Rules. No Rules/index changes are required.
+The callable and UI are implemented but not deployed. Billing-gated Sandbox Functions
+cause an explicit recoverable error, not client writes or Production fallback.
+Browser tests use an injected synthetic presentation adapter; isolated Firestore
+tests prove actual transaction durability/concurrency/security. No real feed was read.
+Next step is human local review, then separately authorized Sandbox Function enablement
+and deployment if desired; a real-feed trial remains a distinct supervised operation.
+
 ## Discovery and scope
 
 Authorized operational discovery found fragmented manual messaging and calendar inspection across reservation providers. The experiment tests observation/change review, not integration completeness. All committed examples, screenshots and automated tests are synthetic. No real feed, provider login or customer record was used.

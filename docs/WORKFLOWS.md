@@ -19,6 +19,13 @@ evidence, and completion.
 A reservation date change or cancellation may require a manager to reconcile a
 related Job. It does not automatically impose an external status on the Job.
 
+**BRANCH-ONLY / SYNTHETIC:** Observation → Shadow Candidate → explicit human
+review (Property selection plus confirmation) → Reservation → [future] Cleaning Job.
+Review states are NEW / NEEDS_REVIEW / PROMOTED / IGNORED. Ingestion remains
+read-only toward operational data. Promotion uses a manager-authorized,
+Sandbox/emulator-only transaction. Cancellation/disappearance and later changes
+only request review; no automatic update/cancel or Cleaning Job creation exists.
+
 ## Offer → interest → Assignment
 
 **CURRENT:** a manager creates a Job, selects multiple cleaners, and creates

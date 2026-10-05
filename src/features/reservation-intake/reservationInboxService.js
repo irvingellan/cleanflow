@@ -1,5 +1,5 @@
-import { assertShadowTarget, shadowProjectId, shadowOrigin, providers } from "./reservationCandidateModel.js";
-const displayed = ["id", "sourceProvider", "sourcePropertyName", "guestName", "checkIn", "checkOut", "sourceReservationStatus", "observedAt", "identityStrategy", "confidence", "reviewState", "changeType", "propertyMappingState", "sourceSemantics", "sourceEvidenceType"];
+import { assertShadowTarget, shadowProjectId, shadowOrigin, providers, validInstant } from "./reservationCandidateModel.js";
+const displayed = ["id", "sourceProvider", "sourceType", "sourceId", "sourceAccountExternalId", "sourceListingExternalId", "externalReservationId", "sourceEventUid", "timezone", "sourceUpdatedAt", "parserVersion", "sourcePropertyName", "guestName", "checkIn", "checkOut", "sourceReservationStatus", "observedAt", "identityStrategy", "confidence", "reviewState", "changeType", "propertyMappingState", "sourceSemantics", "sourceEvidenceType"];
 export function sanitizeInboxSnapshot(value) {
   if (!value || !Array.isArray(value.candidates) || value.candidates.length > 1000) throw new Error("INVALID_SHADOW_SNAPSHOT");
   return value.candidates.map(row => {
@@ -14,6 +14,9 @@ export function sanitizeInboxSnapshot(value) {
       clean[key] = entry ?? null;
     }
     clean.changeSet = {};
+    if (row.sourceSequence != null && (!Number.isSafeInteger(row.sourceSequence) || row.sourceSequence < 0)) throw new Error("INVALID_SHADOW_SNAPSHOT");
+    clean.sourceSequence = row.sourceSequence ?? null;
+    clean.firstObservedAt = validInstant(row.firstObservedAt) ? row.firstObservedAt : clean.observedAt;
     for (const key of ["checkIn", "checkOut", "sourceReservationStatus", "propertyMappingState"]) {
       const diff = row.changeSet?.[key];
       if (diff) {

@@ -4,8 +4,9 @@ import { reservationIntakeMessages } from "./reservationIntakeMessages.js";
 import { buildSyntheticReservationState } from "./syntheticReservationFixtures.js";
 import { readLocalInbox, sanitizeInboxSnapshot } from "./reservationInboxService.js";
 import "./reservationInbox.css";
+import { ReservationReviewPanel } from "./ReservationReviewPanel.jsx";
 
-export function ReservationInboxPreview({ onBack }) {
+export function ReservationInboxPreview({ onBack, properties, review }) {
   const { language, translate } = useTranslation();
   const messages = reservationIntakeMessages[language] || reservationIntakeMessages.en;
   const t = key => messages[key] || messages.none;
@@ -62,7 +63,9 @@ export function ReservationInboxPreview({ onBack }) {
       <p className="reservation-inbox__review">⚠ {t("review")}</p>
       <button type="button" className="button" onClick={() => setSelected(selected?.id === row.id ? null : row)} aria-expanded={selected?.id === row.id}>{t("details")}</button>
       {selected?.id === row.id && <div className="reservation-inbox__detail">
+        <ReservationReviewPanel row={row} properties={properties} review={review} language={language} />
         <h3>{t("current")}</h3><dl><dt>{t("guest")}</dt><dd>{value(row.guestName)}</dd><dt>{t("status")}</dt><dd>{value(row.sourceReservationStatus)}</dd>
+          <dt>{t("provider")}</dt><dd>{row.sourceProvider} · {row.sourceType} · {row.parserVersion}</dd>
           <dt>{t("identity")}</dt><dd>{t(row.identityStrategy)}</dd></dl>
         {row.previousObservation && <><h3>{t("previous")}</h3><dl>{["checkIn", "checkOut", "status", "observed"].map(key => {
           const field = { status: "sourceReservationStatus", observed: "observedAt" }[key] || key;

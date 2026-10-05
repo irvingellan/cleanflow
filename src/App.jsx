@@ -967,7 +967,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
           && <SandboxLifecyclePreview onBack={showDashboard} />}
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-reservation-intake"
-          && <Suspense fallback={<p role="status">{reservationIntakeMessages[language].loading}</p>}><ReservationInboxPreview onBack={showDashboard} /></Suspense>}
+          && <Suspense fallback={<p role="status">{reservationIntakeMessages[language].loading}</p>}><ReservationInboxPreview onBack={showDashboard} properties={properties} /></Suspense>}
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
 
         {view === "dashboard" && (

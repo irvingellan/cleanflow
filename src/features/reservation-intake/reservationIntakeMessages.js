@@ -1,7 +1,7 @@
 export const reservationIntakeMessages = {
   en: {
     newCalendarEvent: "New calendar event", calendarOnly: "Calendar event · reservation not proven. Review blocks/rules before interpreting it.",
-    title: "Reservation intake · Shadow preview", description: "Read-only research bridge. Reservations are not cleaning Jobs. No operational data is changed.",
+    title: "Reservation intake · Shadow preview", description: "Read-only ingestion. Only explicit human approval can create a Sandbox Reservation; never a cleaning Job.",
     entry: "Reservation intake · Preview", synthetic: "SYNTHETIC SHADOW DATA", provider: "Provider", listing: "Listing / property candidate", guest: "Guest display name",
     checkIn: "Check-in", checkOut: "Check-out", status: "Source status", change: "What changed?", observed: "Last observed", identity: "Identity strategy",
     confidence: "Confidence", review: "Review required", mapping: "Property mapping", unknown: "Unknown", matched: "Exact configured mapping", ambiguous: "Ambiguous mapping",
@@ -15,7 +15,7 @@ export const reservationIntakeMessages = {
   },
   pt: {
     newCalendarEvent: "Novo evento de calendário", calendarOnly: "Evento de calendário · reserva não comprovada. Revise bloqueios/regras antes de interpretar.",
-    title: "Entrada de reservas · Prévia shadow", description: "Experimento somente leitura. Reservas não são serviços de limpeza. Nenhum dado operacional é alterado.",
+    title: "Entrada de reservas · Prévia shadow", description: "Ingestão somente leitura. Somente aprovação humana explícita pode criar uma Reserva no Sandbox; nunca um serviço de limpeza.",
     entry: "Entrada de reservas · Prévia", synthetic: "DADOS SHADOW SINTÉTICOS", provider: "Origem", listing: "Imóvel / propriedade candidata", guest: "Nome exibido do hóspede",
     checkIn: "Check-in", checkOut: "Check-out", status: "Status na origem", change: "O que mudou?", observed: "Última observação", identity: "Estratégia de identidade",
     confidence: "Confiança", review: "Revisão necessária", mapping: "Associação da propriedade", unknown: "Desconhecida", matched: "Associação exata configurada", ambiguous: "Associação ambígua",
@@ -29,7 +29,7 @@ export const reservationIntakeMessages = {
   },
   es: {
     newCalendarEvent: "Nuevo evento de calendario", calendarOnly: "Evento de calendario · reserva no comprobada. Revisa bloqueos/reglas antes de interpretar.",
-    title: "Entrada de reservas · Vista previa shadow", description: "Experimento de solo lectura. Las reservas no son servicios de limpieza. Ningún dato operativo se modifica.",
+    title: "Entrada de reservas · Vista previa shadow", description: "Ingestión de solo lectura. Solo aprobación humana explícita puede crear una Reserva en Sandbox; nunca un servicio de limpieza.",
     entry: "Entrada de reservas · Vista previa", synthetic: "DATOS SHADOW SINTÉTICOS", provider: "Origen", listing: "Alojamiento / propiedad candidata", guest: "Nombre visible del huésped",
     checkIn: "Check-in", checkOut: "Check-out", status: "Estado en origen", change: "¿Qué cambió?", observed: "Última observación", identity: "Estrategia de identidad",
     confidence: "Confianza", review: "Revisión necesaria", mapping: "Asociación de propiedad", unknown: "Desconocida", matched: "Asociación exacta configurada", ambiguous: "Asociación ambigua",

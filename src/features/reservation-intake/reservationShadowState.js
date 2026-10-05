@@ -16,6 +16,11 @@ export async function applyShadowPoll(state, poll, context) {
   }
   if (!Array.isArray(poll.observations) || poll.observations.length > 1000) throw new Error("INVALID_POLL");
   const next = structuredClone(state), seen = new Set();
+  next.audit ||= [];
+  const audit = (candidate, operation) => {
+    next.audit.push({ candidateId: candidate.id, operation, observedAt: poll.observedAt, changeType: candidate.changeType });
+    next.audit = next.audit.slice(-1000); // Local shadow evidence only, not an operational write.
+  };
   const normalized = await Promise.all(poll.observations.map(observation => {
     if (observation.sourceId !== poll.sourceId || observation.observedAt !== poll.observedAt) throw new Error("SOURCE_SCOPE_MISMATCH");
     return normalizeReservationObservation(observation, context);
@@ -38,7 +43,8 @@ export async function applyShadowPoll(state, poll, context) {
     candidate.possibleDuplicateOf = duplicates;
     candidate.correlationConfidence = duplicates.length ? "LOW" : null;
     candidate.missingCount = 0;
-    if (!previous) { next.candidates[candidate.id] = candidate; continue; }
+    candidate.firstObservedAt = previous?.firstObservedAt || previous?.observedAt || candidate.observedAt;
+    if (!previous) { next.candidates[candidate.id] = candidate; audit(candidate, "OBSERVED"); continue; }
     const diff = diffReservation(previous, candidate);
     if (diff.changeType === "UNCHANGED") {
       // Duplicate polls may refresh last-seen, never downgrade source ordering.
@@ -62,6 +68,7 @@ export async function applyShadowPoll(state, poll, context) {
       next.candidates[candidate.id] = { ...candidate, ...diff, previousObservation: snapshot,
         conflict: null };
     }
+    audit(next.candidates[candidate.id], "CHANGED");
   }
   const lastPoll = next.polls[poll.sourceId];
   // Only newer complete, successful snapshots count as disappearance evidence.
@@ -73,6 +80,7 @@ export async function applyShadowPoll(state, poll, context) {
       candidate.missingCount = (candidate.missingCount || 0) + 1;
       candidate.changeType = candidate.missingCount >= 3 ? "POSSIBLE_CANCELLED" : "SOURCE_DISAPPEARED";
       candidate.reviewState = "REQUIRED";
+      audit(candidate, "CHANGED");
     }
     next.polls[poll.sourceId] = poll.observedAt;
   }

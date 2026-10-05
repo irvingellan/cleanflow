@@ -1,5 +1,23 @@
 # CleanFlow — Current State
 
+## Reservation Intake Review Gate V0 — branch-only (2026-10-05)
+
+Extends the Issue #79 shadow bridge with explicit human Property selection,
+confirmation, ignore and saved review reload. `reviewReservationIntake` is a new
+Sandbox/emulator-only callable; no deployment occurred. Promotion atomically creates
+one frozen DEMO Reservation plus source-identity claim and revision history. Existing
+ingestion stays operationally read-only. Later changes/cancellation/disappearance
+only show discrepancies. No Job is created; Production/unknown projects are denied.
+Synthetic browser workflow and isolated Firestore concurrency/authorization tests
+are separate evidence: the browser harness mocks transport, not canonical persistence.
+Sandbox Functions remain billing-gated; unavailable calls fail visibly, never fall
+back to Production. Human visual review and separately authorized real-feed trial
+remain pending. See `RESERVATION_INTAKE_BRIDGE_V0.md` and DEC-046.
+Validation: 104 focused tests; 123 files / 1,325 unit tests; 2 synthetic desktop/mobile
+Playwright; 2 isolated Firestore transaction/security/cleanup tests; 17 Sandbox
+build/Hosting guards; Production/Sandbox builds and diff check passed. Cleanup
+treats Reservations/review ledgers as surviving protection evidence, not deletion targets.
+
 ## Issue #76 — Compact Lifecycle V0 (released 2026-10-04)
 
 Presentation slice from `0b1dff1`: compact five-stage strip on Jobs
