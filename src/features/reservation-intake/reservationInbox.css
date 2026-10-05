@@ -1,0 +1,14 @@
+.reservation-inbox { min-width: 0; }
+.reservation-inbox__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.reservation-inbox__card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
+.reservation-inbox__card h2 { font-size: 1.1rem; }
+.reservation-inbox__card dl, .reservation-inbox__detail dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px 12px; }
+.reservation-inbox__card dt { color: var(--color-text-secondary); }
+.reservation-inbox__card dd { margin: 0; font-weight: 600; }
+.reservation-inbox__change, .reservation-inbox__review { color: var(--color-heading); }
+.reservation-inbox__tools { margin: 20px 0; }
+.reservation-inbox__tools summary { cursor: pointer; min-height: 44px; }
+.reservation-inbox__tools label, .reservation-inbox__filter { display: grid; gap: 8px; margin: 12px 0; }
+.reservation-inbox input, .reservation-inbox select { min-width: 0; max-width: 100%; min-height: 44px; }
+.reservation-inbox__detail { border-top: 1px solid var(--color-border); margin-top: 16px; }
+@media (max-width: 700px) { .reservation-inbox__grid { grid-template-columns: minmax(0, 1fr); } .reservation-inbox__card { padding: 16px; } }

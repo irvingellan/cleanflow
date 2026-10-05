@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "CleanFlow Shadow Reservation Observer (experimental)",
+  "version": "0.1.0",
+  "description": "Passive, local-only sanitized reservation evidence. No business actions.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
+  "options_page": "options.html",
+  "content_scripts": [{
+    "matches": ["https://my.hospitable.com/calendar*", "https://my.hospitable.com/reservations*", "https://app.guesty.com/calendar*", "https://app.guesty.com/reservations*"],
+    "js": ["parser.js", "content.js"], "run_at": "document_idle"
+  }]
+}

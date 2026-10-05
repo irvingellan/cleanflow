@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -41,6 +41,10 @@ import { DevCenter } from "./features/dev-center/DevCenter.jsx";
 import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
 import { SandboxLifecyclePreview } from "./features/jobs/SandboxLifecyclePreview.jsx";
+import { reservationIntakeMessages } from "./features/reservation-intake/reservationIntakeMessages.js";
+const ReservationInboxPreview = import.meta.env.MODE === "sandbox"
+  ? lazy(() => import("./features/reservation-intake/ReservationInboxPreview.jsx").then(module => ({ default: module.ReservationInboxPreview })))
+  : null;
 import { canShowEnvironmentNavigation } from "./environment.js";
 import { CreateCleaningForm } from "./features/jobs/JobForm.jsx";
 import { JobsPage } from "./features/jobs/JobsPage.jsx";
@@ -936,6 +940,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                   onClick={() => setView("sandbox-lifecycle-preview")}>
                   {translate("lifecycle.previewEntry")}
                 </button>}
+                {canPreviewLifecycle && <button className="button button--small" type="button"
+                  onClick={() => setView("sandbox-reservation-intake")}>
+                  {reservationIntakeMessages[language].entry}
+                </button>}
                 <button
                   className="header-sign-out"
                   type="button"
@@ -958,6 +966,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         <PwaUpdatePrompt />
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
           && <SandboxLifecyclePreview onBack={showDashboard} />}
+        {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-reservation-intake"
+          && <Suspense fallback={<p role="status">{reservationIntakeMessages[language].loading}</p>}><ReservationInboxPreview onBack={showDashboard} /></Suspense>}
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
 
         {view === "dashboard" && (

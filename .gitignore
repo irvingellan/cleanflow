@@ -52,3 +52,8 @@ tmp/
 .DS_Store
 Thumbs.db
 logs/
+
+# Local reservation bridge feeds and shadow state (never operational fixtures)
+reservation-observer.local.json
+.reservation-observer/
+artifacts/reservation-intake-*.png

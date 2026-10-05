@@ -96,9 +96,13 @@ test("Production build excludes the synthetic lifecycle preview and local harnes
   const javascript = fs.readdirSync(path.join(output, "assets"))
     .filter(file => file.endsWith(".js"))
     .map(file => fs.readFileSync(path.join(output, "assets", file), "utf8")).join("\n");
-  for (const value of ["lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
+  for (const value of ["lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario",
+    "reservation-inbox", "synthetic-feed", "Read local observer", "Demo Harbor House", "127.0.0.1:4789"]) {
     assert.equal(javascript.includes(value), false, `Synthetic preview implementation leaked: ${value}`);
   }
+  const stylesheet = fs.readdirSync(path.join(output, "assets")).filter(file => file.endsWith(".css"))
+    .map(file => fs.readFileSync(path.join(output, "assets", file), "utf8")).join("\n");
+  assert.equal(stylesheet.includes("reservation-inbox"), false);
 });
 
 const rejectedBindings = [
