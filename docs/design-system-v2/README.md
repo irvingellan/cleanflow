@@ -85,3 +85,12 @@ using artboards 03_component_catalog_light.png, 04_component_catalog_dark.png,
 untouched; no shell or data-access work and no contrast migration bundled in.
 Reuse compatible approved Intake primitives only after they exist in the
 chosen baseline; do not copy unrelated branch WIP automatically.
+
+## Phase B implemented (2026-10-06, branch-only)
+
+The subsequent explicit Phase B request authorized shared presentation primitives
+and a standalone Sandbox-only catalog; it did not authorize any screen migration,
+shell, merge or deployment. **READY FOR DESIGN SYSTEM V2 PHASE C** is readiness,
+not release authorization. See [implemented inventory / API / boundaries](PHASE_B_IMPLEMENTATION.md)
+and [validation evidence](PHASE_B_EVIDENCE.json). Original design sources above
+remain DESIGNED; the implementation inventory is maintained separately.

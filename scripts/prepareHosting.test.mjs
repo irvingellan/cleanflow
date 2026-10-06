@@ -46,9 +46,24 @@ test("Hosting ignores Finder artifacts even if recreated after preparation", () 
 test("same preparation validates Sandbox and production binding, not only SHA", t => {
   const dir = fixture(t);
   const binding = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic catalog");
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...binding }));
   assert.ok(inspectHostingBuild(dir, "expected", [], binding).length);
-  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /environment\/project/);
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /Unexpected|environment\/project/);
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", environment: "sandbox", projectId: "clean-flow-prototipo" }));
   assert.throws(() => inspectHostingBuild(dir, "expected", [], binding), /environment\/project/);
+});
+
+test("catalog HTML/assets are allowed only in a Sandbox-bound manifest", t => {
+  const dir = fixture(t);
+  fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic catalog");
+  fs.writeFileSync(path.join(dir, "assets/designSystemCatalog-demo.js"), "synthetic");
+  const sandbox = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...sandbox }));
+  assert.ok(inspectHostingBuild(dir, "expected", [], sandbox).some(entry => entry.file.includes("designSystemCatalog")));
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /Unexpected/);
+  fs.writeFileSync(path.join(dir, "assets/unexpected-catalog.js"), "unexpected");
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], sandbox), /Unexpected/);
 });

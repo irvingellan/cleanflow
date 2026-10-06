@@ -20,10 +20,13 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
     }
   }
   walk(dist);
-  const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
+  const sandboxCatalog = expectedBinding?.environment === "sandbox";
+  const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js", ...(sandboxCatalog ? ["design-system/catalog/index.html"] : [])];
   const allowed = new Set(required);
   for (const file of files) {
-    if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file)) {
+    // Vite's shared src/index.css is extracted as src-*.css for this multi-entry build.
+    const catalogAsset = sandboxCatalog && (/^assets\/(?:designSystemCatalog|catalogShared)-[A-Za-z0-9_-]+\.(js|css)$/.test(file) || /^assets\/src-[A-Za-z0-9_-]+\.css$/.test(file));
+    if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file) && !catalogAsset) {
       throw new Error(`Unexpected Hosting file: ${file}`);
     }
     if (file.split("/").some(part => part.startsWith(".")) || /(?:\.tmp|\.temp|\.swp|\.swo|~)$/.test(file)) {

@@ -1,5 +1,19 @@
 # CleanFlow — Current State
 
+## Design System V2 — Phase B primitives (2026-10-06, branch-only)
+
+**IMPLEMENTED — READY FOR DESIGN SYSTEM V2 PHASE C**, not merge/deploy approval.
+Shared opt-in presentation primitives and a separate, credential-free
+Sandbox-only `/design-system/catalog/` entry; no existing screen is migrated.
+EN/PT/ES × light/dark catalog, safe modal/disclosures, state/field/action/system
+patterns and mobile sticky surface. No Firebase initialization in the catalog.
+Production excludes all catalog/primitives; equal-ID/config Production artifacts
+are byte-identical to Phase A. Existing screens retain 30 byte-identical visual
+pairs; no deferred contrast change, backend or operational rule change.
+See [implemented API, validation, deviations and Phase C boundary](design-system-v2/PHASE_B_IMPLEMENTATION.md).
+Original Intake/Telemetry/Safari WIP and pre-existing foundation documentation
+changes are preserved separately. No merge, deploy or real-data access.
+
 ## Design System V2 — Phase A tokens (2026-10-06, branch-only)
 
 Isolated foundation from main `8bc70165`; no Intake/Telemetry WIP copied.

@@ -193,6 +193,13 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    // Standalone, network-free visual QA entry. Never imported by the application.
+    build: mode === "sandbox" ? {
+      rolldownOptions: {
+        input: { index: path.resolve("index.html"), designSystemCatalog: path.resolve("design-system/catalog/index.html") },
+        output: { chunkFileNames: "assets/catalogShared-[hash].js" },
+      },
+    } : undefined,
     define: {
       __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.buildId),
     },
