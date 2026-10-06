@@ -1,0 +1,371 @@
+CLEANFLOW DESIGN SYSTEM V2 + MANAGER CORE EXPERIENCE V2
+=======================================================
+Package for product / architecture review
+Date: 2026-10-06
+Contents: 62 files — 11 at the top level, 30 in artboards/, 21 in source/.
+
+Design reference only. No application code is included and none was changed.
+All names, properties, people, addresses, phone numbers and amounts shown in the
+artboards are invented.
+
+Editable canvas (private until its owner shares it from the Share menu):
+https://claude.ai/artifact/BYR61adaFeDm4a3CdxrX8D
+
+
+STATUS LABELS USED IN THIS MANIFEST
+-----------------------------------
+PROPOSED DIRECTION   The design recommended for implementation. NOTHING IN THIS
+                     PACKAGE HAS BEEN APPROVED YET. This is the first review.
+                     Where the brief asks for "approved direction", read this
+                     label: it is the direction put forward for approval.
+EXPLORATION          Alternatives that were drawn and compared. Not for
+                     implementation as drawn.
+SUPPORTING REFERENCE Specification sheets, variants of a proposed screen in
+                     another theme or language, and working documents.
+
+The only previously approved work referenced here is Reservation Intake V1.1
+(separate package, not included). It is the origin of several components.
+
+
+START HERE
+----------
+1. 00_contact_sheet_all_artboards.png   everything on one sheet
+2. DESIGN_SYSTEM_V2.md                  the rules
+3. CODEX_HANDOFF.md                     one section per engineering goal
+
+
+TOP-LEVEL FILES (11)
+--------------------
+00_contact_sheet_all_artboards.png           SUPPORTING REFERENCE
+  All 30 artboard exports grouped by area (Foundations and components,
+  Application shell, Dashboard, Services, Job detail, Properties), each with its
+  file name. 5856 x 6442 px.
+
+CleanFlow_Design_System_V2_All_Artboards.pdf SUPPORTING REFERENCE
+  All 30 artboard exports, one per page, each page sized to its artboard.
+  Page order is by area, not by file number:
+    Foundations   01 02 03 04 20 21
+    Shell         05 06 26 07 27
+    Dashboard     08 22 10 11 09 28
+    Services      12 23 13
+    Job detail    14 24 16 25 15 17 30
+    Properties    18 29 19
+  Pages are the 2x images, so text is not selectable.
+
+DESIGN_SYSTEM_V2.md                          PROPOSED DIRECTION
+  Philosophy, colour roles with measured contrast, state system, typography,
+  spacing, radii, sizes, page templates and breakpoints, application shell,
+  perceived-performance rules, localization findings, accessibility rules.
+
+COMPONENT_CATALOG.md                         PROPOSED DIRECTION
+  Every component: purpose, anatomy, variants, states, responsive behaviour,
+  accessibility notes, and the current class or component it replaces.
+
+TOKENS.json                                  PROPOSED DIRECTION
+  Implementation-neutral semantic tokens: colour roles for light and dark,
+  state definitions, typography, spacing, radii, sizes, layout, breakpoints,
+  elevation, motion; a map from the current CSS variables to V2 roles; the list
+  of values that differ from today's stylesheet.
+
+MIGRATION_PLAN.md                            PROPOSED DIRECTION
+  Ten incremental phases (A Tokens ... J Legacy cleanup), dependencies, what
+  can run in parallel, what must not be bundled, rollback.
+
+CODEX_HANDOFF.md                             PROPOSED DIRECTION
+  Eight engineering goals. For each: source artboards, components required,
+  behaviour that must remain, visual / responsive / theme / localization
+  acceptance, what must not change, and which drawn items are OPTIONAL.
+
+VISUAL_ACCEPTANCE_CHECKLIST.md               PROPOSED DIRECTION
+  Reusable checklist to run after every UI implementation, with the screenshot
+  set to attach.
+
+UX_AUDIT.md                                  SUPPORTING REFERENCE
+  Audit of the current product (shell, navigation, headers, cards, lists,
+  filters, forms, buttons, badges, icons, disclosures, alerts, confirmations,
+  loading / empty / error, tokens, localization), each marked KEEP, IMPROVE,
+  REPLACE or CONSOLIDATE, with counts taken from the stylesheet. Created during
+  the mission in addition to the documents the brief listed.
+
+SCREEN_INVENTORY.md                          SUPPORTING REFERENCE
+  Every current screen classified as Already aligned, Minor migration, Major
+  migration or Internal/dev only, with the artboards that cover it.
+
+MANIFEST.txt                                 SUPPORTING REFERENCE
+  This file.
+
+
+ARTBOARDS (artboards/, 30 PNG files, rendered at 2x)
+----------------------------------------------------
+"Size" is the artboard in CSS px; the image is twice that in each direction.
+Device class: Desktop = 1440 px wide app screen. Mobile = 390 px wide phone
+screen (taller than one screen where the page scrolls). Sheet = specification
+sheet, not a product screen. Board = several phone screens on one artboard.
+Language: EN English, PT Portuguese.
+
+GLOBAL — TOKENS, FOUNDATIONS, COMPONENTS
+
+01_tokens_light_and_dark.png
+  Theme: Light and Dark side by side   Device: Sheet   Lang: EN   Size: 1680 x 1345
+  Status: PROPOSED DIRECTION
+  Purpose: colour roles (surfaces, text, lines, brand), the six state tones and
+  the environment indicators, with hex values and contrast notes per theme.
+
+02_foundations_type_spacing_layout_light.png
+  Theme: Light   Device: Sheet   Lang: EN   Size: 1440 x 2055
+  Status: PROPOSED DIRECTION
+  Purpose: type scale, spacing scale, radii, fixed sizes, the four page
+  templates and the breakpoint table. Theme-independent content.
+
+03_component_catalog_light.png
+  Theme: Light   Device: Sheet   Lang: EN   Size: 1440 x 1922
+  Status: PROPOSED DIRECTION
+  Purpose: component sheet — state label, status pill, inline flag, tag, count,
+  environment indicator, actions, fields, search/filter toolbar, needs-attention
+  card, job / property / client / cleaner rows, lifecycle rail, before/after
+  comparison, consequence disclosure, confirmation (standard and destructive),
+  technical details, mobile sticky action.
+
+04_component_catalog_dark.png
+  Theme: Dark   Device: Sheet   Lang: EN   Size: 1440 x 1922
+  Status: SUPPORTING REFERENCE (dark parity of 03)
+  Purpose: the same component sheet in the dark theme.
+
+SYSTEM STATES
+
+20_system_states_light.png
+  Theme: Light   Device: Sheet   Lang: EN   Size: 1440 x 1589
+  Status: PROPOSED DIRECTION
+  Purpose: first load, background refresh, stale data, slow network, section
+  error, page error, empty (first-run and filtered), operation in progress and
+  its result.
+
+21_system_states_dark.png
+  Theme: Dark   Device: Sheet   Lang: EN   Size: 1440 x 1589
+  Status: SUPPORTING REFERENCE (dark parity of 20)
+  Purpose: the same states in the dark theme.
+
+APPLICATION SHELL
+
+05_shell_exploration_light.png
+  Theme: Light   Device: Sheet (half-scale desktop mock-ups)
+  Lang: EN, with one PT sample   Size: 1440 x 1418
+  Status: EXPLORATION
+  Purpose: two shells compared — A single-row top bar, B sidebar with groups —
+  with a comparison table and the recommendation (B).
+
+06_desktop_shell_light.png
+  Theme: Light   Device: Desktop   Lang: EN   Size: 1440 x 900
+  Status: PROPOSED DIRECTION
+  Purpose: the recommended desktop shell: sidebar, environment indicator, page
+  header, workspace region, account menu open.
+
+26_desktop_shell_dark.png
+  Theme: Dark   Device: Desktop   Lang: EN   Size: 1440 x 900
+  Status: SUPPORTING REFERENCE (dark parity of 06)
+  Purpose: the same shell in the dark theme.
+
+07_mobile_shell_light.png
+  Theme: Light   Device: Board of three Mobile screens (390 x 844 each)
+  Lang: EN   Size: 1330 x 942
+  Status: PROPOSED DIRECTION
+  Purpose: mobile shell — top-level screen with four tabs, the More sheet, and
+  a detail screen with back link and sticky action.
+
+27_mobile_shell_dark.png
+  Theme: Dark   Device: Board of three Mobile screens   Lang: EN   Size: 1330 x 942
+  Status: SUPPORTING REFERENCE (dark parity of 07)
+  Purpose: the same mobile shell in the dark theme.
+
+DASHBOARD
+
+08_dashboard_desktop_light_en.png
+  Theme: Light   Device: Desktop   Lang: EN   Size: 1440 x 1065
+  Status: PROPOSED DIRECTION
+  Purpose: manager dashboard in its attention state: counts, needs-attention
+  queue, next 48 hours, this week, recently completed.
+
+22_dashboard_desktop_light_pt.png
+  Theme: Light   Device: Desktop   Lang: PT   Size: 1440 x 1065
+  Status: SUPPORTING REFERENCE (Portuguese validation of 08)
+  Purpose: the same dashboard in Portuguese.
+
+10_dashboard_desktop_dark_pt.png
+  Theme: Dark   Device: Desktop   Lang: PT   Size: 1440 x 1065
+  Status: SUPPORTING REFERENCE (dark and Portuguese validation of 08)
+  Purpose: the dark representative of the dashboard.
+
+11_dashboard_states_light.png
+  Theme: Light   Device: Sheet (three dashboard columns)   Lang: EN   Size: 1440 x 950
+  Status: PROPOSED DIRECTION
+  Purpose: the other three dashboard states — normal (all clear), loading
+  (first load), empty (no services yet).
+
+09_dashboard_mobile_light_en.png
+  Theme: Light   Device: Mobile (scrolling)   Lang: EN   Size: 390 x 1345
+  Status: PROPOSED DIRECTION
+  Purpose: manager dashboard on a phone, attention state.
+
+28_dashboard_mobile_dark_en.png
+  Theme: Dark   Device: Mobile (scrolling)   Lang: EN   Size: 390 x 1345
+  Status: SUPPORTING REFERENCE (dark parity of 09)
+  Purpose: the same phone dashboard in the dark theme.
+
+SERVICES
+
+12_services_desktop_light_en.png
+  Theme: Light   Device: Desktop   Lang: EN   Size: 1440 x 1023
+  Status: PROPOSED DIRECTION
+  Purpose: services list: toolbar, quick filters, dense rows grouped by day,
+  cleaner, lifecycle, load-more footer.
+
+23_services_desktop_dark_en.png
+  Theme: Dark   Device: Desktop   Lang: EN   Size: 1440 x 1023
+  Status: SUPPORTING REFERENCE (dark parity of 12)
+  Purpose: the same list in the dark theme.
+
+13_services_mobile_light_en_pt.png
+  Theme: Light   Device: Board of two Mobile screens (390 x 844 each)
+  Lang: EN (left), PT (right)   Size: 900 x 942
+  Status: PROPOSED DIRECTION
+  Purpose: services list on a phone (EN) and the Filters sheet open (PT).
+
+JOB DETAIL
+
+14_job_detail_desktop_light_en.png
+  Theme: Light   Device: Desktop   Lang: EN   Size: 1440 x 917
+  Status: PROPOSED DIRECTION
+  Purpose: standard assigned service: lifecycle, responsible cleaner, checklist
+  progress, seven sections with summaries, decision rail with one next step.
+
+24_job_detail_desktop_dark_en.png
+  Theme: Dark   Device: Desktop   Lang: EN   Size: 1440 x 917
+  Status: SUPPORTING REFERENCE (dark parity of 14)
+  Purpose: the same service in the dark theme.
+
+16_job_attention_desktop_light_en.png
+  Theme: Light   Device: Desktop   Lang: EN   Size: 1440 x 1336
+  Status: PROPOSED DIRECTION
+  Purpose: service requiring attention: open issue and checklist ready for
+  review, Issues section open, consequence disclosure for Complete service.
+
+25_job_attention_desktop_dark_en.png
+  Theme: Dark   Device: Desktop   Lang: EN   Size: 1440 x 1336
+  Status: SUPPORTING REFERENCE (dark parity of 16)
+  Purpose: the same service in the dark theme.
+
+15_job_detail_mobile_light_en.png
+  Theme: Light   Device: Mobile (scrolling)   Lang: EN   Size: 390 x 1086
+  Status: PROPOSED DIRECTION
+  Purpose: standard assigned service on a phone, with sticky next step.
+
+17_job_attention_mobile_dark_pt.png
+  Theme: Dark   Device: Mobile (scrolling)   Lang: PT   Size: 390 x 1288
+  Status: PROPOSED DIRECTION
+  Purpose: service requiring attention on a phone: cleaner link out of date.
+
+30_job_attention_mobile_light_pt.png
+  Theme: Light   Device: Mobile (scrolling)   Lang: PT   Size: 390 x 1288
+  Status: SUPPORTING REFERENCE (light parity of 17)
+  Purpose: the same phone screen in the light theme.
+
+PROPERTIES
+
+18_properties_desktop_light_en.png
+  Theme: Light   Device: Desktop   Lang: EN   Size: 1440 x 900
+  Status: PROPOSED DIRECTION
+  Purpose: property list: name and address, client, next service, tags, quick
+  action. The "Next service" column is OPTIONAL (not in the product today).
+
+29_properties_desktop_dark_en.png
+  Theme: Dark   Device: Desktop   Lang: EN   Size: 1440 x 900
+  Status: SUPPORTING REFERENCE (dark parity of 18)
+  Purpose: the same list in the dark theme.
+
+19_properties_mobile_light_pt.png
+  Theme: Light   Device: Mobile (scrolling)   Lang: PT   Size: 390 x 1013
+  Status: PROPOSED DIRECTION
+  Purpose: property list on a phone.
+
+
+COVERAGE
+--------
+Theme x language (product screens)
+  Light + English     08 09 12 14 15 16 18, left phone of 13
+  Light + Portuguese  22 19 30, right phone of 13
+  Dark  + English     23 24 25 28 29
+  Dark  + Portuguese  10 17
+
+Device class
+  Desktop   06 26 08 22 10 12 23 14 24 16 25 18 29
+  Mobile    09 28 15 17 30 19, and boards 07 27 13
+  Sheets    01 02 03 04 05 11 20 21
+
+Status
+  PROPOSED DIRECTION    01 02 03 06 07 08 09 11 12 13 14 15 16 17 18 19 20
+  EXPLORATION           05
+  SUPPORTING REFERENCE  04 10 21 22 23 24 25 26 27 28 29 30
+
+
+EDITABLE SOURCE (source/, 21 files) — SUPPORTING REFERENCE
+----------------------------------------------------------
+These are the exact files behind the canvas. The canvas link above is the
+faithful editable original; these files are the same content for archiving.
+They open on the canvas, not as stand-alone web pages (they depend on the
+canvas runtime). No SVG or Figma export exists for them.
+
+canvas.json
+  Canvas index: artboard names, titles, positions and sizes, and one note.
+ds.css
+  Shared stylesheet used by every artboard: tokens for both themes, type
+  classes, icons and every component. Design reference, not production CSS.
+
+One file per canvas artboard. Each screen takes a "theme" value (light or
+dark); the 30 PNG exports are these 19 artboards rendered in one or both themes.
+
+  File                          Exports   Default theme   Language
+  Main.dc.html                  01        light + dark    EN
+  Foundations.dc.html           02        light           EN
+  Components.dc.html            03 04     light           EN
+  SystemStates.dc.html          20 21     light           EN
+  ShellExploration.dc.html      05        light           EN
+  ShellDesktop.dc.html          06 26     light           EN
+  ShellMobile.dc.html           07 27     light           EN
+  DashboardDesktop.dc.html      08        light           EN
+  DashboardDesktopPT.dc.html    10 22     dark            PT
+  DashboardStates.dc.html       11        light           EN
+  DashboardMobile.dc.html       09 28     light           EN
+  ServicesDesktop.dc.html       12 23     light           EN
+  ServicesMobile.dc.html        13        light           EN + PT
+  JobDetailDesktop.dc.html      14 24     light           EN
+  JobDetailMobile.dc.html       15        light           EN
+  JobAttentionDesktop.dc.html   16 25     light           EN
+  JobAttentionMobilePT.dc.html  17 30     dark            PT
+  PropertiesDesktop.dc.html     18 29     light           EN
+  PropertiesMobilePT.dc.html    19        light           PT
+
+
+DRAWN BUT NOT IN THE PRODUCT TODAY (details in CODEX_HANDOFF.md)
+----------------------------------------------------------------
+- Sidebar shell, account menu and mobile tab bar.
+- Properties "Next service" column and its cleaner line (needs a new read).
+- "No client linked" segment filter on Properties.
+- Per-row "New service" quick action on Properties.
+- Demo / Unknown tags shown by exception; Real carries no tag.
+- "Complete service" consequence statements (wording to be verified against
+  the implementation).
+- Intake as a navigation destination (today a Sandbox-only preview entry).
+
+
+KNOWN LIMITS OF THIS PACKAGE
+----------------------------
+- Nothing here has been approved; see STATUS LABELS.
+- The PNGs were rendered locally from the source files. The canvas itself was
+  not opened to check that it renders the same.
+- Portuguese wording was written by the designer and has not been reviewed by
+  a native-speaking operator. Spanish was not drawn.
+- Not drawn: Cleaners and Clients lists (row patterns are on 03), Payments,
+  forms, detail screens other than Job detail, cleaner-facing and public pages.
+  They are classified in SCREEN_INVENTORY.md.
+- Not every artboard has a dark and a Portuguese export. On the canvas every
+  screen can be switched between light and dark.

@@ -1,5 +1,22 @@
 # CleanFlow — Current State
 
+## Design System V2 — Phase A tokens (2026-10-06, branch-only)
+
+Isolated foundation from main `8bc70165`; no Intake/Telemetry WIP copied.
+Canonical design sources and a compact visual index live in
+[docs/design-system-v2](design-system-v2/README.md).
+Forty semantic color roles in both themes plus typography, geometry, layout,
+breakpoint, elevation and motion variables are opt-in. Fourteen light/nineteen
+dark legacy aliases use exact value equality only; all other current values stay.
+No changed-from-current value was applied to existing screens. ThemeProvider,
+component rules, copy, routing, behavior and environment gates are unchanged.
+Validation: eight integrity tests; 114 files / 1,245 unit tests; 25 existing
+presentation Playwright tests; 30 byte-identical before/after screenshot pairs
+for Dashboard/Services/Job Detail, light EN/dark PT at 360/390/768/1280/1440px;
+Production/Sandbox builds and diff check. Synthetic Chromium only, no device or
+Production acceptance claimed. No merge, deployment or real-data access.
+Next explicit goal: Phase B primitives/catalog, not shell/screen migration.
+
 ## Issue #76 — Compact Lifecycle V0 (released 2026-10-04)
 
 Presentation slice from `0b1dff1`: compact five-stage strip on Jobs

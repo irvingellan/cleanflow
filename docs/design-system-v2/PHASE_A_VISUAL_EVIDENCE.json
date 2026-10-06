@@ -1,0 +1,188 @@
+{
+  "baseline": "8bc70165c9bdf8a48ba54aa5c3ff5b3583c6a526",
+  "browser": "Chromium",
+  "syntheticOnly": true,
+  "externalRequests": 0,
+  "pairs": [
+    {
+      "before": "dashboard-1280-dark-before.png",
+      "after": "dashboard-1280-dark-after.png",
+      "sha256": "162a1b229fc46b5b61301e45153e41201d8d59b718ca2a104c61b8d665a1314e",
+      "identical": true
+    },
+    {
+      "before": "dashboard-1280-light-before.png",
+      "after": "dashboard-1280-light-after.png",
+      "sha256": "21e7ce7ca3dc1d9108a43bfcde018e0574a2ac05da3cb5c65f9764bff60ef1d6",
+      "identical": true
+    },
+    {
+      "before": "dashboard-1440-dark-before.png",
+      "after": "dashboard-1440-dark-after.png",
+      "sha256": "8959c5b3ba54c216ad3e6a96e609beb2af70d202931c67d346e2c1cf49b387ce",
+      "identical": true
+    },
+    {
+      "before": "dashboard-1440-light-before.png",
+      "after": "dashboard-1440-light-after.png",
+      "sha256": "daf9a3f3917568ad18bc718a9d1165944f1b5b4a29ee0d15154091a57b0bdb9e",
+      "identical": true
+    },
+    {
+      "before": "dashboard-360-dark-before.png",
+      "after": "dashboard-360-dark-after.png",
+      "sha256": "a1ddb6651c7d829c8fca377352a0657a231a919b728b58c147b1c597076f7c8c",
+      "identical": true
+    },
+    {
+      "before": "dashboard-360-light-before.png",
+      "after": "dashboard-360-light-after.png",
+      "sha256": "a881c11ec1fb619a21218dcdf8f9b7d3f6785c8d2e3a8629e4940e429e2082da",
+      "identical": true
+    },
+    {
+      "before": "dashboard-390-dark-before.png",
+      "after": "dashboard-390-dark-after.png",
+      "sha256": "08707af30a3abcd934b074ef02bb8527bae3e7a6fcdd6455a7d882f56c2b1c85",
+      "identical": true
+    },
+    {
+      "before": "dashboard-390-light-before.png",
+      "after": "dashboard-390-light-after.png",
+      "sha256": "f609605c20f9c714caecfb121c30c1a25125c385fc17505266404be838445115",
+      "identical": true
+    },
+    {
+      "before": "dashboard-768-dark-before.png",
+      "after": "dashboard-768-dark-after.png",
+      "sha256": "5e0061b99a0fbd411902de65002476a66a8e344aae9c9ff3662917d3107889c7",
+      "identical": true
+    },
+    {
+      "before": "dashboard-768-light-before.png",
+      "after": "dashboard-768-light-after.png",
+      "sha256": "a3303ccbf3c7e471fcf5418ee54b47dd6b50116bbd541865ff280d541529f932",
+      "identical": true
+    },
+    {
+      "before": "job-detail-1280-dark-before.png",
+      "after": "job-detail-1280-dark-after.png",
+      "sha256": "0d8019c1510aac39a0c809f605f86e5e399a1064fab1194f5922320f4949078a",
+      "identical": true
+    },
+    {
+      "before": "job-detail-1280-light-before.png",
+      "after": "job-detail-1280-light-after.png",
+      "sha256": "817a0da381bf1438f98538f2d57828de5bef5732a33a5de73217901af650e18f",
+      "identical": true
+    },
+    {
+      "before": "job-detail-1440-dark-before.png",
+      "after": "job-detail-1440-dark-after.png",
+      "sha256": "9cba118a714a6ed90e7ce9533d100090e0f0fffa9388c37e58ce5eabac04c62d",
+      "identical": true
+    },
+    {
+      "before": "job-detail-1440-light-before.png",
+      "after": "job-detail-1440-light-after.png",
+      "sha256": "25c25a2470632be3f331853d84033ab81a729f651509dca1e2da27b6da9dbf4b",
+      "identical": true
+    },
+    {
+      "before": "job-detail-360-dark-before.png",
+      "after": "job-detail-360-dark-after.png",
+      "sha256": "7c15d5a28a31b781c36efceea311b02f2e234bee621566f52ba95b7fff33e42a",
+      "identical": true
+    },
+    {
+      "before": "job-detail-360-light-before.png",
+      "after": "job-detail-360-light-after.png",
+      "sha256": "15b824edbfc826b283ffe9938dfe52e7543dc321db9aa51d6fc5c59f048d19c6",
+      "identical": true
+    },
+    {
+      "before": "job-detail-390-dark-before.png",
+      "after": "job-detail-390-dark-after.png",
+      "sha256": "7d21c200bd6bf15c6e641b3818af112e451f2483025088ace68940b182d0b7af",
+      "identical": true
+    },
+    {
+      "before": "job-detail-390-light-before.png",
+      "after": "job-detail-390-light-after.png",
+      "sha256": "acd436c08367963a15157167379d51f2c007e1b8988d598cfc18a9cde94b35b1",
+      "identical": true
+    },
+    {
+      "before": "job-detail-768-dark-before.png",
+      "after": "job-detail-768-dark-after.png",
+      "sha256": "d6839d1451d9390e778cb604dfd28be02d93385db8ecafd2b6689e5ba0333f52",
+      "identical": true
+    },
+    {
+      "before": "job-detail-768-light-before.png",
+      "after": "job-detail-768-light-after.png",
+      "sha256": "c5ba50f74835f73370fe614c8c876f2b710a73ae9cb630e25582f93a3ae5b2d7",
+      "identical": true
+    },
+    {
+      "before": "jobs-1280-dark-before.png",
+      "after": "jobs-1280-dark-after.png",
+      "sha256": "51b2188f83497b2d7beb6a1311223393f789be351b7cc2ae5ae0a1429cd2f5dc",
+      "identical": true
+    },
+    {
+      "before": "jobs-1280-light-before.png",
+      "after": "jobs-1280-light-after.png",
+      "sha256": "55aa30412b50347706be6a4735c53a81b4e2e1dc91645cf02e6c92b9078e8897",
+      "identical": true
+    },
+    {
+      "before": "jobs-1440-dark-before.png",
+      "after": "jobs-1440-dark-after.png",
+      "sha256": "a2413e65049bfdc9180e438d1f22970937936b23e2349d9cefee39a63f3dfee2",
+      "identical": true
+    },
+    {
+      "before": "jobs-1440-light-before.png",
+      "after": "jobs-1440-light-after.png",
+      "sha256": "e491c42661600774b7fcc246f9d0d518847a36dd623cefe40f37c91338b49efa",
+      "identical": true
+    },
+    {
+      "before": "jobs-360-dark-before.png",
+      "after": "jobs-360-dark-after.png",
+      "sha256": "b8d28953f6f5cafc1250a0ce444e8b1437c0b6f3992d4660301cc97269e47de0",
+      "identical": true
+    },
+    {
+      "before": "jobs-360-light-before.png",
+      "after": "jobs-360-light-after.png",
+      "sha256": "e51435a45f2835e54a315a526f4ff4871be2909035346d0ec720ca304d97de3e",
+      "identical": true
+    },
+    {
+      "before": "jobs-390-dark-before.png",
+      "after": "jobs-390-dark-after.png",
+      "sha256": "300469c590b8471dcba7331ef4c1cb0b7d305f04b79a13d2a4798a27d692594e",
+      "identical": true
+    },
+    {
+      "before": "jobs-390-light-before.png",
+      "after": "jobs-390-light-after.png",
+      "sha256": "7704abcb807b026ccfd9ad56e780840b7398d7c8e1740d8f09052fb0ffd33208",
+      "identical": true
+    },
+    {
+      "before": "jobs-768-dark-before.png",
+      "after": "jobs-768-dark-after.png",
+      "sha256": "46eb0402772462aab599c082b02d0fcba30934eb574197a5f5f5d08e9dd33eaa",
+      "identical": true
+    },
+    {
+      "before": "jobs-768-light-before.png",
+      "after": "jobs-768-light-after.png",
+      "sha256": "9d1c51d9b6031495aa5c70f8b854327b0407d66142f7694d273b190df0eecda3",
+      "identical": true
+    }
+  ]
+}
