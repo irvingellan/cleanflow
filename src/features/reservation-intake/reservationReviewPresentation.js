@@ -8,6 +8,26 @@ export function intakeDate(value, language = "en") {
   }).format(date) + (dateOnly ? "" : " · UTC");
 }
 
+export function intakeShortDate(value, language = "en") {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return intakeDate(value, language);
+  const date = new Date(`${value}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return "—";
+  return new Intl.DateTimeFormat({ en: "en-US", pt: "pt-BR", es: "es-ES" }[language] || "en-US", { day: "numeric", month: "short", timeZone: "UTC" }).format(date);
+}
+
+export function intakeDayChange(diff) {
+  if (!diff || ![diff.before, diff.after].every(value => /^\d{4}-\d{2}-\d{2}$/.test(value || ""))) return null;
+  if ([diff.before, diff.after].some(value => intakeShortDate(value) === "—")) return null;
+  const days = (Date.parse(`${diff.after}T00:00:00Z`) - Date.parse(`${diff.before}T00:00:00Z`)) / 86400000;
+  return Number.isInteger(days) ? days : null;
+}
+
+export function intakeSource(row, generic) {
+  if (row.sourceProvider === "GENERIC_ICAL" && row.sourceType === "ICAL") return generic;
+  const provider = { GUESTY: "Guesty", HOSPITABLE: "Hospitable" }[row.sourceProvider] || row.sourceProvider || "—";
+  return `${provider} · ${row.sourceType === "ICAL" ? "iCal" : row.sourceType || "—"}`;
+}
+
 // Unread server decisions are not guessed from the shadow change classification.
 export function matchesIntakeTriage(row, decision, filter) {
   if (!filter) return true;

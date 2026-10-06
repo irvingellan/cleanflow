@@ -1,5 +1,27 @@
 # CleanFlow — Current State
 
+## Reservation Intake Design V1.1 — branch-only visual acceptance (2026-10-05)
+
+Approved V1.1 artboards are implemented in the existing Intake route/current shell:
+compact queue, center observation comparison and 360px decision rail; mobile Inbox
+→ Review → explicit confirmation sheet. Light/dark use existing semantic tokens plus
+scoped needs-input roles. EN/PT/ES catalogs include the approved Portuguese wording.
+Sandbox indicator stays visible, including above mobile confirmation. Technical/local
+observer controls remain collapsed. No global navigation redesign or backend changes.
+Approval is now two presentation steps; only the final explicit confirmation sends
+PROMOTE with the existing server contract. Property selection still requires an
+explicit save/server resolution; unknown saved decisions are still consulted explicitly.
+No inferred nights/times or iCal/API claims for a different source transport.
+Production still excludes the Intake chunk and fixtures. No push, merge or deploy.
+Validation: 112 focused; 124 files / 1,333 unit tests; 6 desktop/mobile EN/PT light/dark
+Playwright flows; 2 isolated Firestore persistence/security/cleanup tests; 17 build
+guards; Production/Sandbox builds and diff check. Emulator proof remains Reservations
+0→1→1 and Jobs/Assignments/Offers/Payouts 0→0→0. Screenshots are synthetic local
+artifacts; browser transport is mocked, not live Sandbox callable proof. Human visual
+acceptance/Safari retest remains next. Sandbox Functions remain billing-gated.
+
+See `RESERVATION_INTAKE_BRIDGE_V0.md` for design adaptations and remaining limits.
+
 ## Reservation Intake Review Gate V0.1 — operator acceptance, branch-only (2026-10-05)
 
 The Inbox now uses a separate desktop review panel and stacked mobile detail,

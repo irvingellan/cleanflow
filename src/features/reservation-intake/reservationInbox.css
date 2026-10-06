@@ -1,29 +1,130 @@
-.reservation-inbox { min-width: 0; }
-.reservation-inbox__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-.reservation-inbox__workspace--selected { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 20px; align-items: start; }
-.reservation-inbox__workspace--selected .reservation-inbox__grid { grid-template-columns: minmax(0, 1fr); }
-.reservation-inbox__workspace--selected .reservation-inbox__detail { align-self: start; }
-.reservation-inbox__card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
-.reservation-inbox__card h2 { font-size: 1.1rem; }
-.reservation-inbox__card dl, .reservation-inbox__detail dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px 12px; }
-.reservation-inbox__card dt { color: var(--color-text-secondary); }
-.reservation-inbox__card dd { margin: 0; font-weight: 600; }
-.reservation-inbox__change, .reservation-inbox__review { color: var(--color-heading); }
-.reservation-inbox__tools { margin: 20px 0; }
-.reservation-inbox__tools summary { cursor: pointer; min-height: 44px; }
-.reservation-inbox__tools label, .reservation-inbox__filter { display: grid; gap: 8px; margin: 12px 0; }
-.reservation-inbox input, .reservation-inbox select { min-width: 0; max-width: 100%; min-height: 44px; }
-.reservation-inbox__detail { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
-.reservation-inbox__detail dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; }
-.reservation-inbox__detail dd { margin: 0; }
-.reservation-state { display: inline-block; border: 1px solid var(--color-border); border-radius: 8px; padding: 6px 10px; font-weight: 700; }
-.reservation-state--PROMOTED { border-left: 5px solid #237247; }
-.reservation-state--IGNORED { border-left: 5px solid #59636c; }
-.reservation-state--NEEDS_REVIEW { border-left: 5px solid #996000; }
-.reservation-confirmation { border: 1px solid var(--color-border); padding: 12px; border-radius: 8px; margin: 12px 0; }
-.reservation-inbox__review-panel { padding: 12px 0; border-bottom: 1px solid var(--color-border); }
-.reservation-inbox__review-panel label { display: grid; gap: 8px; margin: 12px 0; }
-.reservation-inbox__review-panel .button { min-height: 44px; margin: 4px 8px 4px 0; white-space: normal; }
-.reservation-inbox__review-panel label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; min-height: 44px; }
-.reservation-inbox__review-panel input[type="checkbox"] { flex: 0 0 22px; width: 22px; min-height: 22px; height: 22px; }
-@media (max-width: 700px) { .reservation-inbox__workspace--selected { display: flex; flex-direction: column; } .reservation-inbox__workspace--selected .reservation-inbox__detail { position: static; max-height: none; overflow-y: visible; order: -1; width: 100%; box-sizing: border-box; } .reservation-inbox__grid { grid-template-columns: minmax(0, 1fr); width: 100%; } .reservation-inbox__card { padding: 16px; } }
+.foundation:has(.reservation-inbox) { width: min(100%, 1600px); }
+.reservation-inbox { --intake-input-bg: #fdf3ea; --intake-input-text: #a44e16; --intake-change-border: #f0d49e; min-width: 0; width: 100%; font-size: 16px; line-height: 1.5; color: var(--color-text); overflow-wrap: anywhere; }
+:root[data-theme="dark"] .reservation-inbox { --intake-input-bg: #3d2e22; --intake-input-text: #eea268; --intake-change-border: #71612c; }
+.reservation-inbox *, .reservation-inbox *::before, .reservation-inbox *::after { box-sizing: border-box; }
+.reservation-inbox .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.reservation-inbox button, .reservation-inbox input, .reservation-inbox select { font: inherit; }
+.reservation-inbox button { cursor: pointer; }
+.reservation-inbox button:disabled { cursor: not-allowed; }
+.reservation-inbox button:focus-visible, .reservation-inbox input:focus-visible, .reservation-inbox summary:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.reservation-inbox h1, .reservation-inbox h2, .reservation-inbox h3, .reservation-inbox h4, .reservation-inbox p { margin: 0; }
+.intake-environment { display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px dashed var(--color-selected-border); border-radius: 10px; background: var(--color-selected-bg); width: fit-content; padding: 7px 13px; font-weight: 750; font-size: 12px; letter-spacing: .12em; margin-left: auto; margin-bottom: 16px; }
+.intake-state svg, .intake-environment svg { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.intake-header { display: flex; justify-content: space-between; gap: 20px; margin: 24px 0; }
+.intake-header h1 { font-size: 34px; line-height: 1.2; margin: 6px 0 8px; letter-spacing: -.035em; }
+.intake-header p { color: var(--color-text-secondary); font-size: 17px; }
+.intake-header > .button { align-self: start; }
+.intake-overline { font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .09em; color: var(--color-text-secondary); }
+.intake-workbench { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; align-items: start; }
+.intake-queue, .intake-workspace { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; min-width: 0; }
+.intake-queue { padding: 18px; display: flex; flex-direction: column; min-height: 660px; gap: 14px; }
+.intake-queue__heading { display: flex; align-items: center; justify-content: space-between; color: var(--color-text-secondary); font-size: 13px; }
+.intake-filter-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.intake-filter-pills button { border: 1px solid var(--color-border); border-radius: 24px; padding: 9px 13px; min-height: 44px; font-size: 13px; font-weight: 650; background: var(--color-surface); color: var(--color-text-secondary); }
+.intake-filter-pills button[aria-pressed="true"] { background: var(--color-selected-bg); border-color: var(--color-selected-border); color: var(--color-text); }
+.intake-triage, .intake-local-tools { color: var(--color-text-secondary); font-size: 13px; }
+.intake-triage summary, .intake-local-tools summary, .intake-diagnostics summary { min-height: 44px; padding: 10px 0; cursor: pointer; font-weight: 600; }
+.intake-triage label, .intake-local-tools label { display: grid; gap: 6px; margin: 10px 0; }
+.intake-triage select, .intake-local-tools input { min-width: 0; width: 100%; min-height: 44px; }
+.intake-queue__items { display: grid; gap: 8px; }
+.intake-queue-row { border: 1px solid var(--color-border); border-radius: 14px; overflow: hidden; }
+.intake-queue-row--selected { border-color: var(--color-selected-border); background: var(--color-selected-bg); }
+.intake-queue-row > button { display: block; width: 100%; padding: 14px; text-align: left; border: 0; color: var(--color-text); background: transparent; line-height: 1.4; }
+.intake-queue-row__meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: start; justify-content: space-between; }
+.intake-queue-row__meta > span { font-size: 12px; color: var(--color-text-secondary); }
+.intake-state { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; line-height: 1.4; letter-spacing: .045em; text-transform: uppercase; color: var(--color-brand-text); }
+.intake-state--DATES_CHANGED, .intake-state--STATUS_CHANGED { color: var(--color-warning-text); }
+.intake-state--PROPERTY_REQUIRED { color: var(--intake-input-text); }
+.intake-state--PROMOTED { color: var(--color-success); }
+.intake-state--POSSIBLE_CANCELLED, .intake-state--SOURCE_DISAPPEARED, .intake-state--CONFLICT { color: var(--color-error-text); }
+.intake-queue-row h3 { font-size: 16px; line-height: 1.35; margin: 7px 0 4px; }
+.intake-queue-row p { color: var(--color-text-secondary); font-size: 14px; margin-top: 5px; }
+.intake-queue__note { margin-top: auto !important; border-top: 1px solid var(--color-border); padding-top: 16px; color: var(--color-text-secondary); font-size: 14px; }
+.intake-workspace { overflow: clip; box-shadow: 0 3px 14px var(--shadow-card-subtle); }
+.intake-workspace__empty { min-height: 660px; padding: 32px; display: grid; align-content: center; gap: 14px; text-align: center; }
+.intake-workspace__empty h2 { font-size: 24px; }
+.intake-review { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 660px; }
+.intake-review__main { min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
+.intake-candidate-heading { font-size: 30px; line-height: 1.2; letter-spacing: -.035em; margin-top: -10px !important; }
+.intake-source { color: var(--color-text-secondary); font-weight: 600; }
+.intake-mobile-back { display: none; }
+.intake-observations { display: grid; gap: 14px; }
+.intake-delta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--color-text-secondary); }
+.intake-delta strong { color: var(--color-text); font-size: 18px; }
+.intake-delta > span { background: var(--color-status-warning-bg); border: 1px solid var(--intake-change-border); color: var(--color-warning-text); border-radius: 20px; padding: 1px 9px; font-weight: 700; font-size: 13px; }
+.intake-compare { display: grid; grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr); gap: 10px; align-items: center; }
+.intake-compare > div { border: 1px solid var(--color-border); border-radius: 14px; padding: 16px; background: var(--color-surface-subtle); }
+.intake-compare h4 { font-size: 14px; margin-bottom: 12px; color: var(--color-text-secondary); }
+.intake-compare > .intake-incoming { background: var(--color-status-warning-bg); border-color: var(--intake-change-border); }
+.intake-incoming h4 { color: var(--color-warning-text); }
+.intake-arrow { color: var(--color-text-secondary); font-size: 20px; text-align: center; }
+.reservation-inbox dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; margin: 0; }
+.reservation-inbox dt { color: var(--color-text-secondary); font-size: 14px; }
+.reservation-inbox dd { margin: 0; text-align: right; font-weight: 650; }
+.intake-observations > p:last-child, .intake-future { color: var(--color-text-secondary); font-size: 14px; }
+.intake-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.intake-facts > section { border: 1px solid var(--color-border); border-radius: 14px; padding: 16px; min-width: 0; }
+.intake-facts h3 { margin-bottom: 8px; }
+.intake-facts strong { display: block; }
+.intake-facts p { margin-top: 6px; color: var(--color-text-secondary); font-size: 14px; }
+.intake-diagnostics { margin-top: auto; border-top: 1px solid var(--color-border); padding-top: 8px; color: var(--color-text-secondary); font-size: 14px; }
+.intake-diagnostics pre, .intake-diagnostics dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+.intake-decision, .intake-confirmation { padding: 28px 24px; background: var(--color-surface-subtle); border-left: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.intake-consequence { display: grid; grid-template-columns: 25px minmax(0, 1fr); gap: 10px; }
+.intake-consequence strong { display: block; font-size: 17px; line-height: 1.35; }
+.intake-consequence p { color: var(--color-text-secondary); margin-top: 3px; font-size: 14px; }
+.intake-consequence small { display: block; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; margin-bottom: 3px; }
+.intake-check, .intake-minus { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; font-weight: 700; }
+.intake-check { background: var(--color-brand); color: var(--color-on-brand); }
+.intake-minus { border: 1px solid var(--color-border-strong); color: var(--color-text-secondary); }
+.intake-decision__actions, .intake-confirmation__actions { margin-top: auto; display: grid; gap: 10px; }
+.reservation-inbox .button { min-height: 46px; font-size: 14px; line-height: 1.3; padding: 12px 14px; white-space: normal; }
+.intake-decision .button--primary:disabled { opacity: 1; background: transparent; color: var(--color-text-secondary); border: 1px dashed var(--color-border-strong); }
+.intake-read { color: var(--color-text-secondary); background: none; border: 0; min-height: 44px; padding: 6px; text-decoration: underline; font-size: 13px !important; }
+.reservation-state { font-size: 13px; font-weight: 650; color: var(--color-brand-text); }
+.intake-property-picker { background: var(--intake-input-bg); border: 1px solid var(--color-border); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+.intake-property-picker h3 { color: var(--intake-input-text); }
+.intake-property-picker p { font-size: 14px; }
+.intake-search input { width: 100%; min-height: 48px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-input-border); background: var(--color-surface); color: var(--color-text); }
+.intake-property-picker fieldset { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.intake-property-option { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 10px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-surface); font-weight: 600; font-size: 14px; }
+.intake-property-option input { flex: 0 0 18px; width: 18px; height: 18px; accent-color: var(--color-brand); }
+.intake-risk, .intake-change { padding: 14px; border: 1px solid var(--color-error-border); border-radius: 12px; background: var(--color-error-bg); color: var(--color-error-text); }
+.intake-confirmation { position: absolute; right: 0; top: 0; bottom: 0; width: 360px; border-color: var(--color-selected-border); background: var(--color-selected-bg); z-index: 2; overflow-y: auto; }
+.intake-confirmation h2 { font-size: 24px; line-height: 1.25; }
+.intake-confirmation hr { width: 100%; border: 0; border-top: 1px solid var(--color-border-strong); }
+.intake-confirmation__identity { font-weight: 650; }
+.intake-confirmation__context { display: grid; gap: 4px; color: var(--color-text-secondary); font-size: 13px; }
+.intake-confirmation__actions p { text-align: center; color: var(--color-text-secondary); font-size: 13px; }
+.intake-review--confirming .intake-review__main { position: relative; }
+.intake-review--confirming .intake-review__main::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--color-surface) 45%, transparent); }
+@media (min-width: 1600px) { .intake-review { grid-template-columns: minmax(0, 1fr) 360px; } .intake-confirmation { width: 360px; } }
+@media (min-width: 701px) and (max-width: 1150px) { .intake-workbench { grid-template-columns: 260px minmax(0, 1fr); gap: 14px; } .intake-review { grid-template-columns: minmax(0, 1fr); } .intake-decision { border-left: 0; border-top: 1px solid var(--color-border); } .intake-confirmation { width: 100%; } }
+@media (max-width: 700px) {
+  .app-shell:has(.reservation-inbox) { padding: 0; display: block; }
+  .reservation-inbox { padding: 0 20px 24px; }
+  .intake-environment { position: sticky; top: 0; z-index: 50; width: calc(100% + 40px); margin: 0 -20px 22px; padding: 9px 12px; text-align: center; border-radius: 0; border: 0; border-bottom: 1px dashed var(--color-selected-border); font-size: 12px; }
+  .intake-header { margin: 24px 0; } .intake-header h1 { font-size: 30px; } .intake-header p { font-size: 16px; } .intake-header > .button { display: none; }
+  .intake-workbench { display: block; }
+  .intake-queue { padding: 0; border: 0; background: transparent; min-height: 0; gap: 18px; }
+  .intake-queue__heading { display: none; } .intake-filter-pills button { font-size: 14px; }
+  .intake-queue-row { background: var(--color-surface); } .intake-queue-row > button { padding: 17px; }
+  .intake-queue-row h3 { font-size: 18px; } .intake-queue-row__meta > span { font-size: 13px; }
+  .intake-workspace { display: none; border: 0; box-shadow: none; background: transparent; overflow: visible; }
+  .reservation-inbox--selected .intake-workspace { display: block; }
+  .reservation-inbox--selected .intake-header, .reservation-inbox--selected .intake-queue { display: none; }
+  .intake-review { display: block; min-height: 0; }
+  .intake-review__main { padding: 0; gap: 22px; }
+  .intake-mobile-back { display: block; background: none; border: 0; padding: 0; min-height: 44px; color: var(--color-text-secondary); text-align: left; font-weight: 650; }
+  .intake-candidate-heading { font-size: 30px; } .intake-source { font-size: 17px; }
+  .intake-compare { grid-template-columns: minmax(0, 1fr); gap: 10px; } .intake-arrow { transform: rotate(90deg); }
+  .intake-compare h4 { font-size: 16px; } .intake-compare dd { font-size: 18px; }
+  .intake-facts { grid-template-columns: minmax(0, 1fr); } .intake-facts strong { font-size: 18px; }
+  .intake-decision { margin: 22px -20px -24px; padding: 24px 20px max(24px, env(safe-area-inset-bottom)); border: 1px solid var(--color-border); border-radius: 24px 24px 0 0; background: var(--color-surface); }
+  .intake-decision .button, .intake-confirmation .button { min-height: 48px; font-size: 15px; }
+  .intake-confirmation { position: fixed; z-index: 40; top: auto; bottom: 0; right: 0; left: 0; width: 100%; max-height: calc(100dvh - 45px); border-radius: 24px 24px 0 0; padding: 24px 20px max(20px, env(safe-area-inset-bottom)); background: var(--color-surface); gap: 18px; }
+  .intake-confirmation::before { content: ""; position: fixed; inset: 40px 0 0; background: rgb(17 31 24 / 40%); z-index: -1; pointer-events: none; }
+  .intake-confirmation { isolation: isolate; } .intake-confirmation::after { content: ""; position: absolute; inset: 0; background: var(--color-surface); border-radius: inherit; z-index: -1; }
+  .intake-confirmation h2 { font-size: 26px; } .intake-confirmation__actions { margin-top: 8px; }
+  .intake-property-picker fieldset { grid-template-columns: minmax(0, 1fr); }
+}

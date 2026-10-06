@@ -5,6 +5,9 @@ import { ReservationInboxPreview } from "../../src/features/reservation-intake/R
 import "../../src/index.css";
 import { buildSyntheticReservationState } from "../../src/features/reservation-intake/syntheticReservationFixtures.js";
 if (!import.meta.env.DEV || !["127.0.0.1", "localhost"].includes(location.hostname)) throw new Error("LOCAL_SYNTHETIC_ONLY");
+const presentation = new URLSearchParams(location.search);
+localStorage.setItem("cleanflow-language", ["en", "pt", "es"].includes(presentation.get("lang")) ? presentation.get("lang") : "en");
+document.documentElement.dataset.theme = presentation.get("theme") === "dark" ? "dark" : "light";
 // Presentation-only synthetic adapter. Real durability/authorization is tested in the Firestore emulator.
 async function review(row, operation, extra) {
   const key = `synthetic-review:${row.id}`;

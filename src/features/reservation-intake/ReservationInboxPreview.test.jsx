@@ -5,6 +5,7 @@ import { ReservationInboxPreview } from "./ReservationInboxPreview.jsx";
 import { readLocalInbox, sanitizeInboxSnapshot } from "./reservationInboxService.js";
 import { buildSyntheticReservationState } from "./syntheticReservationFixtures.js";
 import { reservationIntakeMessages } from "./reservationIntakeMessages.js";
+import { designMessages } from "./reservationDesignMessages.js";
 afterEach(() => localStorage.removeItem("cleanflow-language"));
 describe("read-only Reservation Inbox", () => {
   it.each(["en", "pt", "es"])("%s displays source/date change/mapping/review without operational actions", async language => {
@@ -12,11 +13,11 @@ describe("read-only Reservation Inbox", () => {
     const t = reservationIntakeMessages[language], onBack = vi.fn();
     const { container } = render(<TranslationProvider><ReservationInboxPreview onBack={onBack} /></TranslationProvider>);
     await screen.findByText(t.DATES_CHANGED, { selector: "strong" });
-    expect(screen.getByText(t.POSSIBLE_CANCELLED, { selector: "strong" })).toBeVisible(); expect(screen.getAllByText(t.unknownMapping).length).toBeGreaterThan(0);
+    expect(screen.getByText(t.POSSIBLE_CANCELLED, { selector: "strong" })).toBeVisible(); expect(screen.getAllByText(designMessages[language].required).length).toBeGreaterThan(0);
     expect(container.querySelectorAll("article")).toHaveLength(5);
     const changed = [...container.querySelectorAll("article")].find(card => card.textContent.includes(t.DATES_CHANGED));
-    expect(changed).toHaveTextContent(language === "en" ? "Oct 12, 2026 → Oct 13, 2026" : language === "pt" ? "12 de out. de 2026 → 13 de out. de 2026" : "12 oct 2026 → 13 oct 2026");
-    fireEvent.click(within(changed).getByRole("button", { name: t.details }));
+    expect(changed).toHaveTextContent(language === "en" ? "Oct 12 → Oct 13" : language === "pt" ? "12 de out. → 13 de out." : "12 oct → 13 oct");
+    fireEvent.click(within(changed).getByRole("button"));
     expect(screen.getByText(t.previous)).toBeVisible(); expect(screen.getByText("Demo Guest Alpha")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Create Job|Assign|Invoice|Send message|Criar serviço|Atribuir/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: language === "en" ? "Back" : language === "pt" ? "Voltar" : "Volver" }));

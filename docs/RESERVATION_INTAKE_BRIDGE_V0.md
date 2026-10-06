@@ -98,6 +98,55 @@ Read endpoints: `/health`, `/candidates`, `/candidates/:id`, `/observations` (bo
 
 ## Sandbox UI / Production exclusion
 
+### Approved Design V1.1 implementation
+
+Visual source: `CleanFlow_Reservation_Intake_Claude_Design_V1_1.zip`, DESIGN_NOTES
+and MANIFEST; primary artboards 10–14, theme references 06/07/09 and Property Required
+08. The package is a visual specification, not executable code or new authorization.
+The current application shell/navigation is retained. Intake alone expands to 1600px,
+with a compact queue, central review and 360px consequence rail. On tablet the rail
+stacks; mobile switches Inbox → Review → Confirmation rather than shrinking desktop.
+State symbols/text complement colors. Light/dark inherit current semantic tokens;
+needs-input roles are scoped to Intake. Portuguese follows the approved terms, with
+complete English/Spanish equivalents. Short date-only displays never invent time or
+stay-night meaning; exact dates/observation metadata remain in collapsed diagnostics.
+
+Approval opens a presentation-only confirmation rail/sheet. It repeats the selected
+Property, source, dates/guest evidence, Creates: 1 Reservation, Does NOT create: Cleaning
+Job, and future-human-review consequence. Back/Escape dismisses without promotion;
+focus is trapped between confirmation actions and restored on Back, background Intake
+controls are inert, and pending operations prevent duplicate clicks. Only the final
+confirmation invokes existing PROMOTE with confirmed=true and expectedRevision.
+Candidate changes discard pending UI confirmation/late responses. Property search uses
+only supplied active existing records; selection alone does not save, and explicit
+RESOLVE must succeed before approval. Missing/inactive/ambiguous/conflicting evidence
+continues to fail closed server-side. Existing ignore consequence confirmation remains.
+
+Meaningful adaptations/deviations from the static artboards:
+- New global navigation/bottom tabs are intentionally not implemented.
+- Read saved review and Save Property selection remain explicit safety controls, not
+  silently inferred from a configured alias. A change-Property entry is retained.
+- Fixtures contain five candidates, not three; names, guests and counts reflect those
+  synthetic records, never invented artboard property records in persistence.
+- Initial desktop shows a selection prompt; mobile returns to the queue through Intake.
+- Additional triage and local observer/import controls live in secondary disclosures.
+- Confirmation includes source/guest context omitted from some artboards. Instant
+  observations retain explicit UTC context; date-only values use short localized dates.
+- Mobile review is taller than the static artboard because explicit saved-state,
+  Property resolution and source/guest context remain visible safety controls.
+- Screenshots use the real Intake components in a local provider-blocked harness, not
+  an authenticated full-shell screenshot. Integration still uses the existing shell.
+
+Visual proof: `artifacts/reservation-design-{en|pt}-{light|dark}-{desktop|mobile}-*.png`.
+Six browser flows cover queue/changed review, explicit Property resolution, two-step
+approval/back/focus, promotion/reload, later date/status/disappearance discrepancy,
+unresolved Property and durable ignore. Two isolated Firestore tests independently
+prove concurrent/repeated promotion and counts 0→1→1/zero Jobs, with the frozen
+Reservation unchanged after discrepancies. Browser counts are mocked sessionStorage,
+not evidence of live server authorization. No feeds/credentials/Production data used.
+Next: human visual acceptance in local Safari at 100% zoom, including mobile light/dark;
+live Sandbox callable integration remains a separately authorized billing-gated step.
+
 ### Review Gate V0.1 operator acceptance
 
 Selecting an Inbox row opens a separate detail panel, never an expanded grid cell
