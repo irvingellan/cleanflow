@@ -26,6 +26,7 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
   const [jobs, setJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [retryGeneration, setRetryGeneration] = useState(0);
   const [filters, setFilters] = useState(createJobListFilters);
   const [cleaners, setCleaners] = useState([]);
   const [pageCursors, setPageCursors] = useState(initialPageCursors);
@@ -80,7 +81,7 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
     return () => {
       isCurrent = false;
     };
-  }, [view, filters.status, filters.datePreset, includeArchived]);
+  }, [view, filters.status, filters.datePreset, includeArchived, retryGeneration]);
 
   async function loadMore() {
     setIsLoadingMore(true);
@@ -125,5 +126,6 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
     loadMore,
     replaceJob,
     removeJob,
+    retry: () => setRetryGeneration(current => current + 1),
   };
 }

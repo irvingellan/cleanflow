@@ -41,9 +41,9 @@ export function IconButton({ label, icon, ...rest }) { return <Button {...rest} 
 
 export function Panel({ title, actions, children, className }) { return <section className={classes("cfv2-panel", className)}>{(title || actions) && <header className="cfv2-panel-header">{title && <h2>{title}</h2>}{actions}</header>}<div className="cfv2-panel-body">{children}</div></section>; }
 export function Card({ children, selected = false, subtle = false }) { return <div className={classes("cfv2-card", selected && "cfv2-selected", subtle && "cfv2-subtle")}>{children}</div>; }
-export function Row({ children, onClick, selected = false, dense = false, action }) {
+export function Row({ children, onClick, selected = false, dense = false, action, elementRef, ...attributes }) {
   const rowClass = classes("cfv2-row", selected && "cfv2-selected", dense && "cfv2-row-dense");
-  return <div className="cfv2-row-shell">{onClick ? <button type="button" className={rowClass} onClick={onClick} aria-pressed={selected}>{children}</button> : <div className={rowClass}>{children}</div>}{action}</div>;
+  return <div className="cfv2-row-shell">{onClick ? <button {...attributes} ref={elementRef} type="button" className={rowClass} onClick={onClick} aria-pressed={selected}>{children}</button> : <div {...attributes} ref={elementRef} className={rowClass}>{children}</div>}{action}</div>;
 }
 export function Banner({ tone = "info", title, children, action, role }) { return <div className={`cfv2-banner cfv2-tone-${tone}`} role={role}><Icon name={toneIcons[tone]} /><div><strong>{title}</strong>{children && <div className="cfv2-secondary">{children}</div>}</div>{action}</div>; }
 
@@ -104,6 +104,7 @@ export function ErrorState({ title, children, retryLabel, onRetry, busy = false 
 export function StickyMobileAction({ children, label, keyboardOpen = false }) { return <div className="cfv2-sticky-space"><div className="cfv2-sticky" hidden={keyboardOpen}>{label && <span className="cfv2-sticky-label">{label}</span>}{children}</div></div>; }
 
 // Consumes already-computed serviceLifecyclePresentation output, never derives history.
-export function LifecycleRail({ presentation, translate, stateLabels, compact = false }) {
-  return <div className={classes("cfv2-lifecycle", compact && "cfv2-lifecycle-compact")}><div className="cfv2-lifecycle-stages" role="list">{presentation.lifecycle.stages.map(stage => <div key={stage.status} role="listitem" className={`cfv2-lifecycle-stage cfv2-lifecycle-${stage.state}`}><span aria-hidden="true" /><span className={compact ? "cfv2-sr-only" : undefined}>{translate(stage.labelKey)} · {stateLabels[stage.state]}</span></div>)}</div>{compact && <strong>{translate(presentation.lifecycle.statusKey)}</strong>}</div>;
+export function LifecycleRail({ presentation, translate, stateLabels, compact = false, markers = false }) {
+  const symbols = { completed: "✓", current: "●", future: "·", skipped: "–", "unknown-past": "?" };
+  return <div className={classes("cfv2-lifecycle", compact && "cfv2-lifecycle-compact", markers && "cfv2-lifecycle-markers")}><div className="cfv2-lifecycle-stages" role="list">{presentation.lifecycle.stages.map(stage => <div key={stage.status} role="listitem" aria-current={stage.state === "current" ? "step" : undefined} className={`cfv2-lifecycle-stage cfv2-lifecycle-${stage.state}`}><span aria-hidden="true">{markers ? symbols[stage.state] : null}</span><span className={compact ? "cfv2-sr-only" : undefined}>{translate(stage.labelKey)} · {stateLabels[stage.state]}</span></div>)}</div>{compact && <strong>{translate(presentation.lifecycle.statusKey)}</strong>}</div>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -44,6 +44,9 @@ import { SandboxLifecyclePreview } from "./features/jobs/SandboxLifecyclePreview
 import { canShowEnvironmentNavigation } from "./environment.js";
 import { CreateCleaningForm } from "./features/jobs/JobForm.jsx";
 import { JobsPage } from "./features/jobs/JobsPage.jsx";
+// Build-time isolation: this screen chunk is absent from Production builds.
+const ServicesV2Pilot = import.meta.env.MODE === "sandbox"
+  ? lazy(() => import("./features/jobs/ServicesV2Pilot.jsx")) : null;
 import {
   createJobListFilters,
   dashboardJobListFilters,
@@ -425,6 +428,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
   const canPreviewLifecycle = import.meta.env.MODE === "sandbox"
     && canShowEnvironmentNavigation(authUser, "sandbox");
+  const ServicesPage = canPreviewLifecycle ? ServicesV2Pilot : JobsPage;
 
   useEffect(() => {
     if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
@@ -1098,7 +1102,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "job-list" && (
-          <JobsPage
+          <Suspense fallback={<StateCard message={translate("jobs.loading")} status="status" />}><ServicesPage
             jobs={jobs}
             isLoading={isLoadingJobs}
             hasError={hasJobError}
@@ -1119,7 +1123,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             canManageExcluded={canManageExcludedRecords}
             showExcluded={showExcludedRecords}
             onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-          />
+            onRetry={jobWorklist.retry}
+          /></Suspense>
         )}
 
         {view === "cleaner-list" && (

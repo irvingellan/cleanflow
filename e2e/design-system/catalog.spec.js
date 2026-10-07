@@ -2,11 +2,12 @@ import { expect, test } from "@playwright/test";
 import { catalogMessages } from "../../src/design-system/catalog/messages.js";
 import fs from "node:fs";
 const widths = [360, 390, 768, 1280, 1440];
+const catalogOrigin = `http://127.0.0.1:${process.env.CLEANFLOW_CATALOG_TEST_PORT || "4190"}`;
 for (const theme of ["light", "dark"]) for (const language of ["en", "pt", "es"]) for (const width of widths) {
   test(`${theme} ${language} ${width}: network-free catalog, contrast, targets, containment`, async ({ page }) => {
     const external = []; const errors = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.route("**/*", route => { const url = new URL(route.request().url()); if (url.origin !== "http://127.0.0.1:4190" || /api\/|firestore|identitytoolkit|storage|firebase/.test(url.pathname)) { external.push(url.origin + url.pathname); return route.abort(); } return route.continue(); });
+    await page.route("**/*", route => { const url = new URL(route.request().url()); if (url.origin !== catalogOrigin || /api\/|firestore|identitytoolkit|storage|firebase/.test(url.pathname)) { external.push(url.origin + url.pathname); return route.abort(); } return route.continue(); });
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript(({ theme, language }) => { localStorage.setItem("cleanflow-manager-theme", theme); localStorage.setItem("cleanflow-language", language); }, { theme, language });

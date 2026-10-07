@@ -126,7 +126,7 @@ test("Production build excludes the synthetic lifecycle preview and local harnes
     .map(file => fs.readFileSync(path.join(output, "assets", file), "utf8")).join("\n");
   assert.equal(fs.existsSync(path.join(output, "design-system")), false);
   assert.equal(fs.readdirSync(path.join(output, "assets")).some(file => /Catalog|catalogShared|^src-/.test(file)), false);
-  for (const value of ["design-system-v2-catalog", "cfv2-catalog", "cfv2-panel", "lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
+  for (const value of ["services-v2", "Services presentation preview", "Results previous", "synthetic-services-v2", "design-system-v2-catalog", "cfv2-catalog", "cfv2-panel", "lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
     assert.equal(javascript.includes(value), false, `Synthetic preview implementation leaked: ${value}`);
   }
 });

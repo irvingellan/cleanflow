@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+artifacts/services-v2/
 
 # Production builds
 dist/

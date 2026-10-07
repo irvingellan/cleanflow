@@ -60,6 +60,8 @@ test("catalog HTML/assets are allowed only in a Sandbox-bound manifest", t => {
   fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
   fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic catalog");
   fs.writeFileSync(path.join(dir, "assets/designSystemCatalog-demo.js"), "synthetic");
+  fs.writeFileSync(path.join(dir, "assets/ServicesV2Pilot-demo.css"), "synthetic");
+  fs.writeFileSync(path.join(dir, "assets/primitives-demo.css"), "synthetic");
   const sandbox = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...sandbox }));
   assert.ok(inspectHostingBuild(dir, "expected", [], sandbox).some(entry => entry.file.includes("designSystemCatalog")));

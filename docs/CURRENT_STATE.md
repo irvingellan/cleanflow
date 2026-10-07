@@ -1,5 +1,18 @@
 # CleanFlow — Current State
 
+## Design System V2 — Phase D1 Services pilot (2026-10-06, branch-only)
+
+**IMPLEMENTED LOCALLY — operator acceptance pending.** Independent isolated
+branch from exact Phase B `e4a3cfc9862e75b8680c237804fe703a3e45fd6b`, not Shell C.
+Sandbox/developer-only CURRENT/V2 comparison shares existing JobsPage filtering,
+ordering, callbacks and scroll anchors; dense desktop/date groups and compact
+mobile/filter sheet. Evidence-aware lifecycle, provenance and current Job Detail
+are preserved. No new reads, backend/authorization or business-rule change.
+Production excludes the experimental implementation and retains CURRENT.
+Not operator-accepted, Sandbox-released, Production-released, merged or deployed.
+See [Services implementation, validation and deviations](design-system-v2/SERVICES_V2_IMPLEMENTATION.md).
+Original Intake/Telemetry/Safari and other design worktrees remain separate.
+
 ## Design System V2 — Phase B primitives (2026-10-06, branch-only)
 
 **IMPLEMENTED — READY FOR DESIGN SYSTEM V2 PHASE C**, not merge/deploy approval.
