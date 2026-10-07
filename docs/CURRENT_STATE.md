@@ -2,7 +2,7 @@
 
 ## Design System V2 — Phase D1 Services pilot (2026-10-06, branch-only)
 
-**OPERATOR ACCEPTED LOCALLY — isolated preview published; authenticated QA pending.** Independent isolated
+**OPERATOR ACCEPTED LOCALLY — authenticated isolated preview QA passed.** Independent isolated
 branch from exact Phase B `e4a3cfc9862e75b8680c237804fe703a3e45fd6b`, not Shell C.
 Sandbox/developer-only CURRENT/V2 comparison shares existing JobsPage filtering,
 ordering, callbacks and scroll anchors; dense desktop/date groups and compact
@@ -13,9 +13,13 @@ Approved application `e37111bbc23aa714c60ff69df0b6f9912661cca5` published only
 to Sandbox preview `services-v2-d1` (version `38592baeadb4fa7b`), expires
 2026-10-14. All 22 preview hashes match. Sandbox live Shell V2 version
 `7f122070f32a3e25` / build `5e1a1c1` and Production build `5c2e524` remain
-unchanged. Chrome showed Sandbox sign-in checking, then automation timed out;
-authenticated acceptance is not claimed. No operational mutation, live-site
-replacement, backend deployment or merge. Production release review remains NO-GO.
+unchanged (all 22 live Shell files rechecked). After user sign-in, authorized
+Chrome desktop/mobile read-only QA passed: search/quick/advanced filters,
+CURRENT/V2 context, current Job Detail/New form, exact Back anchor, EN/PT and
+light/dark, 44px targets and no overflow. Ten loaded DEMO records do not expose
+pagination; multi-page proof remains local only. No operational mutation,
+live-site replacement, backend deployment or merge. Ready for Production release
+review, not release approval; V2 remains Sandbox-only. No physical iPhone claim.
 See [Services implementation, validation and deviations](design-system-v2/SERVICES_V2_IMPLEMENTATION.md).
 Original Intake/Telemetry/Safari and other design worktrees remain separate.
 

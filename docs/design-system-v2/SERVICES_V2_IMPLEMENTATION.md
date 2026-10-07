@@ -31,8 +31,8 @@ shape, provider, authorization or automatic-read behavior changes.
 - IMPLEMENTED LOCALLY: yes.
 - OPERATOR ACCEPTED LOCALLY: yes, human review confirmed.
 - SANDBOX PREVIEW RELEASED: yes; isolated channel only, not Sandbox live.
-- AUTHENTICATED SANDBOX PREVIEW VALIDATED: pending; browser/session validation
-  could not be completed. No authenticated acceptance is claimed.
+- AUTHENTICATED SANDBOX PREVIEW VALIDATED: yes; authorized Sandbox manager,
+  read-only Chrome desktop/mobile QA completed after user sign-in.
 - PRODUCTION RELEASED: no; current Services remains the only Production variant.
 
 ## Architecture and preserved behavior
@@ -130,7 +130,7 @@ CLEANFLOW_CATALOG_TEST_PORT=4197 npx playwright test --config playwright.design-
 ```
 
 Recommendation: READY FOR SERVICES OPERATOR PILOT locally, not release approval.
-Authenticated Services D1 Sandbox acceptance remains pending.
+Authenticated Services D1 Sandbox preview QA is complete; Production release is not approved.
 Phase A/B, Phase C shell and original Intake/Telemetry/Safari worktrees are untouched.
 
 ## Isolated preview publication (2026-10-07)
@@ -153,13 +153,38 @@ Sandbox live remains Shell V2: version `7f122070f32a3e25`, release
 Production build remains `5c2e52492331577a7cbdc4aa41a8f1a6b9771b45`.
 These live markers were verified after preview publication.
 
-The actual preview displayed `SANDBOX · TEST DATA` and `Checking sign-in…`;
-subsequent Chrome automation commands timed out. Desktop/mobile, themes/locales,
-filters, continuation, restoration, CURRENT Job Detail and New service form
-remain locally tested, not authenticated-preview validated. A login handoff is
-required; no credentials/tokens were extracted or copied between origins.
+Initial browser observation timed out during sign-in. After the user authenticated,
+the existing Chrome preview session was usable; no credentials/tokens were
+extracted or copied between origins. The in-app browser observation still timed
+out, so authenticated evidence is Chrome, not Safari or a physical iPhone.
+
+Authenticated QA used 10 existing Sandbox DEMO Jobs through the real provider:
+search Coast = 1; Today = 0; Needs assignment = 3 (including OFFERED);
+In progress = 3; Completed = 1; advanced cleaner filter = 7. Refresh correctly
+labels previous rows before settled results. CURRENT and V2 show the same
+Completed record and filter context. TEST provenance and unverified Offer history
+remain truthful. No fake provider data was injected.
+
+Current Job Detail opened and Back returned to Services; existing New service
+form opened and was left without submitting. At 390x844 the measured completed
+row anchor was 670.328125px before opening and after Back. Ten records fit in the
+loaded page; continuation is not available for this dataset, so pagination beyond
+one page remains covered by prior local tests, not an authenticated multi-page run.
+
+Desktop 1440px and mobile 390x844: no page horizontal overflow. Visible Services
+controls are at least 44px; desktop rows 72px. EN/PT, light/dark and the mobile
+advanced filter sheet passed. Screenshots (ignored local artifacts):
+`authenticated-desktop-light-en.jpg`, `authenticated-mobile-dark-pt.jpg`,
+`authenticated-mobile-light-pt.jpg`, `authenticated-mobile-list-pt.jpg`,
+`authenticated-mobile-filters-pt.jpg` in `artifacts/services-v2/`.
+
+No create/edit/assignment/offer/checklist/payment/notification action was executed.
+Final preview and Sandbox live verification rechecked all 22 prepared file hashes
+for each; Production version marker remained unchanged. This is presentation QA,
+not physical-device, performance, operational mutation or Production acceptance.
 
 Rollback removes only the preview:
 `firebase hosting:channel:delete services-v2-d1 --project clean-flow-sandbox-irving`.
-Do not clone the preview to live. Production release review is NO-GO until the
-authenticated read-only acceptance checklist is completed.
+Do not clone the preview to live. READY FOR SERVICES PRODUCTION RELEASE REVIEW,
+not permission to merge/deploy. Production still excludes the Sandbox-only V2
+variant; any release scope/gate change needs a separate explicit decision.
