@@ -67,3 +67,17 @@ test("catalog HTML/assets are allowed only in a Sandbox-bound manifest", t => {
   fs.writeFileSync(path.join(dir, "assets/unexpected-catalog.js"), "unexpected");
   assert.throws(() => inspectHostingBuild(dir, "expected", [], sandbox), /Unexpected/);
 });
+
+test("C1 shell/primitives CSS chunks are allowed only in Sandbox; unknown CSS remains denied", t => {
+  const dir = fixture(t);
+  const binding = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic catalog");
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...binding }));
+  for (const name of ["SandboxManagerShell", "primitives"]) fs.writeFileSync(path.join(dir, `assets/${name}-demo.css`), "synthetic");
+  const manifest = inspectHostingBuild(dir, "expected", [], binding);
+  assert.ok(manifest.some(entry => entry.file.includes("SandboxManagerShell")));
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /Unexpected/);
+  fs.writeFileSync(path.join(dir, "assets/arbitrary-demo.css"), "unexpected");
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], binding), /Unexpected/);
+});

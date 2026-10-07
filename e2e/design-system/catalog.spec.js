@@ -6,7 +6,7 @@ for (const theme of ["light", "dark"]) for (const language of ["en", "pt", "es"]
   test(`${theme} ${language} ${width}: network-free catalog, contrast, targets, containment`, async ({ page }) => {
     const external = []; const errors = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.route("**/*", route => { const url = new URL(route.request().url()); if (url.origin !== "http://127.0.0.1:4190" || /api\/|firestore|identitytoolkit|storage|firebase/.test(url.pathname)) { external.push(url.origin + url.pathname); return route.abort(); } return route.continue(); });
+    await page.route("**/*", route => { const url = new URL(route.request().url()); if (url.origin !== new URL(test.info().project.use.baseURL).origin || /api\/|firestore|identitytoolkit|storage|firebase/.test(url.pathname)) { external.push(url.origin + url.pathname); return route.abort(); } return route.continue(); });
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript(({ theme, language }) => { localStorage.setItem("cleanflow-manager-theme", theme); localStorage.setItem("cleanflow-language", language); }, { theme, language });

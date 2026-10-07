@@ -1,5 +1,16 @@
 # CleanFlow — Current State
 
+## Design System V2 — Phase C1 shell (2026-10-06, isolated branch-only)
+
+**IMPLEMENTED IN SANDBOX PILOT — operator acceptance pending. NOT PRODUCTION RELEASED.**
+Isolated from exact Phase B `e4a3cfc9862e75b8680c237804fe703a3e45fd6b`.
+Explicit developer Sandbox comparison (`?shell=v2` / `?shell=current`), grouped
+desktop sidebar, medium icon rail, mobile four-tab navigation and More/account
+surface. Existing content, handlers, utilities and authorization remain intact.
+Production excludes V2 shell code/styles and retains CURRENT navigation.
+No Intake WIP copied, no backend changes, no merge/deploy/real-data access.
+See [C1 implementation and operator instructions](design-system-v2/PHASE_C1_IMPLEMENTATION.md).
+
 ## Design System V2 — Phase B primitives (2026-10-06, branch-only)
 
 **IMPLEMENTED — READY FOR DESIGN SYSTEM V2 PHASE C**, not merge/deploy approval.

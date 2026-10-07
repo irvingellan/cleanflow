@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -87,6 +87,11 @@ const content = {
   productName: "CleanFlow",
   unnamedProperty: "Unnamed property",
 };
+
+// Build-time exclusion: Production cannot import or select the pilot shell.
+const SandboxManagerShell = import.meta.env.MODE === "sandbox"
+  ? lazy(() => import("./components/v2/SandboxManagerShell.jsx").then(module => ({ default: module.SandboxManagerShell })))
+  : null;
 
 function publicOfferTokenFromPathname(pathname = window.location.pathname) {
   const pathSegments = pathname.split("/").filter(Boolean);
@@ -899,30 +904,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("checklist-run");
   }
 
-  return (
-    <main className="app-shell">
-      <section
-        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}${view === "weekly-close-preview" ? " foundation--weekly-close" : ""}`}
-        aria-labelledby="page-title"
-      >
-        <header className="foundation__header">
-          <div className="brand-block">
-            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
-            <h1 id="page-title">{content.productName}</h1>
-            <MainNavigation
-              activeSection={activeSection}
-              translate={translate}
-              onShowDashboard={showDashboard}
-              onShowProperties={showProperties}
-              onShowJobs={showJobs}
-              onShowCleaners={showCleaners}
-              onShowPayouts={showPayouts}
-              onShowClients={showClients}
-              canAccessDevCenter={devCenterController.access.authorized}
-              onShowDevCenter={showDevCenter}
-            />
-          </div>
-          <div className="header-actions">
+  const foundationClass = `foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}${view === "weekly-close-preview" ? " foundation--weekly-close" : ""}`;
+  const utilities = (<>
             <div className="manager-account">
               <ManagerIdentity user={authUser} />
               <div className="manager-account__controls">
@@ -952,8 +935,47 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 {translate("auth.signOutError")}
               </p>
             )}
+  </>);
+  const legacyHeader = (
+        <header className="foundation__header">
+          <div className="brand-block">
+            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
+            <h1 id="page-title">{content.productName}</h1>
+            <MainNavigation
+              activeSection={activeSection}
+              translate={translate}
+              onShowDashboard={showDashboard}
+              onShowProperties={showProperties}
+              onShowJobs={showJobs}
+              onShowCleaners={showCleaners}
+              onShowPayouts={showPayouts}
+              onShowClients={showClients}
+              canAccessDevCenter={devCenterController.access.authorized}
+              onShowDevCenter={showDevCenter}
+            />
+          </div>
+          <div className="header-actions">
+            {utilities}
           </div>
         </header>
+  );
+  const destinations = [
+    { key: "dashboard", labelKey: "navigation.dashboard", icon: "dashboard", group: "daily", onClick: showDashboard },
+    { key: "jobs", labelKey: "navigation.jobs", icon: "jobs", group: "daily", onClick: showJobs },
+    { key: "properties", labelKey: "navigation.properties", icon: "home", group: "directory", onClick: showProperties },
+    { key: "cleaners", labelKey: "navigation.cleaners", icon: "people", group: "directory", onClick: showCleaners },
+    { key: "clients", labelKey: "navigation.clients", icon: "clients", group: "directory", onClick: showClients },
+    { key: "payouts", labelKey: "navigation.payouts", icon: "wallet", group: "money", onClick: showPayouts },
+    ...(devCenterController.access.authorized ? [
+      { key: "dev-center", labelKey: "navigation.devCenter", icon: "tools", group: "internal", onClick: showDevCenter },
+      { key: "diagnostics", labelKey: "loadDiagnostics.title", icon: "clock", group: "internal", href: "/diagnostics/load-times" },
+    ] : []),
+    ...(canPreviewLifecycle ? [{ key: "lifecycle-preview", labelKey: "lifecycle.previewEntry", icon: "flask", group: "internal", onClick: () => setView("sandbox-lifecycle-preview") }] : []),
+  ];
+  const Shell = import.meta.env.MODE === "sandbox" ? SandboxManagerShell : CurrentManagerShell;
+  return (
+    <Suspense fallback={<StateCard message={translate("auth.loading")} status="status" />}><Shell {...{ foundationClass, legacyHeader, utilities, destinations, activeSection, view, language, translate }}
+      authorized={canPreviewLifecycle}>
 
         <PwaUpdatePrompt />
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
@@ -1385,9 +1407,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "issue-success" && selectedJob && (
           <IssueSuccess onBackToCleaning={() => setView("cleaner-job")} />
         )}
-      </section>
-    </main>
+    </Shell></Suspense>
   );
+}
+
+function CurrentManagerShell({ foundationClass, legacyHeader, children }) {
+  return <main className="app-shell"><section className={foundationClass} aria-labelledby="page-title">{legacyHeader}{children}</section></main>;
 }
 
 function AuthenticationLoading() {

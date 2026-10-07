@@ -1,5 +1,12 @@
 # Design System V2 — canonical reference and Phase A
 
+## Phase C1 — isolated Sandbox shell pilot
+
+The subsequent explicit Phase C1 request authorizes only a developer Sandbox
+shell pilot. Status: **IMPLEMENTED IN SANDBOX PILOT**, not OPERATOR ACCEPTED or
+PRODUCTION RELEASED. [Implementation, preserved controls and acceptance steps](PHASE_C1_IMPLEMENTATION.md).
+Screen-content migration remains separately scoped; Production retains CURRENT.
+
 The product owner approved the design direction and authorized **Phase A only**
 on 2026-10-06. The supplied documents retain their original design-reference
 wording, including the earlier "not approved" labels in MANIFEST.txt. Those

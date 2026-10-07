@@ -3,6 +3,14 @@ import "./primitives.css";
 
 const classes = (...values) => values.filter(Boolean).join(" ");
 const iconPaths = {
+  dashboard: "M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7",
+  home: "m3 10 9-7 9 7M5 9v12h14V9M9 21v-7h6v7",
+  jobs: "M8 3h8v4H8V3ZM5 5h14v16H5V5m3 6h8m-8 4h8",
+  people: "M14 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0M3 21v-3a8 8 0 0 1 16 0v3M18 4a3 3 0 0 1 0 6m3 11v-3",
+  wallet: "M3 6h18v14H3V6Zm0 0V3h14m-2 8h6v5h-6v-5",
+  clients: "M5 3h14v18H5V3Zm4 4h6m-6 4h6m-6 4h6",
+  tools: "m4 4 16 16M4 20 20 4M3 3h5M3 3v5m13 13h5v-5",
+  menu: "M4 6h16M4 12h16M4 18h16",
   check: "m5 12 4 4 10-10", close: "m6 6 12 12M18 6 6 18",
   info: "M12 11v6M12 7h.01", warning: "m12 3 10 18H2L12 3Zm0 5v5m0 3h.01",
   clock: "M12 7v5l3 2", search: "m16 16 5 5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",

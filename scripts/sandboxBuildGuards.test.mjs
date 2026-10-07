@@ -126,12 +126,12 @@ test("Production build excludes the synthetic lifecycle preview and local harnes
     .map(file => fs.readFileSync(path.join(output, "assets", file), "utf8")).join("\n");
   assert.equal(fs.existsSync(path.join(output, "design-system")), false);
   assert.equal(fs.readdirSync(path.join(output, "assets")).some(file => /Catalog|catalogShared|^src-/.test(file)), false);
-  for (const value of ["design-system-v2-catalog", "cfv2-catalog", "cfv2-panel", "lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
+  for (const value of ["cfv2-shell", "cleanflow-sandbox-shell-pilot", "Shell V2 · piloto", "LOCAL SYNTHETIC SHELL PREVIEW", "design-system-v2-catalog", "cfv2-catalog", "cfv2-panel", "lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
     assert.equal(javascript.includes(value), false, `Synthetic preview implementation leaked: ${value}`);
   }
 });
 
-test("Phase B leaves every Production build file byte-identical to Phase A at equal build ID/config", t => {
+test("C1 retains Phase B Production CSS/workers/static assets; the pilot shell is build-excluded", t => {
   const root = fixture(t);
   const environment = syntheticEnvironment({ VITE_CLEANFLOW_ENV: "production", VITE_FIREBASE_PROJECT_ID: "clean-flow-prototipo", VITE_FIREBASE_AUTH_DOMAIN: "clean-flow-prototipo.firebaseapp.com", VITE_FIREBASE_STORAGE_BUCKET: "clean-flow-prototipo.firebasestorage.app" });
   function compile(label) {
@@ -143,10 +143,13 @@ test("Phase B leaves every Production build file byte-identical to Phase A at eq
     }
     return walk(output).sort((a, b) => a.file.localeCompare(b.file));
   }
-  const current = compile("dist-phase-b");
-  // Only the build config changed on the Production path. Baseline App/CSS/screens stay untouched.
-  fs.writeFileSync(path.join(root, "vite.config.js"), execFileSync("git", ["show", "baf77b53a67d0968e07be8428e891db83f904b4c:vite.config.js"], { cwd: repository }));
-  assert.deepEqual(current, compile("dist-phase-a"));
+  const current = compile("dist-c1");
+  fs.writeFileSync(path.join(root, "src/App.jsx"), execFileSync("git", ["show", "e4a3cfc9862e75b8680c237804fe703a3e45fd6b:src/App.jsx"], { cwd: repository }));
+  const baseline = compile("dist-phase-b");
+  // App adapter changes the JS/HTML hash, not the legacy CSS, workers or public files.
+  const unchanged = entries => entries.filter(entry => entry.file !== "index.html" && !entry.file.endsWith(".js") || ["sw.js", "firebase-messaging-sw.js"].includes(entry.file));
+  assert.deepEqual(unchanged(current), unchanged(baseline));
+  assert.equal(current.length, baseline.length);
 });
 
 const rejectedBindings = [
