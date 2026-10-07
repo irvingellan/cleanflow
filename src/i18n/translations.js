@@ -17,6 +17,7 @@ export function normalizeTranslationLanguage(language) {
 
 const messages = {
   en: {
+    "dashboardV2.pilot": "Sandbox · Dashboard pilot", "dashboardV2.compare": "Dashboard presentation", "dashboardV2.current": "Current", "dashboardV2.refreshing": "Refreshing — showing previous data", "dashboardV2.previousData": "Previous data — not confirmed current", "dashboardV2.loaded": "Dashboard loaded",
     "compact.previewSurface": "Synthetic preview screen",
     "jobs.moreActions": "More actions",
     "jobs.section.details": "Service details", "jobs.section.cleaner": "Cleaner & assignment",
@@ -68,6 +69,7 @@ const messages = {
     "clients.title": "Clients", "clients.new": "New client", "clients.loading": "Loading clients…", "clients.error": "Unable to load clients.", "clients.empty": "No clients found.", "clients.createTitle": "New client", "clients.name": "Client name", "clients.save": "Save client", "clients.creating": "Saving…", "clients.nameRequired": "Enter a client name.", "clients.createError": "Unable to create client.", "clients.view": "View {client}", "clients.details": "Client details", "clients.linkedProperties": "Linked properties", "clients.propertiesLoading": "Loading linked properties…", "clients.propertiesError": "Unable to load linked properties.", "clients.noLinkedProperties": "No linked properties.", "clients.openProperty": "Open property", "clients.upcomingService": "Upcoming service", "clients.upcomingServices": "Upcoming services", "clients.noUpcomingService": "No upcoming service", "clients.recentHistory": "Recent history", "clients.historyLoading": "Loading client history…", "clients.historyError": "Unable to load client history.", "clients.noRecentHistory": "No recent service history.",
   },
   pt: {
+    "dashboardV2.pilot": "Sandbox · Piloto do painel", "dashboardV2.compare": "Apresentação do painel", "dashboardV2.current": "Atual", "dashboardV2.refreshing": "Atualizando — mostrando dados anteriores", "dashboardV2.previousData": "Dados anteriores — não confirmados como atuais", "dashboardV2.loaded": "Painel carregado",
     "compact.previewSurface": "Tela da prévia sintética",
     "jobs.moreActions": "Mais ações",
     "jobs.section.details": "Detalhes do serviço", "jobs.section.cleaner": "Cleaner e atribuição",
@@ -120,6 +122,7 @@ const messages = {
     "dashboard.needsAttentionDescription": "Principais prioridades operacionais entre atribuições, interesse de cleaners e problemas.",
   },
   es: {
+    "dashboardV2.pilot": "Sandbox · Piloto del panel", "dashboardV2.compare": "Presentación del panel", "dashboardV2.current": "Actual", "dashboardV2.refreshing": "Actualizando — mostrando datos anteriores", "dashboardV2.previousData": "Datos anteriores — no confirmados como actuales", "dashboardV2.loaded": "Panel cargado",
     "compact.previewSurface": "Pantalla de vista previa sintética",
     "jobs.moreActions": "Más acciones",
     "jobs.section.details": "Detalles del servicio", "jobs.section.cleaner": "Cleaner y asignación",

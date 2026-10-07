@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -36,6 +36,8 @@ import { PublicClientReportPage } from "./features/checklists/PublicClientReport
 import { PublicOfferAssignmentAcknowledgment } from "./features/public-offers/PublicOfferAssignmentAcknowledgment.jsx";
 import { PublicOfferCompensation } from "./features/public-offers/PublicOfferCompensation.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
+const DashboardV2Pilot = import.meta.env.MODE === "sandbox"
+  ? lazy(() => import("./features/dashboard/DashboardV2Pilot.jsx")) : null;
 import { useDashboardController } from "./features/dashboard/useDashboardController.js";
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
 import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
@@ -425,6 +427,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
   const canPreviewLifecycle = import.meta.env.MODE === "sandbox"
     && canShowEnvironmentNavigation(authUser, "sandbox");
+  const DashboardPresentation = canPreviewLifecycle && DashboardV2Pilot ? DashboardV2Pilot : Dashboard;
 
   useEffect(() => {
     if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
@@ -961,7 +964,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
 
         {view === "dashboard" && (
-          <Dashboard
+          <Suspense fallback={<StateCard message={translate("dashboard.loading")} status="status" />}><DashboardPresentation
             dashboardData={dashboardData}
             isLoading={isLoadingDashboard}
             hasError={hasDashboardError}
@@ -970,7 +973,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOpenJob={openDashboardJob}
             onShowJobs={showJobs}
             onShowJobsWithFilter={showJobsWithFilter}
-          />
+          /></Suspense>
         )}
 
         {view === "dev-center" && devCenterController.access.authorized && (

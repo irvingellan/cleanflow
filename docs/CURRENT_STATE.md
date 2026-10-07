@@ -1,5 +1,18 @@
 # CleanFlow — Current State
 
+## Design System V2 — Phase E1 Dashboard (2026-10-06, isolated branch-only)
+
+**DESIGNED / IMPLEMENTED LOCALLY — operator acceptance pending.** Exact Phase B
+base `e4a3cfc9862e75b8680c237804fe703a3e45fd6b`; Sandbox/developer-gated
+CURRENT/V2 comparison in the current shell, consuming the same controller data.
+KPI strip, existing five-item attention selection, Next 48h, recent history and
+week/workload. Initial Skeleton; retained-data refresh/error explicitly marked
+previous; existing aggregate deadline/retry untouched. No independent partial
+readiness, invented update timestamp or new reads. Production excludes V2.
+Shell/Services and original Intake/Telemetry worktrees remain separate.
+**OPERATOR ACCEPTED: no. SANDBOX PREVIEW RELEASED: no. PRODUCTION RELEASED: no.**
+See [inventory, evidence, deviations and local pilot](design-system-v2/DASHBOARD_V2_IMPLEMENTATION.md).
+
 ## Design System V2 — Phase B primitives (2026-10-06, branch-only)
 
 **IMPLEMENTED — READY FOR DESIGN SYSTEM V2 PHASE C**, not merge/deploy approval.
