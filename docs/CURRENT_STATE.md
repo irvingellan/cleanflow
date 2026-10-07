@@ -1,8 +1,20 @@
 # CleanFlow — Current State
 
-## Design System V2 — Phase C1 shell (2026-10-06, isolated branch-only)
+## Design System V2 — Phase C2 authenticated Sandbox shell (2026-10-06)
 
-**IMPLEMENTED IN SANDBOX PILOT — operator acceptance pending. NOT PRODUCTION RELEASED.**
+**C1 OPERATOR ACCEPTED LOCALLY. C2 SANDBOX RELEASED / AUTHENTICATED VALIDATION PASSED.**
+Dedicated Sandbox Hosting only, build `5e1a1c122398e0c11cc3842d4419080ef98628ce`;
+release `2026-10-07T01:04:54.015Z` (Oct 6 Pacific). Desktop and 390px manager
+navigation, utility presence, theme/language and CURRENT comparison verified.
+22/22 published hashes match the prepared manifest. Central Dev/diagnostics
+authorization remains fail-closed without Sandbox Functions; no bypass added.
+Production release/build unchanged (`5c2e5249`); **NOT PRODUCTION RELEASED**.
+No screen migration, backend deploy, billing change or operational mutation.
+See [release, rollback and acceptance evidence](design-system-v2/PHASE_C2_SANDBOX_RELEASE.md).
+
+## Design System V2 — Phase C1 shell (2026-10-06, isolated implementation)
+
+**IMPLEMENTED / OPERATOR ACCEPTED LOCALLY. NOT PRODUCTION RELEASED.**
 Isolated from exact Phase B `e4a3cfc9862e75b8680c237804fe703a3e45fd6b`.
 Explicit developer Sandbox comparison (`?shell=v2` / `?shell=current`), grouped
 desktop sidebar, medium icon rail, mobile four-tab navigation and More/account

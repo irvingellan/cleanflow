@@ -4,7 +4,9 @@
 
 DESIGNED: approved canonical shell direction.
 IMPLEMENTED IN SANDBOX PILOT: branch-only code and local synthetic proof.
-OPERATOR ACCEPTED: **pending**. PRODUCTION RELEASED: **no**.
+OPERATOR ACCEPTED LOCALLY: **yes**, reported by product owner after desktop/mobile
+trial. PRODUCTION RELEASED: **no**. Subsequent authenticated Sandbox evidence is
+recorded in [Phase C2](PHASE_C2_SANDBOX_RELEASE.md).
 
 Branch: `feature/design-system-v2-shell-pilot`.
 Worktree: `/Users/irvingellan/.codex/worktrees/design-system-v2-shell-pilot`.

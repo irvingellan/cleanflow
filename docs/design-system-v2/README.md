@@ -3,8 +3,9 @@
 ## Phase C1 — isolated Sandbox shell pilot
 
 The subsequent explicit Phase C1 request authorizes only a developer Sandbox
-shell pilot. Status: **IMPLEMENTED IN SANDBOX PILOT**, not OPERATOR ACCEPTED or
-PRODUCTION RELEASED. [Implementation, preserved controls and acceptance steps](PHASE_C1_IMPLEMENTATION.md).
+shell pilot. Status: **OPERATOR ACCEPTED LOCALLY / SANDBOX RELEASED**, not
+PRODUCTION RELEASED. [Implementation and controls](PHASE_C1_IMPLEMENTATION.md).
+[Authenticated Sandbox release evidence](PHASE_C2_SANDBOX_RELEASE.md).
 Screen-content migration remains separately scoped; Production retains CURRENT.
 
 The product owner approved the design direction and authorized **Phase A only**
