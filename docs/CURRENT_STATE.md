@@ -2,14 +2,20 @@
 
 ## Design System V2 — Phase D1 Services pilot (2026-10-06, branch-only)
 
-**IMPLEMENTED LOCALLY — operator acceptance pending.** Independent isolated
+**OPERATOR ACCEPTED LOCALLY — isolated preview published; authenticated QA pending.** Independent isolated
 branch from exact Phase B `e4a3cfc9862e75b8680c237804fe703a3e45fd6b`, not Shell C.
 Sandbox/developer-only CURRENT/V2 comparison shares existing JobsPage filtering,
 ordering, callbacks and scroll anchors; dense desktop/date groups and compact
 mobile/filter sheet. Evidence-aware lifecycle, provenance and current Job Detail
 are preserved. No new reads, backend/authorization or business-rule change.
 Production excludes the experimental implementation and retains CURRENT.
-Not operator-accepted, Sandbox-released, Production-released, merged or deployed.
+Approved application `e37111bbc23aa714c60ff69df0b6f9912661cca5` published only
+to Sandbox preview `services-v2-d1` (version `38592baeadb4fa7b`), expires
+2026-10-14. All 22 preview hashes match. Sandbox live Shell V2 version
+`7f122070f32a3e25` / build `5e1a1c1` and Production build `5c2e524` remain
+unchanged. Chrome showed Sandbox sign-in checking, then automation timed out;
+authenticated acceptance is not claimed. No operational mutation, live-site
+replacement, backend deployment or merge. Production release review remains NO-GO.
 See [Services implementation, validation and deviations](design-system-v2/SERVICES_V2_IMPLEMENTATION.md).
 Original Intake/Telemetry/Safari and other design worktrees remain separate.
 

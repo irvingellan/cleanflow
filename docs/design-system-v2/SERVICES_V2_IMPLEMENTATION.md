@@ -28,9 +28,11 @@ shape, provider, authorization or automatic-read behavior changes.
 ## Status
 
 - DESIGNED: references 12, 23, 13 in MANIFEST.
-- IMPLEMENTED LOCALLY: yes; operator review pending.
-- OPERATOR ACCEPTED: no.
-- SANDBOX RELEASED: no.
+- IMPLEMENTED LOCALLY: yes.
+- OPERATOR ACCEPTED LOCALLY: yes, human review confirmed.
+- SANDBOX PREVIEW RELEASED: yes; isolated channel only, not Sandbox live.
+- AUTHENTICATED SANDBOX PREVIEW VALIDATED: pending; browser/session validation
+  could not be completed. No authenticated acceptance is claimed.
 - PRODUCTION RELEASED: no; current Services remains the only Production variant.
 
 ## Architecture and preserved behavior
@@ -128,5 +130,36 @@ CLEANFLOW_CATALOG_TEST_PORT=4197 npx playwright test --config playwright.design-
 ```
 
 Recommendation: READY FOR SERVICES OPERATOR PILOT locally, not release approval.
-Authenticated Services D1 Sandbox acceptance and any release remain pending.
+Authenticated Services D1 Sandbox acceptance remains pending.
 Phase A/B, Phase C shell and original Intake/Telemetry/Safari worktrees are untouched.
+
+## Isolated preview publication (2026-10-07)
+
+Approved application SHA: `e37111bbc23aa714c60ff69df0b6f9912661cca5`.
+Channel: `services-v2-d1` in `clean-flow-sandbox-irving`.
+URL: https://clean-flow-sandbox-irving--services-v2-d1-shoy24hg.web.app/?services=v2
+CURRENT comparison: select CURRENT in the same Services screen (same provider).
+Release: `2026-10-07T02:34:49.199Z`, version `38592baeadb4fa7b`.
+Expiration: `2026-10-14T02:34:46.973607233Z`.
+
+Prepared with the existing protected Sandbox configuration, empty push config,
+SHA-pinned `hosting:prepare`; all 22 deployed file hashes match the manifest.
+Preview deploy used `--no-authorized-domains`; no Auth configuration was changed.
+Only Hosting preview was published. No Functions/Rules/Storage/index/secret
+deployment, operational mutation, seeding or Production deployment occurred.
+
+Sandbox live remains Shell V2: version `7f122070f32a3e25`, release
+`2026-10-07T01:04:54.015Z`, build `5e1a1c122398e0c11cc3842d4419080ef98628ce`.
+Production build remains `5c2e52492331577a7cbdc4aa41a8f1a6b9771b45`.
+These live markers were verified after preview publication.
+
+The actual preview displayed `SANDBOX · TEST DATA` and `Checking sign-in…`;
+subsequent Chrome automation commands timed out. Desktop/mobile, themes/locales,
+filters, continuation, restoration, CURRENT Job Detail and New service form
+remain locally tested, not authenticated-preview validated. A login handoff is
+required; no credentials/tokens were extracted or copied between origins.
+
+Rollback removes only the preview:
+`firebase hosting:channel:delete services-v2-d1 --project clean-flow-sandbox-irving`.
+Do not clone the preview to live. Production release review is NO-GO until the
+authenticated read-only acceptance checklist is completed.
