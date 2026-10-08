@@ -63,11 +63,11 @@ test("F2 collapsing a disclosure retains a pending form without saving", async (
   await page.screenshot({ path: testInfo.outputPath("f2-expanded-en-light.png"), fullPage: true });
 });
 
-for (const width of [360, 768]) test(`F2 keeps CURRENT below the desktop breakpoint at ${width}`, async ({ page }, testInfo) => {
+for (const width of [360, 768]) test(`F2 summaries survive F3 integration at ${width}`, async ({ page }, testInfo) => {
   await page.setViewportSize({ width, height: 844 });
   await page.goto("/e2e/job-detail-v2/index.html?jobDetail=v2&scenario=assigned-draft&lang=pt&theme=light");
-  await expect(page.locator(".panel.job-detail")).toBeVisible();
-  await expect(page.locator(".job-v2-disclosure-summary")).toHaveCount(0);
+  await expect(page.locator(".job-detail-v2")).toBeVisible();
+  await expect(page.locator(".job-v2-disclosure-summary")).toHaveCount(7);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await page.evaluate(() => window.__f1Calls)).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath(`f2-current-${width}-pt-light.png`), fullPage: true });

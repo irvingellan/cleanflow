@@ -2773,3 +2773,55 @@ export function useTranslation() {
   if (!translation) throw new Error("useTranslation must be used within TranslationProvider");
   return translation;
 }
+
+Object.assign(messages.en, {
+  "jobV2.consequences": "What this action changes", "jobV2.replaceChecklist": "Replace the cleaner checklist link?",
+  "jobV2.confirm.complete.will": "Mark this service Completed.",
+  "jobV2.confirm.complete.willNot": "Does not mark payment paid or resolve existing issues.",
+  "jobV2.confirm.archive.will": "Exclude this service from the active workflow.",
+  "jobV2.confirm.archive.willNot": "Does not delete its saved history or mark payment paid.",
+  "jobV2.confirm.replace-reminder.will": "Prepare a new cleaner link and invalidate the current link.",
+  "jobV2.confirm.replace-reminder.willNot": "Does not send a message or complete the service.",
+  "jobV2.confirm.assign.will": "Assign the selected cleaner after you confirm.",
+  "jobV2.confirm.assign.willNot": "Selecting a name does not assign or send a message.",
+  "jobV2.confirm.schedule.will": "Save the new date/time with the existing schedule history.",
+  "jobV2.confirm.schedule.willNot": "Does not resend earlier messages. Resend the updated message after saving.",
+  "jobV2.confirm.replace-cleaner.will": "Replace this assignment with the selected interested cleaner after confirming.",
+  "jobV2.confirm.replace-cleaner.willNot": "Does not send a message or mark payment paid.",
+  "jobV2.confirm.offer-link.will": "Create the offer link with the confirmed offered amount.",
+  "jobV2.confirm.offer-link.willNot": "Does not send a message or assign the cleaner.",
+});
+Object.assign(messages.pt, {
+  "jobV2.consequences": "O que esta ação altera", "jobV2.replaceChecklist": "Substituir o link do checklist da cleaner?",
+  "jobV2.confirm.complete.will": "Marcar este serviço como concluído.",
+  "jobV2.confirm.complete.willNot": "Não marca pagamentos como pagos nem resolve problemas existentes.",
+  "jobV2.confirm.archive.will": "Excluir este serviço do fluxo ativo.",
+  "jobV2.confirm.archive.willNot": "Não apaga o histórico salvo nem marca pagamentos como pagos.",
+  "jobV2.confirm.replace-reminder.will": "Preparar um novo link da cleaner e invalidar o link atual.",
+  "jobV2.confirm.replace-reminder.willNot": "Não envia mensagem nem conclui o serviço.",
+  "jobV2.confirm.assign.will": "Atribuir a cleaner selecionada após confirmar.",
+  "jobV2.confirm.assign.willNot": "Selecionar um nome não atribui nem envia mensagem.",
+  "jobV2.confirm.schedule.will": "Salvar a nova data e horário com o histórico existente.",
+  "jobV2.confirm.schedule.willNot": "Não reenvia mensagens anteriores. Reenvie a mensagem atualizada após salvar.",
+  "jobV2.confirm.replace-cleaner.will": "Substituir esta atribuição pela cleaner interessada selecionada após confirmar.",
+  "jobV2.confirm.replace-cleaner.willNot": "Não envia mensagem nem marca pagamentos como pagos.",
+  "jobV2.confirm.offer-link.will": "Criar o link da oferta com o valor oferecido confirmado.",
+  "jobV2.confirm.offer-link.willNot": "Não envia mensagem nem atribui a cleaner.",
+});
+Object.assign(messages.es, {
+  "jobV2.consequences": "Qué cambia esta acción", "jobV2.replaceChecklist": "¿Reemplazar el enlace del checklist de la cleaner?",
+  "jobV2.confirm.complete.will": "Marcar este servicio como completado.",
+  "jobV2.confirm.complete.willNot": "No marca pagos como pagados ni resuelve problemas existentes.",
+  "jobV2.confirm.archive.will": "Excluir este servicio del flujo activo.",
+  "jobV2.confirm.archive.willNot": "No elimina su historial guardado ni marca pagos como pagados.",
+  "jobV2.confirm.replace-reminder.will": "Preparar un enlace nuevo de la cleaner e invalidar el actual.",
+  "jobV2.confirm.replace-reminder.willNot": "No envía mensajes ni completa el servicio.",
+  "jobV2.confirm.assign.will": "Asignar la cleaner seleccionada después de confirmar.",
+  "jobV2.confirm.assign.willNot": "Seleccionar un nombre no asigna ni envía mensajes.",
+  "jobV2.confirm.schedule.will": "Guardar la nueva fecha/hora con el historial existente.",
+  "jobV2.confirm.schedule.willNot": "No reenvía mensajes anteriores. Reenvíe el mensaje actualizado después de guardar.",
+  "jobV2.confirm.replace-cleaner.will": "Reemplazar esta asignación con la cleaner interesada seleccionada después de confirmar.",
+  "jobV2.confirm.replace-cleaner.willNot": "No envía mensajes ni marca pagos como pagados.",
+  "jobV2.confirm.offer-link.will": "Crear el enlace de la oferta con el importe ofrecido confirmado.",
+  "jobV2.confirm.offer-link.willNot": "No envía mensajes ni asigna la cleaner.",
+});

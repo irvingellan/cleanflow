@@ -30,11 +30,13 @@ test("real schedule intent reveals and focuses unchanged controls; selection nev
   expect(await page.evaluate(() => window.__f1Calls)).toEqual(["onUpdateSchedule"]);
 });
 
-test("mobile F1 falls back to unchanged CURRENT; comparison preserves current markup", async ({ page }, testInfo) => {
+test("mobile V2 uses shared intents and CURRENT remains available", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/e2e/job-detail-v2/index.html?jobDetail=v2&scenario=ready&lang=pt&theme=dark");
+  await expect(page.locator(".job-detail-v2")).toBeVisible();
+  await expect(page.locator(".cfv2-sticky .job-intents__next button")).toHaveCount(1);
+  await page.getByRole("button", { name: "ATUAL", exact: true }).click();
   await expect(page.locator(".panel.job-detail")).toBeVisible();
-  await expect(page.locator(".job-detail-v2")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("mobile-current-pt-dark.png"), fullPage: true });
 });

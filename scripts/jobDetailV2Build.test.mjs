@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
 // Compile only an all-synthetic mirror. Never load developer .env or initialize Firebase.
-for (const mode of ["production", "sandbox"]) test(`${mode} bundle isolates Job Detail F1/F2 correctly`, t => {
+for (const mode of ["production", "sandbox"]) test(`${mode} bundle isolates complete Job Detail F1/F2/F3/F4 correctly`, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cleanflow-f1-build-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   for (const directory of ["src", "public", "functions/src", "scripts", "design-system"]) fs.cpSync(path.join(repository, directory), path.join(root, directory), { recursive: true, filter: source => !path.basename(source).startsWith(".") });
@@ -32,9 +32,14 @@ for (const mode of ["production", "sandbox"]) test(`${mode} bundle isolates Job 
   const assets = fs.readdirSync(path.join(output, "assets"));
   const source = assets.filter(name => /\.(js|css)$/.test(name)).map(name => fs.readFileSync(path.join(output, "assets", name), "utf8")).join("\n");
   if (mode === "production") {
-    assert.doesNotMatch(source, /job-detail-v2|job-v2-decision|job-v2-comparison/);
+    // Shared optional presentation hooks compile with CURRENT; the V2 wrapper,
+    // decision/mobile stylesheet and confirmation implementation must not.
+    assert.doesNotMatch(source, /job-detail-v2|job-v2-decision|job-v2-comparison|job-v2-confirmation-host/);
     assert.equal(assets.some(name => name.startsWith("JobDetailV2Pilot")), false);
-  } else assert.match(source, /job-v2-decision/);
+  } else {
+    assert.match(source, /job-v2-decision/);
+    assert.match(source, /job-v2-confirmation-host/);
+  }
   assert.equal(fs.existsSync(path.join(output, "e2e")), false);
   assert.doesNotMatch(source, /__f1Calls|synthetic-archived|Local synthetic scenario/);
 });

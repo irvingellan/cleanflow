@@ -1,5 +1,17 @@
 # CleanFlow — Current State
 
+## Design System V2 — Complete Job Detail F3/F4 (2026-10-07, local only)
+
+F1 and F2 were explicitly operator accepted. Isolated from verified F2 `9b6ec19`,
+F3 adds mobile/tablet composition and one safe-area/keyboard-aware existing primary;
+F4 re-presents existing completion/archive/reminder confirmations with truthful
+consequences. Seven mounted groups, summaries, guards and final handlers remain.
+CURRENT stays default/selectable; V2 remains Sandbox/local-only. Independent
+reviews resolved modal-focus, async-eligibility and competing-sticky defects.
+Local acceptance evidence and full ZIP are prepared; **human F3/F4 acceptance is
+still required**. No cloud data access, push, merge, deploy or backend change.
+See [integration, tests, decisions and limits](design-system-v2/PHASE_F3_F4_IMPLEMENTATION.md).
+
 ## Design System V2 — Phase F2 disclosure summaries (2026-10-07, branch-only)
 
 F1 `1961aa4` was explicitly operator accepted locally. Isolated F2 adds

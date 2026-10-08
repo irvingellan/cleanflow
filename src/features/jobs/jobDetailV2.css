@@ -32,3 +32,47 @@
 .job-v2-decision .job-intents__actions .button { width: 100%; text-align: left; justify-content: flex-start; white-space: normal; }
 .job-detail-v2 :focus-visible { outline: var(--v2-size-focus-ring) solid var(--v2-color-focus); outline-offset: var(--v2-size-focus-offset); }
 @media (prefers-reduced-motion: reduce) { .job-detail-v2 * { scroll-behavior: auto; transition: none; } }
+@media (max-width: 1099px) {
+  .job-v2-columns { display: flex; flex-direction: column; }
+  .job-v2-main { display: contents; }
+  .job-v2-mobile-summary { display: grid; gap: var(--v2-space-4); width: 100%; min-width: 0; }
+  .job-v2-mobile-summary > * { margin: 0; min-width: 0; }
+  .job-v2-mobile-summary > .service-cleaner-summary, .job-v2-mobile-summary > .service-lifecycle, .job-v2-mobile-summary > .service-checklist-summary { padding: var(--v2-space-4); border: var(--v2-size-border) solid var(--v2-color-border); border-radius: var(--v2-radius-panel); background: var(--v2-color-surface); }
+  .job-v2-mobile-summary > .service-cleaner-summary { display: flex; flex-direction: column; align-items: flex-start; gap: var(--v2-space-2); }
+  .job-v2-main > .service-cleaner-summary, .job-v2-main > .service-lifecycle, .job-v2-main > .service-checklist-summary, .job-v2-main > .service-attention { width: 100%; box-sizing: border-box; order: 1; }
+  .job-v2-decision { width: 100%; order: 2; }
+  .job-v2-groups { width: 100%; box-sizing: border-box; order: 3; }
+}
+@media (max-width: 719px) {
+  .job-v2-comparison { flex-wrap: wrap; }
+  .job-v2-identity .panel__title { font-size: var(--v2-type-page-title-compact-size); line-height: var(--v2-type-page-title-compact-line); }
+  .job-v2-identity .job-detail__context { display: flex; flex-wrap: wrap; gap: var(--v2-space-2); }
+  .job-v2-columns { gap: var(--v2-space-4); }
+  .job-v2-main > .service-cleaner-summary, .job-v2-main > .service-lifecycle, .job-v2-main > .service-checklist-summary { padding: var(--v2-space-4); }
+  .job-detail-v2 .service-lifecycle__label { position: absolute; width: var(--v2-size-border); height: var(--v2-size-border); overflow: hidden; clip-path: inset(50%); }
+  .job-detail-v2 .service-lifecycle__heading { flex-wrap: wrap; }
+  .job-v2-groups .job-detail-section > summary { padding: var(--v2-space-4); }
+  .job-v2-groups .job-v2-disclosure-heading { display: inline-flex; flex-direction: column; gap: var(--v2-space-1); }
+  .job-v2-groups .job-v2-disclosure-summary { max-width: 100%; text-align: left; }
+  .job-v2-decision .cfv2-panel { border: 0; background: transparent; }
+  .job-v2-decision .cfv2-panel-body { padding: 0; }
+  .job-v2-decision .job-v2-situation { display: none; }
+  .job-v2-decision .job-intents__secondary { margin-top: 0; border: 0; padding: 0; }
+  .job-v2-decision .job-intents__next { gap: var(--v2-space-2); }
+  .job-v2-decision .job-intents__next strong { display: none; }
+  .job-v2-decision .job-intents__next p { margin: 0; }
+  .job-v2-decision .job-intents__next button { min-height: var(--v2-size-control-large); white-space: nowrap; font-size: var(--v2-type-button-size); }
+  .job-detail-v2 .cfv2-sticky { z-index: 5; }
+  .job-detail-v2 { padding-bottom: calc(var(--v2-size-control-large) + var(--v2-space-12) + env(safe-area-inset-bottom)); }
+  .job-detail-v2 .cfv2-sticky-space { padding-bottom: 0; }
+  .job-detail-v2 input, .job-detail-v2 textarea, .job-detail-v2 select { font-size: var(--v2-type-card-title-size); max-width: 100%; box-sizing: border-box; }
+  .job-detail-v2 .button { min-height: var(--v2-size-touch-target-min); overflow-wrap: anywhere; }
+  .job-detail-v2 .button-row { flex-wrap: wrap; }
+  .job-detail-v2 .detail-list { grid-template-columns: minmax(0, 1fr); }
+}
+.job-v2-lifecycle-current { margin: var(--v2-space-3) 0 0; font-weight: var(--v2-type-body-strong-weight); }
+.job-v2-confirmation-context { color: var(--v2-color-text-primary); line-height: var(--v2-type-body-line); overflow-wrap: anywhere; }
+.job-detail-v2 .cfv2-consequences { margin-block: var(--v2-space-4); }
+@media (max-width: 719px) {
+  .job-v2-confirmation-host .cfv2-confirmation { position: fixed; inset: auto 0 0; margin: 0; width: 100%; box-sizing: border-box; max-height: 90dvh; overflow-y: auto; border-radius: var(--v2-radius-sheet) var(--v2-radius-sheet) 0 0; padding: var(--v2-space-5); padding-bottom: calc(var(--v2-space-5) + env(safe-area-inset-bottom)); }
+}

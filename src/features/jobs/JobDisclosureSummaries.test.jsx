@@ -23,7 +23,8 @@ it("adds descriptions without changing disclosure names, controls or mutation be
   expect(container.querySelector(".service-financial-summary")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Next step: Open existing checklist" })).toBeInTheDocument();
 });
-it("CURRENT and mobile have no added descriptions", () => {
+it("CURRENT keeps its original descriptions on mobile", () => {
+  window.history.replaceState(null, "", "/");
   Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
   const { container } = render(<TranslationProvider><JobDetailV2Pilot {...getServiceLifecycleFixture("assigned-draft")} /></TranslationProvider>);
   expect(container.querySelectorAll(".job-v2-disclosure-summary")).toHaveLength(0);
