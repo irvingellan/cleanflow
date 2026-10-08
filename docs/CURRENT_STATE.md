@@ -1,5 +1,16 @@
 # CleanFlow — Current State
 
+## Design System V2 — Phase F2 disclosure summaries (2026-10-07, branch-only)
+
+F1 `1961aa4` was explicitly operator accepted locally. Isolated F2 adds
+secondary summaries to its seven native disclosure headers, using existing
+loaded props only. Missing/loading/error evidence never becomes empty; no
+amounts or payment inference in Financial. Original bodies stay mounted;
+64 bindings, guards, next-action and 360px rail remain. CURRENT/mobile unchanged.
+**READY FOR F2 OPERATOR PILOT**, not F2 acceptance or release. No new reads,
+backend/data changes, merge, deploy or real-data access. Other worktrees preserved.
+See [sources, uncertainty rules, local preview and validation](design-system-v2/PHASE_F2_IMPLEMENTATION.md).
+
 ## Design System V2 — Phase F1 Job Detail desktop (2026-10-07, branch-only)
 
 **READY FOR JOB DETAIL F1 OPERATOR PILOT**, not human acceptance or release.

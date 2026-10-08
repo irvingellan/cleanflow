@@ -108,6 +108,7 @@ export function JobDetail({
   onRestore,
   canRestore,
   renderPresentation,
+  disclosureSummaries,
 }) {
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
@@ -1039,7 +1040,7 @@ export function JobDetail({
       />
   ;
   const details = <>
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.details")} summary={disclosureSummaries?.details}>
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (
           <p className="form-success" role="status">{translate("jobs.scheduleSaved")}</p>
@@ -1178,7 +1179,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.cleaner")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.cleaner")} summary={disclosureSummaries?.cleaner}>
       {!isAssignmentAware &&
         job.operationalStatus === "ASSIGNED" &&
         (job.assignedCleanerId || job.assignedCleanerName) && (
@@ -1529,7 +1530,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")} summary={disclosureSummaries?.checklist}>
       <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
         <div className="issues-section__header">
           <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
@@ -1686,7 +1687,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")} summary={disclosureSummaries?.offers}>
       <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
         <div className="offers-section__header">
           <h3 id="offers-title">{translate("offers.title")}</h3>
@@ -1954,7 +1955,7 @@ export function JobDetail({
       </div>
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.issues")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.issues")} summary={disclosureSummaries?.issues}>
       <section ref={issuesSectionRef} tabIndex={-1} className="issues-section" aria-labelledby="issues-title">
         <div className="issues-section__header">
           <h3 id="issues-title">{translate("issues.title")}</h3>
@@ -2099,7 +2100,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")} summary={disclosureSummaries?.financial}>
       <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
         <h3>{translate("lifecycle.financialSnapshot")}</h3>
         <dl className="detail-list">
@@ -2177,7 +2178,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.history")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.history")} summary={disclosureSummaries?.history}>
       <dl ref={historySectionRef} tabIndex={-1} className="detail-list job-detail__history-summary">
         <DetailItem
           label={translate("common.property")}

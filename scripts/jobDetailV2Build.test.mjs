@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
 // Compile only an all-synthetic mirror. Never load developer .env or initialize Firebase.
-for (const mode of ["production", "sandbox"]) test(`${mode} bundle isolates Job Detail F1 correctly`, t => {
+for (const mode of ["production", "sandbox"]) test(`${mode} bundle isolates Job Detail F1/F2 correctly`, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cleanflow-f1-build-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   for (const directory of ["src", "public", "functions/src", "scripts", "design-system"]) fs.cpSync(path.join(repository, directory), path.join(root, directory), { recursive: true, filter: source => !path.basename(source).startsWith(".") });

@@ -2657,6 +2657,61 @@ Object.assign(messages.es, {
   "lifecycle.previewEntry": "Progreso del servicio · Vista previa",
 });
 
+Object.assign(messages.en, {
+  "jobV2.summary.loading": "Loading…",
+  "jobV2.summary.assigned": "{count} cleaner(s) assigned",
+  "jobV2.summary.noCleaner": "No cleaner assigned",
+  "jobV2.summary.draft": "Draft",
+  "jobV2.summary.ready": "Ready for review",
+  "jobV2.summary.abandoned": "Abandoned",
+  "jobV2.summary.noChecklist": "No checklist recorded",
+  "jobV2.summary.noOffers": "No offers recorded",
+  "jobV2.summary.pending": "{count} awaiting reply",
+  "jobV2.summary.interested": "{count} interested",
+  "jobV2.summary.offersRecorded": "{count} offer(s) recorded",
+  "jobV2.summary.openIssues": "{count} open issue(s)",
+  "jobV2.summary.noIssues": "No open issues",
+  "jobV2.summary.financial": "Client price and cleaner payout",
+  "jobV2.summary.created": "Created {date}",
+  "jobV2.summary.archived": "Archived"
+});
+Object.assign(messages.pt, {
+  "jobV2.summary.loading": "Carregando…",
+  "jobV2.summary.assigned": "{count} cleaner(s) atribuída(s)",
+  "jobV2.summary.noCleaner": "Nenhuma cleaner atribuída",
+  "jobV2.summary.draft": "Rascunho",
+  "jobV2.summary.ready": "Pronto para revisão",
+  "jobV2.summary.abandoned": "Abandonado",
+  "jobV2.summary.noChecklist": "Nenhum checklist registrado",
+  "jobV2.summary.noOffers": "Nenhuma oferta registrada",
+  "jobV2.summary.pending": "{count} aguardando resposta",
+  "jobV2.summary.interested": "{count} interessada(s)",
+  "jobV2.summary.offersRecorded": "{count} oferta(s) registrada(s)",
+  "jobV2.summary.openIssues": "{count} problema(s) aberto(s)",
+  "jobV2.summary.noIssues": "Nenhum problema aberto",
+  "jobV2.summary.financial": "Preço do cliente e pagamento da cleaner",
+  "jobV2.summary.created": "Criado em {date}",
+  "jobV2.summary.archived": "Arquivado"
+});
+Object.assign(messages.es, {
+  "jobV2.summary.loading": "Cargando…",
+  "jobV2.summary.assigned": "{count} cleaner(s) asignada(s)",
+  "jobV2.summary.noCleaner": "Ninguna cleaner asignada",
+  "jobV2.summary.draft": "Borrador",
+  "jobV2.summary.ready": "Listo para revisión",
+  "jobV2.summary.abandoned": "Abandonado",
+  "jobV2.summary.noChecklist": "Ningún checklist registrado",
+  "jobV2.summary.noOffers": "Ninguna oferta registrada",
+  "jobV2.summary.pending": "{count} esperando respuesta",
+  "jobV2.summary.interested": "{count} interesada(s)",
+  "jobV2.summary.offersRecorded": "{count} oferta(s) registrada(s)",
+  "jobV2.summary.openIssues": "{count} problema(s) abierto(s)",
+  "jobV2.summary.noIssues": "Ningún problema abierto",
+  "jobV2.summary.financial": "Precio del cliente y pago de la cleaner",
+  "jobV2.summary.created": "Creado {date}",
+  "jobV2.summary.archived": "Archivado"
+});
+
 export function translateInLanguage(language, key, replacements = {}) {
   const safeLanguage = normalizeTranslationLanguage(language);
   const message = messages[safeLanguage][key] || messages.en[key] || key;
