@@ -12,6 +12,14 @@ Production excludes the lazy V2 modules. The synthetic QA entry is not a build
 input. No main merge or Production release is authorized. Live authenticated
 acceptance must be recorded separately from synthetic/browser tests.
 See [authenticated review](design-system-v2/AUTHENTICATED_REVIEW.md).
+Implementation `1aa7587` is now released only to the fresh
+`cleanflow-v2-integrated-review` channel (expires 2026-10-15). All 30 hashes match;
+live/Shell, Services/Dashboard previews and Production release IDs are unchanged.
+Human new-origin sign-in and authenticated read-only QA passed: CURRENT/V2 KPI
+parity, Dashboard/Services → Detail → Back, preserved search and mobile More.
+Next-48-hours populated state remains synthetic-only; Functions-dependent
+checklist status remains unavailable under the Sandbox billing gate.
+No Gabi acceptance, main merge, Production release or operational write claimed.
 
 ## V2 integrated synthetic operator pilot (2026-10-08, local branch only)
 

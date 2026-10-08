@@ -26,22 +26,22 @@
 
 **Files:** `src/App.jsx`, `src/components/v2/*`, existing pilot wrappers and their tests.
 **Interfaces:** Existing 55 JobDetail props; existing Dashboard/JobsPage props; existing navigation and account components.
-- [ ] Add failing authenticated-integration tests for build-time isolation, full module selection and preserved callbacks.
-- [ ] Selectively reuse prior App shell integration, add Sandbox-only wrappers and a single integrated comparison control.
-- [ ] Update structural preservation assertions to compare actual controller/callback contracts, not forbid approved presentation wiring.
-- [ ] Run focused and full unit tests; commit integration.
+- [x] Add failing authenticated-integration tests for build-time isolation, full module selection and preserved callbacks.
+- [x] Selectively reuse prior App shell integration, add Sandbox-only wrappers and a single integrated comparison control.
+- [x] Update structural preservation assertions to compare actual controller/callback contracts, not forbid approved presentation wiring.
+- [x] Run focused and full unit tests; commit integration.
 
 ### Task 2: Verify browsers, builds and release isolation
 
 **Files:** existing Playwright configurations; `scripts/prepareHosting.mjs` only if its allowlist lacks verified Vite chunks.
-- [ ] Run Chromium/WebKit, responsive and lifecycle regressions; inspect screenshots.
-- [ ] Run production/Sandbox builds, environment and Hosting guards; verify production exclusion.
-- [ ] Obtain independent UX/safety reviews and resolve only proven integration defects with regression tests.
-- [ ] Record current live/channel version markers, prepare committed Sandbox build, publish only a fresh preview and hash-verify all files.
+- [x] Run Chromium/WebKit, responsive and lifecycle regressions; inspect screenshots.
+- [x] Run production/Sandbox builds, environment and Hosting guards; verify production exclusion.
+- [x] Obtain independent UX/safety reviews and resolve only proven integration defects with regression tests.
+- [x] Record current live/channel version markers, prepare committed Sandbox build, publish only a fresh preview and hash-verify all files.
 
 ### Task 3: Authenticated QA and handoff
 
 **Files:** `docs/design-system-v2/AUTHENTICATED_REVIEW_*`, `docs/CURRENT_STATE.md`, external handoff ZIP.
-- [ ] Use existing authorized session if available; otherwise record one bounded human-smoke requirement without claiming acceptance.
-- [ ] Verify navigation, parity and environment read-only; preserve previous Hosting channels.
-- [ ] Document source, binding audit, tests, reviews, limitations, release URL/expiry and delete-only rollback; assemble sanitized ZIP.
+- [x] Use existing authorized session if available; otherwise record one bounded human-smoke requirement without claiming acceptance.
+- [x] Verify navigation, parity and environment read-only; preserve previous Hosting channels.
+- [x] Document source, binding audit, tests, reviews, limitations, release URL/expiry and delete-only rollback; assemble sanitized ZIP.
