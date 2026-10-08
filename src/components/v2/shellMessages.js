@@ -1,0 +1,6 @@
+const copy = {
+  en: { daily: "Daily work", directory: "Directory", money: "Money", internal: "Internal tools", account: "Account & settings", more: "More", close: "Close", collapse: "Collapse sidebar", expand: "Expand sidebar", current: "Current shell", pilot: "V2 shell pilot", compare: "Shell comparison", services: "Services", skip: "Skip to content", sandbox: "SANDBOX · TEST DATA" },
+  pt: { daily: "Operação diária", directory: "Diretório", money: "Financeiro", internal: "Ferramentas internas", account: "Conta e preferências", more: "Mais", close: "Fechar", collapse: "Recolher menu", expand: "Expandir menu", current: "Shell atual", pilot: "Shell V2 · piloto", compare: "Comparar navegação", services: "Serviços", skip: "Ir para o conteúdo", sandbox: "SANDBOX · TEST DATA" },
+  es: { daily: "Trabajo diario", directory: "Directorio", money: "Finanzas", internal: "Herramientas internas", account: "Cuenta y ajustes", more: "Más", close: "Cerrar", collapse: "Contraer menú", expand: "Expandir menú", current: "Shell actual", pilot: "Shell V2 · piloto", compare: "Comparar navegación", services: "Servicios", skip: "Ir al contenido", sandbox: "SANDBOX · TEST DATA" },
+};
+export function shellText(language, key) { return (copy[language] || copy.en)[key] || copy.en[key]; }

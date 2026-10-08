@@ -31,6 +31,9 @@ playwright-report/
 test-results/
 blob-report/
 artifacts/visual-smoke/
+artifacts/services-v2/
+artifacts/integrated-v2-local-build/
+artifacts/integrated-v2-review/
 .vite/
 .cache/
 .eslintcache

@@ -1,5 +1,21 @@
 # CleanFlow — Current State
 
+## V2 integrated synthetic operator pilot (2026-10-08, local branch only)
+
+Shell, Dashboard (including approved icon/accent WIP), Services and complete
+Job Detail F1–F4 are selectively integrated on
+`feature/design-system-v2-integrated-experience`, from verified Phase B.
+One credential-free, loopback-only app shares 41 synthetic services across
+screens. No Firebase initialization, external requests, operational persistence,
+merge, push or deploy. Production App/provider boundaries remain Phase B.
+UNKNOWN suggested completion was corrected to a historical read-only action;
+existing completion guards are unchanged. Independent UX/security findings were
+resolved with regressions. Operator acceptance is still required.
+See [integration report](design-system-v2/INTEGRATED_EXPERIENCE_REPORT.md),
+[binding inventory](design-system-v2/INTEGRATED_ACTION_TRACEABILITY.md) and
+[source provenance](design-system-v2/INTEGRATED_SOURCE_PROVENANCE.json).
+
+
 ## Design System V2 — Phase B primitives (2026-10-06, branch-only)
 
 **IMPLEMENTED — READY FOR DESIGN SYSTEM V2 PHASE C**, not merge/deploy approval.

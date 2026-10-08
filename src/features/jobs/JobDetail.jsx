@@ -107,6 +107,13 @@ export function JobDetail({
   onArchive,
   onRestore,
   canRestore,
+  renderPresentation,
+  disclosureSummaries,
+  renderIntentNext,
+  renderConfirmation,
+  requestConfirmation,
+  renderConsequences,
+  compactLifecycle,
 }) {
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
@@ -178,6 +185,8 @@ export function JobDetail({
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const [reminderPreview, setReminderPreview] = useState(null);
+  const reminderPreviewRef = useRef(reminderPreview);
+  reminderPreviewRef.current = reminderPreview;
   const [isCopyingReminder, setIsCopyingReminder] = useState(false);
   const offersSectionRef = useRef(null);
   const currentJobIdRef = useRef(job.id);
@@ -327,6 +336,10 @@ export function JobDetail({
     && !isLoadingChecklistRun && !hasChecklistRunError
     && (!checklistRun || checklistRun.status === "DRAFT")
     && !isLoadingChecklistCapability && !hasChecklistCapabilityError);
+  // In-app confirmation yields to live props. Recheck the existing guard before
+  // invoking the original handler, not the eligibility captured when it opened.
+  const reminderEligibilityRef = useRef(canPrepareChecklistForReminder);
+  reminderEligibilityRef.current = canPrepareChecklistForReminder;
   const reminderPreviewAssignment = reminderPreview?.assignmentId
     ? activeAssignments.find((assignment) => assignment.id === reminderPreview.assignmentId)
     : null;
@@ -394,7 +407,9 @@ export function JobDetail({
           ? { intent: "assignment", label: "jobs.assignCleanerDirectly" }
           : job.operationalStatus === "ASSIGNED"
             ? { intent: "reminder", label: "jobs.intent.reminder" }
-            : { intent: "completion", label: "jobs.intent.completion" };
+            : canUseCompletionControls
+              ? { intent: "completion", label: "jobs.intent.completion" }
+              : { intent: "history", label: "jobs.intentHistory" };
 
   function focusIntentSection(ref) {
     // Wait for an existing form/preview to render; ignore a switched/unmounted Job.
@@ -906,8 +921,16 @@ export function JobDetail({
   async function prepareReminderChecklist() {
     if (!reminderPreview?.includeChecklist || !canPrepareChecklistForReminder
       || isPreparingReminderChecklist) return;
-    if (checklistCapability?.state === "ACTIVE"
-      && !window.confirm(translate("jobs.reminderReplaceChecklistWarning"))) return;
+    const preview = reminderPreview;
+    const requestedJobId = job.id;
+    if (checklistCapability?.state === "ACTIVE") {
+      const confirmed = requestConfirmation
+        ? await requestConfirmation({ kind: "replace-reminder", message: translate("jobs.reminderReplaceChecklistWarning") })
+        : window.confirm(translate("jobs.reminderReplaceChecklistWarning"));
+      if (!confirmed) return;
+      if (currentJobIdRef.current !== requestedJobId || reminderPreviewRef.current !== preview
+        || !reminderEligibilityRef.current) return;
+    }
     const cleanerId = reminderPreview.cleanerId;
     const jobId = job.id;
     setHasReminderChecklistError(false);
@@ -983,8 +1006,7 @@ export function JobDetail({
     }
   }
 
-  return (
-    <section className="panel job-detail" aria-labelledby="job-detail-title">
+  const identity = <>
       <BackButton onClick={onBack} />
 
       <h2 id="job-detail-title" className="panel__title">
@@ -999,6 +1021,8 @@ export function JobDetail({
       {isCompleted && <p className="job-detail__completion">
         {translate("jobs.completedTime")}: {completedAt || translate("common.notProvided")}
       </p>}
+  </>;
+  const summary = <>
       {lifecyclePresentation.attention.length > 0 && <aside className="service-attention" aria-label={translate("dashboard.needsAttention")}>
         {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
           <strong>{translate(attention.key, { count: attention.count })}</strong>
@@ -1011,7 +1035,7 @@ export function JobDetail({
           </button>}
         </div>)}
       </aside>}
-      <ServiceLifecycleRail lifecycle={lifecyclePresentation.lifecycle} />
+      <ServiceLifecycleRail lifecycle={lifecyclePresentation.lifecycle} compact={compactLifecycle} />
 
       <div className="service-cleaner-summary">
         <span>{translate("common.cleaner")}</span>
@@ -1021,9 +1045,17 @@ export function JobDetail({
               : job.assignedCleanerName || translate("dashboard.notAssigned")}</strong>
       </div>
       <ChecklistProgressSummary checklist={lifecyclePresentation.checklist} />
-      <JobIntentLayer
+  </>;
+  const intents = <JobIntentLayer
         key={job.id}
         primary={primaryIntent}
+        renderNext={renderIntentNext ? next => renderIntentNext(next, {
+          // Presentation-only: an open operation owns its final action. Do not
+          // cover it with a competing fixed primary after keyboard blur.
+          operationOpen: Boolean(isEditingJobSchedule || isEditingJobDetails || isEditingPrices
+            || isDirectAssignmentOpen || replacementTargetId || resolvingIssueId
+            || editingOfferCompensationFor || reminderPreview || isCompletionConfirmationVisible),
+        }) : undefined}
         showOperationalIntents={!job.archivedAt && !isCompleted}
         onIntent={chooseJobIntent}
         notice={intentNotice ? translate(intentNotice.key) : null}
@@ -1034,7 +1066,9 @@ export function JobDetail({
           : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
             : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
       />
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
+  ;
+  const details = <>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.details")} summary={disclosureSummaries?.details}>
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (
           <p className="form-success" role="status">{translate("jobs.scheduleSaved")}</p>
@@ -1044,6 +1078,7 @@ export function JobDetail({
         )}
         {isEditingJobSchedule && (
           <form className="cleaning-form" noValidate onSubmit={saveJobSchedule}>
+            {renderConsequences?.("schedule")}
             <p className="form-hint">{translate("jobs.scheduleExternalMessageWarning")}</p>
             <label>
               {translate("jobs.scheduledDate")}
@@ -1173,7 +1208,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.cleaner")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.cleaner")} summary={disclosureSummaries?.cleaner}>
       {!isAssignmentAware &&
         job.operationalStatus === "ASSIGNED" &&
         (job.assignedCleanerId || job.assignedCleanerName) && (
@@ -1215,6 +1250,7 @@ export function JobDetail({
 
           {canDirectAssign && isDirectAssignmentOpen && (
             <form className="cleaning-form" onSubmit={assignCleanerDirectly}>
+              {renderConsequences?.("assign")}
               <p className="form-hint">{translate("jobs.directAssignmentExplanation")}</p>
               {isLoadingCleaners && <StateCard message={translate("offers.loadingCleaners")} status="status" />}
               {hasCleanerError && <StateCard message={translate("offers.cleanerError")} status="alert" isError />}
@@ -1342,6 +1378,7 @@ export function JobDetail({
                     )}
                     {canEditRoster && isReplacing && (
                       <div className="assignment-replacement">
+                        {renderConsequences?.("replace-cleaner")}
                         <label>
                           {translate("jobs.replacementCleaner")}
                           <select
@@ -1524,7 +1561,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")} summary={disclosureSummaries?.checklist}>
       <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
         <div className="issues-section__header">
           <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
@@ -1614,7 +1651,14 @@ export function JobDetail({
                   onClick={() => setIsCompletionConfirmationVisible(true)}>
                   {translate("jobs.completeService")}
                 </button>
-              ) : (
+              ) : renderConfirmation ? renderConfirmation({
+                kind: "complete", title: translate("jobs.completeWithoutChecklistConfirm"),
+                message: translate("jobs.completeWithoutChecklistConfirm"),
+                confirmLabel: isCompletingCleaning ? translate("jobs.completingCleaning") : translate("jobs.completeService"),
+                cancelLabel: translate("common.cancel"), busy: isCompletingCleaning,
+                error: hasCompleteCleaningError ? translate("jobs.completeCleaningError") : null,
+                onCancel: () => setIsCompletionConfirmationVisible(false), onConfirm: completeCleaning,
+              }) : (
                 <div>
                   <p>{translate("jobs.completeWithoutChecklistConfirm")}</p>
                   <div className="button-row">
@@ -1681,7 +1725,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")} summary={disclosureSummaries?.offers}>
       <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
         <div className="offers-section__header">
           <h3 id="offers-title">{translate("offers.title")}</h3>
@@ -1809,6 +1853,7 @@ export function JobDetail({
                       className="offer-compensation-form"
                       onSubmit={(event) => createOfferLink(event, offer)}
                     >
+                      {renderConsequences?.("offer-link")}
                       <label>
                         {translate("offers.offeredCompensation")}
                         <input
@@ -1949,7 +1994,7 @@ export function JobDetail({
       </div>
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.issues")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.issues")} summary={disclosureSummaries?.issues}>
       <section ref={issuesSectionRef} tabIndex={-1} className="issues-section" aria-labelledby="issues-title">
         <div className="issues-section__header">
           <h3 id="issues-title">{translate("issues.title")}</h3>
@@ -2094,7 +2139,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")} summary={disclosureSummaries?.financial}>
       <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
         <h3>{translate("lifecycle.financialSnapshot")}</h3>
         <dl className="detail-list">
@@ -2172,7 +2217,7 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.history")}>
+      <JobDetailSection jobId={job.id} title={translate("jobs.section.history")} summary={disclosureSummaries?.history}>
       <dl ref={historySectionRef} tabIndex={-1} className="detail-list job-detail__history-summary">
         <DetailItem
           label={translate("common.property")}
@@ -2227,10 +2272,17 @@ export function JobDetail({
 
       <DataProvenanceReview record={job} onSave={onSaveDataProvenance} />
 
-      <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
+      <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} renderConfirmation={renderConfirmation} />
       </JobDetailSection>
-
-      <ScrollToTopButton />
+  </>;
+  const scrollToTop = <ScrollToTopButton />;
+  // Presentation receives existing elements, never a second controller or guard engine.
+  return renderPresentation ? renderPresentation({ identity, summary, summaryParts: {
+    attention: summary.props.children[0], lifecycle: summary.props.children[1],
+    cleaner: summary.props.children[2], checklist: summary.props.children[3],
+  }, intents, details, scrollToTop }) : (
+    <section className="panel job-detail" aria-labelledby="job-detail-title">
+      {identity}{summary}{intents}{details}{scrollToTop}
     </section>
   );
 }
