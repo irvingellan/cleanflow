@@ -1,5 +1,16 @@
 # CleanFlow — Current State
 
+## Design System V2 — Phase F1 Job Detail desktop (2026-10-07, branch-only)
+
+**READY FOR JOB DETAIL F1 OPERATOR PILOT**, not human acceptance or release.
+Isolated from verified Phase B `e4a3cfc`; existing Job Detail elements and single
+Intent Layer recompose into desktop content plus a 360px decision rail. All
+seven groups, guards, handlers, mounted forms and evidence semantics remain.
+Sandbox developer opt-in only; CURRENT default and mobile unchanged. Production
+excludes F1 component/CSS and synthetic harness. No new reads, mutations,
+backend changes, merge, deploy or real-data access. Other worktrees preserved.
+See [inventory, local preview, validation and deliberate F1 limits](design-system-v2/PHASE_F1_IMPLEMENTATION.md).
+
 ## Design System V2 — Phase B primitives (2026-10-06, branch-only)
 
 **IMPLEMENTED — READY FOR DESIGN SYSTEM V2 PHASE C**, not merge/deploy approval.

@@ -2709,6 +2709,10 @@ export function TranslationProvider({ children }) {
   return createElement(TranslationContext.Provider, { value }, children);
 }
 
+Object.assign(messages.en, { "jobV2.comparison": "Job Detail presentation", "jobV2.current": "CURRENT", "jobV2.decision": "Service decisions", "jobV2.desktopOnly": "F1 desktop preview — CURRENT presentation on smaller screens" });
+Object.assign(messages.pt, { "jobV2.comparison": "Apresentação do serviço", "jobV2.current": "ATUAL", "jobV2.decision": "Decisões do serviço", "jobV2.desktopOnly": "Prévia desktop F1 — apresentação ATUAL em telas menores" });
+Object.assign(messages.es, { "jobV2.comparison": "Presentación del servicio", "jobV2.current": "ACTUAL", "jobV2.decision": "Decisiones del servicio", "jobV2.desktopOnly": "Vista de escritorio F1 — presentación ACTUAL en pantallas pequeñas" });
+
 export function useTranslation() {
   const translation = useContext(TranslationContext);
   if (!translation) throw new Error("useTranslation must be used within TranslationProvider");

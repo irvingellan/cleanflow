@@ -197,7 +197,13 @@ export default defineConfig(({ mode }) => {
     build: mode === "sandbox" ? {
       rolldownOptions: {
         input: { index: path.resolve("index.html"), designSystemCatalog: path.resolve("design-system/catalog/index.html") },
-        output: { chunkFileNames: "assets/catalogShared-[hash].js" },
+        output: {
+          chunkFileNames: "assets/catalogShared-[hash].js",
+          // Sandbox-only extracted pilot CSS uses the existing deployable
+          // shared-asset convention; no broader Hosting allowlist is needed.
+          assetFileNames: asset => asset.names?.some(name => name.endsWith(".css"))
+            ? "assets/catalogShared-[hash].css" : "assets/[name]-[hash][extname]",
+        },
       },
     } : undefined,
     define: {

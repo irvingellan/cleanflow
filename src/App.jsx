@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -40,6 +40,8 @@ import { useDashboardController } from "./features/dashboard/useDashboardControl
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
 import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
+const SandboxJobDetailV2 = import.meta.env.MODE === "sandbox"
+  ? lazy(() => import("./features/jobs/JobDetailV2Pilot.jsx").then(module => ({ default: module.JobDetailV2Pilot }))) : null;
 import { SandboxLifecyclePreview } from "./features/jobs/SandboxLifecyclePreview.jsx";
 import { canShowEnvironmentNavigation } from "./environment.js";
 import { CreateCleaningForm } from "./features/jobs/JobForm.jsx";
@@ -425,6 +427,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
   const canPreviewLifecycle = import.meta.env.MODE === "sandbox"
     && canShowEnvironmentNavigation(authUser, "sandbox");
+  const JobDetailPresentation = canPreviewLifecycle ? SandboxJobDetailV2 : JobDetail;
 
   useEffect(() => {
     if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
@@ -1267,7 +1270,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "job-detail" && selectedJob && (
-          <JobDetail
+          <Suspense fallback={<StateCard message={translate("jobs.loading")} status="status" />}><JobDetailPresentation
             job={selectedJob}
             property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
             knownCleaners={directoryCleaners}
@@ -1333,7 +1336,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             canRestore={canManageExcludedRecords}
             onArchive={async () => { await archiveJobRecord(); removeJobFromWorklist(selectedJob.id); returnToJobs(); }}
             onRestore={restoreJobRecord}
-          />
+          /></Suspense>
         )}
 
         {view === "checklist-run" && selectedJob && checklistRun && (

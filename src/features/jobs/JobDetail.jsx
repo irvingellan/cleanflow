@@ -107,6 +107,7 @@ export function JobDetail({
   onArchive,
   onRestore,
   canRestore,
+  renderPresentation,
 }) {
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
@@ -983,8 +984,7 @@ export function JobDetail({
     }
   }
 
-  return (
-    <section className="panel job-detail" aria-labelledby="job-detail-title">
+  const identity = <>
       <BackButton onClick={onBack} />
 
       <h2 id="job-detail-title" className="panel__title">
@@ -999,6 +999,8 @@ export function JobDetail({
       {isCompleted && <p className="job-detail__completion">
         {translate("jobs.completedTime")}: {completedAt || translate("common.notProvided")}
       </p>}
+  </>;
+  const summary = <>
       {lifecyclePresentation.attention.length > 0 && <aside className="service-attention" aria-label={translate("dashboard.needsAttention")}>
         {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
           <strong>{translate(attention.key, { count: attention.count })}</strong>
@@ -1021,7 +1023,8 @@ export function JobDetail({
               : job.assignedCleanerName || translate("dashboard.notAssigned")}</strong>
       </div>
       <ChecklistProgressSummary checklist={lifecyclePresentation.checklist} />
-      <JobIntentLayer
+  </>;
+  const intents = <JobIntentLayer
         key={job.id}
         primary={primaryIntent}
         showOperationalIntents={!job.archivedAt && !isCompleted}
@@ -1034,6 +1037,8 @@ export function JobDetail({
           : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
             : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
       />
+  ;
+  const details = <>
       <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (
@@ -2229,8 +2234,12 @@ export function JobDetail({
 
       <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
       </JobDetailSection>
-
-      <ScrollToTopButton />
+  </>;
+  const scrollToTop = <ScrollToTopButton />;
+  // Presentation receives existing elements, never a second controller or guard engine.
+  return renderPresentation ? renderPresentation({ identity, summary, intents, details, scrollToTop }) : (
+    <section className="panel job-detail" aria-labelledby="job-detail-title">
+      {identity}{summary}{intents}{details}{scrollToTop}
     </section>
   );
 }
