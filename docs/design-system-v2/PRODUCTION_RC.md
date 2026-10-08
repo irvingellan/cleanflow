@@ -82,8 +82,9 @@ records, credentials or raw cloud inventories enter the review package.
 - Hosting/environment/build guards: 26 tests.
 - Disposable Firestore/Storage emulator security: 78 tests, synthetic project,
   isolated ports; existing user's emulators untouched. Installed JDK21 reused.
-- Browser: 308 checks (293 Chromium, 15 WebKit): integrated43, real App26,
-  production-like CURRENT/V2 4, Job Detail175, Shell19, Dashboard30, Services11.
+- Browser: 369 checks (354 Chromium, 15 WebKit): integrated43, real App26,
+  production-like CURRENT/V2 4, Job Detail175, Shell19, Dashboard30, Services11,
+  primitives31, CURRENT pixel-equivalence30.
 - Light EN / dark PT; ES detail and localization; 360/390/768/1280/1440 widths;
   keyboard/ARIA/focus/confirmation/Back/filter/containment regressions.
 - Production CURRENT, explicit candidate V2 and Sandbox builds and prepared
@@ -107,6 +108,12 @@ but final logs are identified separately; no failed tests are silently omitted.
 | G Production authorization | Not granted; no release performed |
 
 No unresolved P0/P1 presentation/security defect found in this RC review.
+Dependency audits are a separate inherited warning, not a clean-security claim:
+root runtime has 4 high advisory findings; Functions runtime has 11 moderate,
+1 high and 1 critical (`proxy-addr`, GHSA-jqcg-44mw-7w3h). Package/lockfiles and
+Functions remain unchanged; exploitability of the deployed bundle is not proven
+by npm audit. No automatic dependency update is performed. Triage these findings
+explicitly in the release decision; presentation tests do not clear them.
 The existing real-photo/notification reliability questions are not solved by
 presentation source preservation. Do not claim rollout/device/user success.
 
@@ -142,4 +149,5 @@ already-open browser clients may retain old code until navigation/update.
 Do not unregister notification workers or change tokens to force an update.
 
 **Recommendation:** READY FOR PRODUCTION RELEASE DECISION as an inactive RC;
-hold deployment until remaining gates and explicit authorization are resolved.
+hold deployment until remaining gates, dependency advisory triage and explicit
+authorization are resolved.
