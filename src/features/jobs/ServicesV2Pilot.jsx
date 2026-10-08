@@ -5,6 +5,7 @@ import { assignedCleanerSummary } from "./assignmentPresentation.js";
 import { formatDate } from "../../lib/presentation.js";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
+import { StateCard } from "../../components/UiPrimitives.jsx";
 import { Button, Row, SearchField, FilterChip, Select, ConfirmationSheet,
   Skeleton, SyncLine, EmptyState, ErrorState, LifecycleRail, Icon } from "../../components/v2/primitives.jsx";
 import { servicesV2Translate } from "./servicesV2Copy.js";
@@ -14,13 +15,14 @@ import "./servicesV2.css";
 export default function ServicesV2Pilot(props) {
   const { language } = useTranslation();
   const [variant, setVariant] = useState(() => new URLSearchParams(window.location.search).get("services") === "v2" ? "v2" : "current");
+  const selected = props.presentation ?? variant;
   const t = key => servicesV2Translate(language, key);
-  return <div className={variant === "v2" ? "services-v2-pilot" : undefined}>
-    <div className="services-v2-comparison" role="group" aria-label={t("preview")}>
+  return <div className={selected === "v2" ? "services-v2-pilot" : undefined}>
+    {!props.hideComparison && <div className="services-v2-comparison" role="group" aria-label={t("preview")}>
       <span>{t("preview")}</span>{["current", "v2"].map(value => <Button key={value} variant="secondary" aria-pressed={variant === value}
         onClick={() => { setVariant(value); const url = new URL(window.location.href); url.searchParams.set("services", value); window.history.replaceState(window.history.state, "", url); }}>{t(value)}</Button>)}
-    </div>
-    <JobsPage {...props} renderPresentation={variant === "v2" ? model => <ServicesV2 {...props} {...model} /> : undefined} />
+    </div>}
+    <JobsPage {...props} renderPresentation={selected === "v2" ? model => <ServicesV2 {...props} {...model} /> : undefined} />
   </div>;
 }
 
@@ -74,7 +76,9 @@ function ServicesV2({ language, translate, sortedJobs, cleanerNamesById, jobCard
     </ConfirmationSheet>
     {isLoading && !jobs.length && <Skeleton label={translate("jobs.loading")} rows={5} />}
     {hasPrevious && <SyncLine status={hasError ? "stale" : "updating"}>{hasError ? t("failed") : t("refreshing")} {t("previous")}</SyncLine>}
-    {hasError && !isLoading && <ErrorState title={translate("jobs.error")} retryLabel={t("retry")} onRetry={onRetry} />}
+    {hasError && !isLoading && (onRetry
+      ? <ErrorState title={translate("jobs.error")} retryLabel={t("retry")} onRetry={onRetry} />
+      : <StateCard message={translate("jobs.error")} status="alert" isError />)}
     {!isLoading && !hasError && !sortedJobs.length && <EmptyState title={translate(jobs.length ? "jobs.noMatchingFilters" : "jobs.empty")}
       action={<Button variant="secondary" onClick={jobs.length ? onClearFilters : onCreate}>{translate(jobs.length ? "jobs.clearFilters" : "jobs.newService")}</Button>}>
     </EmptyState>}

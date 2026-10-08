@@ -1,5 +1,6 @@
 .job-v2-comparison { display: flex; align-items: center; gap: var(--v2-space-3); margin-bottom: var(--v2-space-4); color: var(--v2-color-text-secondary); }
 .job-v2-pilot--wide { width: 100%; max-width: var(--v2-layout-content-max-wide); margin-inline: auto; }
+.cfv2-shell-content.foundation:has(.job-detail-v2) { width: 100%; max-width: var(--v2-layout-content-max-wide); }
 .job-detail-v2 { color: var(--v2-color-text-primary); font-family: var(--v2-type-font-family); font-size: var(--v2-type-body-size); line-height: var(--v2-type-body-line); }
 .job-v2-identity { margin-bottom: var(--v2-space-5); }
 .job-v2-identity .back-button { display: block; min-height: var(--v2-size-touch-target-min); }

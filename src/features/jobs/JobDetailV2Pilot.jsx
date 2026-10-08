@@ -11,7 +11,8 @@ import { JobConfirmationV2, JobConsequencesV2 } from "./JobConfirmationV2.jsx";
 // This wrapper owns presentation preference, not permission or domain state.
 export function JobDetailV2Pilot(props) {
   const { translate, language } = useTranslation();
-  const [presentation, setPresentation] = useState(() => new URLSearchParams(window.location.search).get("jobDetail") === "v2" ? "v2" : "current");
+  const [localPresentation, setPresentation] = useState(() => new URLSearchParams(window.location.search).get("jobDetail") === "v2" ? "v2" : "current");
+  const presentation = props.presentation ?? localPresentation;
   const [desktop, setDesktop] = useState(() => window.matchMedia("(min-width: 1100px)").matches);
   const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 719px)").matches);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -71,10 +72,10 @@ export function JobDetailV2Pilot(props) {
   const status = formatOperationalStatus(props.job.operationalStatus, translate);
   const tone = props.job.archivedAt ? "neutral" : ({ UNASSIGNED: "warning", OFFERED: "info", ASSIGNED: "brand", IN_PROGRESS: "info", COMPLETED: "success" }[props.job.operationalStatus] || "neutral");
   return <div className={v2 ? "job-v2-pilot job-v2-pilot--wide" : "job-v2-pilot"}>
-    <div className="job-v2-comparison">
+    {!props.hideComparison && <div className="job-v2-comparison">
       <SegmentedControl label={translate("jobV2.comparison")} value={presentation} onChange={compare}
         options={[{ value: "current", label: translate("jobV2.current") }, { value: "v2", label: "V2" }]} />
-    </div>
+    </div>}
     <JobDetail {...props}
       compactLifecycle={v2 && compact}
       requestConfirmation={v2 ? requestConfirmation : undefined}

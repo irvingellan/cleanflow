@@ -25,7 +25,7 @@ it("local pagination/filtering leaves the source context unchanged",()=>{
  expect(filteredServices(c.jobs,{status:"in-progress",datePreset:"today"},false).every(j=>j.operationalStatus==="IN_PROGRESS"&&j.scheduledDate===today)).toBe(true);
  expect(c.jobs).toHaveLength(41);
 });
-it("real App and provider/business-rule boundaries are exactly Phase B",()=>{
- for(const f of ["src/App.jsx","src/features/jobs/jobService.js","src/features/jobs/assignmentService.js","src/features/jobs/jobCompatibility.js","src/features/jobs/jobScheduleService.js","src/features/dashboard/dashboardService.js","firestore.rules","storage.rules","firebase.json"]){
+it("provider/business-rule boundaries are exactly Phase B",()=>{
+ for(const f of ["src/features/jobs/jobService.js","src/features/jobs/assignmentService.js","src/features/jobs/jobCompatibility.js","src/features/jobs/jobScheduleService.js","src/features/dashboard/dashboardService.js","firestore.rules","storage.rules","firebase.json"]){
  expect(fs.readFileSync(f,"utf8"),f).toBe(execFileSync("git",["show",`e4a3cfc:${f}`],{encoding:"utf8"}));}
 });

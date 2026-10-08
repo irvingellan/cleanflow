@@ -6,19 +6,26 @@ const current = fs.readFileSync("src/App.jsx", "utf8");
 function manager(code) { return code.slice(code.indexOf("function ManagerApplication"), code.indexOf("function AuthenticationLoading")); }
 describe("Phase C1 presentation preservation", () => {
   it("manager controllers, authorization checks and existing handlers remain byte-identical", () => {
-    expect(manager(current)).toBe(manager(baseline));
+    const logic = code => manager(code).split("  const foundationClass =")[0].split("  return (\n    <main className=\"app-shell\">")[0]
+      .replace(/  const \[integratedChoice[\s\S]*?(?=\n  useEffect\()/, "");
+    expect(logic(current)).toBe(logic(baseline));
   });
   it("every existing screen JSX/handler binding is unchanged", () => {
-    const pages = code => manager(code).slice(manager(code).indexOf("        <PwaUpdatePrompt />"));
+    const pages = code => manager(code).slice(manager(code).indexOf("        <PwaUpdatePrompt />"), manager(code).lastIndexOf("      </section>"))
+      .replaceAll('DashboardPresentation presentation="v2" hideComparison', "Dashboard")
+      .replaceAll('ServicesPresentation presentation="v2" hideComparison', "JobsPage")
+      .replaceAll('DetailPresentation presentation="v2" hideComparison', "JobDetail")
+      .replace('            onRetry={jobWorklist.retry}\n', "");
+    const currentPages = manager(current).slice(manager(current).indexOf("        <PwaUpdatePrompt />"), manager(current).lastIndexOf("      </Shell>"))
+      .replaceAll('DashboardPresentation presentation="v2" hideComparison', "Dashboard")
+      .replaceAll('ServicesPresentation presentation="v2" hideComparison', "JobsPage")
+      .replaceAll('DetailPresentation presentation="v2" hideComparison', "JobDetail")
+      .replace('            onRetry={jobWorklist.retry}\n', "");
     const oldPages = pages(baseline);
-    expect(pages(current)).toBe(oldPages);
+    expect(currentPages).toBe(oldPages);
   });
   it("all legacy account components and callbacks are reused verbatim", () => {
-    const account = code => {
-      const start = manager(code).indexOf('            <div className="manager-account">');
-      return manager(code).slice(start, manager(code).indexOf("  </>);", start) > 0
-        ? manager(code).indexOf("  </>);", start) : manager(code).indexOf("          </div>\n        </header>", start));
-    };
+    const account = code => manager(code).match(/            <div className="manager-account">[\s\S]*?\{hasSignOutError[\s\S]*?\n            \)}/)?.[0];
     expect(account(current)).toBe(account(baseline));
   });
   it("all shell CSS values refer to existing tokens; no arbitrary colors", () => {

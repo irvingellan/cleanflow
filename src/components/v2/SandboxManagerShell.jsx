@@ -27,7 +27,7 @@ export function SandboxManagerShell(props) {
   return <V2ManagerShell {...props} />;
 }
 
-export function V2ManagerShell({ language, translate, destinations, activeSection, view, utilities, foundationClass, children }) {
+export function V2ManagerShell({ language, translate, destinations, activeSection, view, utilities, foundationClass, children, integratedComparison = false }) {
   const t = key => shellText(language, key);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("cleanflow-v2-sidebar-collapsed") === "true"; } catch { return false; }
@@ -103,7 +103,7 @@ export function V2ManagerShell({ language, translate, destinations, activeSectio
           return items.length ? <section key={group} className={`cfv2-shell-group cfv2-shell-group-${group}`}><h2>{t(group)}</h2>{items.map(item => navigationItem(item))}</section> : null;
         })}</nav>}
         <div className="cfv2-shell-utilities">{utilities}</div>
-        <section className="cfv2-shell-group cfv2-shell-group-internal"><h2>{t("compare")}</h2><a className="cfv2-shell-destination" href={shellComparisonHref(location.search, "current")}><Icon name="flask" />{t("current")}</a></section>
+        {!integratedComparison && <section className="cfv2-shell-group cfv2-shell-group-internal"><h2>{t("compare")}</h2><a className="cfv2-shell-destination" href={shellComparisonHref(location.search, "current")}><Icon name="flask" />{t("current")}</a></section>}
       </section>
     </div>
   </div>;

@@ -1,5 +1,18 @@
 # CleanFlow — Current State
 
+## V2 authenticated Sandbox integration (2026-10-08, isolated preview candidate)
+
+User-reported local operator acceptance for integrated baseline `6687329` is
+accepted evidence; it supersedes the pending local-acceptance wording below.
+Branch `feature/design-system-v2-authenticated-review` connects the four approved
+presentations to the existing authenticated App, without changing controllers,
+services, authorization or operational handlers. V2 requires the Sandbox build,
+existing manager access, developer presentation permission and `?experience=v2`.
+Production excludes the lazy V2 modules. The synthetic QA entry is not a build
+input. No main merge or Production release is authorized. Live authenticated
+acceptance must be recorded separately from synthetic/browser tests.
+See [authenticated review](design-system-v2/AUTHENTICATED_REVIEW.md).
+
 ## V2 integrated synthetic operator pilot (2026-10-08, local branch only)
 
 Shell, Dashboard (including approved icon/accent WIP), Services and complete

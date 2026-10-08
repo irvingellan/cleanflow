@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 const entry="/e2e/integrated-v2/index.html";
 const errors=new WeakMap();
-test.beforeEach(async({page})=>{const list=[];errors.set(page,list);page.on("pageerror",e=>list.push(e.message));page.on("request",r=>{if(!r.url().startsWith("http://127.0.0.1:4210")&&!r.url().startsWith("data:"))list.push(`external:${r.url()}`);});});
+test.beforeEach(async({page,baseURL})=>{const list=[];errors.set(page,list);page.on("pageerror",e=>list.push(e.message));page.on("request",r=>{if(!r.url().startsWith(baseURL+"/")&&!r.url().startsWith("data:"))list.push(`external:${r.url()}`);});});
 test.afterEach(async({page})=>{expect(errors.get(page)).toEqual([]);});
 async function open(page,view="dashboard",options=""){await page.goto(`${entry}?view=${view}${options}`);await expect(page.locator(".integrated-banner")).toBeVisible();}
 async function contained(page){expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);}

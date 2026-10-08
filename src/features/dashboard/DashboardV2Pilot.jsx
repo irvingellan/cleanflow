@@ -10,6 +10,7 @@ import "./dashboardV2.css";
 // Imported only by the Sandbox build. This UI never chooses a backend or loads data.
 export default function DashboardV2Pilot(props) {
   const [version, setVersion] = useState(() => new URLSearchParams(window.location.search).get("dashboard") === "v2" ? "v2" : "current");
+  const selected = props.presentation ?? version;
   const t = props.translate;
   const choose = value => {
     setVersion(value);
@@ -19,11 +20,11 @@ export default function DashboardV2Pilot(props) {
     window.history.replaceState(window.history.state, "", url);
   };
   return <div className="dashboard-pilot">
-    <div className="dashboard-pilot-comparison"><StateLabel tone="sandbox" icon="flask">{t("dashboardV2.pilot")}</StateLabel>
+    {!props.hideComparison && <div className="dashboard-pilot-comparison"><StateLabel tone="sandbox" icon="flask">{t("dashboardV2.pilot")}</StateLabel>
       <SegmentedControl label={t("dashboardV2.compare")} value={version} onChange={choose}
         options={[{ value: "current", label: t("dashboardV2.current") }, { value: "v2", label: "V2" }]} />
-    </div>
-    <Dashboard {...props} renderPresentation={version === "v2" ? model => <DashboardV2 {...props} model={model} /> : undefined} />
+    </div>}
+    <Dashboard {...props} renderPresentation={selected === "v2" ? model => <DashboardV2 {...props} model={model} /> : undefined} />
   </div>;
 }
 
