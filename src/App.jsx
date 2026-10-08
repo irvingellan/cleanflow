@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { integratedPilotEnabled } from "./components/v2/integratedPilot.js";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -41,7 +42,7 @@ import { DevCenter } from "./features/dev-center/DevCenter.jsx";
 import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
 import { SandboxLifecyclePreview } from "./features/jobs/SandboxLifecyclePreview.jsx";
-import { canShowEnvironmentNavigation } from "./environment.js";
+import { canShowEnvironmentNavigation, cleanflowEnvironment } from "./environment.js";
 import { CreateCleaningForm } from "./features/jobs/JobForm.jsx";
 import { JobsPage } from "./features/jobs/JobsPage.jsx";
 import {
@@ -87,6 +88,16 @@ const content = {
   productName: "CleanFlow",
   unnamedProperty: "Unnamed property",
 };
+
+// Build-time only: CURRENT default; Production has no query/storage opt-in.
+const IntegratedSandboxShell = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+  ? lazy(() => import("./components/v2/SandboxManagerShell.jsx").then(module => ({ default: module.V2ManagerShell }))) : null;
+const SandboxDashboard = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+  ? lazy(() => import("./features/dashboard/DashboardV2Pilot.jsx")) : null;
+const SandboxServices = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+  ? lazy(() => import("./features/jobs/ServicesV2Pilot.jsx")) : null;
+const SandboxJobDetail = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+  ? lazy(() => import("./features/jobs/JobDetailV2Pilot.jsx").then(module => ({ default: module.JobDetailV2Pilot }))) : null;
 
 function publicOfferTokenFromPathname(pathname = window.location.pathname) {
   const pathSegments = pathname.split("/").filter(Boolean);
@@ -425,6 +436,21 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
   const canPreviewLifecycle = import.meta.env.MODE === "sandbox"
     && canShowEnvironmentNavigation(authUser, "sandbox");
+  const [integratedChoice, setIntegratedChoice] = useState(() => integratedPilotEnabled({
+    mode: import.meta.env.MODE, authorized: canPreviewLifecycle, search: window.location.search,
+    buildExperience: __CLEANFLOW_MANAGER_EXPERIENCE__,
+  }));
+  const useIntegratedV2 = (import.meta.env.MODE === "production" && __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+    || (canPreviewLifecycle && integratedChoice);
+  const DashboardPresentation = useIntegratedV2 ? SandboxDashboard : Dashboard;
+  const ServicesPresentation = useIntegratedV2 ? SandboxServices : JobsPage;
+  const DetailPresentation = useIntegratedV2 ? SandboxJobDetail : JobDetail;
+  function chooseIntegratedPresentation(enabled) {
+    setIntegratedChoice(enabled);
+    const url = new URL(window.location.href);
+    url.searchParams.set("experience", enabled ? "v2" : "current");
+    window.history.replaceState(window.history.state, "", url);
+  }
 
   useEffect(() => {
     if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
@@ -899,30 +925,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("checklist-run");
   }
 
-  return (
-    <main className="app-shell">
-      <section
-        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}${view === "weekly-close-preview" ? " foundation--weekly-close" : ""}`}
-        aria-labelledby="page-title"
-      >
-        <header className="foundation__header">
-          <div className="brand-block">
-            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
-            <h1 id="page-title">{content.productName}</h1>
-            <MainNavigation
-              activeSection={activeSection}
-              translate={translate}
-              onShowDashboard={showDashboard}
-              onShowProperties={showProperties}
-              onShowJobs={showJobs}
-              onShowCleaners={showCleaners}
-              onShowPayouts={showPayouts}
-              onShowClients={showClients}
-              canAccessDevCenter={devCenterController.access.authorized}
-              onShowDevCenter={showDevCenter}
-            />
-          </div>
-          <div className="header-actions">
+  const foundationClass = `foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}${view === "weekly-close-preview" ? " foundation--weekly-close" : ""}`;
+  const utilities = (<>
             <div className="manager-account">
               <ManagerIdentity user={authUser} />
               <div className="manager-account__controls">
@@ -952,8 +956,33 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 {translate("auth.signOutError")}
               </p>
             )}
-          </div>
-        </header>
+    {canPreviewLifecycle && <div role="group" aria-label={translate("jobV2.comparison")}>
+      <button className="button button--small" type="button" aria-pressed={!useIntegratedV2}
+        onClick={() => chooseIntegratedPresentation(false)}>{translate("jobV2.current")}</button>
+      <button className="button button--small" type="button" aria-pressed={useIntegratedV2}
+        onClick={() => chooseIntegratedPresentation(true)}>V2</button>
+    </div>}
+  </>);
+  const legacyHeader = <header className="foundation__header"><div className="brand-block">
+    <p className="eyebrow">{translate("brand.operationsPlatform")}</p><h1 id="page-title">{content.productName}</h1>
+    <MainNavigation activeSection={activeSection} translate={translate}
+      onShowDashboard={showDashboard} onShowProperties={showProperties} onShowJobs={showJobs}
+      onShowCleaners={showCleaners} onShowPayouts={showPayouts} onShowClients={showClients}
+      canAccessDevCenter={devCenterController.access.authorized} onShowDevCenter={showDevCenter} />
+    </div><div className="header-actions">{utilities}</div></header>;
+  const destinations = [
+    { key: "dashboard", labelKey: "navigation.dashboard", icon: "dashboard", group: "daily", onClick: showDashboard },
+    { key: "jobs", labelKey: "navigation.jobs", icon: "jobs", group: "daily", onClick: showJobs },
+    { key: "properties", labelKey: "navigation.properties", icon: "home", group: "directory", onClick: showProperties },
+    { key: "cleaners", labelKey: "navigation.cleaners", icon: "people", group: "directory", onClick: showCleaners },
+    { key: "clients", labelKey: "navigation.clients", icon: "clients", group: "directory", onClick: showClients },
+    { key: "payouts", labelKey: "navigation.payouts", icon: "wallet", group: "money", onClick: showPayouts },
+    ...(devCenterController.access.authorized ? [{ key: "dev-center", labelKey: "navigation.devCenter", icon: "tools", group: "internal", onClick: showDevCenter }] : []),
+  ];
+  const Shell = useIntegratedV2 ? IntegratedSandboxShell : CurrentManagerShell;
+  return (
+    <Suspense fallback={<StateCard message={translate("auth.loading")} status="status" />}>
+      <Shell {...{ foundationClass, legacyHeader, utilities, destinations, activeSection, view, language, translate }} environment={cleanflowEnvironment} integratedComparison>
 
         <PwaUpdatePrompt />
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
@@ -961,7 +990,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
 
         {view === "dashboard" && (
-          <Dashboard
+          <DashboardPresentation presentation="v2" hideComparison
             dashboardData={dashboardData}
             isLoading={isLoadingDashboard}
             hasError={hasDashboardError}
@@ -1098,7 +1127,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "job-list" && (
-          <JobsPage
+          <ServicesPresentation presentation="v2" hideComparison
             jobs={jobs}
             isLoading={isLoadingJobs}
             hasError={hasJobError}
@@ -1267,7 +1296,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "job-detail" && selectedJob && (
-          <JobDetail
+          <DetailPresentation presentation="v2" hideComparison
             job={selectedJob}
             property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
             knownCleaners={directoryCleaners}
@@ -1385,9 +1414,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "issue-success" && selectedJob && (
           <IssueSuccess onBackToCleaning={() => setView("cleaner-job")} />
         )}
-      </section>
-    </main>
+      </Shell>
+    </Suspense>
   );
+}
+
+function CurrentManagerShell({ foundationClass, legacyHeader, children }) {
+  return <main className="app-shell"><section className={foundationClass} aria-labelledby="page-title">{legacyHeader}{children}</section></main>;
 }
 
 function AuthenticationLoading() {

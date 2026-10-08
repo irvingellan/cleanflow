@@ -4,8 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createServer } from "node:http";
+import { chromium } from "@playwright/test";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
 const sandboxProjectId = "cleanflow-sandbox-fixture";
@@ -17,7 +19,7 @@ function fixture(t) {
 
   // Deliberately copy only build inputs, never local .env files, credentials,
   // exports, emulator data or Firebase CLI state from the developer workspace.
-  for (const directory of ["src", "public", "functions/src", "scripts"]) {
+  for (const directory of ["src", "public", "functions/src", "scripts", "design-system"]) {
     fs.cpSync(path.join(repository, directory), path.join(root, directory), {
       recursive: true,
       filter: (source) => !path.basename(source).startsWith("."),
@@ -66,7 +68,7 @@ function build(root, environment, label) {
   return { ...result, output, diagnostic: `${result.stdout || ""}\n${result.stderr || ""}` };
 }
 
-test("Sandbox build binds synthetic client and messaging worker to its separate project", (t) => {
+test("Sandbox build binds synthetic client/worker and catalog remains network-free after bundling", async (t) => {
   const root = fixture(t);
   const result = build(root, syntheticEnvironment(), "positive");
   assert.equal(result.status, 0, result.diagnostic);
@@ -79,6 +81,32 @@ test("Sandbox build binds synthetic client and messaging worker to its separate 
   assert.ok(messagingWorker.includes(`"storageBucket":"${sandboxProjectId}.firebasestorage.app"`));
   const rootWorker = fs.readFileSync(path.join(result.output, "sw.js"), "utf8");
   assert.doesNotMatch(rootWorker, /addEventListener\(\s*["']fetch["']/);
+  assert.ok(fs.existsSync(path.join(result.output, "design-system/catalog/index.html")));
+  const catalogHtml = fs.readFileSync(path.join(result.output, "design-system/catalog/index.html"), "utf8");
+  assert.match(catalogHtml, /assets\/designSystemCatalog-/);
+  // Catalog's dedicated entry must not import the main application/Firebase chunk.
+  assert.doesNotMatch(catalogHtml, /assets\/index-.*\.js/);
+  const server = createServer((request, response) => {
+    const relative = new URL(request.url, "http://localhost").pathname.replace(/^\//, "");
+    const file = path.resolve(result.output, relative.endsWith("/") ? relative + "index.html" : relative);
+    if (!file.startsWith(result.output + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { response.writeHead(404).end(); return; }
+    response.setHeader("Content-Type", file.endsWith(".js") ? "application/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
+    response.end(fs.readFileSync(file));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage(); const unexpected = []; const errors = [];
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => { const url = new URL(route.request().url()); if (url.origin !== origin || /api\/|firebase|firestore|identitytoolkit/.test(url.pathname)) { unexpected.push(url.origin + url.pathname); return route.abort(); } return route.continue(); });
+    await page.goto(origin + "/design-system/catalog/");
+    await page.getByRole("heading", { name: "Component catalog" }).waitFor();
+    await page.getByRole("button", { name: "Preview confirmation" }).click();
+    await page.getByRole("button", { name: "Keep example" }).click();
+    assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+    assert.equal(await page.evaluate(() => navigator.serviceWorker.getRegistrations().then(rows => rows.length)), 0);
+  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 });
 
 test("Production build excludes the synthetic lifecycle preview and local harness", (t) => {
@@ -96,8 +124,39 @@ test("Production build excludes the synthetic lifecycle preview and local harnes
   const javascript = fs.readdirSync(path.join(output, "assets"))
     .filter(file => file.endsWith(".js"))
     .map(file => fs.readFileSync(path.join(output, "assets", file), "utf8")).join("\n");
-  for (const value of ["lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
+  assert.equal(fs.existsSync(path.join(output, "design-system")), false);
+  assert.equal(fs.readdirSync(path.join(output, "assets")).some(file => /Catalog|catalogShared|^src-/.test(file)), false);
+  for (const value of ["design-system-v2-catalog", "cfv2-catalog", "cfv2-panel", "lifecycle-v0-job-", "Lifecycle Demo Client", "Synthetic preview is read-only", "sandbox-lifecycle-preview", "Local synthetic scenario"]) {
     assert.equal(javascript.includes(value), false, `Synthetic preview implementation leaked: ${value}`);
+  }
+});
+
+test("Inactive RC default and explicit CURRENT preserve worker/static hashes, marker and V2 exclusion", t => {
+  const root = fixture(t);
+  const environment = syntheticEnvironment({ VITE_CLEANFLOW_ENV: "production", VITE_FIREBASE_PROJECT_ID: "clean-flow-prototipo", VITE_FIREBASE_AUTH_DOMAIN: "clean-flow-prototipo.firebaseapp.com", VITE_FIREBASE_STORAGE_BUCKET: "clean-flow-prototipo.firebasestorage.app" });
+  function compile(label) {
+    const output = path.join(root, label);
+    const result = spawnSync("npm", ["run", "build", "--", "--outDir", output], { cwd: root, env: environment, encoding: "utf8", timeout: 60_000 });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    function walk(directory, prefix = "") {
+      return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(path.join(directory, entry.name), prefix + entry.name + "/") : [{ file: prefix + entry.name, hash: crypto.createHash("sha256").update(fs.readFileSync(path.join(directory, entry.name))).digest("hex") }]);
+    }
+    return walk(output).sort((a, b) => a.file.localeCompare(b.file));
+  }
+  const current = compile("dist-phase-b");
+  // The historical Phase A config predates the RC build constant. Compare the
+  // two supported inactive release inputs rather than an incompatible old config.
+  environment.VITE_MANAGER_EXPERIENCE = "current";
+  const explicit = compile("dist-phase-a");
+  // Vite embeds the explicit VITE_* input in import.meta.env; entry hashes may
+  // differ. Worker/static content and presentation selection must not differ.
+  const stable = files => files.filter(item => !item.file.startsWith("assets/") && item.file !== "index.html");
+  assert.deepEqual(stable(current), stable(explicit));
+  for (const output of ["dist-phase-b", "dist-phase-a"]) {
+    const assets = fs.readdirSync(path.join(root, output, "assets"));
+    assert.equal(assets.some(file => /managerV2|DashboardV2|ServicesV2|SandboxManagerShell/.test(file)), false);
+    const js = assets.filter(file => file.endsWith(".js")).map(file => fs.readFileSync(path.join(root, output, "assets", file), "utf8")).join("\n");
+    assert.equal(js.includes("cfv2-shell-tabs"), false);
   }
 });
 

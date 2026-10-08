@@ -22,6 +22,17 @@ test("root and nested DS_Store are removed and never enter stable deployable man
   assert.equal(fs.existsSync(path.join(dir, ".DS_Store")), false);
   assert.deepEqual(inspectHostingBuild(dir, "expected", []), manifest);
 });
+test("explicit future V2 manifest permits only its verified chunks and checks presentation binding", t => {
+  const dir = fixture(t);
+  const binding = { environment: "production", projectId: "clean-flow-prototipo", managerExperience: "v2" };
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...binding }));
+  fs.writeFileSync(path.join(dir, "assets/managerV2-synthetic.js"), "synthetic");
+  fs.writeFileSync(path.join(dir, "assets/DashboardV2Pilot-synthetic.css"), "synthetic");
+  assert.ok(inspectHostingBuild(dir, "expected", [], binding).some(f => f.file.endsWith("managerV2-synthetic.js")));
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { ...binding, managerExperience: "current" }), /presentation|experience/);
+  fs.writeFileSync(path.join(dir, "assets/harness-synthetic.js"), "synthetic");
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], binding), /Unexpected/);
+});
 test("unexpected temporary or harness files fail closed", t => {
   const dir = fixture(t);
   for (const file of ["upload.tmp", "test.html", "assets/.hidden"]) {
@@ -46,9 +57,37 @@ test("Hosting ignores Finder artifacts even if recreated after preparation", () 
 test("same preparation validates Sandbox and production binding, not only SHA", t => {
   const dir = fixture(t);
   const binding = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic catalog");
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...binding }));
   assert.ok(inspectHostingBuild(dir, "expected", [], binding).length);
-  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /environment\/project/);
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /Unexpected|environment\/project/);
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", environment: "sandbox", projectId: "clean-flow-prototipo" }));
   assert.throws(() => inspectHostingBuild(dir, "expected", [], binding), /environment\/project/);
+});
+
+test("catalog HTML/assets are allowed only in a Sandbox-bound manifest", t => {
+  const dir = fixture(t);
+  fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic catalog");
+  fs.writeFileSync(path.join(dir, "assets/designSystemCatalog-demo.js"), "synthetic");
+  const sandbox = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...sandbox }));
+  assert.ok(inspectHostingBuild(dir, "expected", [], sandbox).some(entry => entry.file.includes("designSystemCatalog")));
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /Unexpected/);
+  fs.writeFileSync(path.join(dir, "assets/unexpected-catalog.js"), "unexpected");
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], sandbox), /Unexpected/);
+});
+test("verified lazy V2 CSS chunks are Sandbox-only; arbitrary chunks still fail closed", t => {
+  const dir = fixture(t), sandbox = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic");
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...sandbox }));
+  for (const name of ["DashboardV2Pilot", "ServicesV2Pilot", "JobDetailV2Pilot", "SandboxManagerShell", "primitives"]) {
+    fs.writeFileSync(path.join(dir, `assets/${name}-synthetic.css`), "synthetic");
+  }
+  assert.equal(inspectHostingBuild(dir, "expected", [], sandbox).filter(entry => entry.file.endsWith(".css")).length, 5);
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], { environment: "production", projectId: "clean-flow-prototipo" }), /Unexpected/);
+  fs.writeFileSync(path.join(dir, "assets/unknown-synthetic.css"), "synthetic");
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], sandbox), /Unexpected/);
 });

@@ -53,6 +53,7 @@ export function JobsPage({
   canManageExcluded,
   showExcluded,
   onToggleExcluded,
+  renderPresentation,
 }) {
   const { language, translate } = useTranslation();
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
@@ -156,6 +157,12 @@ export function JobsPage({
       datePreset: filters.datePreset === "today" ? "any" : "today",
     });
   }
+
+  if (renderPresentation) return renderPresentation({
+    language, translate, sortedJobs, cleanerNamesById, jobCardElements,
+    hasActiveFilters, statusOptions, dateOptions, advancedFilterCount,
+    toggleQuickStatus, toggleToday,
+  });
 
   return (
     <section aria-labelledby="jobs-title">

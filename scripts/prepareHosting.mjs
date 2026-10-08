@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolveManagerExperience } from "../src/components/v2/integratedPilot.js";
 
 export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBinding) {
   const files = [];
@@ -20,10 +21,20 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
     }
   }
   walk(dist);
-  const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
+  const version = JSON.parse(fs.readFileSync(path.join(dist, "version.json"), "utf8"));
+  if (expectedBinding?.managerExperience && (version.managerExperience || "current") !== expectedBinding.managerExperience) {
+    throw new Error("Hosting manager experience does not match intended presentation");
+  }
+  const productionV2 = expectedBinding?.environment === "production" && expectedBinding.managerExperience === "v2";
+  const sandboxCatalog = expectedBinding?.environment === "sandbox";
+  const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js", ...(sandboxCatalog ? ["design-system/catalog/index.html"] : [])];
   const allowed = new Set(required);
   for (const file of files) {
-    if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file)) {
+    // Vite's shared src/index.css is extracted as src-*.css for this multi-entry build.
+    const catalogAsset = sandboxCatalog && (/^assets\/(?:designSystemCatalog|catalogShared)-[A-Za-z0-9_-]+\.(js|css)$/.test(file) || /^assets\/(?:src|DashboardV2Pilot|ServicesV2Pilot|JobDetailV2Pilot|SandboxManagerShell|primitives)-[A-Za-z0-9_-]+\.css$/.test(file));
+    const productionV2Asset = productionV2 && (/^assets\/managerV2-[A-Za-z0-9_-]+\.js$/.test(file)
+      || /^assets\/(?:DashboardV2Pilot|ServicesV2Pilot|JobDetailV2Pilot|SandboxManagerShell|primitives)-[A-Za-z0-9_-]+\.css$/.test(file));
+    if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file) && !catalogAsset && !productionV2Asset) {
       throw new Error(`Unexpected Hosting file: ${file}`);
     }
     if (file.split("/").some(part => part.startsWith(".")) || /(?:\.tmp|\.temp|\.swp|\.swo|~)$/.test(file)) {
@@ -31,7 +42,6 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
     }
   }
   for (const file of required) if (!files.includes(file)) throw new Error(`Missing Hosting file: ${file}`);
-  const version = JSON.parse(fs.readFileSync(path.join(dist, "version.json"), "utf8"));
   if (version.buildId !== expectedSha) {
     throw new Error("Hosting build ID does not match intended SHA");
   }
@@ -50,6 +60,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const head = git("rev-parse", "HEAD");
   const expectedSha = process.argv[2] || head;
   const environment = process.argv[3] || "production";
+  const managerExperience = resolveManagerExperience(process.argv[4]);
+  if (process.env.VITE_MANAGER_EXPERIENCE && process.env.VITE_MANAGER_EXPERIENCE !== managerExperience) {
+    throw new Error("Conflicting manager experience flag; use the explicit preparation argument");
+  }
   if (!["production", "sandbox"].includes(environment)) throw new Error("Hosting preparation requires production or sandbox");
   const alias = environment === "production" ? "prod" : "sandbox";
   const projectId = JSON.parse(fs.readFileSync(path.join(root, ".firebaserc"), "utf8")).projects[alias];
@@ -64,8 +78,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const manifestPath = path.join(root, ".firebase", "hosting-prepared-manifest.json");
   fs.rmSync(manifestPath, { force: true });
   fs.rmSync(dist, { recursive: true, force: true });
-  execFileSync("npm", ["run", environment === "sandbox" ? "build:sandbox" : "build"], { cwd: root, stdio: "inherit", env: { ...process.env, GITHUB_SHA: expectedSha } });
-  const binding = { environment, projectId };
+  execFileSync("npm", ["run", environment === "sandbox" ? "build:sandbox" : "build"], { cwd: root, stdio: "inherit", env: { ...process.env, GITHUB_SHA: expectedSha, VITE_MANAGER_EXPERIENCE: managerExperience } });
+  const binding = { environment, projectId, managerExperience };
   const manifest = { buildId: expectedSha, ...binding, files: inspectHostingBuild(dist, expectedSha, publicFiles, binding) };
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");

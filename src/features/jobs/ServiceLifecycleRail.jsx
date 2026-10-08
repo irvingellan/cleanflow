@@ -1,7 +1,7 @@
 import { useTranslation } from "../../i18n/translations.js";
 import "./serviceLifecycle.css";
 
-export function ServiceLifecycleRail({ lifecycle }) {
+export function ServiceLifecycleRail({ lifecycle, compact = false }) {
   const { translate } = useTranslation();
   return <section className="service-lifecycle" aria-label={translate("lifecycle.execution")}>
     <div className="service-lifecycle__heading">
@@ -19,5 +19,6 @@ export function ServiceLifecycleRail({ lifecycle }) {
         <span className="service-lifecycle__label">{translate(stage.labelKey)}</span>
       </li>)}
     </ol>
+    {compact && <p className="job-v2-lifecycle-current">{translate(lifecycle.statusKey)}</p>}
   </section>;
 }

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { assertBuildEnvironment } from './src/environment.js'
+import { resolveManagerExperience } from './src/components/v2/integratedPilot.js'
 
 const firebaseConfigKeys = [
   'VITE_FIREBASE_API_KEY',
@@ -173,6 +174,7 @@ const packageMetadata = JSON.parse(
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), "");
   const binding = assertBuildEnvironment(mode, environment);
+  const managerExperience = resolveManagerExperience(environment.VITE_MANAGER_EXPERIENCE);
   if (mode === "sandbox") {
     // API keys route Firebase Auth independently of projectId. Reject known
     // local production credentials without logging or embedding them in Sandbox.
@@ -190,11 +192,22 @@ export default defineConfig(({ mode }) => {
     version: `v${packageMetadata.version}`,
     buildId: process.env.GITHUB_SHA || `${packageMetadata.version}-${new Date().toISOString()}`,
     ...binding,
+    managerExperience,
   }
 
   return {
+    // Standalone, network-free visual QA entry. Never imported by the application.
+    build: mode === "sandbox" ? {
+      rolldownOptions: {
+        input: { index: path.resolve("index.html"), designSystemCatalog: path.resolve("design-system/catalog/index.html") },
+        output: { chunkFileNames: "assets/catalogShared-[hash].js" },
+      },
+    } : managerExperience === "v2" ? {
+      rolldownOptions: { output: { chunkFileNames: "assets/managerV2-[hash].js" } },
+    } : undefined,
     define: {
       __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.buildId),
+      __CLEANFLOW_MANAGER_EXPERIENCE__: JSON.stringify(managerExperience),
     },
     plugins: ["test", "e2e"].includes(mode)
       ? [react()]

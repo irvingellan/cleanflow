@@ -1,5 +1,27 @@
 # CleanFlow — Current State
 
+## Design System V2 Production RC (local preparation, 2026-10-08)
+
+The inactive RC lives only on `feature/design-system-v2-production-rc` in its
+existing isolated worktree. No merge, push or deployment is authorized/executed.
+Verified origin/main is `8bc70165c9bdf8a48ba54aa5c3ff5b3583c6a526`; Production
+still serves `5c2e52492331577a7cbdc4aa41a8f1a6b9771b45`, Hosting version
+`6130ee0f019cbff4`. The difference between these sources is documentation only.
+Shell, Dashboard, Services and complete Job Detail V2 reuse accepted presentation
+source; all 55 original Job Detail bindings and operational source are preserved.
+Production CURRENT remains default. Only an explicitly built future V2 artifact
+can select V2, behind unchanged manager access; URL/storage cannot opt in.
+Irving's integrated operator acceptance and authenticated Sandbox presentation
+QA are CONFIRMED for the accepted source. The exact RC delta has local synthetic
+regression evidence, not a new deployed/authenticated acceptance claim.
+Gabi acceptance, physical iPhone V2 validation, full operational workflows and
+Production release authorization remain PENDING. Sandbox Functions/Storage
+remain billing-gated; no silent Production fallback or billing change is made.
+See [RC decision and rollout plan](design-system-v2/PRODUCTION_RC.md) and its
+sanitized review package for exact commit, manifests, tests and rollback.
+Older issue checkpoints below are historical; current release evidence above
+and the Issue #76 record supersede their outdated deployment statements.
+
 ## Issue #76 — Compact Lifecycle V0 (released 2026-10-04)
 
 Presentation slice from `0b1dff1`: compact five-stage strip on Jobs

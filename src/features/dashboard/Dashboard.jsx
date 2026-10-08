@@ -25,14 +25,15 @@ export function Dashboard({
   onOpenJob,
   onShowJobs,
   onShowJobsWithFilter,
+  renderPresentation,
 }) {
   const { language } = useTranslation();
 
-  if (isLoading) {
+  if (isLoading && !renderPresentation) {
     return <StateCard message={translate("dashboard.loading")} status="status" />;
   }
 
-  if (hasError) {
+  if (hasError && !renderPresentation) {
     return (
       <section className="dashboard-state" aria-live="polite">
         <StateCard message={translate("dashboard.error")} status="alert" isError />
@@ -152,6 +153,11 @@ export function Dashboard({
     counts.needsAssignment > attentionJobs.length ||
     visibleAttentionItems.length === 5;
   const next48HourGroups = groupNext48HourJobs(next48HoursJobs, translate);
+
+  // Both presentations consume this exact existing selection/order. No new reads.
+  if (renderPresentation) return renderPresentation({ language, counts,
+    visibleAttentionItems, hasMoreAttention, next48HourGroups, offersByJob,
+    cleanerNamesById, recentlyCompletedJobs, weeklySummary });
 
   return (
     <section className="dashboard" aria-labelledby="dashboard-title">

@@ -1,0 +1,195 @@
+{
+  "base": "e4a3cfc9862e75b8680c237804fe703a3e45fd6b",
+  "integrationBranch": "feature/design-system-v2-integrated-experience",
+  "sourceModules": [
+    {
+      "module": "shell",
+      "root": "/Users/irvingellan/.codex/worktrees/design-system-v2-shell-pilot",
+      "head": "84cfcb413fa7ea2de5a7de7cd442035e9570a7e1",
+      "branch": "feature/design-system-v2-shell-pilot",
+      "originalWip": [],
+      "files": [
+        {
+          "file": "src/components/v2/SandboxManagerShell.jsx",
+          "sourceSha256": "79cec0d8c5f7ccf67e34a7865dee60c8afeee11d04b1ebe5eebfa4b7c750f765",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/components/v2/SandboxManagerShell.test.jsx",
+          "sourceSha256": "b3f3b0839c8d89c22382f0ccbc89f5850e50a3fea9eb4018bd3c252b2fd8d96d",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/components/v2/shell.css",
+          "sourceSha256": "14410f6af6a18fa0847e8edbebd869b1deb0bd7932d6d898dd6d30d41e794062",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/components/v2/shellMessages.js",
+          "sourceSha256": "427eaf2c152d09b2012c4a29d734eab863825d0cbfb9dd203c989cb6d9298216",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/components/v2/shellPilot.js",
+          "sourceSha256": "9c8f8d258f7516a66a1f9bdfe49d62d33a9c7474730e34662cfebd8d22a40f4b",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/components/v2/shellPreservation.test.js",
+          "sourceSha256": "327913df7396b411e689466bcd3b9cc63fe343bf4ed79552796505455615a272",
+          "sourceCommitted": true
+        }
+      ]
+    },
+    {
+      "module": "services",
+      "root": "/Users/irvingellan/.codex/worktrees/design-system-v2-services-pilot",
+      "head": "37dbcc8b35822017fda142fd2ca8792f4ffb6084",
+      "branch": "feature/design-system-v2-services-pilot",
+      "originalWip": [],
+      "files": [
+        {
+          "file": "src/features/jobs/JobsPage.jsx",
+          "sourceSha256": "ac638b71bfe8071ddfd0277224a4d690d6212523e72f5d2582dc6bb4667b1ff0",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/ServicesV2Pilot.jsx",
+          "sourceSha256": "230bbeb2cd8e7f8082afecfc1c3ea6eeade3075c09a5cf3023a74f704974c339",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/ServicesV2Pilot.test.jsx",
+          "sourceSha256": "66c94cbfdb902a8d4fe62f046503b11b620f53f90d6c61acb52120b67a0dcc87",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/servicesV2.css",
+          "sourceSha256": "0d164b88e6a1d0c0f24f159ce996e9ed4dde12bbd2388664d86ad218b5424c6b",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/servicesV2Copy.js",
+          "sourceSha256": "3d93d833f694415d8b7850921353ac180deb3026140573fdf3d96eabb9c00a92",
+          "sourceCommitted": true
+        }
+      ]
+    },
+    {
+      "module": "dashboard",
+      "root": "/Users/irvingellan/.codex/worktrees/design-system-v2-dashboard-pilot",
+      "head": "ac2c2fdbb1ff7187d2dc53683be088c9fe312447",
+      "branch": "feature/design-system-v2-dashboard-pilot",
+      "originalWip": [
+        "M docs/CURRENT_STATE.md",
+        " M docs/design-system-v2/DASHBOARD_V2_IMPLEMENTATION.md",
+        " M e2e/dashboard-v2/dashboard-v2.spec.js",
+        " M src/features/dashboard/DashboardV2.test.jsx",
+        " M src/features/dashboard/DashboardV2Pilot.jsx",
+        " M src/features/dashboard/dashboardV2.css"
+      ],
+      "files": [
+        {
+          "file": "src/features/dashboard/Dashboard.jsx",
+          "sourceSha256": "7057c28f594dc969b404c60e82f66152c4b6eef92d4a225ab115c57cd1c6e7ab",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/dashboard/DashboardV2.test.jsx",
+          "sourceSha256": "c95442e0f86c196a04af971f57c63cad2f3deebcaf3ea1da16e065e6d30a4102",
+          "sourceCommitted": false
+        },
+        {
+          "file": "src/features/dashboard/DashboardV2Pilot.jsx",
+          "sourceSha256": "c51eb1c53ef6ed67435114ed79f12ae3157533fc5acde969ce2035abc5af2c76",
+          "sourceCommitted": false
+        },
+        {
+          "file": "src/features/dashboard/dashboardV2.css",
+          "sourceSha256": "188b2b2c677a8ceb2c8f150631cfb781549ae92009cb855b3ff4e780dfbff7e8",
+          "sourceCommitted": false
+        }
+      ]
+    },
+    {
+      "module": "detail",
+      "root": "/Users/irvingellan/.codex/worktrees/design-system-v2-job-detail-complete/Clean Flow Gabriela",
+      "head": "7adec211d5bf0848191d442be664e9caac03ded6",
+      "branch": "feature/design-system-v2-job-detail-complete",
+      "originalWip": [],
+      "files": [
+        {
+          "file": "src/components/RecordArchiveControl.jsx",
+          "sourceSha256": "0749c6724a3e636d1b1e8618ce5cb3b03b5e08c7630ca69cf4d8bbc4a3a0fc90",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobConfirmationV2.jsx",
+          "sourceSha256": "c25f6419121d6046f8e7f9096dda9e23bcc059f8491940fb62e479f552d429e2",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobDetail.jsx",
+          "sourceSha256": "70cbc8c4257ccde88ba8c62f99baa06e6aedac4920c7e963628dd4d027dbbcc7",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobDetailComplete.test.jsx",
+          "sourceSha256": "598429e26b81f3e57e3808a77e07b9ced081ddc1964467febf96f9f7e227cc16",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobDetailSection.jsx",
+          "sourceSha256": "f5511893b10f7437d42d2471aa70b7db6e3c4cb117cd4159ca5182ec993aa65c",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobDetailV2.test.jsx",
+          "sourceSha256": "05e7dbd54d2c53d2efa68b4b5e4c633656eb01948591785db947e24badf507db",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobDetailV2Pilot.jsx",
+          "sourceSha256": "25568c2ace00c6b693bc8c0a8ca4a7462085f9d3a217e44bd9df498e81076201",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobDisclosureSummaries.test.jsx",
+          "sourceSha256": "a4e3f8cbdd830c371871d622e7c558947481de6a03e7853c67e9ae92bca1409f",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/JobIntentLayer.jsx",
+          "sourceSha256": "47d4e1dbad17ec4446712a609002aba7f5ef95a8ca123054addcc7be510254c3",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/ServiceLifecycleRail.jsx",
+          "sourceSha256": "4a102b40cb64715c847422fa99a1e701aedca07f5f59406204f03d08c7564f95",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/jobDetailV2.css",
+          "sourceSha256": "6e9430a2a1a85c586f5153f13c2f565fad9ee0e188fd702931a428b6dbf69c01",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/jobDisclosureSummaries.js",
+          "sourceSha256": "b91bfd7e0136847c74132d8eb450877d986ef42b2f34bd6001ce445bca27156a",
+          "sourceCommitted": true
+        },
+        {
+          "file": "src/features/jobs/jobDisclosureSummaries.test.js",
+          "sourceSha256": "baf9d5eaf5b794c5e11d7ef40153d5968cdaffb4d031fc841badc9741b1e85d2",
+          "sourceCommitted": true
+        }
+      ]
+    }
+  ],
+  "reconciledDependencies": {
+    "primitives": "Services Row/markers plus Shell icon paths; otherwise Phase B",
+    "translations": "Complete Job Detail catalog plus Dashboard-only six keys per language"
+  },
+  "excluded": "All source App, service, backend, rules and release-tooling changes excluded. No Reservation Intake, Telemetry, Safari or Issue42 WIP copied.",
+  "localChanges": "Memory-only harness and regression tests; UNKNOWN primary recommendation uses existing completion guard or history."
+}
