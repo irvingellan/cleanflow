@@ -4650,3 +4650,22 @@ button.summary-card {
     grid-template-columns: 1fr;
   }
 }
+.public-checklist__completion {
+  padding: 1rem;
+  margin-block: 1rem;
+  border: 1px solid var(--color-selected-border);
+  border-radius: 12px;
+}
+.public-checklist__completion h2 { margin-top: 0; }
+.public-checklist__receipt { font-weight: 600; }
+@media (max-width: 600px) {
+  .public-checklist__review-handoff {
+    padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    background: var(--color-surface);
+    border: 1px solid var(--color-selected-border);
+    border-radius: 12px;
+  }
+  .public-checklist__review-actions { flex-wrap: wrap; }
+  .public-checklist__review-handoff button { min-height: 44px; }
+}

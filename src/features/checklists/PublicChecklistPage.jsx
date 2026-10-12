@@ -191,7 +191,7 @@ function reviewErrorMessage(reviewError, translate) {
   return translate("checklists.readyForReviewError");
 }
 
-function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onSubmit, language, translate }) {
+function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onCheckReadiness, onSubmit, language, translate }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const isReady = saveState === checklistSaveStates.READY_FOR_REVIEW;
   const canSubmit = saveState === checklistSaveStates.SAVED && !isSubmittingReview;
@@ -206,6 +206,7 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
     return (
       <section className="public-checklist__review-state" aria-live="polite">
         <h2>{translate("checklists.readyForReview")}</h2>
+        <p className="public-checklist__receipt">{translate("checklists.submissionReceipt")}</p>
         <p>{translate("checklists.readyForReviewReadOnly")}</p>
         {readyAt && <p>{translate("checklists.readyForReviewAt", { time: readyAt })}</p>}
       </section>
@@ -214,13 +215,16 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
 
   return (
     <section className="public-checklist__review-handoff" aria-labelledby="checklist-review-handoff-title">
-      <h2 id="checklist-review-handoff-title">{translate("checklists.readyForReview")}</h2>
+      <h2 id="checklist-review-handoff-title" tabIndex={-1}>{translate("checklists.sendForReview")}</h2>
+      {isSubmittingReview && <p role="status">{translate("checklists.submissionPending")}</p>}
       {!isConfirming ? (
         <>
           <p>{translate("checklists.readyForReviewPrompt")}</p>
           {!canSubmit && <p className="public-checklist__review-help">{translate("checklists.readyForReviewSaveFirst")}</p>}
           {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
-          <button className="button" type="button" disabled={!canSubmit} onClick={() => setIsConfirming(true)}>
+          <button className="button" type="button" disabled={!canSubmit} onClick={() => {
+            if (onCheckReadiness()) setIsConfirming(true);
+          }}>
             {translate("checklists.sendForReview")}
           </button>
         </>
@@ -230,7 +234,10 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
           <p>{translate("checklists.readyForReviewConfirmBody")}</p>
           {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
           <div className="public-checklist__review-actions">
-            <button className="button" type="button" disabled={isSubmittingReview} onClick={onSubmit}>
+            <button className="button" type="button" disabled={isSubmittingReview} onClick={() => {
+              if (onCheckReadiness()) onSubmit();
+              else setIsConfirming(false);
+            }}>
               {isSubmittingReview ? translate("checklists.sendForReviewSending") : translate("checklists.sendForReview")}
             </button>
             <button className="button button--secondary" type="button" disabled={isSubmittingReview} onClick={() => setIsConfirming(false)}>
@@ -392,6 +399,21 @@ export function PublicChecklistPage({ token }) {
     target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     target?.focus?.({ preventScroll: true });
   };
+  const reviewHandoff = <ReviewHandoff
+    checklist={checklist}
+    saveState={saveState}
+    isSubmittingReview={isSubmittingReview}
+    reviewError={reviewError}
+    onCheckReadiness={() => {
+      if (missingItems.length === 0) return true;
+      setHasAttemptedValidation(true);
+      requestAnimationFrame(moveToFirstMissing);
+      return false;
+    }}
+    onSubmit={submitForManagerReview}
+    language={language}
+    translate={translate}
+  />;
 
   return (
     <main className="public-offer-page checklist-public-page">
@@ -421,6 +443,23 @@ export function PublicChecklistPage({ token }) {
           onReapply={reapplyLocalChanges}
           translate={translate}
         />
+
+        {isReadOnly && reviewHandoff}
+
+        {!isReadOnly && (
+          <section className="public-checklist__completion" aria-labelledby="checklist-completion-title" aria-live="polite">
+            <h2 id="checklist-completion-title">{translate(isSubmittingReview ? "checklists.sendForReviewSending" : missingItems.length > 0
+              ? "checklists.completionIncomplete"
+              : saveState === checklistSaveStates.SAVED ? "checklists.completionReady" : "checklists.completionSaving")}</h2>
+            <p>{translate(saveState === checklistSaveStates.SAVED ? "checklists.draftNotSubmitted" : "checklists.draftPending")}</p>
+            {missingItems.length > 0 ? (
+              <>
+                {!hasAttemptedValidation && <p>{translate("checklists.reviewValidationSummary", { checklist: missingChecklistCount, inventory: missingInventoryCount, photos: missingPhotoCount })}</p>}
+                {!hasAttemptedValidation && <button className="button button--secondary" type="button" onClick={moveToFirstMissing}>{translate("checklists.goToFirstMissingItem")}</button>}
+              </>
+            ) : saveState === checklistSaveStates.SAVED && <><p>{translate("checklists.completionReadyHelp")}</p><a className="button button--secondary" href="#checklist-review-handoff-title">{translate("checklists.goToSendStep")}</a></>}
+          </section>
+        )}
 
         {checklist.cleanerInstructions && (
           <section className="public-checklist__instructions" aria-labelledby="public-checklist-instructions-title">
@@ -546,15 +585,7 @@ export function PublicChecklistPage({ token }) {
           </section>
         )}
 
-        <ReviewHandoff
-          checklist={checklist}
-          saveState={saveState}
-          isSubmittingReview={isSubmittingReview}
-          reviewError={reviewError}
-          onSubmit={submitForManagerReview}
-          language={language}
-          translate={translate}
-        />
+        {!isReadOnly && reviewHandoff}
       </section>
       <ScrollToTopButton />
     </main>
