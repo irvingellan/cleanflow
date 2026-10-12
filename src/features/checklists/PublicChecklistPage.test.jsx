@@ -72,6 +72,11 @@ function renderPage(token = "opaque-capability-token") {
   return render(<TranslationProvider><PublicChecklistPage token={token} /></TranslationProvider>);
 }
 
+function primeReadyChecklist() {
+  acknowledgedDraft = createDraft({ checklistAnswers: { bed: "DONE", pool: "NOT_APPLICABLE", "living-belongings": "DONE" }, inventoryAnswers: { soap: "HIGH" } });
+  getPublicChecklist.mockResolvedValue({ checklist: { ...frozenChecklist, evidence: [{ requirementId: "living-belongings" }] }, draft: acknowledgedDraft });
+}
+
 function itemFieldset(label) {
   return screen.getByText(label).closest("fieldset");
 }
@@ -110,7 +115,7 @@ beforeEach(() => {
   readyPublicChecklistForReview.mockImplementation(async ({ baseRevision }) => ({
     duplicate: false,
     checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW", readyForReviewAt: "2026-09-22T18:00:00.000Z" },
-    draft: createDraft({ revision: baseRevision }),
+    draft: createDraft({ ...acknowledgedDraft, revision: baseRevision }),
   }));
   uploadPublicChecklistEvidence.mockResolvedValue({ evidence: [{ requirementId: "living-belongings", contentType: "image/jpeg", sizeBytes: 3 }] });
 });
@@ -122,6 +127,108 @@ afterEach(() => {
 });
 
 describe("PublicChecklistPage", () => {
+  it("removes draft validation guidance after a corrected incomplete checklist is acknowledged as submitted", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    for (const label of ["Make the bed", "Check under beds and furniture", "Check the pool"]) {
+      fireEvent.click(within(itemFieldset(label)).getByLabelText("Done"));
+      await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+    }
+    fireEvent.change(screen.getByLabelText("Hand soap"), { target: { value: "HIGH" } });
+    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+    fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [new File([new Uint8Array([0xff, 0xd8, 0xff])], "synthetic.jpg", { type: "image/jpeg" })] } });
+    await screen.findByText("Photo saved");
+    expect(screen.getByText("These requirements now appear complete. Send again so the server can check the saved version.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByText(/Checklist submitted\./);
+    expect(screen.queryByText("These requirements now appear complete. Send again so the server can check the saved version.")).not.toBeInTheDocument();
+    expect(document.querySelector('.public-checklist__validation-summary')).not.toBeInTheDocument();
+  });
+
+  it("keeps missing required evidence out of confirmation even when all answers are complete", async () => {
+    primeReadyChecklist();
+    getPublicChecklist.mockResolvedValue({ checklist: frozenChecklist, draft: acknowledgedDraft });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Required photo is not saved yet.")).toBeVisible();
+    await waitFor(() => expect(document.querySelector(".public-checklist__photo")).toHaveFocus());
+    expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
+  });
+
+  it("rechecks readiness if an answer is cleared while confirmation is open", async () => {
+    primeReadyChecklist();
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Not answered"));
+    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Answer this item before sending for review.")).toBeVisible();
+    expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
+  });
+
+  it("waits for server acknowledgment after a ready confirmation and blocks repeated sends", async () => {
+    primeReadyChecklist();
+    const response = deferred();
+    readyPublicChecklistForReview.mockReturnValueOnce(response.promise);
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
+    const confirm = within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" });
+    fireEvent.click(confirm); fireEvent.click(confirm);
+    expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Checklist submitted\./)).not.toBeInTheDocument();
+    await act(async () => response.resolve({ checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW" }, draft: acknowledgedDraft }));
+    expect(await screen.findByText(/Checklist submitted\./)).toBeVisible();
+  });
+
+  it("reveals missing requirements before confirmation without sending an incomplete draft", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Answer this item before sending for review.")).toHaveLength(3);
+    expect(screen.getByText("Required photo is not saved yet.")).toBeVisible();
+    await waitFor(() => expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toHaveFocus());
+    expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Send checklist for review" })).toBeEnabled();
+  });
+  it("shows the authoritative submitted receipt before read-only answers on reload", async () => {
+    getPublicChecklist.mockResolvedValue({ checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW" }, draft: createDraft() });
+    renderPage();
+    const receipt = await screen.findByText("Checklist submitted. No further action is needed from you here; manager review is next, not service completion.");
+    expect(receipt.compareDocumentPosition(itemFieldset("Make the bed")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send checklist for review" })).not.toBeInTheDocument();
+  });
+
+  it("distinguishes saved draft from submission and guides incomplete work without initial error markers", async () => {
+    renderPage();
+    expect(await screen.findByText("Draft saved — not submitted yet.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Checklist incomplete" })).toBeVisible();
+    expect(screen.queryByText("Answer this item before sending for review.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Go to first missing item" }));
+    expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toHaveFocus();
+    expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
+  });
+
+  it("only presents ready guidance when answers and confirmed required evidence exist", async () => {
+    getPublicChecklist.mockResolvedValue({
+      checklist: { ...frozenChecklist, evidence: [{ requirementId: "living-belongings" }] },
+      draft: createDraft({ checklistAnswers: { bed: "DONE", pool: "NOT_APPLICABLE", "living-belongings": "DONE" }, inventoryAnswers: { soap: "HIGH" } }),
+    });
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "Ready to send for review" })).toBeVisible();
+    expect(screen.getByText("Your draft is saved. Send it below; your manager will review it next.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Go to the send step" })).toHaveAttribute("href", "#checklist-review-handoff-title");
+    expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
+  });
+
   it("records one token-free load diagnostic after the checklist is ready", async () => {
     renderPage("secret-capability-token");
     expect(await screen.findByRole("heading", { name: "Cleaning checklist" })).toBeVisible();
@@ -584,9 +691,10 @@ describe("PublicChecklistPage", () => {
   });
 
   it("sends the saved frozen draft for manager review and makes the cleaner view read-only", async () => {
+    primeReadyChecklist();
     getPublicChecklist.mockResolvedValue({
-      checklist: { ...frozenChecklist, assignedCleanerName: "Assigned Cleaner Example" },
-      draft: createDraft(),
+      checklist: { ...frozenChecklist, evidence: [{ requirementId: "living-belongings" }], assignedCleanerName: "Assigned Cleaner Example" },
+      draft: acknowledgedDraft,
     });
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
@@ -607,6 +715,7 @@ describe("PublicChecklistPage", () => {
   });
 
   it("reuses the exact review submission after a lost response", async () => {
+    primeReadyChecklist();
     readyPublicChecklistForReview
       .mockRejectedValueOnce({ code: "checklist_request_timeout" })
       .mockResolvedValueOnce({
@@ -620,6 +729,7 @@ describe("PublicChecklistPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     expect(await screen.findByText("Could not send for review. Try again.")).toBeVisible();
+    expect(screen.queryByText(/Checklist submitted\./)).not.toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(2));
@@ -638,7 +748,6 @@ describe("PublicChecklistPage", () => {
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     const missingText = "Still needed — checklist answers: 3; inventory items: 1; required photos: 1.";
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -663,7 +772,6 @@ describe("PublicChecklistPage", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     await screen.findByText("Still needed — checklist answers: 3; inventory items: 1; required photos: 1.");
 
     fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
@@ -697,7 +805,6 @@ describe("PublicChecklistPage", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     await screen.findByText("Required photo is not saved yet.");
     const photo = new File([new Uint8Array([0xff, 0xd8, 0xff])], "under-bed.jpg", { type: "image/jpeg" });
     fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [photo] } });
@@ -712,6 +819,7 @@ describe("PublicChecklistPage", () => {
   });
 
   it("lets a cleaner correct validation gaps and submit a fresh saved revision", async () => {
+    primeReadyChecklist();
     readyPublicChecklistForReview.mockRejectedValueOnce({
       code: "checklist_requirements_missing",
       status: 422,
@@ -721,9 +829,9 @@ describe("PublicChecklistPage", () => {
     await screen.findByRole("heading", { name: "Cleaning checklist" });
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
-    await screen.findByText("Still needed — checklist answers: 3; inventory items: 1; required photos: 1.");
+    await screen.findByText("These requirements now appear complete. Send again so the server can check the saved version.");
 
-    fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
+    fireEvent.change(screen.getByLabelText("Other notes"), { target: { value: "Reviewed again" } });
     await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
@@ -736,6 +844,7 @@ describe("PublicChecklistPage", () => {
   });
 
   it("refreshes on a revision conflict instead of classifying it as an unavailable link", async () => {
+    primeReadyChecklist();
     readyPublicChecklistForReview.mockRejectedValueOnce({ code: "checklist_conflict", status: 409 });
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });

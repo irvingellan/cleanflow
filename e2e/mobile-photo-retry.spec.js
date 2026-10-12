@@ -162,8 +162,6 @@ for (const [source, inputIndex] of [["camera", 0], ["library", 1]]) {
 
       await expect(photo.locator(".public-checklist__photo-status")).toHaveText("Photo saved");
       expect(await page.evaluate(() => window.__syntheticSelectedFileSize)).toBe(syntheticJpeg.length);
-      expect(encodedRequestBytes.length).toBe(syntheticJpeg.length);
-      expect(encodedRequestBytes.equals(syntheticJpeg)).toBe(true);
       expect(parsedUpload).toEqual({
         isBuffer: true,
         byteLength: syntheticJpeg.length,
@@ -171,6 +169,14 @@ for (const [source, inputIndex] of [["camera", 0], ["library", 1]]) {
         contentType: "image/jpeg",
         matchesSelectedBytes: true,
       });
+      // WebKit's Playwright protocol may omit Blob postData. The actual
+      // localhost receiver must still prove length, MIME and exact bytes above.
+      if (encodedRequestBytes !== null) {
+        expect(encodedRequestBytes.length).toBe(syntheticJpeg.length);
+        expect(encodedRequestBytes.equals(syntheticJpeg)).toBe(true);
+      } else {
+        test.info().annotations.push({ type: 'instrumentation', description: 'Playwright postDataBuffer unavailable; server equality checks remain mandatory.' });
+      }
     } finally {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));

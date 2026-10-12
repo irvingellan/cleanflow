@@ -51,7 +51,18 @@ test("root worker without fetch interception preserves navigation and a 5 MiB Bl
       const registration = await navigator.serviceWorker.getRegistration();
       await registration.update();
     });
-    await expect.poll(() => page.evaluate(() => window.syntheticWorkerBuild)).toBe("synthetic-transport-build");
+    try {
+      await expect.poll(() => page.evaluate(() => window.syntheticWorkerBuild)).toBe("synthetic-transport-build");
+    } catch (error) {
+      const state = await page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.getRegistration();
+        return { observedBuild: window.syntheticWorkerBuild, controller: navigator.serviceWorker.controller?.state,
+          active: registration?.active?.state, waiting: registration?.waiting?.state,
+          installing: registration?.installing?.state };
+      });
+      await test.info().attach('synthetic-worker-state', { body: JSON.stringify(state), contentType: 'application/json' });
+      throw error;
+    }
     const result = await page.evaluate(async () => {
       const file = new File([new Uint8Array(5 * 1024 * 1024).fill(0x5a)], "synthetic.png", { type: "image/png" });
       const body = new Blob([await file.arrayBuffer()], { type: file.type });

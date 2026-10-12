@@ -2709,6 +2709,40 @@ export function TranslationProvider({ children }) {
   return createElement(TranslationContext.Provider, { value }, children);
 }
 
+Object.assign(messages.en, {
+  "checklists.draftNotSubmitted": "Draft saved — not submitted yet.",
+  "checklists.draftPending": "Draft changes are not confirmed saved yet. Check the save status above before sending.",
+  "checklists.completionIncomplete": "Checklist incomplete",
+  "checklists.completionReady": "Ready to send for review",
+  "checklists.completionSaving": "Confirm the saved draft first",
+  "checklists.completionReadyHelp": "Your draft is saved. Send it below; your manager will review it next.",
+  "checklists.goToSendStep": "Go to the send step",
+  "checklists.submissionReceipt": "Checklist submitted. No further action is needed from you here; manager review is next, not service completion.",
+  "checklists.submissionPending": "Waiting for server confirmation. Do not send again while this request is in progress.",
+});
+Object.assign(messages.pt, {
+  "checklists.draftNotSubmitted": "Rascunho salvo — ainda não enviado.",
+  "checklists.draftPending": "As alterações ainda não têm salvamento confirmado. Confira o estado acima antes de enviar.",
+  "checklists.completionIncomplete": "Checklist incompleto",
+  "checklists.completionReady": "Pronto para enviar para revisão",
+  "checklists.completionSaving": "Confirme primeiro o rascunho salvo",
+  "checklists.completionReadyHelp": "Seu rascunho está salvo. Envie abaixo; a gerente fará a revisão em seguida.",
+  "checklists.goToSendStep": "Ir à etapa de envio",
+  "checklists.submissionReceipt": "Checklist enviado. Nenhuma outra ação é necessária aqui; o próximo passo é a revisão da gerente, não a conclusão do serviço.",
+  "checklists.submissionPending": "Aguardando confirmação do servidor. Não envie novamente enquanto esta solicitação estiver em andamento.",
+});
+Object.assign(messages.es, {
+  "checklists.draftNotSubmitted": "Borrador guardado — todavía no enviado.",
+  "checklists.draftPending": "Los cambios aún no tienen guardado confirmado. Revisa el estado de arriba antes de enviar.",
+  "checklists.completionIncomplete": "Checklist incompleto",
+  "checklists.completionReady": "Listo para enviar a revisión",
+  "checklists.completionSaving": "Confirma primero el borrador guardado",
+  "checklists.completionReadyHelp": "Tu borrador está guardado. Envíalo abajo; la gerente lo revisará después.",
+  "checklists.goToSendStep": "Ir al paso de envío",
+  "checklists.submissionReceipt": "Checklist enviado. No necesitas otra acción aquí; sigue la revisión de la gerente, no la finalización del servicio.",
+  "checklists.submissionPending": "Esperando confirmación del servidor. No vuelvas a enviar mientras esta solicitud esté en curso.",
+});
+
 export function useTranslation() {
   const translation = useContext(TranslationContext);
   if (!translation) throw new Error("useTranslation must be used within TranslationProvider");

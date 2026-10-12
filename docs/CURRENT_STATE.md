@@ -1,5 +1,18 @@
 # CleanFlow — Current State
 
+## Cleaner Checklist Completion UX — local integration candidate (2026-10-12)
+
+Approved checkpoint `897b423` selectively ported from Production-compatible main.
+Saved draft and submitted receipt are distinct; incomplete submit reveals existing
+requirements before confirmation, while ready drafts retain explicit confirmation
+and server-authoritative acknowledgment. A narrow reviewed guard removes stale
+pending guidance after success. Backend/capabilities/autosave/photo transport and
+manager completion are unchanged. No V2 RC or unrelated WIP imported.
+Local synthetic comparison and isolated security evidence are packaged; authenticated
+isolated backend and physical iPhone/PWA validation remain gates, including an
+unresolved extra WebKit worker-update test. No merge, push, deploy or Production
+data access/mutation. See `CLEANER_CHECKLIST_COMPLETION_CANDIDATE.md`.
+
 ## Issue #76 — Compact Lifecycle V0 (released 2026-10-04)
 
 Presentation slice from `0b1dff1`: compact five-stage strip on Jobs
