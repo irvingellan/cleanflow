@@ -22,3 +22,18 @@ EN/PT at 1440px and 390x844; Production build and diff check. Known inherited
 punycode/chunk-size warnings remain. No physical-device/live cleaner proof claimed.
 No backend/schema/Rules/Functions changes, merge, push or deployment.
 V2 Production RC remains at `7f941b7` with clean tracked source.
+
+## Confirmation-order revalidation — 2026-10-13
+
+The requested ordering is already implemented in local checkpoint `897b423`.
+Incomplete submit clicks reveal the existing summary, markers and first pending
+field without opening confirmation or calling submission. Ready drafts retain
+confirmation; readiness is checked again before the unchanged server handoff.
+Failure/retry keeps the draft usable, and success waits for server acknowledgment.
+No additional implementation was needed during this revalidation.
+
+Fresh results: 72 focused tests; 113 files / 1,244 unit tests; 16 synthetic
+Chromium/WebKit browser tests (EN/PT, desktop 1440px and mobile 390x844);
+emulator-bound build and diff check passed. Inherited punycode/chunk-size warnings
+remain. Physical iPhone acceptance and real backend proof are not claimed here.
+Production and the separate V2 Release Candidate were not changed.
