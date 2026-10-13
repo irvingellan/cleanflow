@@ -1,17 +1,23 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 
 test("root worker without fetch interception preserves navigation and a 5 MiB Blob PUT", async ({ page }) => {
   // Exercise the actual pure worker generator without requiring a prior build
   // or exporting test-only production APIs.
-  const config = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
+  const config = process.env.ROOT_WORKER_BASELINE === "1"
+    ? execFileSync("git", ["show", "8bc70165c9bdf8a48ba54aa5c3ff5b3583c6a526:vite.config.js"], { encoding: "utf8" })
+    : await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
   const generator = config.slice(config.indexOf("function rootWorkerSource("), config.indexOf("function cleanflowServiceWorkers("));
   const worker = new Function(`${generator}; return rootWorkerSource;`)()("synthetic-transport-build");
   expect(worker).not.toMatch(/addEventListener\(["']fetch["']/);
   // Model the removed network-only handler, then update the same registration.
   let servedWorker = worker.replace("synthetic-transport-build", "synthetic-old-build")
     + '\nself.addEventListener("fetch", (event) => event.respondWith(fetch(event.request)));';
+  // Test-only completion signal after the actual old activation promise.
+  servedWorker = servedWorker.replace('    );\n  })());',
+    '    );\n    (await self.clients.matchAll({type:"window"})).forEach(client => client.postMessage({type:"SYNTHETIC_ACTIVATION_SETTLED"}));\n  })());');
   let received;
   const server = createServer(async (request, response) => {
     if (request.url === "/sw.js") {
@@ -28,8 +34,12 @@ test("root worker without fetch interception preserves navigation and a 5 MiB Bl
     response.writeHead(200, { "Content-Type": "text/html" });
     response.end(`<title>Synthetic transport</title><script>
       navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data.type === 'SYNTHETIC_ACTIVATION_SETTLED') {
+          window.syntheticActivationSettled = true;
+          return;
+        }
         window.syntheticWorkerBuild = event.data.buildId;
-        navigator.serviceWorker.controller?.postMessage({type:'CLEANFLOW_UPDATE_CLIENT_READY'});
+        event.source?.postMessage({type:'CLEANFLOW_UPDATE_CLIENT_READY'});
       });
     </script>`);
   });
@@ -46,10 +56,20 @@ test("root worker without fetch interception preserves navigation and a 5 MiB Bl
       navigator.serviceWorker.controller.postMessage({ type: "CLEANFLOW_UPDATE_CLIENT_READY" });
     });
     await expect.poll(() => page.evaluate(() => window.syntheticWorkerBuild)).toBe("synthetic-old-build");
+    await expect.poll(() => page.evaluate(() => window.syntheticActivationSettled)).toBe(true);
     servedWorker = worker;
     await page.evaluate(async () => {
       const registration = await navigator.serviceWorker.getRegistration();
       await registration.update();
+      // Match PwaUpdatePrompt's existing explicit update protocol. WebKit may
+      // leave the newly installed worker waiting while this page is controlled.
+      const installing = registration.installing;
+      if (installing && installing.state !== "installed" && installing.state !== "activated") {
+        await new Promise((resolve) => installing.addEventListener("statechange", () => {
+          if (["installed", "activated", "redundant"].includes(installing.state)) resolve();
+        }));
+      }
+      registration.waiting?.postMessage({ type: "CLEANFLOW_SKIP_WAITING" });
     });
     try {
       await expect.poll(() => page.evaluate(() => window.syntheticWorkerBuild)).toBe("synthetic-transport-build");

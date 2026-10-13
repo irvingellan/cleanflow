@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+const config=JSON.parse(fs.readFileSync('firebase.json'));
+config.emulators.ui.enabled=false;
+for(const name of ['auth','firestore','functions','storage','hosting']) config.emulators[name].host='127.0.0.1';
+fs.writeFileSync('firebase.backend-validation.json',JSON.stringify(config));
+const env={...process.env,JAVA_HOME:'/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home',GOOGLE_APPLICATION_CREDENTIALS:'/nonexistent/no-cloud-credentials'};
+env.PATH=env.JAVA_HOME+'/bin:'+env.PATH;
+const result=spawnSync('./node_modules/.bin/firebase',['emulators:exec','--config','firebase.backend-validation.json','--project','demo-cleanflow','--only','auth,firestore,functions,storage,hosting','./node_modules/.bin/playwright test --config e2e/checklist-completion/backend.config.js'],{env,encoding:'utf8',timeout:300000,maxBuffer:10000000});
+const output=(result.stdout+'\n'+result.stderr).replace(/[A-Za-z0-9_-]{43,}/g,'[redacted-local-identifier]');
+fs.writeFileSync('artifacts/checklist-backend/emulators.log',output);
+process.stdout.write(output.slice(-8000));
+process.exit(result.status??1);
