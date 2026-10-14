@@ -88,6 +88,44 @@ function primeMulti(evidence = [], overrides = {}) {
 }
 
 describe("V2 multi-photo cleaner flow", () => {
+  it("isolates an already loaded gallery when a delayed new token starts at a lower revision", async () => {
+    const checklistA = primeMulti([{ evidenceId: "photo-a", requirementId: "living-belongings" }], { propertyName: "Synthetic property A", evidenceRevision: 5 });
+    let checklistB = { ...checklistA, propertyName: "Synthetic property B", evidenceRevision: 0, evidence: [] };
+    const bLoad = deferred(); let bRequests = 0;
+    getPublicChecklist.mockImplementation((token) => token === "token-a" ? Promise.resolve({ checklist: checklistA, draft: acknowledgedDraft })
+      : ++bRequests === 1 ? bLoad.promise : Promise.resolve({ checklist: checklistB, draft: acknowledgedDraft }));
+    let selectedPurpose;
+    uploadPublicChecklistEvidence.mockImplementation(async ({ token, requirementId }) => {
+      selectedPurpose = requirementId;
+      if (token !== "token-b") throw new Error("Wrong synthetic upload scope");
+      const item = { evidenceId: "photo-b", requirementId };
+      checklistB = { ...checklistB, evidenceRevision: 1, evidence: [item] };
+      return { evidenceId: "photo-b", evidenceRevision: 1, evidence: [item] };
+    });
+    readyPublicChecklistForReview.mockImplementation(async ({ token }) => {
+      if (token !== "token-b") throw new Error("Wrong synthetic review scope");
+      return { checklist: { ...checklistB, status: "READY_FOR_REVIEW" }, draft: acknowledgedDraft };
+    });
+    const { rerender } = renderPage("token-a");
+    await screen.findByRole("button", { name: "Remove photo" });
+    expect(screen.getByText("Synthetic property A")).toBeVisible();
+    rerender(<TranslationProvider><PublicChecklistPage token="token-b" /></TranslationProvider>);
+    await waitFor(() => expect(screen.queryByText("Synthetic property A")).not.toBeInTheDocument());
+    await act(async () => bLoad.resolve({ checklist: checklistB, draft: acknowledgedDraft }));
+    await screen.findByText("Synthetic property B");
+    expect(screen.queryByText("Photo saved")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh saved photos" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh saved photos" })).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Choose photos"), { target: { files: [new File(["synthetic-b"], "synthetic.jpg", { type: "image/jpeg" })] } });
+    await screen.findByText("Photo saved");
+    expect(selectedPurpose).toBe("living-belongings");
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByRole("heading", { name: "Ready for manager review" });
+    expect(screen.getAllByText("Photo saved")).toHaveLength(1);
+  });
   it("appends library selections and a later camera photo with associated labels and safe gallery controls", async () => {
     const checklist = primeMulti(); let n = 0; const evidence = [];
     uploadPublicChecklistEvidence.mockImplementation(async ({ requirementId }) => {

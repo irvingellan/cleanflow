@@ -123,21 +123,21 @@ export function usePublicChecklistDraft(token) {
   const flushRef = useRef(null);
   const saveStateRef = useRef(checklistSaveStates.LOADING);
   const activeTokenRef = useRef({ token });
-  const projectionRef = useRef({ token, checklist: null });
+  const projectionRef = useRef({ token, scope: activeTokenRef.current, checklist: null });
   if (activeTokenRef.current.token !== token) activeTokenRef.current = { token };
   const activeScope = activeTokenRef.current;
 
   const setProjection = useCallback((incoming) => {
     if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
-    const current = projectionRef.current.token === token ? projectionRef.current.checklist : null;
+    const current = projectionRef.current.scope === activeScope ? projectionRef.current.checklist : null;
     const next = preserveNewestEvidence(current, incoming);
-    projectionRef.current = { token, checklist: next };
+    projectionRef.current = { token, scope: activeScope, checklist: next };
     setChecklist(next);
   }, [token]);
 
   const updateEvidence = useCallback((result) => {
     const current = projectionRef.current;
-    if (!isMountedRef.current || activeTokenRef.current !== activeScope || current.token !== token
+    if (!isMountedRef.current || activeTokenRef.current !== activeScope || current.scope !== activeScope
       || current.checklist?.evidencePolicy?.version !== 2 || !Array.isArray(result?.evidence)
       || !Number.isInteger(result.evidenceRevision)
       || result.evidenceRevision < (current.checklist.evidenceRevision || 0)) return;
@@ -325,6 +325,9 @@ export function usePublicChecklistDraft(token) {
 
   useEffect(() => {
     isMountedRef.current = true;
+    projectionRef.current = { token, scope: activeScope, checklist: null };
+    setChecklist(null);
+    setDraft(null);
     // Previous-token pending work was already persisted at dispatch. Retain
     // its recovery record, but release this editor's references before loading
     // the new token. Late callbacks cannot settle the new editor's state.
@@ -497,13 +500,16 @@ export function usePublicChecklistDraft(token) {
     }
   }, [load, setCurrentSaveState, setVisibleDraft, setProjection, token]);
 
+  const projectionIsCurrent = projectionRef.current.scope === activeScope;
   return {
-    checklist,
-    draft,
+    // React state still contains the previous editor for the render before
+    // token effects run. Never expose it to a new gallery/capability scope.
+    checklist: projectionIsCurrent ? checklist : null,
+    draft: projectionIsCurrent ? draft : null,
     loadDiagnostics,
-    isLoading,
-    loadError,
-    saveState,
+    isLoading: projectionIsCurrent ? isLoading : true,
+    loadError: projectionIsCurrent ? loadError : null,
+    saveState: projectionIsCurrent ? saveState : checklistSaveStates.LOADING,
     hasRecoveryWarning,
     isResolvingConflict,
     isSubmittingReview,
