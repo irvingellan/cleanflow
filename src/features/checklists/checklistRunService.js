@@ -34,8 +34,8 @@ export async function abandonChecklistRunAndCompleteJob(jobId) {
 }
 
 /** The manager receives image bytes only through the authorized server callable. */
-export async function getChecklistEvidence(jobId, requirementId) {
-  const result = await getChecklistEvidenceCall({ jobId, requirementId });
+export async function getChecklistEvidence(jobId, requirementId, evidenceId) {
+  const result = await getChecklistEvidenceCall({ jobId, ...(evidenceId ? { evidenceId } : { requirementId }) });
   const { base64, contentType } = result.data || {};
   if (typeof base64 !== "string" || typeof contentType !== "string") {
     throw new Error("Checklist photo is unavailable.");

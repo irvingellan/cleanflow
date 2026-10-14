@@ -4,6 +4,8 @@ import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, usePublicTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
 import { checklistSaveStates, usePublicChecklistDraft } from "./usePublicChecklistDraft.js";
+import { useChecklistPhotoGallery } from "./useChecklistPhotoGallery.js";
+import { ChecklistPhotoGallery } from "./ChecklistPhotoGallery.jsx";
 import {
   publicChecklistEvidenceUrl,
   uploadPublicChecklistEvidence,
@@ -134,7 +136,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
 
 function ChecklistAnswer({
   item, value, onChange, translate, token, evidence, disabled = false,
-  missing = false, photoMissing = false, answerTargetRef, photoTargetRef, onEvidenceSaved,
+  missing = false, photoMissing = false, answerTargetRef, photoTargetRef, onEvidenceSaved, gallery,
 }) {
   const label = itemLabel(item, translate);
   const answerValues = ["UNANSWERED", "DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
@@ -161,7 +163,7 @@ function ChecklistAnswer({
       </div>
       {missing && <p className="public-checklist__missing-marker" id={missingAnswerId}>{translate("checklists.answerRequiredBeforeReview")}</p>}
       {item.requiresPhoto && item.id === pilotPhotoRequirementId && (
-        <ChecklistPhoto
+        gallery ? <ChecklistPhotoGallery gallery={gallery} token={token} disabled={disabled} missing={photoMissing} targetRef={photoTargetRef} translate={translate} /> : <ChecklistPhoto
           item={item}
           token={token}
           evidence={evidence}
@@ -191,16 +193,23 @@ function reviewErrorMessage(reviewError, translate) {
   return translate("checklists.readyForReviewError");
 }
 
-function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onCheckReadiness, onSubmit, language, translate }) {
+function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onCheckReadiness, onSubmit, language, translate, pendingPhotos, refreshingPhotos, remotePendingPhotos }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const isReady = saveState === checklistSaveStates.READY_FOR_REVIEW;
-  const canSubmit = saveState === checklistSaveStates.SAVED && !isSubmittingReview;
+  const canSubmit = saveState === checklistSaveStates.SAVED && !isSubmittingReview && !refreshingPhotos;
   const showReviewError = Boolean(reviewError && reviewError !== "checklist_requirements_missing");
   const readyAt = formatReadyForReviewAt(checklist.readyForReviewAt, language);
 
   useEffect(() => {
     if (reviewError === "checklist_requirements_missing") setIsConfirming(false);
   }, [reviewError]);
+  useEffect(() => { setIsConfirming(false); }, [checklist.evidenceRevision, pendingPhotos]);
+  const check = (onReady) => {
+    const result = onCheckReadiness();
+    if (typeof result?.then === "function") result.then((ready) => { if (ready) onReady(); else setIsConfirming(false); });
+    else if (result) onReady();
+    else setIsConfirming(false);
+  };
 
   if (isReady) {
     return (
@@ -217,13 +226,15 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
     <section className="public-checklist__review-handoff" aria-labelledby="checklist-review-handoff-title">
       <h2 id="checklist-review-handoff-title" tabIndex={-1}>{translate("checklists.sendForReview")}</h2>
       {isSubmittingReview && <p role="status">{translate("checklists.submissionPending")}</p>}
+      {pendingPhotos > 0 && <p role="status">{translate("checklists.pendingPhotos")}</p>}
+      {remotePendingPhotos > 0 && <p role="status">{translate("checklists.remotePendingPhotos")}</p>}
       {!isConfirming ? (
         <>
           <p>{translate("checklists.readyForReviewPrompt")}</p>
           {!canSubmit && <p className="public-checklist__review-help">{translate("checklists.readyForReviewSaveFirst")}</p>}
           {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
           <button className="button" type="button" disabled={!canSubmit} onClick={() => {
-            if (onCheckReadiness()) setIsConfirming(true);
+            check(() => setIsConfirming(true));
           }}>
             {translate("checklists.sendForReview")}
           </button>
@@ -235,8 +246,7 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
           {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
           <div className="public-checklist__review-actions">
             <button className="button" type="button" disabled={isSubmittingReview} onClick={() => {
-              if (onCheckReadiness()) onSubmit();
-              else setIsConfirming(false);
+              check(onSubmit);
             }}>
               {isSubmittingReview ? translate("checklists.sendForReviewSending") : translate("checklists.sendForReview")}
             </button>
@@ -300,17 +310,23 @@ export function PublicChecklistPage({ token }) {
     isResolvingConflict,
     isSubmittingReview,
     reviewError,
+    reviewRequirements,
     queueChanges,
     saveNow,
     discardLocalChanges,
     reapplyLocalChanges,
     submitForManagerReview,
     retryLoad,
+    updateEvidence,
   } = usePublicChecklistDraft(token);
   const { language, setLanguage, translate } = usePublicTranslation(checklist?.preferredLanguage);
   const fieldTargetsRef = useRef(new Map());
   const [hasAttemptedValidation, setHasAttemptedValidation] = useState(false);
   const [confirmedEvidenceIds, setConfirmedEvidenceIds] = useState(() => new Set());
+  const isV2 = checklist?.evidencePolicy?.version === 2;
+  const gallery = useChecklistPhotoGallery({ token, checklist, disabled: isSubmittingReview || saveState === checklistSaveStates.READY_FOR_REVIEW, onEvidence: updateEvidence });
+  const canReviewRef = useRef(false);
+  canReviewRef.current = saveState === checklistSaveStates.SAVED && !isSubmittingReview;
 
   useEffect(() => {
     setHasAttemptedValidation(false);
@@ -381,7 +397,7 @@ export function PublicChecklistPage({ token }) {
       const answered = answer === "DONE" || (answer === "NOT_APPLICABLE" && item.canBeNotApplicable === true);
       if (!answered) missingItems.push({ key: `checklist:${item.id}`, label: itemLabel(item, translate), kind: "checklist" });
       if (item.requiresPhoto && item.id === pilotPhotoRequirementId
-        && !evidenceByRequirement.has(item.id) && !confirmedEvidenceIds.has(item.id)) {
+        && !evidenceByRequirement.has(item.id) && (isV2 || !confirmedEvidenceIds.has(item.id))) {
         missingItems.push({ key: `photo:${item.id}`, label: itemLabel(item, translate), kind: "photo" });
       }
     }
@@ -404,11 +420,19 @@ export function PublicChecklistPage({ token }) {
     saveState={saveState}
     isSubmittingReview={isSubmittingReview}
     reviewError={reviewError}
+    pendingPhotos={isV2 ? gallery.pendingCount : 0}
+    refreshingPhotos={isV2 && gallery.refreshing}
+    remotePendingPhotos={reviewRequirements?.pendingPhotoCount || 0}
     onCheckReadiness={() => {
-      if (missingItems.length === 0) return true;
-      setHasAttemptedValidation(true);
-      requestAnimationFrame(moveToFirstMissing);
-      return false;
+      const validate = () => {
+        if (isV2 && gallery.getSnapshot().pendingCount > 0) { setHasAttemptedValidation(true); return false; }
+        const missing = isV2 ? missingItems.filter((item) => item.kind !== "photo").length > 0
+          || !gallery.getSnapshot().saved.some((item) => item.requirementId === pilotPhotoRequirementId) : missingItems.length > 0;
+        if (!missing && canReviewRef.current) return true;
+        setHasAttemptedValidation(true); requestAnimationFrame(moveToFirstMissing); return false;
+      };
+      if (!isV2 || gallery.pendingCount > 0 || missingItems.length > 0) return validate();
+      return gallery.refreshSaved().then((loaded) => loaded && validate());
     }}
     onSubmit={submitForManagerReview}
     language={language}
@@ -450,6 +474,7 @@ export function PublicChecklistPage({ token }) {
           <section className="public-checklist__completion" aria-labelledby="checklist-completion-title" aria-live="polite">
             <h2 id="checklist-completion-title">{translate(isSubmittingReview ? "checklists.sendForReviewSending" : missingItems.length > 0
               ? "checklists.completionIncomplete"
+              : isV2 && (gallery.pendingCount > 0 || gallery.refreshing) ? "checklists.completionSaving"
               : saveState === checklistSaveStates.SAVED ? "checklists.completionReady" : "checklists.completionSaving")}</h2>
             <p>{translate(saveState === checklistSaveStates.SAVED ? "checklists.draftNotSubmitted" : "checklists.draftPending")}</p>
             {missingItems.length > 0 ? (
@@ -457,7 +482,7 @@ export function PublicChecklistPage({ token }) {
                 {!hasAttemptedValidation && <p>{translate("checklists.reviewValidationSummary", { checklist: missingChecklistCount, inventory: missingInventoryCount, photos: missingPhotoCount })}</p>}
                 {!hasAttemptedValidation && <button className="button button--secondary" type="button" onClick={moveToFirstMissing}>{translate("checklists.goToFirstMissingItem")}</button>}
               </>
-            ) : saveState === checklistSaveStates.SAVED && <><p>{translate("checklists.completionReadyHelp")}</p><a className="button button--secondary" href="#checklist-review-handoff-title">{translate("checklists.goToSendStep")}</a></>}
+            ) : saveState === checklistSaveStates.SAVED && (!isV2 || gallery.pendingCount === 0) && <><p>{translate("checklists.completionReadyHelp")}</p><a className="button button--secondary" href="#checklist-review-handoff-title">{translate("checklists.goToSendStep")}</a></>}
           </section>
         )}
 
@@ -506,8 +531,9 @@ export function PublicChecklistPage({ token }) {
                 onChange={(answer) => queueChanges({ checklistAnswers: { [item.id]: answer } })}
                 translate={translate}
                 token={token}
+                gallery={isV2 ? gallery : null}
                 evidence={evidenceByRequirement.get(item.id)}
-                disabled={isReadOnly}
+                disabled={isReadOnly || isSubmittingReview}
                 missing={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `checklist:${item.id}`)}
                 photoMissing={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `photo:${item.id}`)}
                 answerTargetRef={(node) => {
@@ -578,7 +604,7 @@ export function PublicChecklistPage({ token }) {
           </label>
         </section>
 
-        {checklist.requiredPhotoTypes?.length > 0 && (
+        {!isV2 && checklist.requiredPhotoTypes?.length > 0 && (
           <section className="public-checklist__future-note" aria-labelledby="public-checklist-photos-title">
             <h2 id="public-checklist-photos-title">{translate("checklists.requiredPhotos")}</h2>
             <p>{translate("checklists.photosLater")}</p>

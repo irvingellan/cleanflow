@@ -1,0 +1,10 @@
+.checklist-photo-gallery { min-width: 0; overflow-wrap: anywhere; }
+.checklist-photo-gallery__list { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .65rem; }
+.checklist-photo-gallery__list li { min-width: 0; border: 1px solid var(--color-border, #d5dce0); border-radius: .6rem; padding: .75rem; }
+.checklist-photo-gallery__list p { margin: .4rem 0; }
+.checklist-photo-gallery__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.checklist-photo-gallery .button, .checklist-photo-view { min-height: 44px; min-width: 44px; max-width: 100%; white-space: normal; }
+.checklist-photo-gallery label.button { cursor: pointer; display: inline-flex; align-items: center; }
+.checklist-photo-gallery:focus-within { outline-offset: 3px; }
+.checklist-photo-gallery .visually-hidden:focus { position: static; width: auto; height: 44px; clip-path: none; }
+.checklist-photo-gallery img { max-width: 100%; height: auto; }

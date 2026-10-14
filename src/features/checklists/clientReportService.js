@@ -40,12 +40,12 @@ export async function revokeClientReport(jobId) {
   return result.data?.capability || { state: "REVOKED" };
 }
 
-function clientReportRequestUrl(token, photo = false) {
-  return `${clientReportApiPath}?${new URLSearchParams({ token, ...(photo ? { photo: "1" } : {}) })}`;
+function clientReportRequestUrl(token, photo = false, evidenceId) {
+  return `${clientReportApiPath}?${new URLSearchParams({ token, ...(photo ? { photo: "1" } : {}), ...(evidenceId ? { evidenceId } : {}) })}`;
 }
 
-export function publicClientReportPhotoUrl(token) {
-  return clientReportRequestUrl(token, true);
+export function publicClientReportPhotoUrl(token, evidenceId) {
+  return clientReportRequestUrl(token, true, evidenceId);
 }
 
 export async function getPublicClientReport(token) {

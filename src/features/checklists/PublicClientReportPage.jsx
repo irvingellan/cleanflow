@@ -8,13 +8,14 @@ function textFor(entry, translate) {
   return entry?.label || translate(entry?.labelKey || "clientReport.checklistItem");
 }
 
-function PublicReportPhoto({ token, translate }) {
+function PublicReportPhoto({ token, translate, evidenceId }) {
   const [hasError, setHasError] = useState(false);
   if (hasError) return <p className="client-report__photo-error">{translate("clientReport.photoUnavailable")}</p>;
   return (
     <img
       className="client-report__photo"
-      src={publicClientReportPhotoUrl(token)}
+      src={publicClientReportPhotoUrl(token, evidenceId)}
+      loading="lazy"
       alt={translate("clientReport.savedEvidence")}
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}
@@ -122,10 +123,12 @@ export function PublicClientReportPage({ token }) {
           </section>
         )}
 
-        {report.hasPhoto && (
+        {(report.evidence?.length > 0 || report.hasPhoto) && (
           <section className="client-report__section">
             <h2>{translate("clientReport.evidence")}</h2>
-            <PublicReportPhoto token={token} translate={translate} />
+            {report.evidence?.length > 0 ? report.evidence.map((item) => (
+              <PublicReportPhoto key={item.evidenceId} token={token} translate={translate} evidenceId={item.evidenceId} />
+            )) : <PublicReportPhoto key={token} token={token} translate={translate} />}
           </section>
         )}
       </article>

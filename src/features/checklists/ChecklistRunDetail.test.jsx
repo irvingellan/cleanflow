@@ -44,6 +44,21 @@ function renderChecklistRun(runOverrides = {}) {
 }
 
 describe("ChecklistRunDetail", () => {
+  it("represents twenty saved photos and fetches only the explicitly selected opaque identity", async () => {
+    const loadEvidence = vi.fn().mockResolvedValue(new Blob(["abc"], { type: "image/jpeg" }));
+    const revoke = vi.fn(); let n = 0;
+    vi.stubGlobal("URL", { ...URL, createObjectURL: () => `blob:photo-${++n}`, revokeObjectURL: revoke });
+    render(<TranslationProvider><ChecklistRunDetail job={{ id: "job-1" }} checklistRun={{ id: "initial", status: "DRAFT", evidence: Array.from({ length: 20 }, (_, i) => ({ evidenceId: `opaque-${i}`, requirementId: i ? "additional" : "living-belongings" })) }} loadEvidence={loadEvidence} /></TranslationProvider>);
+    const buttons = screen.getAllByRole("button", { name: "View photo" });
+    expect(buttons).toHaveLength(20);
+    expect(loadEvidence).not.toHaveBeenCalled();
+    fireEvent.click(buttons[10]);
+    expect(await screen.findByRole("img")).toHaveAttribute("src", "blob:photo-1");
+    expect(loadEvidence).toHaveBeenCalledWith("job-1", "additional", "opaque-10");
+    fireEvent.click(buttons[11]);
+    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(1));
+    expect(revoke).toHaveBeenCalledWith("blob:photo-1");
+  });
   it("shows the cleaner from the existing Assignment snapshot, with a localized unassigned fallback", () => {
     const { rerender } = render(
       <TranslationProvider>
@@ -271,6 +286,8 @@ describe("ChecklistRunDetail", () => {
 
     expect(screen.getByText("Sink")).toBeVisible();
     expect(screen.getByText("Done")).toBeVisible();
+    expect(loadEvidence).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "View photo" }));
     expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:abandoned-photo");
     expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
   });
@@ -291,6 +308,8 @@ describe("ChecklistRunDetail", () => {
     );
 
     expect(await screen.findByText("Saved evidence")).toBeVisible();
+    expect(loadEvidence).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "View photo" }));
     expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
     expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:manager-photo");
   });

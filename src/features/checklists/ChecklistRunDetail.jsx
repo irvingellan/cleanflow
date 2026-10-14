@@ -78,7 +78,7 @@ function AttentionNames({ title, items, emptyMessage, translate }) {
   );
 }
 
-function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
+function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence, selected, onSelect }) {
   const [url, setUrl] = useState(null);
   const [hasError, setHasError] = useState(false);
 
@@ -87,10 +87,12 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
     let objectUrl = null;
     setUrl(null);
     setHasError(false);
-    loadEvidence(jobId, evidence.requirementId)
+    if (!selected) return;
+    (evidence.evidenceId ? loadEvidence(jobId, evidence.requirementId, evidence.evidenceId) : loadEvidence(jobId, evidence.requirementId))
       .then((blob) => {
         objectUrl = URL.createObjectURL(blob);
         if (active) setUrl(objectUrl);
+        else URL.revokeObjectURL(objectUrl);
       })
       .catch(() => {
         if (active) setHasError(true);
@@ -99,11 +101,12 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence }) {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [evidence.requirementId, jobId, loadEvidence]);
+  }, [evidence.requirementId, evidence.evidenceId, selected, jobId, loadEvidence]);
 
+  if (!selected) return <button className="button button--secondary checklist-photo-view" type="button" onClick={onSelect}>{translate("checklists.viewPhoto")}</button>;
   if (hasError) return <p className="checklist-run__evidence-error">{translate("checklists.photoUnavailable")}</p>;
   if (!url) return <p className="checklist-run__evidence-loading">{translate("checklists.photoLoading")}</p>;
-  return <img className="checklist-run__evidence-photo" src={url} alt={translate("checklists.savedPhoto")} />;
+  return <><button className="button button--secondary checklist-photo-view" type="button" onClick={onSelect}>{translate("checklists.hidePhoto")}</button><img className="checklist-run__evidence-photo" src={url} alt={translate("checklists.savedPhoto")} loading="lazy" /></>;
 }
 
 /** Displays the server-projected manager summary, never a raw Property or Run. */
@@ -112,6 +115,7 @@ export function ChecklistRunDetail({
   loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete, onAbandonAndComplete,
 }) {
   const { language, translate } = useTranslation();
+  const [selectedEvidence, setSelectedEvidence] = useState(null);
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
   const requiredPhotoCount = Number.isInteger(checklistRun.requiredPhotoCount)
@@ -355,13 +359,15 @@ export function ChecklistRunDetail({
         <section className="checklist-run__section" aria-labelledby="checklist-evidence-title">
           <h3 id="checklist-evidence-title">{translate("checklists.savedEvidence")}</h3>
           {evidence.map((item) => (
-            <div className="checklist-run__evidence" key={item.requirementId}>
+            <div className="checklist-run__evidence" key={item.evidenceId || item.requirementId}>
               <p>{translate("checklists.photoForRequirement", {
                 requirement: item.requirementId === "living-belongings"
                   ? translate("checklistPreview.livingBelongings")
-                  : item.requirementId,
+                  : translate("checklists.additionalPhoto"),
               })}</p>
-              <ChecklistEvidencePhoto jobId={job.id} evidence={item} translate={translate} loadEvidence={loadEvidence} />
+              <ChecklistEvidencePhoto jobId={job.id} evidence={item} translate={translate} loadEvidence={loadEvidence}
+                selected={selectedEvidence === `${job.id}:${item.evidenceId || item.requirementId}`}
+                onSelect={() => setSelectedEvidence((current) => current === `${job.id}:${item.evidenceId || item.requirementId}` ? null : `${job.id}:${item.evidenceId || item.requirementId}`)} />
             </div>
           ))}
         </section>

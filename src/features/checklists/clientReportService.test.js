@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clientReportRequestTimeoutMilliseconds,
   getPublicClientReport,
+  publicClientReportPhotoUrl,
 } from "./clientReportService.js";
 
 afterEach(() => {
@@ -10,6 +11,10 @@ afterEach(() => {
 });
 
 describe("public client report request classification", () => {
+  it("keeps photo URLs same-origin and supports both exact IDs and historical photo=1", () => {
+    expect(publicClientReportPhotoUrl("synthetic-token", "opaque-photo")).toBe("/api/client-report?token=synthetic-token&photo=1&evidenceId=opaque-photo");
+    expect(publicClientReportPhotoUrl("synthetic-token")).toBe("/api/client-report?token=synthetic-token&photo=1");
+  });
   it.each([404, 410])("treats HTTP %s as a permanent unavailable link", async (status) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status }));
 

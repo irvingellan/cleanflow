@@ -17,6 +17,18 @@ function renderPage(token = "opaque") {
 }
 
 describe("PublicClientReportPage", () => {
+  it("represents all ID-scoped saved photos lazily without private technical labels", async () => {
+    publicClientReportPhotoUrl.mockImplementation((_token, id) => `/api/client-report?photo=1&evidenceId=${id}`);
+    getPublicClientReport.mockResolvedValue({ sections: [], hasPhoto: true, evidence: [{ evidenceId: "first", requirementId: "living-belongings" }, { evidenceId: "second", requirementId: "additional" }] });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning report" });
+    const images = screen.getAllByRole("img");
+    expect(images).toHaveLength(2);
+    expect(images.map((image) => image.getAttribute("src"))).toEqual(["/api/client-report?photo=1&evidenceId=first", "/api/client-report?photo=1&evidenceId=second"]);
+    for (const image of images) { expect(image).toHaveAttribute("loading", "lazy"); expect(image).toHaveAttribute("referrerPolicy", "no-referrer"); }
+    expect(screen.queryByText("second")).not.toBeInTheDocument();
+    publicClientReportPhotoUrl.mockImplementation(() => "/api/client-report?token=opaque&photo=1");
+  });
   it("renders the saved read-only checklist, inventory, notes and evidence", async () => {
     getPublicClientReport.mockResolvedValue({
       titleKey: "clientReport.title",

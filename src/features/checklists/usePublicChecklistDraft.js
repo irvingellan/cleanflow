@@ -84,6 +84,16 @@ function checklistIsReadyForReview(checklist) {
   return checklist?.status === checklistSaveStates.READY_FOR_REVIEW;
 }
 
+function preserveNewestEvidence(current, incoming) {
+  if (current?.evidencePolicy?.version !== 2) return incoming;
+  if (incoming?.evidencePolicy?.version !== 2 || !Number.isInteger(incoming.evidenceRevision)
+    || incoming.evidenceRevision < current.evidenceRevision) {
+    return { ...incoming, evidencePolicy: current.evidencePolicy,
+      evidenceRevision: current.evidenceRevision, evidence: current.evidence };
+  }
+  return incoming;
+}
+
 /**
  * Serializes one cleaner editor's sparse mutations. A recovery record retains
  * the original mutation ID before dispatch, allowing an uncertain response to
@@ -112,6 +122,27 @@ export function usePublicChecklistDraft(token) {
   const noteDebounceRef = useRef(null);
   const flushRef = useRef(null);
   const saveStateRef = useRef(checklistSaveStates.LOADING);
+  const activeTokenRef = useRef({ token });
+  const projectionRef = useRef({ token, checklist: null });
+  if (activeTokenRef.current.token !== token) activeTokenRef.current = { token };
+  const activeScope = activeTokenRef.current;
+
+  const setProjection = useCallback((incoming) => {
+    if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
+    const current = projectionRef.current.token === token ? projectionRef.current.checklist : null;
+    const next = preserveNewestEvidence(current, incoming);
+    projectionRef.current = { token, checklist: next };
+    setChecklist(next);
+  }, [token]);
+
+  const updateEvidence = useCallback((result) => {
+    const current = projectionRef.current;
+    if (!isMountedRef.current || activeTokenRef.current !== activeScope || current.token !== token
+      || current.checklist?.evidencePolicy?.version !== 2 || !Array.isArray(result?.evidence)
+      || !Number.isInteger(result.evidenceRevision)
+      || result.evidenceRevision < (current.checklist.evidenceRevision || 0)) return;
+    setProjection({ ...current.checklist, evidence: result.evidence, evidenceRevision: result.evidenceRevision });
+  }, [setProjection, token]);
 
   const setCurrentSaveState = useCallback((nextState) => {
     saveStateRef.current = nextState;
@@ -165,6 +196,7 @@ export function usePublicChecklistDraft(token) {
     setCurrentSaveState(checklistSaveStates.SAVING);
     try {
       const result = await savePublicChecklistDraft({ token, ...pending });
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       if (!validDraft(result?.draft)) throw new Error("Checklist save response was invalid.");
       if (pendingMutationRef.current !== pending) return;
 
@@ -196,6 +228,7 @@ export function usePublicChecklistDraft(token) {
         setCurrentSaveState(checklistSaveStates.SAVED);
       }
     } catch (error) {
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       if (isRevisionConflict(error)) {
         enterConflict();
       } else if (isUnavailable(error)) {
@@ -205,7 +238,7 @@ export function usePublicChecklistDraft(token) {
       }
       persistRecovery();
     } finally {
-      isSavingRef.current = false;
+      if (activeTokenRef.current === activeScope) isSavingRef.current = false;
     }
   }, [enterConflict, persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
 
@@ -219,7 +252,7 @@ export function usePublicChecklistDraft(token) {
     }
     try {
       const [scope, result] = await Promise.all([checklistDraftRecoveryScopeBounded(token), getPublicChecklist(token)]);
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       scopeRef.current = scope;
       setHasRecoveryWarning(!scope);
       setLoadDiagnostics(result?.diagnostics || null);
@@ -231,7 +264,7 @@ export function usePublicChecklistDraft(token) {
         pendingMutationRef.current = null;
         queuedChangesRef.current = {};
         if (scope) clearChecklistDraftRecovery(scope);
-        setChecklist(result.checklist);
+        setProjection(result.checklist);
         setVisibleDraft(result.draft);
         setHasRecoveryWarning(false);
         setIsLoading(false);
@@ -240,7 +273,7 @@ export function usePublicChecklistDraft(token) {
       }
 
       const recovery = discardRecovery || !scope ? null : loadChecklistDraftRecovery(scope);
-      setChecklist(result.checklist);
+      setProjection(result.checklist);
       pendingMutationRef.current = recovery?.pendingMutation || null;
       queuedChangesRef.current = recovery?.queuedChanges || {};
       const pending = pendingMutationRef.current;
@@ -274,7 +307,7 @@ export function usePublicChecklistDraft(token) {
         setCurrentSaveState(checklistSaveStates.SAVED);
       }
     } catch (error) {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       setIsLoading(false);
       const terminalUnavailable = isUnavailable(error);
       setLoadError(terminalUnavailable ? error?.code || "checklist_unavailable" : "checklist_request_failed");
@@ -288,10 +321,24 @@ export function usePublicChecklistDraft(token) {
       });
       setCurrentSaveState(terminalUnavailable ? checklistSaveStates.UNAVAILABLE : checklistSaveStates.RETRY);
     }
-  }, [persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
+  }, [persistRecovery, setCurrentSaveState, setVisibleDraft, setProjection, token]);
 
   useEffect(() => {
     isMountedRef.current = true;
+    // Previous-token pending work was already persisted at dispatch. Retain
+    // its recovery record, but release this editor's references before loading
+    // the new token. Late callbacks cannot settle the new editor's state.
+    scopeRef.current = null;
+    pendingMutationRef.current = null;
+    queuedChangesRef.current = {};
+    draftRef.current = null;
+    isSavingRef.current = false;
+    isSubmittingReviewRef.current = false;
+    reviewSubmissionRef.current = null;
+    setIsSubmittingReview(false);
+    setIsResolvingConflict(false);
+    setReviewError(null);
+    setReviewRequirements(null);
     load();
     const retryOnOnline = () => {
       if (![checklistSaveStates.CONFLICT, checklistSaveStates.READY_FOR_REVIEW].includes(saveStateRef.current)) {
@@ -353,8 +400,9 @@ export function usePublicChecklistDraft(token) {
     setIsResolvingConflict(true);
     try {
       const result = await getPublicChecklist(token);
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       if (!result?.checklist || !validDraft(result?.draft)) throw new Error("Checklist response was invalid.");
-      setChecklist(result.checklist);
+      setProjection(result.checklist);
       if (!hasChanges(changes)) {
         pendingMutationRef.current = null;
         queuedChangesRef.current = {};
@@ -374,13 +422,14 @@ export function usePublicChecklistDraft(token) {
       setCurrentSaveState(checklistSaveStates.SAVING);
       await flushRef.current?.();
     } catch (error) {
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       if (isUnavailable(error)) setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
       else setCurrentSaveState(checklistSaveStates.CONFLICT);
       persistRecovery();
     } finally {
-      if (isMountedRef.current) setIsResolvingConflict(false);
+      if (isMountedRef.current && activeTokenRef.current === activeScope) setIsResolvingConflict(false);
     }
-  }, [isResolvingConflict, pendingLocalChanges, persistRecovery, setCurrentSaveState, setVisibleDraft, token]);
+  }, [isResolvingConflict, pendingLocalChanges, persistRecovery, setCurrentSaveState, setVisibleDraft, setProjection, token]);
 
   const submitForManagerReview = useCallback(async () => {
     if (isSubmittingReviewRef.current || saveStateRef.current !== checklistSaveStates.SAVED
@@ -399,6 +448,7 @@ export function usePublicChecklistDraft(token) {
     reviewSubmissionRef.current = submission;
     try {
       const result = await readyPublicChecklistForReview({ token, ...submission });
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       if (!result?.checklist || !validDraft(result?.draft) || !checklistIsReadyForReview(result.checklist)) {
         throw new Error("Checklist review response was invalid.");
       }
@@ -406,17 +456,19 @@ export function usePublicChecklistDraft(token) {
       queuedChangesRef.current = {};
       reviewSubmissionRef.current = null;
       if (scopeRef.current) clearChecklistDraftRecovery(scopeRef.current);
-      setChecklist((current) => ({
+      const current = projectionRef.current.checklist;
+      setProjection({
         ...result.checklist,
         // The successful handoff response may omit this already-safe server
         // projection field; retain it for the confirmation view.
         assignedCleanerName: result.checklist.assignedCleanerName ?? current?.assignedCleanerName ?? null,
         preferredLanguage: result.checklist.preferredLanguage ?? current?.preferredLanguage ?? null,
-      }));
+      });
       setVisibleDraft(result.draft);
       setHasRecoveryWarning(false);
       setCurrentSaveState(checklistSaveStates.READY_FOR_REVIEW);
     } catch (error) {
+      if (!isMountedRef.current || activeTokenRef.current !== activeScope) return;
       if (isUnavailable(error)) {
         setCurrentSaveState(checklistSaveStates.UNAVAILABLE);
       } else if (error?.status === 422 && error?.code === "checklist_requirements_missing") {
@@ -438,10 +490,12 @@ export function usePublicChecklistDraft(token) {
         setReviewError("checklist_review_failed");
       }
     } finally {
-      isSubmittingReviewRef.current = false;
-      if (isMountedRef.current) setIsSubmittingReview(false);
+      if (activeTokenRef.current === activeScope) {
+        isSubmittingReviewRef.current = false;
+        if (isMountedRef.current) setIsSubmittingReview(false);
+      }
     }
-  }, [load, setCurrentSaveState, setVisibleDraft, token]);
+  }, [load, setCurrentSaveState, setVisibleDraft, setProjection, token]);
 
   return {
     checklist,
@@ -462,5 +516,6 @@ export function usePublicChecklistDraft(token) {
     reapplyLocalChanges,
     submitForManagerReview,
     retryLoad: load,
+    updateEvidence,
   };
 }

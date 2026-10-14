@@ -8,6 +8,8 @@ import {
   savePublicChecklistDraft,
   uploadPublicChecklistEvidence,
   validateChecklistEvidenceFile,
+  removePublicChecklistEvidence,
+  publicChecklistEvidenceUrl,
 } from "./checklistCapabilityService.js";
 
 afterEach(() => {
@@ -16,6 +18,21 @@ afterEach(() => {
 });
 
 describe("public checklist requests", () => {
+  it("uses opaque identities for photos and removal with a full revisioned receipt", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ removed: true, evidence: [], evidenceRevision: 2 }) });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(publicChecklistEvidenceUrl("token", "additional", "opaque-id")).toContain("evidenceId=opaque-id");
+    await expect(removePublicChecklistEvidence({ token: "token", evidenceId: "opaque-id", mutationId: "synthetic-mutation" })).resolves.toMatchObject({ evidenceRevision: 2, evidence: [] });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ token: "token", evidenceId: "opaque-id", mutationId: "synthetic-mutation", action: "REMOVE_EVIDENCE" });
+  });
+  it("rejects V2 acknowledgement for another identity even if its purpose matches", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ evidenceId: "absent", evidenceRevision: 1, evidence: [{ evidenceId: "other", requirementId: "living-belongings" }] }) }));
+    await expect(uploadPublicChecklistEvidence({ token: "token", requirementId: "living-belongings", file: new Blob(["abc"], { type: "image/jpeg" }), version: 2 })).rejects.toHaveProperty("code", "checklist_response_invalid");
+  });
+  it.each([[413, "checklist_photo_limit"], [409, "checklist_conflict"], [410, "checklist_unavailable"]])("keeps coarse HTTP %s photo errors safe", async (status, code) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status, json: async () => ({ error: "private arbitrary server detail" }) }));
+    await expect(uploadPublicChecklistEvidence({ token: "token", requirementId: "additional", file: new Blob(["abc"], { type: "image/jpeg" }), version: 2 })).rejects.toHaveProperty("code", code);
+  });
   it.each(["image/jpeg", "image/png", "image/webp"])("accepts a %s file within the upload limit", (type) => {
     const file = new File([new Uint8Array([1, 2, 3])], "photo", { type });
     expect(() => validateChecklistEvidenceFile(file)).not.toThrow();

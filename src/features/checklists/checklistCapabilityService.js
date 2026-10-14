@@ -52,6 +52,10 @@ export async function revokeChecklistCapability(jobId) {
 
 async function fetchPublicChecklist(input, init = {}, readResponse = async (response) => response) {
   const controller = new AbortController();
+  const externalSignal = init.signal;
+  const abort = () => controller.abort();
+  externalSignal?.addEventListener("abort", abort, { once: true });
+  if (externalSignal?.aborted) controller.abort();
   let timeoutId;
   let requestStage = "request";
   const deadline = new Promise((_, reject) => {
@@ -74,6 +78,7 @@ async function fetchPublicChecklist(input, init = {}, readResponse = async (resp
     throw error;
   } finally {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", abort);
   }
 }
 
@@ -124,8 +129,8 @@ async function requestPublicChecklist(token) {
 
 export { requestPublicChecklist as getPublicChecklist };
 
-export function publicChecklistEvidenceUrl(token, requirementId) {
-  return `${publicChecklistApiPath}?${new URLSearchParams({ token, evidenceItem: requirementId })}`;
+export function publicChecklistEvidenceUrl(token, requirementId, evidenceId) {
+  return `${publicChecklistApiPath}?${new URLSearchParams({ token, ...(evidenceId ? { evidenceId } : { evidenceItem: requirementId }) })}`;
 }
 
 export function validateChecklistEvidenceFile(file) {
@@ -165,7 +170,7 @@ export async function prepareChecklistEvidenceUploadBody(file) {
   return body;
 }
 
-export async function uploadPublicChecklistEvidence({ token, requirementId, file }) {
+export async function uploadPublicChecklistEvidence({ token, requirementId, file, version = 1, signal }) {
   const startedAt = Date.now();
   const sessionId = getPublicChecklistSessionId();
   const requestId = createPublicChecklistDiagnosticId();
@@ -209,7 +214,9 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
   }
 
   try {
+    if (signal?.aborted) throw new PublicChecklistRequestError("checklist_photo_optimization_cancelled");
     const body = await fetchPublicChecklist(`${publicChecklistApiPath}?${new URLSearchParams({ token })}`, {
+      signal,
       method: "PUT",
       headers: {
         "Content-Type": file.type,
@@ -230,11 +237,13 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
         }
       }
       if (!response.ok) {
-        throw new PublicChecklistRequestError("checklist_photo_unavailable", response.status, null, "request");
+        throw new PublicChecklistRequestError(version === 2 ? photoErrorForStatus(response.status) : "checklist_photo_unavailable", response.status, null, "request");
       }
       return result;
     });
-    if (!Array.isArray(body.evidence) || !body.evidence.some((saved) => saved.requirementId === requirementId)) {
+    if (!Array.isArray(body.evidence) || !body.evidence.some((saved) => saved.requirementId === requirementId
+      && (version !== 2 || (typeof body.evidenceId === "string" && saved.evidenceId === body.evidenceId)))
+      || (version === 2 && (!Number.isInteger(body.evidenceRevision) || body.evidenceRevision < 0))) {
       throw new PublicChecklistRequestError("checklist_response_invalid", undefined, null, "response-parse");
     }
     logPhotoDiagnostic("success", "server-confirmed");
@@ -250,6 +259,27 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
     error.diagnosticCode = diagnosticCode;
     throw error;
   }
+}
+
+function photoErrorForStatus(status) {
+  if (status === 413) return "checklist_photo_limit";
+  if (status === 409) return "checklist_conflict";
+  if (status === 404 || status === 410) return "checklist_unavailable";
+  return "checklist_photo_unavailable";
+}
+
+export async function removePublicChecklistEvidence({ token, evidenceId, mutationId, signal }) {
+  const body = await fetchPublicChecklist(publicChecklistApiPath, {
+    method: "POST", signal,
+    headers: { "Content-Type": "application/json", Accept: "application/json" }, credentials: "omit",
+    body: JSON.stringify({ token, action: "REMOVE_EVIDENCE", evidenceId, mutationId }),
+  }, async (response) => {
+    if (!response.ok) throw new PublicChecklistRequestError(photoErrorForStatus(response.status), response.status);
+    return readJsonResponse(response);
+  });
+  if (body.removed !== true || !Array.isArray(body.evidence) || !Number.isInteger(body.evidenceRevision)
+    || body.evidence.some((item) => item.evidenceId === evidenceId)) throw new PublicChecklistRequestError("checklist_response_invalid");
+  return body;
 }
 
 export async function savePublicChecklistDraft({ token, mutationId, baseRevision, changes }) {

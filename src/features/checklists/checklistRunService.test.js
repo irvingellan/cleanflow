@@ -50,5 +50,7 @@ describe("checklistRunService", () => {
     expect(evidence).toBeInstanceOf(Blob);
     expect(evidence.type).toBe("image/jpeg");
     expect(evidenceCall).toHaveBeenCalledWith({ jobId: "job-1", requirementId: "living-belongings" });
+    await service.getChecklistEvidence("job-1", "additional", "opaque-photo");
+    expect(evidenceCall).toHaveBeenLastCalledWith({ jobId: "job-1", evidenceId: "opaque-photo" });
   });
 });

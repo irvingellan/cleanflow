@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   uploadPublicChecklistEvidence: vi.fn(),
   recordPublicChecklistLoadDiagnostic: vi.fn(),
   realUploadPublicChecklistEvidence: null,
+  optimize: vi.fn(), remove: vi.fn(),
 }));
 const {
   getPublicChecklist, readyPublicChecklistForReview, savePublicChecklistDraft, uploadPublicChecklistEvidence,
@@ -24,8 +25,10 @@ vi.mock("./checklistCapabilityService.js", async (importOriginal) => {
     readyPublicChecklistForReview: mocks.readyPublicChecklistForReview,
     savePublicChecklistDraft: mocks.savePublicChecklistDraft,
     uploadPublicChecklistEvidence: mocks.uploadPublicChecklistEvidence,
+    removePublicChecklistEvidence: mocks.remove,
   };
 });
+vi.mock("./checklistImageOptimizer.js", () => ({ optimizeChecklistImage: mocks.optimize }));
 
 vi.mock("./publicChecklistLoadDiagnostics.js", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -77,6 +80,71 @@ function primeReadyChecklist() {
   getPublicChecklist.mockResolvedValue({ checklist: { ...frozenChecklist, evidence: [{ requirementId: "living-belongings" }] }, draft: acknowledgedDraft });
 }
 
+function primeMulti(evidence = [], overrides = {}) {
+  primeReadyChecklist();
+  const checklist = { ...frozenChecklist, status: "DRAFT", evidencePolicy: { version: 2, maxPhotos: 20 }, evidenceRevision: evidence.length, evidence, ...overrides };
+  getPublicChecklist.mockResolvedValue({ checklist, draft: acknowledgedDraft });
+  return checklist;
+}
+
+describe("V2 multi-photo cleaner flow", () => {
+  it("appends library selections and a later camera photo with associated labels and safe gallery controls", async () => {
+    const checklist = primeMulti(); let n = 0; const evidence = [];
+    uploadPublicChecklistEvidence.mockImplementation(async ({ requirementId }) => {
+      const item = { evidenceId: `opaque-${++n}`, requirementId }; evidence.push(item);
+      return { evidenceId: item.evidenceId, evidenceRevision: n, evidence: [...evidence] };
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    const library = screen.getByLabelText("Choose photos"); const camera = screen.getByLabelText("Take photo");
+    expect(library).toHaveAttribute("multiple"); expect(camera).not.toHaveAttribute("multiple");
+    fireEvent.change(library, { target: { files: [new File(["first"], "private-name.jpg", { type: "image/jpeg" }), new File(["second"], "other.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => expect(screen.getAllByText("Photo saved")).toHaveLength(2));
+    fireEvent.change(camera, { target: { files: [new File(["third"], "camera.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => expect(screen.getAllByText("Photo saved")).toHaveLength(3));
+    expect(screen.getAllByRole("button", { name: "View photo" })).toHaveLength(3);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.queryByText("private-name.jpg")).not.toBeInTheDocument();
+    expect(checklist.evidence).toHaveLength(0);
+  });
+  it("required removal restores missing status and failed optional selection blocks review until explicit discard", async () => {
+    const initial = primeMulti([{ evidenceId: "required", requirementId: "living-belongings" }]);
+    mocks.remove.mockResolvedValue({ removed: true, evidenceRevision: 2, evidence: [] });
+    getPublicChecklist.mockImplementation(async () => ({ checklist: initial, draft: acknowledgedDraft }));
+    renderPage(); await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(await screen.findByRole("button", { name: "Remove photo" }));
+    await waitFor(() => expect(screen.queryByText("Photo saved")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    await waitFor(() => expect(screen.getByText("Required photo is not saved yet.")).toBeVisible());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+  it("retains answers on optional upload failure and blocks confirmation until discarded and refreshed", async () => {
+    primeMulti([{ evidenceId: "required", requirementId: "living-belongings" }]);
+    uploadPublicChecklistEvidence.mockRejectedValue({ code: "checklist_conflict", status: 409 });
+    renderPage(); await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.change(screen.getByLabelText("Choose photos"), { target: { files: [new File(["abc"], "private.jpg", { type: "image/jpeg" })] } });
+    await screen.findByRole("button", { name: "Discard selection" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Finish, retry or discard pending photos before sending for review.")).toBeVisible();
+    expect(screen.getByLabelText("Done", { selector: "input[name=checklist-bed]" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Discard selection" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Discard selection" })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    expect(await screen.findByRole("dialog")).toBeVisible();
+  });
+  it("shows remote active-upload requirements without falsely marking saved required evidence missing", async () => {
+    primeMulti([{ evidenceId: "required", requirementId: "living-belongings" }]);
+    readyPublicChecklistForReview.mockRejectedValue({ status: 422, code: "checklist_requirements_missing", requirements: { pendingPhotoCount: 1, missingPhotoCount: 0, missingChecklistCount: 0, missingInventoryCount: 0 } });
+    renderPage(); await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByRole("dialog"); fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    await screen.findByText("Photos are still uploading in another session. Refresh saved photos and try again.");
+    expect(screen.queryByText("Required photo is not saved yet.")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+});
+
 function itemFieldset(label) {
   return screen.getByText(label).closest("fieldset");
 }
@@ -92,6 +160,8 @@ function deferred() {
 }
 
 beforeEach(() => {
+  mocks.optimize.mockReset().mockResolvedValue({ blob: new Blob(["abc"], { type: "image/jpeg" }) });
+  mocks.remove.mockReset();
   window.localStorage.clear();
   acknowledgedDraft = createDraft();
   getPublicChecklist.mockReset();
