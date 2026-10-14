@@ -52,3 +52,4 @@ tmp/
 .DS_Store
 Thumbs.db
 logs/
+.private-emulator-origin.json

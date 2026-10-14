@@ -172,7 +172,14 @@ const packageMetadata = JSON.parse(
 
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), "");
-  const binding = assertBuildEnvironment(mode, environment);
+  let approvedPrivateEmulatorOrigin = "";
+  const approvalFile = path.join(process.cwd(), ".private-emulator-origin.json");
+  if (mode === "emulator" && existsSync(approvalFile)) {
+    const approval = JSON.parse(readFileSync(approvalFile, "utf8"));
+    if (approval.environment !== "emulator" || approval.projectId !== "demo-cleanflow") throw new Error("Invalid private emulator approval binding.");
+    approvedPrivateEmulatorOrigin = approval.origin;
+  }
+  const binding = assertBuildEnvironment(mode, environment, { approvedPrivateEmulatorOrigin });
   if (mode === "sandbox") {
     // API keys route Firebase Auth independently of projectId. Reject known
     // local production credentials without logging or embedding them in Sandbox.
@@ -194,6 +201,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     define: {
+      __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__: JSON.stringify(mode === "emulator" ? approvedPrivateEmulatorOrigin : ""),
       __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.buildId),
     },
     plugins: ["test", "e2e"].includes(mode)

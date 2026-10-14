@@ -27,7 +27,8 @@ export function assertFirebaseEnvironmentBinding({ environment, firebaseProjectI
 }
 
 /** Shared by Vite, generated messaging worker and browser SDK initialization. */
-export function assertBuildEnvironment(mode, values) {
+export function assertBuildEnvironment(mode, values, { approvedPrivateEmulatorOrigin } = {}) {
+  privateOriginForBuild(mode, values, approvedPrivateEmulatorOrigin);
   const projectId = values.VITE_FIREBASE_PROJECT_ID;
   const environment = resolveCleanFlowEnvironment({ mode, firebaseProjectId: projectId });
   if (mode === "test") return { environment: "emulator", projectId: "demo-cleanflow" };
@@ -47,7 +48,29 @@ export function assertBuildEnvironment(mode, values) {
   return { environment, projectId };
 }
 
-export function assertHostingOriginBinding({ environment, currentOrigin, sandboxProjectId } = {}) {
+function privateOriginForBuild(mode, values, approvedOrigin) {
+  const requested = values.VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN;
+  if (!requested) return "";
+  if (mode !== "emulator" || values.VITE_FIREBASE_PROJECT_ID !== "demo-cleanflow"
+    || values.VITE_USE_FIREBASE_EMULATORS !== "true" || !approvedOrigin || requested !== approvedOrigin) {
+    throw new Error("Private origin requires exact local approval and demo emulator build.");
+  }
+  const parsed = new URL(approvedOrigin);
+  if (parsed.protocol !== "https:" || parsed.origin !== approvedOrigin || parsed.username || parsed.password
+    || parsed.port !== "8443" || approvedOrigin.includes("*")) throw new Error("Invalid exact private origin approval.");
+  return approvedOrigin;
+}
+
+export function assertHostingOriginBinding({ environment, currentOrigin, sandboxProjectId,
+  buildMode, firebaseProjectId, privateEmulatorOrigin, approvedPrivateEmulatorOrigin } = {}) {
+  if (privateEmulatorOrigin) {
+    const approved = privateOriginForBuild(buildMode, {
+      VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN: privateEmulatorOrigin,
+      VITE_FIREBASE_PROJECT_ID: firebaseProjectId,
+      VITE_USE_FIREBASE_EMULATORS: environment === "emulator" ? "true" : "false",
+    }, approvedPrivateEmulatorOrigin);
+    if (environment === "emulator" && currentOrigin === approved) return;
+  }
   if (!currentOrigin || localOrigin.test(currentOrigin)) return;
   const projectId = environment === "sandbox" ? sandboxProjectId
     : environment === "production" ? productionFirebaseProjectId : "";

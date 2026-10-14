@@ -11,6 +11,28 @@ const config = {
 };
 
 describe("environment isolation", () => {
+  const privateOrigin = "https://test-node.synthetic.ts.net:8443";
+  const privateBinding = {environment:"emulator", buildMode:"emulator", firebaseProjectId:"demo-cleanflow", privateEmulatorOrigin:privateOrigin, approvedPrivateEmulatorOrigin:privateOrigin, currentOrigin:privateOrigin};
+  it("permits only the exact private emulator build origin and demo project", () => {
+    expect(()=>assertHostingOriginBinding(privateBinding)).not.toThrow();
+    for(const overrides of [{currentOrigin:"https://other.synthetic.ts.net:8443"},{currentOrigin:"https://evil.example"},{currentOrigin:privateOrigin+"/"},{firebaseProjectId:"clean-flow-prototipo"},{firebaseProjectId:"other-demo"},{buildMode:"production"},{buildMode:"sandbox"},{buildMode:"e2e"},{environment:"production"},{environment:"sandbox"},{privateEmulatorOrigin:""},{privateEmulatorOrigin:"https://other.synthetic.ts.net:8443",currentOrigin:"https://other.synthetic.ts.net:8443"},{approvedPrivateEmulatorOrigin:""}])expect(()=>assertHostingOriginBinding({...privateBinding,...overrides})).toThrow();
+  });
+  it("rejects wildcard, non-HTTPS and malformed test-only origin configuration", () => {
+    for(const origin of ["https://*.ts.net:8443","http://test-node.synthetic.ts.net:8443","https://evil.example:8443",privateOrigin+"/path",privateOrigin+"?x=1","https://user@test-node.synthetic.ts.net:8443",privateOrigin+",https://other.ts.net:8443"]){
+      expect(()=>assertHostingOriginBinding({...privateBinding,privateEmulatorOrigin:origin,currentOrigin:origin})).toThrow();
+    }
+  });
+  it("refuses test-only configuration in Production and Sandbox builds",()=>{
+    const approval={approvedPrivateEmulatorOrigin:privateOrigin};
+    const production={...config,VITE_CLEANFLOW_ENV:"production",VITE_FIREBASE_PROJECT_ID:"clean-flow-prototipo",VITE_FIREBASE_AUTH_DOMAIN:"clean-flow-prototipo.firebaseapp.com",VITE_FIREBASE_STORAGE_BUCKET:"clean-flow-prototipo.appspot.com"};
+    expect(()=>assertBuildEnvironment("production",production)).not.toThrow();
+    expect(()=>assertBuildEnvironment("production",{...production,VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN:privateOrigin},approval)).toThrow();
+    expect(()=>assertBuildEnvironment("sandbox",{...config,VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN:privateOrigin},approval)).toThrow();
+    const emulator={...config,VITE_CLEANFLOW_ENV:"emulator",VITE_USE_FIREBASE_EMULATORS:"true",VITE_FIREBASE_PROJECT_ID:"demo-cleanflow",VITE_FIREBASE_AUTH_DOMAIN:"demo-cleanflow.local",VITE_FIREBASE_STORAGE_BUCKET:"demo-cleanflow.appspot.com",VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN:privateOrigin};
+    expect(assertBuildEnvironment("emulator",emulator,approval)).toEqual({environment:"emulator",projectId:"demo-cleanflow"});
+    for(const patch of [{VITE_USE_FIREBASE_EMULATORS:"false"},{VITE_FIREBASE_PROJECT_ID:"wrong-project"},{VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN:"https://evil.example:8443"}])expect(()=>assertBuildEnvironment("emulator",{...emulator,...patch},approval)).toThrow();
+    expect(()=>assertBuildEnvironment("emulator",emulator)).toThrow();
+  });
   it("limits the UI navigation allowlist to exact emails and known environments", () => {
     const user = { uid: "synthetic-developer", email: " Developer@Example.test " };
     expect(canShowEnvironmentNavigation(user, "sandbox", " other@example.test, developer@example.test ")).toBe(true);

@@ -9,12 +9,18 @@ export const useFirebaseEmulators =
   ["emulator", "e2e"].includes(import.meta.env.MODE) &&
   import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true";
 
-const binding = assertBuildEnvironment(import.meta.env.MODE, import.meta.env);
+const approvedPrivateEmulatorOrigin = typeof __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__ === "string"
+  ? __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__ : "";
+const binding = assertBuildEnvironment(import.meta.env.MODE, import.meta.env, { approvedPrivateEmulatorOrigin });
 const firebaseConfig = createFirebaseConfig({
   ...import.meta.env,
   ...(["test", "emulator", "e2e"].includes(import.meta.env.MODE) ? { VITE_FIREBASE_PROJECT_ID: "demo-cleanflow" } : {}),
 });
 assertHostingOriginBinding({
+  buildMode: import.meta.env.MODE,
+  firebaseProjectId: firebaseConfig.projectId,
+  privateEmulatorOrigin: import.meta.env.VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN,
+  approvedPrivateEmulatorOrigin,
   environment: binding.environment,
   currentOrigin: typeof window === "undefined" ? "" : window.location.origin,
   sandboxProjectId: import.meta.env.VITE_CLEANFLOW_SANDBOX_PROJECT_ID,
