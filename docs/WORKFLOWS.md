@@ -199,6 +199,14 @@ manager notes, client/cleaner private data, prices, payout, IDs, and capability
 metadata. Public reads do not mutate the Job, Run, draft, evidence, or
 capability. The report does not complete the Job or change payment state.
 
+**Issue #81 local candidate (not deployed):** multi-photo policy Runs append
+one required belongings image and optional extras. Only server-confirmed
+evidence satisfies readiness. The cleaner may retry or remove evidence only
+in DRAFT; READY remains immutable. Manager review and the frozen client report
+show all saved authorized photos lazily. Historical single-photo Runs/reports,
+manager approval and payment behavior remain unchanged. Physical iPhone
+acceptance is a separate gate; see `MULTI_PHOTO_CHECKLIST_V1_CANDIDATE.md`.
+
 ```text
 Cleaner saves checklist, inventory, notes, and required photo
 → cleaner marks Run READY_FOR_REVIEW

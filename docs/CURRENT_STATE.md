@@ -1,5 +1,31 @@
 # CleanFlow — Current State
 
+## Issue #81 — Multi-photo checklist V1, local candidate (2026-10-13)
+
+Isolated branch `codex/checklist-multi-photo-v1`, based on `82ead8c`, preserves
+the approved completion UX and private-origin guard. Application checkpoint
+`cc1bf99`; actual-backend test checkpoint `e231120`. Newly created Runs freeze
+evidence policy version 2: initially 20 photos / 50 MiB, one server-saved
+belongings photo required, extras optional. Historical policy-absent Runs and
+single-photo reports remain unchanged; no migration.
+
+Native sequential optimization admits at most 20 MiB / 16 MP per source and
+targets a 1920px longest edge / JPEG .85, without upscaling or output growth.
+HEIC/HEIF remains unsupported. Fresh-Blob Safari transport and readiness-first
+submission remain intact. Per-photo retry, DRAFT removal, private authorized
+manager/report images and server count/byte/content reservations are included.
+Unknown Storage writers remain charged conservatively; there is no periodic
+orphan worker or hard native-memory/cancellation guarantee.
+
+Local synthetic validation: 119 files / 1,349 unit tests, 82 security tests,
+28 native optimizer browser cases, four gallery browser cases and four actual
+Auth/Firestore/Functions/Storage/Hosting integration cases. Manager integration
+uses real authorized callable projections, not the complete authenticated shell.
+Physical iPhone camera/library, useful-detail and memory acceptance remain gates.
+No merge, push, cloud deployment, Production mutation or billing change.
+Main and deployed Production are separate baselines; this candidate is not live.
+See `MULTI_PHOTO_CHECKLIST_V1_CANDIDATE.md` for compatibility and limits.
+
 ## Cleaner Checklist Completion UX — local integration candidate (2026-10-12)
 
 Approved checkpoint `897b423` selectively ported from Production-compatible main.

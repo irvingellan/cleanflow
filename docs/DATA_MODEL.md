@@ -249,6 +249,14 @@ for the frozen under-bed/furniture requirement while its Checklist Run is
 does not change Job or Assignment lifecycle. Additional photo types, galleries,
 and client delivery remain separate future work.
 
+**Issue #81 local candidate (not deployed):** newly created Runs freeze
+`evidencePolicy.version = 2`, with initially 20 photos / 50 MiB. Server-owned
+`evidenceState`, `evidenceContent` and `evidenceRemovals` children reserve quota,
+deduplicate content and record DRAFT-only removals. Safe evidence entries use
+opaque IDs; private Storage attempts and content hashes are not public fields.
+The required single-photo alias remains compatible. Policy-absent historical
+Runs are not migrated. See `MULTI_PHOTO_CHECKLIST_V1_CANDIDATE.md`.
+
 **Deployed pilot follow-up (2026-09-29):** an optional initial
 `DRAFT` Run may become terminal `ABANDONED` through one manager-authorized
 transaction that also revokes its active cleaner capability and completes its
