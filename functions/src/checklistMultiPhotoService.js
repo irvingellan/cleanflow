@@ -5,6 +5,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { checklistCapabilityState } from "./checklistCapabilityService.js";
 import { createChecklistEvidencePolicy, isPilotChecklistPhotoRequirement, pilotChecklistPhotoRequirementId, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
 import { assertMetadataSafeChecklistImage } from "./checklistImagePrivacy.js";
+import { getChecklistAttemptStorage } from "./checklistAttemptStorage.js";
 
 export const checklistUploadLeaseMilliseconds = 2 * 60 * 1000;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -38,7 +39,9 @@ async function readContext(transaction, initial, options, now, editable = true) 
 
 /** Attempt paths are unique and never reused. Generation preconditions prevent cross-attempt deletion. */
 async function cleanupObject(storage, photo) {
-  if (!photo?.storagePath) return false;
+  // Neither absence nor an observed generation fences an outstanding write.
+  // Unknown writers remain charged even after their finalization lease expires.
+  if (!photo?.storagePath || photo.writerSettled !== true) return false;
   const file = storage.bucket().file(photo.storagePath);
   try {
     const generation = photo.generation || (await file.getMetadata())[0].generation;
@@ -49,6 +52,7 @@ async function cleanupObject(storage, photo) {
 }
 
 async function releaseCleanedAttempt(database, initial, photo) {
+  if (photo.writerSettled !== true) return;
   await database.runTransaction(async transaction => {
     const [stateSnapshot, contentSnapshot] = await Promise.all([transaction.get(stateRef(initial)), transaction.get(identityRef(initial, photo.contentHash))]);
     const state = stateSnapshot.data() || emptyState();
@@ -110,7 +114,7 @@ export async function uploadMultiPhotoEvidence(database, initial, options, image
       if (content.requirementId !== requirementId) throw new HttpsError("already-exists", "This photo is already saved for another purpose.");
       return { duplicate: true, evidenceId: content.evidenceId, evidenceRevision: state.revision || 0, evidence: projectChecklistEvidenceGallery(state.photos) };
     }
-    if (state.pending.some(p => p.contentHash === image.contentHash)) {
+    if (state.pending.some(p => p.contentHash === image.contentHash && p.status === "RESERVED" && p.leaseExpiresAt > clock().getTime())) {
       throw new HttpsError("aborted", "This photo is still uploading. Retry shortly.");
     }
     if (!content && (state.contentCount || 0) >= maximumChecklistContentHistory) throw new HttpsError("resource-exhausted", "Checklist photo correction limit reached.");
@@ -118,11 +122,12 @@ export async function uploadMultiPhotoEvidence(database, initial, options, image
     if (active.length >= run.evidencePolicy.maxPhotos || active.reduce((sum, p) => sum + p.sizeBytes, 0) + bytes.length > run.evidencePolicy.maxTotalBytes) {
       throw new HttpsError("resource-exhausted", "Checklist photo limit reached.");
     }
-    if (requirementId === pilotChecklistPhotoRequirementId && active.some(p => p.requirementId === requirementId)) {
+    const eligible = [...state.photos, ...state.pending.filter(p => p.status === "RESERVED" && p.leaseExpiresAt > clock().getTime())];
+    if (requirementId === pilotChecklistPhotoRequirementId && eligible.some(p => p.requirementId === requirementId)) {
       throw new HttpsError("already-exists", "The required photo is already saved or uploading. Add other photos as additional evidence.");
     }
     const photo = {
-      status: "RESERVED", evidenceId: content?.evidenceId || newEvidenceId, attemptId,
+      status: "RESERVED", evidenceId: content?.evidenceId || newEvidenceId, attemptId, writerSettled: false,
       contentHash: image.contentHash, requirementId, contentType: image.contentType, sizeBytes: bytes.length,
       leaseExpiresAt: clock().getTime() + checklistUploadLeaseMilliseconds,
       capabilityRotation: capability.rotation || 0, contextRevision: capability.contextRevision,
@@ -134,9 +139,14 @@ export async function uploadMultiPhotoEvidence(database, initial, options, image
   });
   if (reservation.duplicate) return reservation;
   const photo = reservation.photo;
-  const file = storage.bucket().file(photo.storagePath);
+  const attemptStorage = options.attemptStorage || getChecklistAttemptStorage(storage);
+  const file = attemptStorage.bucket().file(photo.storagePath);
+  let writerSettled = false;
   try {
     await file.save(bytes, { resumable: false, contentType: image.contentType, metadata: { cacheControl: "private, no-store" }, preconditionOpts: { ifGenerationMatch: 0 } });
+    // The dedicated client sends this attempt once. A rejection remains unknown;
+    // a successful completion has no earlier application retry left outstanding.
+    writerSettled = true;
     const [metadata] = await file.getMetadata();
     if (!metadata.generation) throw new Error("Storage generation unavailable.");
     const result = await database.runTransaction(async transaction => {
@@ -148,7 +158,7 @@ export async function uploadMultiPhotoEvidence(database, initial, options, image
         || content.status !== "RESERVED" || capability.rotation !== photo.capabilityRotation
         || capability.contextRevision !== photo.contextRevision) unavailable();
       if (requirementId !== "additional" && !isPilotChecklistPhotoRequirement(run, requirementId)) unavailable();
-      const saved = { ...photo, status: "SAVED", generation: metadata.generation, createdAt: Timestamp.fromDate(clock()) };
+      const saved = { ...photo, status: "SAVED", writerSettled, generation: metadata.generation, createdAt: Timestamp.fromDate(clock()) };
       const next = { ...state, revision: (state.revision || 0) + 1, photos: [...state.photos, saved], pending: state.pending.filter(p => p.attemptId !== attemptId) };
       transaction.set(identityRef(initial, image.contentHash), saved);
       transaction.set(stateRef(initial), next);
@@ -171,12 +181,13 @@ export async function uploadMultiPhotoEvidence(database, initial, options, image
         if (content?.attemptId === attemptId && content.status === "RESERVED") {
           transaction.set(identityRef(initial, image.contentHash), { ...content, status: "FAILED" });
         }
-        if (state.pending.some(p => p.attemptId === attemptId)) transaction.set(stateRef(initial), { ...state, pending: state.pending.map(p => p.attemptId === attemptId ? { ...p, status: "CLEANUP", leaseExpiresAt: 0 } : p) });
+        if (state.pending.some(p => p.attemptId === attemptId)) transaction.set(stateRef(initial), { ...state, pending: state.pending.map(p => p.attemptId === attemptId ? { ...p, status: "CLEANUP", writerSettled, leaseExpiresAt: 0 } : p) });
         return { committed: false };
       });
     } catch { throw error; } // Unknown commit outcome: retain object, fail closed.
     if (recovery.committed) return { duplicate: true, evidenceId: photo.evidenceId, ...await loadMultiPhotoEvidence(database, initial, { ...options, includeRevision: true }) };
-    if (await cleanupObject(storage, photo)) await releaseCleanedAttempt(database, initial, photo);
+    const cleanupPhoto = { ...photo, writerSettled };
+    if (await cleanupObject(storage, cleanupPhoto)) await releaseCleanedAttempt(database, initial, cleanupPhoto);
     throw error;
   }
 }

@@ -165,6 +165,7 @@ export async function uploadPublicChecklistEvidence(database, {
   bytes,
   now = new Date(),
   storage = getStorage(),
+  attemptStorage,
 }) {
   let image;
   try {
@@ -180,7 +181,7 @@ export async function uploadPublicChecklistEvidence(database, {
     throw markPhotoDiagnosticStage(error, validationOrUnknownStage(error));
   }
   if (initial.run.evidencePolicy?.version === 2) {
-    return uploadMultiPhotoEvidence(database, initial, { organizationId, tokenHash, requirementId, contentType, bytes, now, storage }, image);
+    return uploadMultiPhotoEvidence(database, initial, { organizationId, tokenHash, requirementId, contentType, bytes, now, storage, attemptStorage }, image);
   }
   if (initial.run.status !== "DRAFT") {
     throw markPhotoDiagnosticStage(photoValidationError("failed-precondition", "Checklist Run is no longer editable.", "run_not_draft"), "server-validation");

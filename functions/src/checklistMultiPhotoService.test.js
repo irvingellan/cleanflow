@@ -34,11 +34,11 @@ function fixture(policy = { version: 2, maxPhotos: 20, maxTotalBytes: 50 * 1024 
   const objects = new Map();
   const hooks = {};
   const storage = { bucket: () => ({ file: (path, fileOptions) => ({
-    save: async bytes => { objects.set(path, bytes); await hooks.onSave?.(); },
+    save: async bytes => { await hooks.beforeSave?.(); objects.set(path, bytes); await hooks.onSave?.(); },
     getMetadata: async () => { if (!objects.has(path)) throw Object.assign(new Error("missing"), { code: 404 }); return [{ generation: "1" }]; },
     delete: async () => { expect(fileOptions.preconditionOpts.ifGenerationMatch).toBe("1"); expect(fileOptions.generation).toBe("1"); await hooks.onDelete?.(); objects.delete(path); },
   }) }) };
-  const upload = (n = 1, requirementId = "living-belongings", extra = {}) => uploadPublicChecklistEvidence(database, { organizationId: "cleanflow-demo", tokenHash: "hash", contentType: "image/png", bytes: photo(n), requirementId, storage, ...extra });
+  const upload = (n = 1, requirementId = "living-belongings", extra = {}) => uploadPublicChecklistEvidence(database, { organizationId: "cleanflow-demo", tokenHash: "hash", contentType: "image/png", bytes: photo(n), requirementId, storage, attemptStorage: storage, ...extra });
   const remove = (evidenceId, mutationId = "remove-one") => removePublicChecklistEvidence(database, { organizationId: "cleanflow-demo", tokenHash: "hash", evidenceId, mutationId, storage });
   return { records, database, objects, storage, upload, remove, hooks };
 }
@@ -105,7 +105,7 @@ describe("V2 multi-photo evidence", () => {
     await expect(f.upload()).rejects.toMatchObject({ code: "resource-exhausted" });
     expect(f.objects.size).toBe(0);
   });
-  it("retains objects on uncertain commit recovery and safely reclaims an expired lease", async () => {
+  it("retains uncertain writer obligations after expiry while allowing retries within remaining capacity", async () => {
     const f = fixture();
     const transaction = f.database.runTransaction;
     f.hooks.onSave = () => {
@@ -119,8 +119,42 @@ describe("V2 multi-photo evidence", () => {
     delete f.hooks.onSave;
     f.records.get(`${root}/checklistCapabilities/active`).expiresAt = { toMillis: () => Date.now() + 600_000 };
     await f.upload(2, "living-belongings", { now: new Date(Date.now() + 180_000) });
-    expect(f.objects.size).toBe(1);
-    expect(f.records.get(`${root}/evidenceState/current`).pending).toHaveLength(0);
+    expect(f.objects.size).toBe(2);
+    expect(f.records.get(`${root}/evidenceState/current`).pending).toHaveLength(1);
+  });
+  it("retains a charged obligation when an expired writer creates its object after an observed 404", async () => {
+    const f = fixture({ version: 2, maxPhotos: 2, maxTotalBytes: 1000 });
+    f.records.get(`${root}/checklistCapabilities/active`).expiresAt = { toMillis: () => Date.now() + 600_000 };
+    let releaseWrite;
+    let signalStarted;
+    const started = new Promise(resolve => { signalStarted = resolve; });
+    const hold = new Promise(resolve => { releaseWrite = resolve; });
+    f.hooks.beforeSave = async () => { delete f.hooks.beforeSave; signalStarted(); await hold; };
+    const oldUpload = f.upload();
+    await started;
+    const future = new Date(Date.now() + 180_000);
+    const retry = await f.upload(1, "living-belongings", { now: future });
+    expect(retry.evidence).toHaveLength(1);
+    const transaction = f.database.runTransaction;
+    f.database.runTransaction = () => Promise.reject(new Error("synthetic crashed writer recovery"));
+    releaseWrite();
+    await expect(oldUpload).rejects.toThrow();
+    f.database.runTransaction = transaction;
+    expect(f.objects.size).toBe(2);
+    expect(f.records.get(`${root}/evidenceState/current`).pending).toHaveLength(1);
+    await expect(f.upload(2, "additional", { now: future })).rejects.toMatchObject({ code: "resource-exhausted" });
+    expect(f.records.get(`${root}/evidenceState/current`).pending).toHaveLength(1);
+  });
+  it.each(["beforeSave", "onSave"])("keeps rejected %s writes charged whether the object is absent or visible", async hook => {
+    const f = fixture({ version: 2, maxPhotos: 2, maxTotalBytes: 1000 });
+    f.hooks[hook] = () => { throw new Error("synthetic unknown write outcome"); };
+    await expect(f.upload()).rejects.toThrow("synthetic unknown write outcome");
+    delete f.hooks[hook];
+    expect(f.records.get(`${root}/evidenceState/current`).pending[0]).toMatchObject({ status: "CLEANUP", writerSettled: false });
+    await f.upload(1, "living-belongings");
+    expect(f.records.get(`${root}/evidenceState/current`).pending).toHaveLength(1);
+    expect(f.objects.size).toBe(hook === "beforeSave" ? 1 : 2);
+    await expect(f.upload(2, "additional")).rejects.toMatchObject({ code: "resource-exhausted" });
   });
   it("removes a saved photo, releases quota, and prevents upload replay resurrecting it", async () => {
     const f = fixture({ version: 2, maxPhotos: 1, maxTotalBytes: 100 });

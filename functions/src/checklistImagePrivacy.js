@@ -85,6 +85,10 @@ export function assertMetadataSafeChecklistImage(bytes, contentType) {
     let offset = 8;
     let header = false;
     let data = false;
+    let colorType;
+    let bitDepth;
+    let paletteEntries = 0;
+    const seen = new Set();
     const allowed = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "sRGB", "pHYs"]);
     while (offset + 12 <= bytes.length) {
       const length = bytes.readUInt32BE(offset);
@@ -92,12 +96,48 @@ export function assertMetadataSafeChecklistImage(bytes, contentType) {
       if (length > bytes.length - offset - 12 || !allowed.has(type)) invalid();
       if (crc32(bytes.subarray(offset + 4, offset + 8 + length)) !== bytes.readUInt32BE(offset + 8 + length)) invalid();
       if (!header && type !== "IHDR") invalid();
+      // All supported metadata/palette chunks have fixed, typed payloads and
+      // precede pixel data. A valid CRC does not make arbitrary payloads safe.
+      if (type !== "IDAT" && seen.has(type)) invalid();
+      if (seen.has("IDAT") && !["IDAT", "IEND"].includes(type)) invalid();
+      if (["gAMA", "cHRM", "sRGB"].includes(type) && seen.has("PLTE")) invalid();
+      const payload = offset + 8;
       if (type === "IHDR") {
         if (header || length !== 13) invalid();
         dimensions(bytes.readUInt32BE(offset + 8), bytes.readUInt32BE(offset + 12));
+        bitDepth = bytes[payload + 8];
+        colorType = bytes[payload + 9];
+        if (!({ 0: [1,2,4,8,16], 2: [8,16], 3: [1,2,4,8], 4: [8,16], 6: [8,16] })[colorType]?.includes(bitDepth)
+          || bytes[payload + 10] !== 0 || bytes[payload + 11] !== 0 || bytes[payload + 12] > 1) invalid();
         header = true;
       }
+      if (type === "gAMA" && (length !== 4 || bytes.readUInt32BE(payload) === 0)) invalid();
+      if (type === "sRGB" && (length !== 1 || bytes[payload] > 3)) invalid();
+      if (type === "pHYs" && (length !== 9 || bytes[payload + 8] > 1)) invalid();
+      if (type === "cHRM") {
+        if (length !== 32) invalid();
+        for (let point = 0; point < 4; point++) {
+          const x = bytes.readUInt32BE(payload + point * 8);
+          const y = bytes.readUInt32BE(payload + point * 8 + 4);
+          if (x > 100_000 || y > 100_000 || x + y > 100_000) invalid();
+        }
+      }
+      if (type === "PLTE") {
+        if ([0,4].includes(colorType) || seen.has("tRNS") || !length || length % 3 || length > 768) invalid();
+        paletteEntries = length / 3;
+        if (colorType === 3 && paletteEntries > 2 ** bitDepth) invalid();
+      }
+      if (type === "tRNS") {
+        if (colorType === 3) {
+          if (!paletteEntries || !length || length > paletteEntries) invalid();
+        } else if (colorType === 0 || colorType === 2) {
+          if (length !== (colorType === 0 ? 2 : 6)) invalid();
+          for (let sample = 0; sample < length; sample += 2) if (bytes.readUInt16BE(payload + sample) >= 2 ** bitDepth) invalid();
+        } else invalid();
+      }
+      if (type === "IDAT" && colorType === 3 && !paletteEntries) invalid();
       if (type === "IDAT" && length > 0) data = true;
+      seen.add(type);
       offset += length + 12;
       if (type === "IEND") { if (!data || length !== 0 || offset !== bytes.length) invalid(); return; }
     }

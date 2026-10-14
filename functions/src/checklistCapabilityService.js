@@ -367,6 +367,7 @@ export async function readyPublicChecklistForReview(database, {
   request,
   now = new Date(),
 }) {
+  const requestStartedAt = Date.now();
   const matches = await database.collectionGroup("checklistCapabilities")
     .where("tokenHash", "==", tokenHash).limit(2).get();
   if (matches.size !== 1) throw new HttpsError("not-found", "Checklist capability not found.");
@@ -426,8 +427,14 @@ export async function readyPublicChecklistForReview(database, {
       if (capability.organizationId !== organizationId || capability.jobId !== location.jobId || capability.runId !== location.runId
         || run.organizationId !== organizationId || run.jobId !== location.jobId) throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
       const evidenceState = (await transaction.get(runRef.collection("evidenceState").doc("current"))).data();
-      // The shared ledger serializes reservation/removal against submission.
-      pendingPhotoCount = evidenceState?.pending?.length || 0;
+      const transactionNow = new Date(now.getTime() + Date.now() - requestStartedAt);
+      if (checklistCapabilityState(capability, jobSnapshot.data(), run, transactionNow) !== "ACTIVE") {
+        throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
+      }
+      // The ledger serializes finalization against submission. Expired/cleanup
+      // obligations remain charged, but cannot add evidence after review.
+      pendingPhotoCount = evidenceState?.pending?.filter(photo => photo.status === "RESERVED"
+        && photo.leaseExpiresAt > transactionNow.getTime()).length || 0;
     }
     const currentDraft = draftSnapshot.exists ? draftSnapshot.data() : null;
     const { draft: validatedDraft, missingChecklistCount, missingInventoryCount } =

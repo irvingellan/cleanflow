@@ -1499,6 +1499,8 @@ test("V2 concurrent reservation quota, required-photo gate and metadata denial u
   assert.equal(malformed.code, 400);
   const privateMetadata = syntheticChecklistPng(4, [["eXIf", Buffer.from("synthetic GPS metadata")]]);
   assert.equal((await publicChecklistUpload(issued.token, "additional", privateMetadata, "image/png")).code, 400);
+  const disguisedMetadata = syntheticChecklistPng(4, [["gAMA", Buffer.from("synthetic GPS=12.34,56.78;filename=private-example.png")]]);
+  assert.equal((await publicChecklistUpload(issued.token, "additional", disguisedMetadata, "image/png")).code, 400);
   const uploads = await Promise.all([publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(4), "image/png"), publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(5), "image/png")]);
   assert.deepEqual(uploads.map(item => item.code).sort(), [200, 413]);
   const saved = uploads.find(item => item.code === 200);
@@ -1507,7 +1509,7 @@ test("V2 concurrent reservation quota, required-photo gate and metadata denial u
   await publicChecklistSave({ token: issued.token, action: "REMOVE_EVIDENCE", evidenceId: saved.body.evidenceId, mutationId: "quota-remove" });
   assert.equal((await publicChecklistUpload(issued.token, "living-belongings", syntheticChecklistPng(7), "image/png")).code, 200);
   const state = await runRef.collection("evidenceState").doc("current").get();
-  await state.ref.update({ pending: [{ attemptId: "synthetic-pending", sizeBytes: 100, leaseExpiresAt: Date.now() + 60000 }] });
+  await state.ref.update({ pending: [{ status: "RESERVED", attemptId: "synthetic-pending", sizeBytes: 100, leaseExpiresAt: Date.now() + 60000 }] });
   const pendingSubmission = await publicChecklistSave({ token: issued.token, action: "READY_FOR_REVIEW", submissionId: "quota-submit-0001", baseRevision: 1 });
   assert.equal(pendingSubmission.code, 422);
   assert.equal(pendingSubmission.body.error, "checklist_requirements_missing");
@@ -1538,13 +1540,54 @@ test("V2 revoked-during-upload cleans the exact stored generation using actual S
   } }) };
   await assert.rejects(uploadPublicChecklistEvidence(functionDatabase, {
     organizationId: org, tokenHash: createHash("sha256").update(issued.token).digest("hex"), requirementId: "living-belongings",
-    contentType: "image/png", bytes: syntheticChecklistPng(12), storage: revokingStorage,
+    contentType: "image/png", bytes: syntheticChecklistPng(12), storage: revokingStorage, attemptStorage: revokingStorage,
   }), { code: "failed-precondition" });
   assert.ok(writtenPath);
   assert.equal((await actualStorage.bucket().file(writtenPath).exists())[0], false);
   const state = (await admin.doc(`${root}/jobs/job/checklistRuns/initial/evidenceState/current`).get()).data();
   assert.equal(state.photos.length, 0);
   assert.equal(state.pending.length, 0);
+});
+
+test("V2 expired unknown writer stays charged while a saved retry can submit and the late writer cannot finalize", async () => {
+  await seedEligibleChecklistJob({ multiPhoto: true });
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const { uploadPublicChecklistEvidence } = await import("../functions/src/checklistEvidenceService.js");
+  const { getChecklistAttemptStorage } = await import("../functions/src/checklistAttemptStorage.js");
+  const actualStorage = createRequire(new URL("../functions/src/index.js", import.meta.url))("firebase-admin/storage").getStorage();
+  const singleAttempt = getChecklistAttemptStorage(actualStorage);
+  let releaseWrite;
+  let signalStarted;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  const hold = new Promise(resolve => { releaseWrite = resolve; });
+  const heldStorage = { bucket: () => ({ file: (path, options) => {
+    const file = singleAttempt.bucket().file(path, options);
+    return { getMetadata: () => file.getMetadata(), save: async (bytes, options) => { signalStarted(); await hold; await file.save(bytes, options); } };
+  } }) };
+  const oldResult = uploadPublicChecklistEvidence(functionDatabase, {
+    organizationId: org, tokenHash: createHash("sha256").update(issued.token).digest("hex"), requirementId: "living-belongings",
+    contentType: "image/png", bytes: syntheticChecklistPng(15), storage: actualStorage, attemptStorage: heldStorage,
+  }).then(value => ({ value }), error => ({ error }));
+  await started;
+  const stateRef = admin.doc(`${root}/jobs/job/checklistRuns/initial/evidenceState/current`);
+  try {
+    const state = (await stateRef.get()).data();
+    await stateRef.update({ pending: state.pending.map(photo => ({ ...photo, leaseExpiresAt: Date.now() - 1 })) });
+    const retry = await publicChecklistUpload(issued.token, "living-belongings", syntheticChecklistPng(15), "image/png");
+    assert.equal(retry.code, 200);
+    assert.equal((await stateRef.get()).data().pending.length, 1);
+    assert.equal((await publicChecklistSave({ token: issued.token, mutationId: "orphan-draft-0001", baseRevision: 0, changes: await completeChecklistAnswers() })).code, 200);
+    const submission = { token: issued.token, action: "READY_FOR_REVIEW", submissionId: "orphan-submit-001", baseRevision: 1 };
+    assert.equal((await publicChecklistSave(submission)).code, 200);
+    assert.equal((await publicChecklistSave(submission)).body.duplicate, true);
+    assert.equal((await stateRef.get()).data().pending.length, 1);
+  } finally { releaseWrite(); await oldResult; }
+  assert.equal((await oldResult).error?.code, "failed-precondition");
+  const finalState = (await stateRef.get()).data();
+  assert.equal(finalState.photos.length, 1);
+  assert.equal(finalState.revision, 1);
+  assert.equal(finalState.pending.length, 0); // Positive completion now permits exact-generation cleanup.
+  assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data().status, "READY_FOR_REVIEW");
 });
 
 test("public photo diagnostics accept only token-free allowlisted events and do not write Firestore", async () => {
