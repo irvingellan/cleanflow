@@ -1,5 +1,34 @@
 # CleanFlow — Current State
 
+## Issue #81 — Production-compatible release-review candidate (2026-10-14)
+
+Existing isolated `codex/checklist-multi-photo-v1` implementation is preserved;
+this checkpoint adds verification/release documentation, not new behavior.
+Issue #81 records owner-reported physical iPhone Safari PASS for ten uploads
+and persistence after reload. Camera, detailed quality/memory, installed PWA
+and real Cloud Storage end-to-end acceptance are not inferred from that report.
+
+Actual Node 20.20.2 verification passed: Functions ESM loading, 119 files /
+1,349 unit tests, 82 actual isolated security tests and four real
+Auth/Firestore/Functions/Storage/Hosting Chromium/WebKit integrations. The
+Functions emulator explicitly used host node@20. Another 28 native optimizer
+and four gallery browser regressions passed. Historical V1 reports, all-photo
+manager/report views, quotas/concurrency/retry/removal and privacy remain covered.
+
+Remote main remains `8bc7016`; Production Hosting remains `5c2e524`.
+Their application source is identical (only CURRENT_STATE differs). Approved
+completion/Safari/private-origin ancestors remain intact. Separate V2 RC
+`7f941b7` remains unchanged. Billing was already enabled; GET-only metadata
+verified the firebasestorage.app bucket in US-WEST1 and no public IAM/default
+object-ACL principal. No objects/customer data were read; no billing was changed.
+
+Temporary multi-photo private Serve handler/gateway/emulators were stopped
+with ownership checks. Disposable test runtimes exited; Tailscale itself and
+unrelated/original runtime were preserved. No merge, push, cloud deploy or
+Production data mutation. See `MULTI_PHOTO_V1_RELEASE_REVIEW.md` for consumption,
+release/rollback gates and evidence limits. Node20 decommission is scheduled for
+2026-10-30; compatibility does not remove that separate release-calendar gate.
+
 ## Issue #81 — Multi-photo checklist V1, local candidate (2026-10-13)
 
 Isolated branch `codex/checklist-multi-photo-v1`, based on `82ead8c`, preserves
