@@ -1,0 +1,20 @@
+{
+  "functions": { "source": "functions" },
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "storage": { "rules": "storage.rules" },
+  "hosting": { "public": "dist", "rewrites": [
+    { "source": "/api/public-checklist", "function": { "functionId": "publicChecklist", "region": "us-central1" } },
+    { "source": "/api/client-report", "function": { "functionId": "publicClientReport", "region": "us-central1" } },
+    { "source": "**", "destination": "/index.html" }
+  ] },
+  "emulators": {
+    "functions": { "host": "127.0.0.1", "port": 5011 },
+    "hosting": { "host": "127.0.0.1", "port": 5012 },
+    "firestore": { "host": "127.0.0.1", "port": 8081, "websocketPort": 19151 },
+    "auth": { "host": "127.0.0.1", "port": 9098 },
+    "storage": { "host": "127.0.0.1", "port": 9198 },
+    "hub": { "host": "127.0.0.1", "port": 14410 },
+    "logging": { "host": "127.0.0.1", "port": 14411 },
+    "ui": { "enabled": false }, "singleProjectMode": true
+  }
+}
