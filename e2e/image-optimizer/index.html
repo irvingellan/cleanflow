@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><title>Synthetic local image optimizer tests</title>
+<style>body{font:16px sans-serif;margin:20px}#comparison{display:flex;gap:20px}figure{margin:0;width:48%}img{width:100%;object-fit:contain;max-height:730px;background:#eee}figcaption{padding:8px}</style>
+</head><body><h1>Synthetic image optimization • local test only</h1><p>No real property or personal data. Browser quality evidence; physical iPhone review remains separate.</p>
+<div id="comparison"></div><script type="module">
+import { optimizeChecklistImage } from "/src/features/checklists/checklistImageOptimizer.js";
+import { createSyntheticPhoto, orientationPhoto, comparePhotos, sampleCorners, serializedBlob } from "./syntheticImages.js";
+window.optimizerHarness = { optimizeChecklistImage, createSyntheticPhoto, orientationPhoto, comparePhotos, sampleCorners, serializedBlob };
+</script></body></html>
