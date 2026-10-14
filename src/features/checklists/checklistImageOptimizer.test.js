@@ -103,11 +103,18 @@ describe("local checklist image optimizer", () => {
     expect(() => assertMetadataSafeChecklistImage(bytes, result.contentType)).not.toThrow();
   });
   it("retains a validated metadata-free small original when encoding would enlarge it", async () => {
-    native({ encode: () => file(jpeg(2, 2, true)) });
+    const end = cleanJpeg.findIndex((value, i) => value === 255 && cleanJpeg[i + 1] === 217);
+    const largerPixels = new Uint8Array([...cleanJpeg.slice(0, end), ...new Uint8Array(200).fill(1), ...cleanJpeg.slice(end)]);
+    const encoded = file(largerPixels);
+    expect(() => assertMetadataSafeChecklistImage(Buffer.from(largerPixels), "image/jpeg")).not.toThrow();
+    native({ encode: () => encoded });
     const original = file();
+    expect(encoded.size).toBeGreaterThan(original.size);
     const result = await optimizeChecklistImage(original);
+    expect(result.originalBytes).toBe(original.size);
     expect(result.optimizedBytes).toBe(original.size);
-    expect(Buffer.from(await result.blob.arrayBuffer())).toEqual(Buffer.from(cleanJpeg));
+    expect(result.blob.size).toBeLessThan(encoded.size);
+    expect(Buffer.from(await result.blob.arrayBuffer())).toEqual(Buffer.from(await original.arrayBuffer()));
   });
   it("never retains private metadata or silently enlarges a non-fallback image", async () => {
     // More structural pixel bytes, not metadata, are needed to force output growth.
