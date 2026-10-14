@@ -148,6 +148,9 @@ export function projectChecklistRunForCleaner(checklistRun, {
     status: checklistRun?.status === "READY_FOR_REVIEW" ? "READY_FOR_REVIEW" : "DRAFT",
     readyForReviewAt,
     definitionVersion: checklistRun?.definitionVersion || null,
+    ...(checklistRun?.evidencePolicy?.version === 2 ? { evidencePolicy: {
+      version: 2, maxPhotos: checklistRun.evidencePolicy.maxPhotos, maxTotalBytes: checklistRun.evidencePolicy.maxTotalBytes,
+    } } : {}),
     propertyName: checklistRun?.propertySnapshot?.propertyName || null,
     scheduledDate: checklistRun?.jobSnapshot?.scheduledDate || null,
     scheduledStart: checklistRun?.jobSnapshot?.scheduledStart || null,

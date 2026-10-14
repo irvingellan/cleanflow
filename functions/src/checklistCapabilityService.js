@@ -382,6 +382,13 @@ export async function readyPublicChecklistForReview(database, {
   const submission = normalizeChecklistReadyForReviewRequest(request);
   const requestHash = checklistReadyForReviewRequestHash(submission);
 
+  // Cleanup is a separate mutation step, never Storage work inside the submission transaction.
+  const preflightRun = await database.runTransaction(transaction => transaction.get(runRef));
+  if (preflightRun.data()?.evidencePolicy?.version === 2 && preflightRun.data()?.status === "DRAFT") {
+    const { recoverChecklistUploadsBeforeSubmission } = await import("./checklistMultiPhotoService.js");
+    await recoverChecklistUploadsBeforeSubmission(database, { capabilityRef, jobRef, runRef, location }, { organizationId, tokenHash, now });
+  }
+
   return database.runTransaction(async (transaction) => {
     const [capabilitySnapshot, jobSnapshot, runSnapshot, draftSnapshot, evidenceSnapshot] = await Promise.all([
       transaction.get(capabilityRef), transaction.get(jobRef), transaction.get(runRef), transaction.get(draftRef), transaction.get(evidenceRef),
@@ -414,6 +421,14 @@ export async function readyPublicChecklistForReview(database, {
       };
     }
     if (run.status !== "DRAFT") throw new HttpsError("failed-precondition", "Checklist Run is not editable.");
+    let pendingPhotoCount = 0;
+    if (run.evidencePolicy?.version === 2) {
+      if (capability.organizationId !== organizationId || capability.jobId !== location.jobId || capability.runId !== location.runId
+        || run.organizationId !== organizationId || run.jobId !== location.jobId) throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
+      const evidenceState = (await transaction.get(runRef.collection("evidenceState").doc("current"))).data();
+      // The shared ledger serializes reservation/removal against submission.
+      pendingPhotoCount = evidenceState?.pending?.length || 0;
+    }
     const currentDraft = draftSnapshot.exists ? draftSnapshot.data() : null;
     const { draft: validatedDraft, missingChecklistCount, missingInventoryCount } =
       checklistDraftReviewRequirements(run, currentDraft);
@@ -422,12 +437,13 @@ export async function readyPublicChecklistForReview(database, {
     }
     const missingPhotoCount = isPilotChecklistPhotoRequirement(run, pilotChecklistPhotoRequirementId)
       && evidenceSnapshot.data()?.status !== "SAVED" ? 1 : 0;
-    if (missingChecklistCount || missingInventoryCount || missingPhotoCount) {
+    if (missingChecklistCount || missingInventoryCount || missingPhotoCount || pendingPhotoCount) {
       throw new HttpsError("failed-precondition", "Checklist requirements are incomplete.", {
         reason: "checklist-requirements-missing",
         missingChecklistCount,
         missingInventoryCount,
         missingPhotoCount,
+        ...(pendingPhotoCount ? { pendingPhotoCount } : {}),
       });
     }
     transaction.update(runRef, {

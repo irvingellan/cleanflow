@@ -57,9 +57,10 @@ import {
 import {
   downloadManagerChecklistEvidence,
   downloadPublicChecklistEvidence,
-  loadPublicChecklistEvidence,
+  loadPublicChecklistEvidenceView,
   uploadPublicChecklistEvidence,
 } from "./checklistEvidenceService.js";
+import { removePublicChecklistEvidence } from "./checklistMultiPhotoService.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { rescheduleJobForManager } from "./jobScheduleService.js";
 import { assignCleanerDirectlyForManager } from "./managerDirectAssignmentService.js";
@@ -923,7 +924,8 @@ export const getChecklistEvidence = onCall(
     await requireOrganizationManager(db, request, organizationId);
     const jobId = request.data?.jobId;
     const requirementId = request.data?.requirementId;
-    if (!validChecklistRunJobId(jobId) || requirementId !== pilotChecklistPhotoRequirementId) {
+    const evidenceId = request.data?.evidenceId;
+    if (!validChecklistRunJobId(jobId) || (evidenceId === undefined && requirementId !== pilotChecklistPhotoRequirementId)) {
       throw new HttpsError("invalid-argument", "Checklist photo request is invalid.");
     }
     const evidence = await downloadManagerChecklistEvidence(db, {
@@ -931,6 +933,7 @@ export const getChecklistEvidence = onCall(
       jobId,
       runId: initialChecklistRunId,
       requirementId,
+      evidenceId,
     });
     return { contentType: evidence.contentType, base64: evidence.bytes.toString("base64") };
   },
@@ -1326,7 +1329,7 @@ export const publicOffer = onRequest(
  * the server-owned record; no caller-supplied organization, Job, or Run ID is trusted.
  */
 export const publicChecklist = onRequest(
-  { region: "us-central1", invoker: "public" },
+  { region: "us-central1", invoker: "public", timeoutSeconds: 60 },
   async (request, response) => {
     if (!["GET", "POST", "PUT"].includes(request.method)) {
       sendPublicError(response, 405, "method_not_allowed");
@@ -1394,6 +1397,15 @@ export const publicChecklist = onRequest(
       }
       if (request.method === "POST") {
         const action = request.body?.action;
+        if (action === "REMOVE_EVIDENCE") {
+          requestStage = "evidence-remove";
+          const result = await removePublicChecklistEvidence(db, {
+            organizationId, tokenHash: hashToken(token), evidenceId: request.body?.evidenceId, mutationId: request.body?.mutationId,
+          });
+          configureResponse(response);
+          response.status(200).json(result);
+          return;
+        }
         requestStage = action === "READY_FOR_REVIEW" ? "review-submission" : "draft-save";
         if (action && action !== "READY_FOR_REVIEW") {
           sendPublicError(response, 400, "checklist_unavailable");
@@ -1436,12 +1448,14 @@ export const publicChecklist = onRequest(
         return;
       }
       const evidenceItem = request.query.evidenceItem;
-      if (typeof evidenceItem === "string" && evidenceItem) {
+      const evidenceId = request.query.evidenceId;
+      if ((typeof evidenceItem === "string" && evidenceItem) || evidenceId !== undefined) {
         requestStage = "evidence-download";
         const evidence = await downloadPublicChecklistEvidence(db, {
           organizationId,
           tokenHash: hashToken(token),
           requirementId: evidenceItem,
+          evidenceId,
         });
         configureResponse(response);
         response.set("Content-Type", evidence.contentType);
@@ -1458,7 +1472,7 @@ export const publicChecklist = onRequest(
       if (result.state === "active") {
         requestStage = "evidence-load";
         const evidenceStartedAt = Date.now();
-        const evidence = await loadPublicChecklistEvidence(db, {
+        const evidenceView = await loadPublicChecklistEvidenceView(db, {
           organizationId,
           tokenHash: hashToken(token),
         });
@@ -1474,7 +1488,7 @@ export const publicChecklist = onRequest(
           ...diagnostics,
         });
         configureResponse(response);
-        response.status(200).json({ checklist: { ...result.checklist, evidence }, draft: result.draft, diagnostics });
+        response.status(200).json({ checklist: { ...result.checklist, ...evidenceView }, draft: result.draft, diagnostics });
         return;
       }
       const diagnostics = {
@@ -1506,7 +1520,7 @@ export const publicChecklist = onRequest(
         }, request.get("user-agent") || ""));
       }
       const sessionId = request.get("X-CleanFlow-Checklist-Session");
-      const errorCode = ["invalid-argument", "not-found", "failed-precondition", "already-exists", "aborted", "unavailable", "deadline-exceeded"].includes(error?.code)
+      const errorCode = ["invalid-argument", "not-found", "failed-precondition", "already-exists", "aborted", "resource-exhausted", "unavailable", "deadline-exceeded"].includes(error?.code)
         ? error.code : "internal";
       const diagnostics = {
         capabilityResolutionMs: capabilityDiagnostics?.capabilityResolutionMs
@@ -1527,8 +1541,11 @@ export const publicChecklist = onRequest(
         missingChecklistCount: error.details.missingChecklistCount,
         missingInventoryCount: error.details.missingInventoryCount,
         missingPhotoCount: error.details.missingPhotoCount,
+        ...(Number.isInteger(error.details.pendingPhotoCount) && error.details.pendingPhotoCount > 0
+          ? { pendingPhotoCount: error.details.pendingPhotoCount } : {}),
       } : null;
       const status = hasRequirementGaps ? 422
+        : error?.code === "resource-exhausted" ? 413
         : error?.code === "invalid-argument" ? 400
         : error?.code === "not-found" ? 404
           : error?.code === "already-exists" ? 409
@@ -1536,6 +1553,7 @@ export const publicChecklist = onRequest(
               : error?.code === "failed-precondition" ? 410
                 : 500;
       const publicError = status === 404 ? "checklist_not_found"
+        : status === 413 ? "checklist_photo_limit"
         : status === 410 ? "checklist_unavailable"
           : status === 409 ? "checklist_conflict"
             : status === 422 ? "checklist_requirements_missing"
@@ -1562,7 +1580,7 @@ export const publicClientReport = onRequest(
     try {
       const tokenHash = hashToken(token);
       if (request.query.photo === "1") {
-        const photo = await downloadPublicClientReportPhoto(db, { organizationId, tokenHash });
+        const photo = await downloadPublicClientReportPhoto(db, { organizationId, tokenHash, evidenceId: request.query.evidenceId });
         configureResponse(response);
         response.set("Content-Type", photo.contentType);
         response.set("Content-Disposition", "inline");

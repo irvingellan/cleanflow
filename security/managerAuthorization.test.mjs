@@ -3,12 +3,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
+import { syntheticChecklistPng } from "./syntheticChecklistImages.mjs";
 
 // Fail before loading Admin SDK/handlers unless all access is explicitly local and disposable.
+const firestorePort = Number(process.env.CLEANFLOW_SECURITY_FIRESTORE_PORT || 8080);
+const storagePort = Number(process.env.CLEANFLOW_SECURITY_STORAGE_PORT || 9199);
+assert.ok([8080, 18080].includes(firestorePort));
+assert.ok([9199, 19199].includes(storagePort));
 for (const [variable, expected] of Object.entries({
   GCLOUD_PROJECT: "demo-cleanflow",
-  FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
-  FIREBASE_STORAGE_EMULATOR_HOST: "127.0.0.1:9199",
+  FIRESTORE_EMULATOR_HOST: `127.0.0.1:${firestorePort}`,
+  FIREBASE_STORAGE_EMULATOR_HOST: `127.0.0.1:${storagePort}`,
 })) {
   assert.equal(process.env[variable], expected, `Security tests require local ${variable}`);
 }
@@ -78,8 +83,8 @@ function request(uid, data = {}, anonymous = false) {
 before(async () => {
   environment = await initializeTestEnvironment({
     projectId: "demo-cleanflow",
-    firestore: { host: "127.0.0.1", port: 8080, rules: await readFile("firestore.rules", "utf8") },
-    storage: { host: "127.0.0.1", port: 9199, rules: await readFile("storage.rules", "utf8") },
+    firestore: { host: "127.0.0.1", port: firestorePort, rules: await readFile("firestore.rules", "utf8") },
+    storage: { host: "127.0.0.1", port: storagePort, rules: await readFile("storage.rules", "utf8") },
   });
 });
 after(async () => { await environment?.cleanup(); });
@@ -1016,7 +1021,7 @@ async function seedChecklistJob({ checklistSettings } = {}) {
   });
 }
 
-async function seedEligibleChecklistJob({ checklistSettings } = {}) {
+async function seedEligibleChecklistJob({ checklistSettings, multiPhoto = false } = {}) {
   await seedChecklistJob({ checklistSettings });
   await admin.doc(`${root}/jobs/job`).update({
     schemaVersion: 2,
@@ -1038,6 +1043,9 @@ async function seedEligibleChecklistJob({ checklistSettings } = {}) {
     internalNotes: "private assignment details",
   });
   await createChecklistRun.run(request("manager", { jobId: "job" }));
+  // Existing tests deliberately exercise immutable historical single-photo contracts.
+  // New V2 tests below opt in to the new-Run server policy.
+  if (!multiPhoto) await admin.doc(`${root}/jobs/job/checklistRuns/initial`).update({ evidencePolicy: FieldValue.delete() });
 }
 
 async function completeChecklistAnswers(jobId = "job") {
@@ -1181,6 +1189,7 @@ test("active manager creates one default DRAFT Checklist Run and a retry returns
   assert.equal(runs.size, 1);
   const run = runs.docs[0].data();
   assert.equal(run.status, "DRAFT");
+  assert.deepEqual(run.evidencePolicy, { version: 2, maxPhotos: 20, maxTotalBytes: 50 * 1024 * 1024 });
   assert.equal(run.definitionVersion, 1);
   assert.equal(run.resolvedDefinition.sections.flatMap((section) => section.items).length, 28);
   assert.equal(run.createdByUid, "manager");
@@ -1433,6 +1442,109 @@ test("capability-authorized DRAFT photo is server-scoped, idempotent, reloadable
   }
   await assertFails(account("manager").firestore().doc(evidencePath).get());
   await assertFails(account("manager").storage().ref(evidence.storagePath).getMetadata());
+});
+
+test("V2 multiple photos persist privately, survive refresh, remove safely, and reach full report gallery", async () => {
+  await seedEligibleChecklistJob({ multiPhoto: true });
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const first = await publicChecklistUpload(issued.token, "living-belongings", syntheticChecklistPng(1), "image/png");
+  assert.equal(first.code, 200);
+  const second = await publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(2), "image/png");
+  assert.equal(second.code, 200);
+  assert.equal(second.body.evidence.length, 2);
+  assert.match(second.body.evidenceId, /^[a-f0-9-]{36}$/);
+  const duplicate = await publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(2), "image/png");
+  assert.equal(duplicate.body.duplicate, true);
+  assert.equal(duplicate.body.evidenceId, second.body.evidenceId);
+  const loaded = await publicChecklistGet(issued.token);
+  assert.equal(loaded.body.checklist.evidence.length, 2);
+  assert.deepEqual(Object.keys(loaded.body.checklist.evidence[0]).sort(), ["contentType", "createdAt", "evidenceId", "requirementId", "sizeBytes"]);
+  const png = await publicChecklistGet(issued.token, { evidenceId: second.body.evidenceId });
+  assert.equal(png.code, 200);
+  assert.deepEqual(png.body, syntheticChecklistPng(2));
+  const managerPhoto = await getChecklistEvidence.run(request("manager", { jobId: "job", evidenceId: second.body.evidenceId }));
+  assert.deepEqual(Buffer.from(managerPhoto.base64, "base64"), syntheticChecklistPng(2));
+  await assert.rejects(getChecklistEvidence.run(request("cleaner", { jobId: "job", evidenceId: second.body.evidenceId })), { code: "permission-denied" });
+  const remove = { token: issued.token, action: "REMOVE_EVIDENCE", evidenceId: second.body.evidenceId, mutationId: "multi-remove-one" };
+  assert.equal((await publicChecklistSave(remove)).body.evidence.length, 1);
+  assert.equal((await publicChecklistSave(remove)).body.duplicate, true);
+  assert.equal((await publicChecklistGet(issued.token, { evidenceId: second.body.evidenceId })).code, 404);
+  assert.equal((await publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(2), "image/png")).code, 410);
+  const third = await publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(3), "image/png");
+  assert.equal(third.code, 200);
+  assert.equal((await publicChecklistSave({ token: issued.token, mutationId: "multi-draft-0001", baseRevision: 0, changes: await completeChecklistAnswers() })).code, 200);
+  assert.equal((await publicChecklistSave({ token: issued.token, action: "READY_FOR_REVIEW", submissionId: "multi-submit-0001", baseRevision: 1 })).code, 200);
+  assert.equal((await publicChecklistSave({ ...remove, evidenceId: first.body.evidenceId, mutationId: "late-remove" })).code, 410);
+  const manager = await getChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(manager.run.evidence.length, 2);
+  const reportLink = await createClientReport.run(request("manager", { jobId: "job" }));
+  const report = await publicClientReportGet(reportLink.token);
+  assert.equal(report.code, 200);
+  assert.equal(report.body.report.evidence.length, 2);
+  const reportPhoto = await publicClientReportGet(reportLink.token, { photo: "1", evidenceId: third.body.evidenceId });
+  assert.equal(reportPhoto.code, 200);
+  assert.deepEqual(reportPhoto.body, syntheticChecklistPng(3));
+  const evidenceState = (await admin.doc(`${root}/jobs/job/checklistRuns/initial/evidenceState/current`).get()).data();
+  assert.equal(evidenceState.pending.length, 0);
+  for (const photo of evidenceState.photos) await assertFails(account("manager").storage().ref(photo.storagePath).getDownloadURL());
+});
+
+test("V2 concurrent reservation quota, required-photo gate and metadata denial use actual emulators", async () => {
+  await seedEligibleChecklistJob({ multiPhoto: true });
+  const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
+  // Trusted emulator fixture makes the quota race small and deterministic.
+  await runRef.update({ "evidencePolicy.maxPhotos": 1 });
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const malformed = await publicChecklistUpload(issued.token, "additional", Buffer.from([255,216,255,217]), "image/jpeg");
+  assert.equal(malformed.code, 400);
+  const privateMetadata = syntheticChecklistPng(4, [["eXIf", Buffer.from("synthetic GPS metadata")]]);
+  assert.equal((await publicChecklistUpload(issued.token, "additional", privateMetadata, "image/png")).code, 400);
+  const uploads = await Promise.all([publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(4), "image/png"), publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(5), "image/png")]);
+  assert.deepEqual(uploads.map(item => item.code).sort(), [200, 413]);
+  const saved = uploads.find(item => item.code === 200);
+  assert.equal((await publicChecklistSave({ token: issued.token, mutationId: "quota-draft-0001", baseRevision: 0, changes: await completeChecklistAnswers() })).code, 200);
+  assert.equal((await publicChecklistSave({ token: issued.token, action: "READY_FOR_REVIEW", submissionId: "quota-submit-0001", baseRevision: 1 })).code, 422);
+  await publicChecklistSave({ token: issued.token, action: "REMOVE_EVIDENCE", evidenceId: saved.body.evidenceId, mutationId: "quota-remove" });
+  assert.equal((await publicChecklistUpload(issued.token, "living-belongings", syntheticChecklistPng(7), "image/png")).code, 200);
+  const state = await runRef.collection("evidenceState").doc("current").get();
+  await state.ref.update({ pending: [{ attemptId: "synthetic-pending", sizeBytes: 100, leaseExpiresAt: Date.now() + 60000 }] });
+  const pendingSubmission = await publicChecklistSave({ token: issued.token, action: "READY_FOR_REVIEW", submissionId: "quota-submit-0001", baseRevision: 1 });
+  assert.equal(pendingSubmission.code, 422);
+  assert.equal(pendingSubmission.body.error, "checklist_requirements_missing");
+  assert.equal(pendingSubmission.body.requirements.pendingPhotoCount, 1);
+  assert.equal(pendingSubmission.body.requirements.missingPhotoCount, 0);
+  assert.equal((await runRef.get()).data().status, "DRAFT");
+  await revokeChecklistCapability.run(request("manager", { jobId: "job" }));
+  assert.equal((await publicChecklistUpload(issued.token, "additional", syntheticChecklistPng(8), "image/png")).code, 410);
+});
+
+test("V2 revoked-during-upload cleans the exact stored generation using actual Storage", async () => {
+  await seedEligibleChecklistJob({ multiPhoto: true });
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
+  const { uploadPublicChecklistEvidence } = await import("../functions/src/checklistEvidenceService.js");
+  const actualStorage = createRequire(new URL("../functions/src/index.js", import.meta.url))("firebase-admin/storage").getStorage();
+  let writtenPath;
+  const revokingStorage = { bucket: () => ({ file: (path, options) => {
+    const file = actualStorage.bucket().file(path, options);
+    return {
+      getMetadata: () => file.getMetadata(),
+      delete: options => file.delete(options),
+      save: async (bytes, options) => {
+        await file.save(bytes, options);
+        writtenPath = path;
+        await admin.doc(`${root}/jobs/job/checklistRuns/initial/checklistCapabilities/active`).update({ status: "REVOKED" });
+      },
+    };
+  } }) };
+  await assert.rejects(uploadPublicChecklistEvidence(functionDatabase, {
+    organizationId: org, tokenHash: createHash("sha256").update(issued.token).digest("hex"), requirementId: "living-belongings",
+    contentType: "image/png", bytes: syntheticChecklistPng(12), storage: revokingStorage,
+  }), { code: "failed-precondition" });
+  assert.ok(writtenPath);
+  assert.equal((await actualStorage.bucket().file(writtenPath).exists())[0], false);
+  const state = (await admin.doc(`${root}/jobs/job/checklistRuns/initial/evidenceState/current`).get()).data();
+  assert.equal(state.photos.length, 0);
+  assert.equal(state.pending.length, 0);
 });
 
 test("public photo diagnostics accept only token-free allowlisted events and do not write Firestore", async () => {

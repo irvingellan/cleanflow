@@ -1,5 +1,23 @@
 export const pilotChecklistPhotoRequirementId = "living-belongings";
 export const maximumChecklistEvidenceSizeBytes = 5 * 1024 * 1024;
+export const additionalChecklistPhotoRequirementId = "additional";
+export function createChecklistEvidencePolicy({ maxPhotos = 20, maxTotalBytes = 50 * 1024 * 1024 } = {}) {
+  if (!Number.isInteger(maxPhotos) || maxPhotos < 1 || maxPhotos > 20
+    || !Number.isInteger(maxTotalBytes) || maxTotalBytes < 1 || maxTotalBytes > 100 * 1024 * 1024) {
+    throw new Error("Invalid server checklist evidence policy.");
+  }
+  return { version: 2, maxPhotos, maxTotalBytes };
+}
+
+export function projectChecklistEvidenceGallery(photos = []) {
+  return photos.filter(photo => photo?.status === "SAVED").map(photo => ({
+    evidenceId: photo.evidenceId,
+    requirementId: photo.requirementId,
+    contentType: photo.contentType,
+    sizeBytes: photo.sizeBytes,
+    createdAt: createdAtIso(photo.createdAt),
+  }));
+}
 export const supportedChecklistEvidenceContentTypes = new Set([
   "image/jpeg",
   "image/png",

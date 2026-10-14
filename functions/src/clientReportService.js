@@ -3,7 +3,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertChecklistDraftReadyForReview } from "./checklistDraftService.js";
 import { downloadSavedChecklistEvidence } from "./checklistEvidenceService.js";
-import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
+import { pilotChecklistPhotoRequirementId, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
+import { selectMultiPhotoEvidence } from "./checklistMultiPhotoService.js";
 
 export const clientReportCapabilityId = "active";
 export const clientReportLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
@@ -80,8 +81,9 @@ export function projectClientReport(run, draft, evidence) {
     })),
     issueNotes: normalizedDraft.issueNotes || "",
     generalNotes: normalizedDraft.generalNotes || "",
-    hasPhoto: evidence?.status === "SAVED"
-      && evidence.requirementId === pilotChecklistPhotoRequirementId,
+    hasPhoto: run.evidencePolicy?.version === 2 ? (evidence?.photos?.length || 0) > 0
+      : evidence?.status === "SAVED" && evidence.requirementId === pilotChecklistPhotoRequirementId,
+    ...(run.evidencePolicy?.version === 2 ? { evidence: projectChecklistEvidenceGallery(evidence?.photos) } : {}),
   };
 }
 
@@ -233,8 +235,10 @@ async function resolvePublicClientReport(database, { organizationId, tokenHash, 
     || evidence.data().requirementId !== pilotChecklistPhotoRequirementId) {
     throw new HttpsError("failed-precondition", "Saved checklist evidence is unavailable.");
   }
-  const report = projectClientReport(run.data(), draftData, evidence.exists ? evidence.data() : null);
-  return { report, run: run.data(), evidence: evidence.exists ? evidence.data() : null, location: lookup };
+  const gallery = run.data().evidencePolicy?.version === 2
+    ? (await runRef.collection("evidenceState").doc("current").get()).data() : null;
+  const report = projectClientReport(run.data(), draftData, gallery || (evidence.exists ? evidence.data() : null));
+  return { report, run: run.data(), evidence: evidence.exists ? evidence.data() : null, gallery, location: lookup };
 }
 
 export async function loadPublicClientReport(database, options) {
@@ -243,9 +247,15 @@ export async function loadPublicClientReport(database, options) {
 }
 
 export async function downloadPublicClientReportPhoto(database, {
-  organizationId, tokenHash, now = new Date(), storage,
+  organizationId, tokenHash, evidenceId, now = new Date(), storage,
 }) {
   const result = await resolvePublicClientReport(database, { organizationId, tokenHash, now });
+  if (result.run.evidencePolicy?.version === 2) {
+    const photo = selectMultiPhotoEvidence(result.gallery, { evidenceId });
+    if (!photo) throw new HttpsError("not-found", "Report photo not found.");
+    return downloadSavedChecklistEvidence(result.run, photo, { storage });
+  }
+  if (evidenceId !== undefined) throw new HttpsError("not-found", "Report photo not found.");
   if (!result.report.hasPhoto || !result.evidence) throw new HttpsError("not-found", "Report photo not found.");
   return downloadSavedChecklistEvidence(result.run, result.evidence, { storage });
 }

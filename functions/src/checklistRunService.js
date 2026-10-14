@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
 import { projectChecklistDraftForRead } from "./checklistDraftService.js";
-import { pilotChecklistPhotoRequirementId, projectChecklistEvidence } from "./checklistEvidenceDefinition.js";
+import { createChecklistEvidencePolicy, pilotChecklistPhotoRequirementId, projectChecklistEvidence, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
 
 export const initialChecklistRunId = "initial";
 
@@ -48,6 +48,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
     status: run?.status || "DRAFT",
     jobId: typeof run?.jobId === "string" ? run.jobId : null,
     definitionVersion: Number.isInteger(run?.definitionVersion) ? run.definitionVersion : null,
+    ...(run?.evidencePolicy?.version === 2 ? { evidencePolicy: createChecklistEvidencePolicy(run.evidencePolicy) } : {}),
     property: {
       id: typeof run?.propertySnapshot?.propertyId === "string"
         ? run.propertySnapshot.propertyId
@@ -88,7 +89,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
     readyForReviewAt: toIsoTimestamp(run?.readyForReviewAt),
     abandonedAt: toIsoTimestamp(run?.abandonedAt),
     draft: draftProjection,
-    evidence: projectChecklistEvidence(evidence),
+    evidence: run?.evidencePolicy?.version === 2 ? projectChecklistEvidenceGallery(evidence?.photos) : projectChecklistEvidence(evidence),
   };
 }
 
@@ -106,15 +107,18 @@ export async function getChecklistRunForManager(database, { organizationId, jobI
     throw new HttpsError("not-found", "Job not found.");
   }
 
+  const projectedEvidence = runSnapshot.data()?.evidencePolicy?.version === 2
+    ? (await runReference.collection("evidenceState").doc("current").get()).data()
+    : evidenceSnapshot.exists ? evidenceSnapshot.data() : null;
   return runSnapshot.exists
     ? projectChecklistRunForManager(
       runSnapshot.data(), runSnapshot.id, draftSnapshot.exists ? draftSnapshot.data() : null,
-      evidenceSnapshot.exists ? evidenceSnapshot.data() : null,
+      projectedEvidence,
     )
     : null;
 }
 
-export async function createChecklistRunForManager(database, { organizationId, jobId, actorUid }) {
+export async function createChecklistRunForManager(database, { organizationId, jobId, actorUid, evidencePolicy }) {
   const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
   const runReference = jobReference.collection("checklistRuns").doc(initialChecklistRunId);
 
@@ -152,6 +156,7 @@ export async function createChecklistRunForManager(database, { organizationId, j
       organizationId,
       jobId,
       status: "DRAFT",
+      evidencePolicy: createChecklistEvidencePolicy(evidencePolicy),
       createdByUid: actorUid,
       createdAt: FieldValue.serverTimestamp(),
       ...buildChecklistRunSnapshot({ job, property }),

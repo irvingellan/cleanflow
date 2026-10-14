@@ -3,6 +3,7 @@ import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { checklistCapabilityState } from "./checklistCapabilityService.js";
+import { loadMultiPhotoEvidence, uploadMultiPhotoEvidence, selectMultiPhotoEvidence } from "./checklistMultiPhotoService.js";
 import {
   isPilotChecklistPhotoRequirement,
   maximumChecklistEvidenceSizeBytes,
@@ -104,7 +105,7 @@ function evidenceStoragePath({ organizationId, jobId, runId, requirementId, cont
   return `organizations/${organizationId}/jobs/${jobId}/checklistRuns/${runId}/evidence/${requirementId}/${contentHash}.${extension}`;
 }
 
-async function resolveActiveCapability(database, { organizationId, tokenHash, now }) {
+export async function resolveActiveCapability(database, { organizationId, tokenHash, now }) {
   const matches = await database.collectionGroup("checklistCapabilities")
     .where("tokenHash", "==", tokenHash).limit(2).get();
   if (matches.size !== 1) throw photoValidationError("not-found", "Checklist capability not found.", "capability_unavailable");
@@ -143,8 +144,13 @@ async function resolveActiveCapability(database, { organizationId, tokenHash, no
 }
 
 export async function loadPublicChecklistEvidence(database, { organizationId, tokenHash, now = new Date() }) {
+  return (await loadPublicChecklistEvidenceView(database, { organizationId, tokenHash, now })).evidence;
+}
+
+export async function loadPublicChecklistEvidenceView(database, { organizationId, tokenHash, now = new Date() }) {
   const resolved = await resolveActiveCapability(database, { organizationId, tokenHash, now });
-  return projectChecklistEvidence(resolved.evidence);
+  if (resolved.run.evidencePolicy?.version === 2) return loadMultiPhotoEvidence(database, resolved, { organizationId, tokenHash, now, includeRevision: true });
+  return { evidence: projectChecklistEvidence(resolved.evidence) };
 }
 
 /**
@@ -172,6 +178,9 @@ export async function uploadPublicChecklistEvidence(database, {
     initial = await resolveActiveCapability(database, { organizationId, tokenHash, now });
   } catch (error) {
     throw markPhotoDiagnosticStage(error, validationOrUnknownStage(error));
+  }
+  if (initial.run.evidencePolicy?.version === 2) {
+    return uploadMultiPhotoEvidence(database, initial, { organizationId, tokenHash, requirementId, contentType, bytes, now, storage }, image);
   }
   if (initial.run.status !== "DRAFT") {
     throw markPhotoDiagnosticStage(photoValidationError("failed-precondition", "Checklist Run is no longer editable.", "run_not_draft"), "server-validation");
@@ -270,6 +279,12 @@ export async function uploadPublicChecklistEvidence(database, {
 }
 
 function assertStoredEvidence(run, evidence, requirementId) {
+  if (run.evidencePolicy?.version === 2 && evidence?.evidenceId) {
+    if (evidence.status !== "SAVED" || !supportedChecklistEvidenceContentTypes.has(evidence.contentType)
+      || !Number.isInteger(evidence.sizeBytes) || evidence.sizeBytes <= 0 || evidence.sizeBytes > maximumChecklistEvidenceSizeBytes
+      || typeof evidence.storagePath !== "string" || !evidence.generation) throw new HttpsError("not-found", "Checklist photo not found.");
+    return;
+  }
   if (!isPilotChecklistPhotoRequirement(run, requirementId)
     || evidence?.status !== "SAVED"
     || evidence.requirementId !== requirementId
@@ -285,26 +300,42 @@ function assertStoredEvidence(run, evidence, requirementId) {
 /** Downloads bytes only after a server-side caller has resolved the exact saved evidence record. */
 export async function downloadSavedChecklistEvidence(run, evidence, { storage = getStorage() } = {}) {
   assertStoredEvidence(run, evidence, pilotChecklistPhotoRequirementId);
-  const [bytes] = await storage.bucket().file(evidence.storagePath).download();
+  const [bytes] = await storage.bucket().file(evidence.storagePath, evidence.generation ? { generation: evidence.generation } : undefined).download();
   return { bytes, contentType: evidence.contentType };
 }
 
 export async function downloadPublicChecklistEvidence(database, {
-  organizationId, tokenHash, requirementId, now = new Date(), storage = getStorage(),
+  organizationId, tokenHash, requirementId, evidenceId, now = new Date(), storage = getStorage(),
 }) {
   const resolved = await resolveActiveCapability(database, { organizationId, tokenHash, now });
+  if (resolved.run.evidencePolicy?.version === 2) {
+    // Recheck exact V2 identity and current authorization before selecting private bytes.
+    await loadMultiPhotoEvidence(database, resolved, { organizationId, tokenHash, now });
+    const state = (await resolved.runRef.collection("evidenceState").doc("current").get()).data();
+    const photo = selectMultiPhotoEvidence(state, { evidenceId, requirementId });
+    if (!photo) throw new HttpsError("not-found", "Checklist photo not found.");
+    return downloadSavedChecklistEvidence(resolved.run, photo, { storage });
+  }
+  if (evidenceId !== undefined) throw new HttpsError("not-found", "Checklist photo not found.");
   assertStoredEvidence(resolved.run, resolved.evidence, requirementId);
   return downloadSavedChecklistEvidence(resolved.run, resolved.evidence, { storage });
 }
 
 export async function downloadManagerChecklistEvidence(database, {
-  organizationId, jobId, runId, requirementId, storage = getStorage(),
+  organizationId, jobId, runId, requirementId, evidenceId, storage = getStorage(),
 }) {
   const runRef = runReference(database, organizationId, jobId, runId);
-  const evidenceRef = evidenceReference(database, organizationId, jobId, runId, requirementId);
+  const evidenceRef = evidenceReference(database, organizationId, jobId, runId, pilotChecklistPhotoRequirementId);
   const [runSnapshot, evidenceSnapshot] = await Promise.all([runRef.get(), evidenceRef.get()]);
-  if (!runSnapshot.exists || !evidenceSnapshot.exists) throw new HttpsError("not-found", "Checklist photo not found.");
+  if (!runSnapshot.exists) throw new HttpsError("not-found", "Checklist photo not found.");
   const run = runSnapshot.data();
+  if (run.evidencePolicy?.version === 2) {
+    const state = (await runRef.collection("evidenceState").doc("current").get()).data();
+    const photo = selectMultiPhotoEvidence(state, { evidenceId, requirementId });
+    if (!photo) throw new HttpsError("not-found", "Checklist photo not found.");
+    return downloadSavedChecklistEvidence(run, photo, { storage });
+  }
+  if (!evidenceSnapshot.exists || evidenceId !== undefined) throw new HttpsError("not-found", "Checklist photo not found.");
   const evidence = evidenceSnapshot.data();
   assertStoredEvidence(run, evidence, requirementId);
   return downloadSavedChecklistEvidence(run, evidence, { storage });
