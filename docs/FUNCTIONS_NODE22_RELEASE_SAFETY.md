@@ -51,9 +51,19 @@ declarations, preventing implicit resets of live caps/identity settings.
 All business-handler bytes and other51 server files remain unchanged except this
 configuration import/option. No schema/rules/storage/index/frontend changes.
 
-This option is not a blanket configuration-equivalence guarantee. CLI parameter
-resolution, secret bindings and concurrency still require the explicit release
-comparison below. Existing source-explicit settings remain authoritative.
+This option is not a blanket configuration-equivalence guarantee. Even without
+dotenv, CLI15.28.1 resolves nonempty MANAGER_REMINDER_PROVIDER=fcm, marks the
+codebase environment-managed and skips merging existing environment maps.
+27 live functions explicitly have fcm;4 omit it. Candidate preparation can add
+the unchanged fcm default to those4. The empty Sandbox-project parameter is not
+added by the nonempty-param loop; emulator local parameters are not production
+inputs. No other custom live environment key was observed in this inventory.
+This is a **blocking preflight gate before the first deployment**: resolve the
+actual candidate environment per function, privately compare existing keys/
+values and bindings, and stop on any unexplained removal/change/addition.
+An explained default-key addition is not the same as exact full-map hash equality.
+Existing source-explicit settings remain authoritative; no-dotenv alone proves
+neither environment preservation nor configuration equality.
 
 ## Validation and boundaries
 
@@ -80,7 +90,8 @@ comparison below. Existing source-explicit settings remain authoritative.
 - One overlapping post-fix emulator rerun ended unexpectedly after57 tests.
   Sequential rerun completed78/78; only this run's verified orphan was stopped.
 - Emulator-only application build passed; all server JS syntax checked in Node22.
-- No production API/data calls, real pushes, physical-device or cloud rollback
+- No production application-endpoint/customer-data calls; metadata-only
+  control-plane reads occurred. No real pushes, physical-device or cloud rollback
   acceptance are claimed. No real identity is inferred from a browser/account.
 - Independent final review: no remaining introduced P1/P2 after cap preservation;
   explicit configuration/release gates and validation limitations recorded.
@@ -130,8 +141,12 @@ physical-iPhone acceptance separately. No MultiPhoto code shipped in this branch
    active operational upload. Do not read customer records or bearer tokens.
 2. Require production project `clean-flow-prototipo`, Node22, engine/CLI test,
    exact locked dependencies; no Functions dotenv/local secrets or env overrides
-   that could replace deployed values. Privately compare configured parameter
-   values, service identity and secret versions against captured metadata.
+   that could replace deployed values. Resolve the concrete CLI candidate
+   environment BEFORE first deploy, including environment-managed parameters;
+   privately compare every preserved key/value, service identity and secret
+   version against captured metadata. Stop on unexplained drift. The4 missing
+   provider keys may acquire the existing fcm default; explicitly disposition
+   this known additive normalization rather than asserting identical hashes.
 3. Only update existing names. NO create/delete/rename/recreate; no IAM workaround,
    secret changes, rules/index/Storage/Hosting deployment or billing activation.
 4. Deploy the24 callables (exact command below), then verify runtime/state/config.
@@ -141,8 +156,10 @@ physical-iPhone acceptance separately. No MultiPhoto code shipped in this branch
    bounded invalid-token requests; no real Run, upload or report creation.
 7. Deploy the2 scheduled functions away from their07:00/19:00 execution windows;
    verify exact cron/timezone/claim configuration. Never force/replay reminders.
-8. Metadata must show all31 ACTIVE/nodejs22 with unchanged configuration hashes,
+8. Metadata must show all31 ACTIVE/nodejs22 with preserved configuration values,
    identities, secret versions, caps, concurrency, event paths and schedules.
+   Compare hashes against the approved prepared maps (not blindly against old
+   full maps if the4 explained provider-default additions occurred).
    Retain old/new revision inventory. No real delivery/display claim.
 
 Commands below are documentation ONLY; none was executed:
