@@ -5,10 +5,14 @@ import { createRequire } from "node:module";
 import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
 
 // Fail before loading Admin SDK/handlers unless all access is explicitly local and disposable.
+const firestorePort = Number(process.env.CLEANFLOW_SECURITY_FIRESTORE_PORT || 8080);
+const storagePort = Number(process.env.CLEANFLOW_SECURITY_STORAGE_PORT || 9199);
+assert.ok([8080, 18080].includes(firestorePort));
+assert.ok([9199, 19199].includes(storagePort));
 for (const [variable, expected] of Object.entries({
   GCLOUD_PROJECT: "demo-cleanflow",
-  FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
-  FIREBASE_STORAGE_EMULATOR_HOST: "127.0.0.1:9199",
+  FIRESTORE_EMULATOR_HOST: `127.0.0.1:${firestorePort}`,
+  FIREBASE_STORAGE_EMULATOR_HOST: `127.0.0.1:${storagePort}`,
 })) {
   assert.equal(process.env[variable], expected, `Security tests require local ${variable}`);
 }
@@ -78,8 +82,8 @@ function request(uid, data = {}, anonymous = false) {
 before(async () => {
   environment = await initializeTestEnvironment({
     projectId: "demo-cleanflow",
-    firestore: { host: "127.0.0.1", port: 8080, rules: await readFile("firestore.rules", "utf8") },
-    storage: { host: "127.0.0.1", port: 9199, rules: await readFile("storage.rules", "utf8") },
+    firestore: { host: "127.0.0.1", port: firestorePort, rules: await readFile("firestore.rules", "utf8") },
+    storage: { host: "127.0.0.1", port: storagePort, rules: await readFile("storage.rules", "utf8") },
   });
 });
 after(async () => { await environment?.cleanup(); });
