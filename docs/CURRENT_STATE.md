@@ -1,5 +1,19 @@
 # CleanFlow — Current State
 
+## Issue82 — Node22 runtime candidate (local-only, 2026-10-14)
+
+Isolated `codex/functions-node22-migration`, based on main8bc7016/live-compatible
+app5c2e524; no merge/push/deploy. Runtime checkpoint911d291 changes engine22 and
+preserves existing service options (13 live caps20). Live metadata:31 ACTIVE
+Functions still nodejs20/us-central1; schedules/triggers unchanged. Final unit
+113/1237, runtime2/2, security78/78, actual Chromium/WebKit integration2/2 pass.
+Separate unchanged worker test fails WebKit update within5s; no causal runtime
+link established, no Hosting change. Existing dependency advisories assessed,
+not blindly upgraded. MultiPhoto/V2 RCs and main WIP preserved; combined feature
+regression and actual cloud release remain future gates. See
+[release safety](FUNCTIONS_NODE22_RELEASE_SAFETY.md), including exact configuration
+comparison and Node20 rollback restriction after2026-10-30.
+
 ## Issue #76 — Compact Lifecycle V0 (released 2026-10-04)
 
 Presentation slice from `0b1dff1`: compact five-stage strip on Jobs
