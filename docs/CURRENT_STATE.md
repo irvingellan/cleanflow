@@ -1,5 +1,49 @@
 # CleanFlow — Current State
 
+## Issue82 — Policy B accepted; new LOCAL Node22 candidate (2026-10-15 PDT)
+
+Owner explicitly accepts maxInstances20 as a NEW deliberate policy for the
+existing31gen2Functions/us-central1; historical scaling equivalence remains
+UNPROVEN. Source now pins20 alongside preserveExternalChanges:true; no business
+handler or dependency change. Exact SDK/CLI body/mask tests cover all31exports.
+Preparation only: no deployment/merge/push, billing or customer-data access.
+The proposed continuation targets only21Node20Functions in groups10/4/2/3/2;
+the ten already-Node22Functions are excluded. Seven historical drift cases are
+deliberately accepted NEW policy, not reclassified as historically equivalent.
+Original PRODUCTION_STOP remains byte-identical and is NOT cleared by acceptance.
+Initial metadata preflight:881fields,815identical/66explained/0blocking;
+21updates,0create/delete/recreate. Explained env additions preserve existing
+empty-Sandbox/fcm defaults; exact full-map equality is not claimed for them.
+Final gate additionally validates exact31-source inventory, observed resource
+identity, no broad reset masks, Eventarc readiness/bindings and enabled unchanged
+schedulers, plus no planned IAM mutations. Final SHA-bound receipts are local.
+See [Policy B release/recovery contract](NODE22_POLICY_B.md). A separate explicit
+GO naming the new SHA and exact groups is required before any cloud mutation.
+
+## Issue82 — Production migration PARTIAL / STOPPED (2026-10-15 PDT)
+
+Approved source `e90040b1e8332bc70c179a923226630b5bb08a02`, isolated migration
+branch only. First named batch of10callables updated successfully at
+09:34:51–09:36:47 UTC (02:34–02:36 PDT). Post-batch gate stopped further rollout:
+seven Functions changed from omitted maxInstanceCount to explicit20. Historical
+CloudRun revision metadata also shows no prior explicit limit; preservation of
+the previous effective policy is NOT proven. Four callables additionally gained
+the platform's FUNCTION_SIGNATURE_TYPE=http environment metadata.
+
+Current inventory:31 ACTIVE,10nodejs22/21nodejs20,us-central1. No other batch was
+deployed. Metadata checks preserve IAM/service identities,secrets/versions,
+build configuration,Firestore triggers,Eventarc destinations and schedules.
+Sanitized ten-minute aggregate health showedzero requests/ERROR/5xx; this does
+not prove real workflow acceptance. Hosting remains6130ee0f019cbff4/build5c2e524.
+No customer records read/mutated,no synthetic events,no Hosting/Rules/Storage/
+indexes/secrets/billing deployment. MultiPhoto/V2 candidates unchanged.
+
+Do NOT resume from the former READY preflight alone. Review the explicit scaling
+policy and validate a new preservation/fix-forward plan before further production
+updates. No speculative Node20 rollback,traffic switch or event replay occurred.
+Local sanitized execution artifacts: `.superpowers/sdd/2026-10-14-functions-node22-migration/production-execution/`.
+This historical checkpoint remains local; no merge/push.
+
 ## Issue82 — Node22 runtime candidate (local-only, 2026-10-14)
 
 Isolated `codex/functions-node22-migration`, based on main8bc7016/live-compatible

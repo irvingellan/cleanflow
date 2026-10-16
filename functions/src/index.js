@@ -98,8 +98,8 @@ import {
   unknownManagerReminderDeliveryAuditFields,
 } from "./managerReminderTransport.js";
 
-// Runtime maintenance must not reset existing service limits or identity settings.
-setGlobalOptions({ preserveExternalChanges: true });
+// Policy B: explicit20 is a new approved cap; preserve all other external options.
+setGlobalOptions({ preserveExternalChanges: true, maxInstances: 20 });
 
 if (getApps().length === 0) {
   initializeApp();

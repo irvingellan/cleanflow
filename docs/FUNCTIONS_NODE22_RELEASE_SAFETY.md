@@ -1,7 +1,23 @@
 # Issue82 — Firebase Functions Node22 release safety
 
-Status: **READY FOR NODE22 RELEASE DECISION — preparation only**.
-No deployment, merge/push, billing or customer-data access occurred.
+## Authoritative continuation contract — Policy B (2026-10-15)
+
+The owner has now accepted explicitmaxInstances20 as a NEW policy, not proven
+historical equivalence. Local source/tests pin20 while preserving other external
+options. Production is still10Node22/21Node20. Original STOP remains active.
+Use [NODE22_POLICY_B.md](NODE22_POLICY_B.md) for exact21-target groups, current
+preflight, recovery and monitoring. No deployment, merge or push is authorized.
+The historical31-target/rollback instructions below are NOT permission to replay
+batch0, deploy all31, restore omission-based limits or downgrade runtimes.
+
+Status: **PARTIAL — PRODUCTION MIGRATION STOPPED (2026-10-15)**.
+First10callables updated from approved e90040b; post-batch config gate failed.
+Production is31ACTIVE:10Node22/21Node20. No merge/push,billing or customer-data
+access/mutation occurred. No further deployment is authorized by the old READY
+preflight. Seven updates materialized maxInstanceCount20 where GCF/old CloudRun
+revision metadata had no explicit limit. This is not proven configuration
+equivalence. Four Functions also acquired platform signature-type metadata.
+No blind retry or speculative rollback occurred. See CURRENT_STATE checkpoint.
 
 ## Source and live baseline
 
@@ -51,19 +67,18 @@ declarations, preventing implicit resets of live caps/identity settings.
 All business-handler bytes and other51 server files remain unchanged except this
 configuration import/option. No schema/rules/storage/index/frontend changes.
 
-This option is not a blanket configuration-equivalence guarantee. Even without
-dotenv, CLI15.28.1 resolves nonempty MANAGER_REMINDER_PROVIDER=fcm, marks the
-codebase environment-managed and skips merging existing environment maps.
-27 live functions explicitly have fcm;4 omit it. Candidate preparation can add
-the unchanged fcm default to those4. The empty Sandbox-project parameter is not
-added by the nonempty-param loop; emulator local parameters are not production
-inputs. No other custom live environment key was observed in this inventory.
-This is a **blocking preflight gate before the first deployment**: resolve the
-actual candidate environment per function, privately compare existing keys/
-values and bindings, and stop on any unexplained removal/change/addition.
-An explained default-key addition is not the same as exact full-map hash equality.
-Existing source-explicit settings remain authoritative; no-dotenv alone proves
-neither environment preservation nor configuration equality.
+This option is not a blanket configuration-equivalence guarantee. The verified
+noninteractive CLI contract pins a local ignored project-specific input file:
+DEV_CENTER_SANDBOX_PROJECT_ID empty and MANAGER_REMINDER_PROVIDER fcm, canonical
+digest930b4625a4745717af7362b8d6480ecc99806df3fa22078e2cdd970cfa4c57fb.
+No secrets or other overrides. Without those pins resolution fails closed.
+The predeploy846field comparison approved31runtime changes,31empty Sandbox-ID
+defaults and4existing FCM-default additions; latest secret metadata was checked.
+The actual first batch then exposed server-side scaling materialization NOT
+predicted by omission-preserving CLI mapping. Do not equate omitted request
+fields with guaranteed live API/platform preservation. Old preflight is now
+insufficient to authorize remaining updates; explicit scaling disposition and
+revalidated effective configuration are required.
 
 ## Validation and boundaries
 
@@ -140,8 +155,8 @@ physical-iPhone acceptance separately. No MultiPhoto code shipped in this branch
    unexpected drift, new function, missing trigger, changed secret version or
    active operational upload. Do not read customer records or bearer tokens.
 2. Require production project `clean-flow-prototipo`, Node22, engine/CLI test,
-   exact locked dependencies; no Functions dotenv/local secrets or env overrides
-   that could replace deployed values. Resolve the concrete CLI candidate
+   exact locked dependencies; only the two-key ignored non-secret project pin
+   described above, no local secrets/other overrides. Resolve the concrete CLI candidate
    environment BEFORE first deploy, including environment-managed parameters;
    privately compare every preserved key/value, service identity and secret
    version against captured metadata. Stop on unexplained drift. The4 missing
@@ -149,7 +164,9 @@ physical-iPhone acceptance separately. No MultiPhoto code shipped in this branch
    this known additive normalization rather than asserting identical hashes.
 3. Only update existing names. NO create/delete/rename/recreate; no IAM workaround,
    secret changes, rules/index/Storage/Hosting deployment or billing activation.
-4. Deploy the24 callables (exact command below), then verify runtime/state/config.
+4. Only after resolving the current STOP: split24callables into at most10 per
+   deployment and verify each batch before advancing. The historical24-target
+   command below is not an approved single execution batch.
 5. Deploy the2 existing Firestore triggers; verify intended event paths, nam5,
    retries disabled and Eventarc ready BEFORE public handlers. Stop on failure.
 6. Deploy publicChecklist/publicClientReport/publicOffer. Perform only safe
