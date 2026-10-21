@@ -1,5 +1,22 @@
 # CleanFlow — Current State
 
+## Issue #51 — V3 visual/loading repair (2026-10-21; authenticated gate BLOCKED)
+
+The earlier integration handoff below is historical: human authenticated acceptance
+FAILED. Safari reproduced the authenticated shell followed by Dashboard read error.
+The exact failing Firestore stage/category is not yet proven; unavailable Sandbox
+Dev Center/notification Functions are not dependencies of the Dashboard read.
+Isolated local branch `codex/workspace-v3-visual-loading-repair` restores scoped
+C+A hierarchy, full Workspace width and accessible CSS shimmer, plus ephemeral
+allowlisted read-stage/error diagnostics under the existing 20-second controller
+deadline. No query/result semantics, manager authorization or backend change.
+Only the existing isolated Sandbox Hosting preview was updated; not Sandbox live
+or Production. Real authenticated revalidation is PENDING safe error details, not
+inferred from synthetic tests or static HTTP/hash success. 130 files / 1,450 unit,
+56 Workspace browser, 26 CURRENT/V2 browser, 78 security and 27 guard tests passed.
+Original refs, RC, Multi-Photo and Node22 STOP remain unchanged; no push/merge.
+See [repair evidence and remaining gate](WORKSPACE_V3_VISUAL_LOADING_REPAIR.md).
+
 ## Issue #51 — Manager Workspace V3 Hybrid integration (2026-10-21)
 
 Isolated branch `codex/manager-workspace-v3-hybrid`, based on accepted V2 RC

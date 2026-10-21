@@ -12,6 +12,11 @@ for (const width of [390, 768, 1440]) for (const [lang, theme] of [["en", "light
     const start=await bar.evaluate(el=>getComputedStyle(el,"::after").transform);
     await page.waitForTimeout(180);
     expect(await bar.evaluate(el=>getComputedStyle(el,"::after").transform)).not.toBe(start);
+    await page.evaluate(()=>{Object.defineProperty(document,"hidden",{configurable:true,value:true});document.dispatchEvent(new Event("visibilitychange"));});
+    await expect(loading).toHaveAttribute("data-paused","true");
+    expect(await bar.evaluate(el=>getComputedStyle(el,"::after").animationPlayState)).toBe("paused");
+    await page.evaluate(()=>{Object.defineProperty(document,"hidden",{configurable:true,value:false});document.dispatchEvent(new Event("visibilitychange"));});
+    await expect(loading).toHaveAttribute("data-paused","false");
     await page.screenshot({path:`artifacts/workspace-v3/repair/after/${info.project.name}-${width}-${lang}-${theme}-loading.png`,fullPage:true});
     await page.emulateMedia({reducedMotion:"reduce"});
     expect(await bar.evaluate(el=>getComputedStyle(el,"::after").animationName)).toBe("none");
