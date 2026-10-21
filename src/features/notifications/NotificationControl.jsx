@@ -7,7 +7,7 @@ import {
 } from "./notificationService.js";
 import { reportCurrentManagerNotificationHealth } from "./notificationHealthReporter.js";
 
-export function NotificationControl({ userId }) {
+export function NotificationControl({ userId, detailLabels }) {
   const { language, translate } = useTranslation();
   const [state, setState] = useState("checking");
   const [testResult, setTestResult] = useState(null);
@@ -163,6 +163,10 @@ export function NotificationControl({ userId }) {
 
   return (
     <div className="notification-control__group">
+      {detailLabels && <dl className="workspace-notification-status">
+        <div><dt>{detailLabels("permission")}</dt><dd>{detailLabels(["granted","denied","default"].includes(globalThis.Notification?.permission) ? globalThis.Notification.permission : "unavailable")}</dd></div>
+        <div><dt>{detailLabels("registration")}</dt><dd>{detailLabels(state === "enabled" ? "registered" : state === "unavailable" ? "unavailable" : "unknown")}</dd></div>
+      </dl>}
       <button
         className={`notification-control notification-control--${state}`}
         type="button"

@@ -9,6 +9,7 @@ import { Banner, Button, EmptyState, ErrorState, Icon, Panel, Row, SearchField, 
 import { formatDate } from "../../lib/presentation.js";
 import { inRange, laDateKey, rangeFor, shiftRange } from "./workspaceV3Model.js";
 import { workspaceText } from "./workspaceMessages.js";
+import { settingsText } from "./workspaceSettingsMessages.js";
 import "./workspaceV3.css";
 
 const operationViews = new Set(["job-list", "job-detail", "offer-cleaners", "checklist-run", "cleaner-job"]);
@@ -129,6 +130,7 @@ function WorkspaceAgora({ active, model, dashboard: d, t, translate, range, toda
         <Button variant="secondary" icon="clock" onClick={() => onOperation({ status: "in-progress" })}>{translate("dashboard.inProgress")}</Button>
         <Button variant="secondary" icon="jobs" onClick={onCreate}>{translate("jobs.newService")}</Button></div>
     </div>
+    <LoadingMotionPreview active={active} label={translate("dashboard.loading")} />
     {d.isLoading && <WorkspaceLoading label={translate("dashboard.loading")} active={active} />}
     {d.hasError && <div className="workspace-v3-load-error"><Banner tone="risk" role="alert" title={translate("dashboard.error")}
       action={<Button variant="secondary" icon="refresh" onClick={d.onRefresh}>{translate("auth.managerAccessRetry")}</Button>}>
@@ -177,4 +179,22 @@ function WorkspaceLoading({ label, active }) {
       <div className="workspace-v3-loading-side">{[0, 1, 2].map(i => <div className="workspace-v3-loading-panel" key={i}><span /><span /><span /></div>)}</div>
     </div>
   </div>;
+}
+
+function LoadingMotionPreview({active,label}) {
+  const {language}=useTranslation();const t=key=>settingsText(language,key);
+  const [show,setShow]=useState(false);const trigger=useRef(null);
+  useEffect(()=>{
+    if(!show)return;
+    const timer=setTimeout(()=>setShow(false),4000);
+    const escape=event=>{if(event.key==="Escape"){setShow(false);trigger.current?.focus();}};
+    document.addEventListener("keydown",escape);
+    return()=>{clearTimeout(timer);document.removeEventListener("keydown",escape);};
+  },[show]);
+  useEffect(()=>{if(!active)setShow(false);},[active]);
+  return <><Button ref={trigger} variant="tertiary" icon="refresh" onClick={()=>setShow(true)} aria-expanded={show}>{t("motion")}</Button>
+    {show&&active&&<aside className="workspace-v3-motion-preview" aria-label={t("motionTitle")}>
+      <header><strong>{t("motionTitle")}</strong><button className="cfv2-button cfv2-button-icon" type="button" aria-label={t("close")} onClick={()=>{setShow(false);trigger.current?.focus();}}><Icon name="close"/></button></header>
+      <p>{t("motionNote")}</p><WorkspaceLoading active={active} label={label}/>
+    </aside>}</>;
 }

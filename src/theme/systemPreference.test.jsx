@@ -1,0 +1,6 @@
+import {act,renderHook} from "@testing-library/react";
+import {beforeEach,expect,it,vi} from "vitest";
+import {ThemeProvider,useTheme} from "./theme.js";
+beforeEach(()=>{localStorage.clear();Object.defineProperty(window,"matchMedia",{configurable:true,value:vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()}))});});
+it("System removes the explicit preference and follows the existing media query",()=>{localStorage.setItem("cleanflow-manager-theme","light");const{result}=renderHook(()=>useTheme(),{wrapper:ThemeProvider});act(()=>result.current.setTheme("system"));expect(result.current.theme).toBe("dark");expect(result.current.preference).toBe("system");expect(localStorage.getItem("cleanflow-manager-theme")).toBeNull();});
+it("System keeps tracking device appearance and rejects unsupported preferences",()=>{const{result}=renderHook(()=>useTheme(),{wrapper:ThemeProvider});const media=window.matchMedia.mock.results.at(-1).value;const update=media.addEventListener.mock.calls[0][1];act(()=>update({matches:false}));expect(result.current.theme).toBe("light");act(()=>result.current.setTheme("invalid"));expect(result.current.theme).toBe("light");expect(localStorage.getItem("cleanflow-manager-theme")).toBeNull();});

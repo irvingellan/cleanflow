@@ -1,5 +1,21 @@
 # CleanFlow — Current State
 
+## Issue #51 — V3 settings/motion refinement (2026-10-21)
+
+New explicit human feedback confirms the authenticated Sandbox Dashboard loaded
+actual DEMO attention items/totals. This is a successful read, not proof that the
+earlier intermittent failure is permanently fixed. No new failure investigation
+is performed. Read diagnostic is intentionally error-only; absence on success is
+expected. The same isolated repair branch now groups V3 Account/Preferences/
+Notifications/Help/Advanced using existing real controls, adds direct mobile Account
+access and System appearance, and makes shimmer perceptible. A four-second, clearly
+labeled Sandbox/developer-only animation preview makes the same CSS observable
+without requests, writes or artificially delayed data. CURRENT/V2 controls remain
+intact; no backend/authorization/query/billing/Production changes. Final exact-SHA
+preview evidence and tests are recorded in the handoff. Human visual retest of this
+refinement remains pending; older blocked/read checkpoints below are historical.
+See [settings/motion evidence](WORKSPACE_V3_SETTINGS_MOTION.md).
+
 ## Issue #51 — V3 visual/loading repair (2026-10-21; authenticated gate BLOCKED)
 
 The earlier integration handoff below is historical: human authenticated acceptance

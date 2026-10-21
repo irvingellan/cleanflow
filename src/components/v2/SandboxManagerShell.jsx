@@ -27,7 +27,7 @@ export function SandboxManagerShell(props) {
   return <V2ManagerShell {...props} />;
 }
 
-export function V2ManagerShell({ language, translate, destinations, activeSection, view, utilities, foundationClass, children, integratedComparison = false, environment = "sandbox" }) {
+export function V2ManagerShell({ language, translate, destinations, activeSection, view, utilities, foundationClass, children, integratedComparison = false, environment = "sandbox", workspaceSettings = false }) {
   const t = key => shellText(language, key);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("cleanflow-v2-sidebar-collapsed") === "true"; } catch { return false; }
@@ -88,7 +88,7 @@ export function V2ManagerShell({ language, translate, destinations, activeSectio
       <Button variant="tertiary" icon="user" className="cfv2-shell-account-trigger" aria-label={t("account")} title={t("account")} aria-expanded={surface === "account"} aria-controls="cfv2-shell-utilities" onClick={event => open(event, "account")}><span>{t("account")}</span></Button>
     </aside>
     <main id="cfv2-main" tabIndex={-1} className="cfv2-shell-main" inert={surface ? true : undefined}>
-      <header className="cfv2-shell-mobile-header"><strong>CleanFlow</strong>{detail && <IconButton icon="menu" label={t("more")} onClick={event => open(event, "more")} aria-expanded={surface === "more"} />}</header>
+      <header className="cfv2-shell-mobile-header"><strong>CleanFlow</strong>{workspaceSettings && <IconButton icon="user" label={t("account")} onClick={event => open(event, "account")} aria-expanded={surface === "account"} />}{detail && <IconButton icon="menu" label={t("more")} onClick={event => open(event, "more")} aria-expanded={surface === "more"} />}</header>
       <div className={`cfv2-shell-content ${foundationClass}`}>{children}</div>
     </main>
     {!detail && <nav className="cfv2-shell-tabs" aria-label={translate("common.mainNavigation")} inert={surface ? true : undefined}>

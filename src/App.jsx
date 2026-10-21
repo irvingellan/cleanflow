@@ -90,6 +90,9 @@ const content = {
   unnamedProperty: "Unnamed property",
 };
 
+const WorkspaceAccountSettings = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator")
+  ? lazy(() => import("./features/workspace/WorkspaceAccountSettings.jsx")) : null;
+
 // Build-time only: CURRENT default; Production has no query/storage opt-in.
 const IntegratedSandboxShell = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
   ? lazy(() => import("./components/v2/SandboxManagerShell.jsx").then(module => ({ default: module.V2ManagerShell }))) : null;
@@ -1006,6 +1009,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   ];
   const Shell = useIntegratedV2 ? IntegratedSandboxShell : CurrentManagerShell;
   const WorkspaceBoundary = useWorkspaceV3 ? ManagerWorkspaceV3 : WorkspacePassthrough;
+  const settingsUtilities = useWorkspaceV3 ? <WorkspaceAccountSettings user={authUser} screen={view}
+    identity={<ManagerIdentity user={authUser} />} languageControl={<LanguageSelector language={language} onChange={setLanguage} />}
+    signOutControl={<button className="header-sign-out" type="button" disabled={isSigningOut} onClick={onSignOut}>{translate(isSigningOut ? "auth.signingOut" : "auth.signOut")}</button>}
+    signOutError={hasSignOutError && <p role="alert">{translate("auth.signOutError")}</p>}
+    onExit={() => chooseWorkspace(false)} advancedNavigation={<>{destinations.filter(item => item.group === "internal").map(item => item.href
+      ? <a key={item.key} className="cfv2-shell-destination" href={item.href}>{translate(item.labelKey)}</a>
+      : <button key={item.key} className="cfv2-button cfv2-button-secondary" type="button" onClick={item.onClick}>{translate(item.labelKey)}</button>)}
+      {canPreviewLifecycle && <button className="cfv2-button cfv2-button-secondary" type="button" onClick={() => setView("sandbox-lifecycle-preview")}>{translate("lifecycle.previewEntry")}</button>}</>} /> : utilities;
   const workspaceWorklistProps = {
     jobs, isLoading: isLoadingJobs, hasError: hasJobError, onSelect: openJob, onCreate: showNewJob,
     filters: jobListFilters, cleaners: jobFilterCleaners, properties,
@@ -1018,7 +1029,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   };
   return (
     <Suspense fallback={<StateCard message={translate("auth.loading")} status="status" />}>
-      <Shell {...{ foundationClass, legacyHeader, utilities, destinations, activeSection, view, language, translate }} environment={cleanflowEnvironment} integratedComparison>
+      <Shell {...{ foundationClass, legacyHeader, destinations, activeSection, view, language, translate }} utilities={settingsUtilities} workspaceSettings={useWorkspaceV3} environment={cleanflowEnvironment} integratedComparison>
 
         <PwaUpdatePrompt />
         <WorkspaceBoundary view={view} selectedJob={selectedJob}

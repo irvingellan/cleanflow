@@ -15,6 +15,15 @@ const healthReporter = vi.hoisted(() => ({ reportCurrentManagerNotificationHealt
 vi.mock("./notificationHealthReporter.js", () => healthReporter);
 
 describe("NotificationControl", () => {
+  it("optional settings details show browser permission and confirmed FCM state without enabling or testing", async () => {
+    vi.stubGlobal("Notification", { permission: "granted" });
+    notificationService.getPushChannelDiagnostics.mockResolvedValue({ state: "enabled", browserPermission: "granted", fcm: { state: "registered" }, oneSignal: { state: "unknown" }, oneSignalWorker: { state: "unknown" } });
+    render(<TranslationProvider><NotificationControl userId="synthetic-manager" detailLabels={key => key} /></TranslationProvider>);
+    expect(await screen.findByText("registered", { exact: true })).toBeVisible();
+    expect(screen.getByText("granted", { exact: true })).toBeVisible();
+    expect(notificationService.enablePushNotifications).not.toHaveBeenCalled();
+    expect(notificationService.testCurrentDeviceNotifications).not.toHaveBeenCalled();
+  });
   afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     vi.clearAllMocks();

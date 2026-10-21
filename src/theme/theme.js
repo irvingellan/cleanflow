@@ -58,6 +58,12 @@ export function ThemeProvider({ children }) {
   }, [themeState.isExplicit]);
 
   function setTheme(theme) {
+    if (!["light", "dark", "system"].includes(theme)) return;
+    if (theme === "system") {
+      setThemeState({ theme: systemTheme(), isExplicit: false });
+      try { window.localStorage.removeItem(themeStorageKey); } catch { /* session preference still works */ }
+      return;
+    }
     setThemeState({ theme, isExplicit: true });
 
     try {
@@ -72,6 +78,7 @@ export function ThemeProvider({ children }) {
     {
       value: {
         theme: themeState.theme,
+        preference: themeState.isExplicit ? themeState.theme : "system",
         setTheme,
       },
     },
