@@ -4,6 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
+import { setGlobalOptions } from "firebase-functions/v2";
 import { defineSecret, defineString, projectID } from "firebase-functions/params";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
@@ -97,6 +98,9 @@ import {
   requireAvailablePilotReminderTransport,
   unknownManagerReminderDeliveryAuditFields,
 } from "./managerReminderTransport.js";
+
+// Approved Node22 Policy B; preserve unspecified live configuration.
+setGlobalOptions({ preserveExternalChanges: true, maxInstances: 20 });
 
 if (getApps().length === 0) {
   initializeApp();
