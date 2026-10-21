@@ -1,5 +1,23 @@
 # CleanFlow — Current State
 
+## Issue #51 — Manager Workspace V3 Hybrid integration (2026-10-21)
+
+Isolated branch `codex/manager-workspace-v3-hybrid`, based on accepted V2 RC
+`7f941b7`; main `8bc7016` is its ancestor. Original V3 prototype `1a0e38c`, RC,
+Multi-Photo, checklist candidates and Node22 STOP controls are preserved.
+Sandbox/emulator-only authenticated presentation now connects Agora (existing
+Dashboard attention + bounded Today/Tomorrow) and Operação (retained existing
+Services list + original Job Detail/actions). Calendar refinement is LA Mon–Sun;
+it covers loaded pages, not a complete agenda. Overall Dashboard counts retain
+their original scope. No new queries, backend rules, simulated operational data
+or Production opt-in. Existing controller response-publication races are guarded.
+Code is local integration, not a Production release or new human acceptance.
+Isolated Sandbox Hosting publication is the only authorized cloud surface; its
+final receipt and human-test status must be distinguished from synthetic tests.
+The repository is public, so conditional private-only push/PR authorization does
+not apply. No branch push/PR or merge. See
+[integration contract and limits](MANAGER_WORKSPACE_V3_HYBRID.md).
+
 ## Design System V2 Production RC (local preparation, 2026-10-08)
 
 The inactive RC lives only on `feature/design-system-v2-production-rc` in its

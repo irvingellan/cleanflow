@@ -31,13 +31,17 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
   const [pageCursors, setPageCursors] = useState(initialPageCursors);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const generation = useRef(0);
   const previousViewRef = useRef(view);
   const isEnteringJobList =
     view === "job-list" && previousViewRef.current !== "job-list";
   const isWorklistLoading = isLoading || isEnteringJobList;
 
   useEffect(() => {
+    const requestGeneration = ++generation.current;
     previousViewRef.current = view;
+    setIsLoadingMore(false);
 
     if (view !== "job-list") {
       return undefined;
@@ -79,21 +83,25 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
 
     return () => {
       isCurrent = false;
+      if (generation.current === requestGeneration) generation.current++;
     };
-  }, [view, filters.status, filters.datePreset, includeArchived]);
+  }, [view, filters.status, filters.datePreset, includeArchived, reloadKey]);
 
   async function loadMore() {
+    if (view !== "job-list" || isLoading || isLoadingMore || !hasMore) return;
+    const requestGeneration = generation.current;
     setIsLoadingMore(true);
 
     try {
       const loadedJobPage = await getJobs(filters, { ...pageCursors, includeArchived });
+      if (requestGeneration !== generation.current) return;
       setJobs((currentJobs) => mergeJobs(currentJobs, loadedJobPage.jobs));
       setPageCursors(loadedJobPage.nextPageCursors);
       setHasMore(loadedJobPage.hasMore);
     } catch {
-      setHasError(true);
+      if (requestGeneration === generation.current) setHasError(true);
     } finally {
-      setIsLoadingMore(false);
+      if (requestGeneration === generation.current) setIsLoadingMore(false);
     }
   }
 
@@ -123,6 +131,7 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
     setFilters,
     resetPagination,
     loadMore,
+    refresh: () => setReloadKey(key => key + 1),
     replaceJob,
     removeJob,
   };

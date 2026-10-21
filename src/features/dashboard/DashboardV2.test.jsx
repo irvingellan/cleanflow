@@ -108,7 +108,7 @@ it("CURRENT/V2 switching reuses data, calls no service, preserves current markup
 it("V2 has no provider/controller imports; App uses Sandbox plus existing developer presentation gate",()=>{
   const source=fs.readFileSync("src/features/dashboard/DashboardV2Pilot.jsx","utf8");
   expect(source).not.toMatch(/from .*Service\.js|from .*Controller|firebase|fetch\(/);
-  const app=fs.readFileSync("src/App.jsx","utf8");expect(app).toContain('const SandboxDashboard = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")');
+  const app=fs.readFileSync("src/App.jsx","utf8");expect(app).toContain('const SandboxDashboard = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")');
   expect(app).toContain('const DashboardPresentation = useIntegratedV2 ? SandboxDashboard : Dashboard');
   const preview=fs.readFileSync("e2e/integrated-v2/preview.jsx","utf8");
   expect(preview).toContain("import.meta.env.DEV");

@@ -91,3 +91,15 @@ test("verified lazy V2 CSS chunks are Sandbox-only; arbitrary chunks still fail 
   fs.writeFileSync(path.join(dir, "assets/unknown-synthetic.css"), "synthetic");
   assert.throws(() => inspectHostingBuild(dir, "expected", [], sandbox), /Unexpected/);
 });
+test("workspace CSS is accepted only in the allowlisted Sandbox artifact shape", t => {
+  const dir = fixture(t), sandbox = { environment: "sandbox", projectId: "cleanflow-sandbox-fixture" };
+  fs.mkdirSync(path.join(dir, "design-system/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "design-system/catalog/index.html"), "synthetic");
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...sandbox }));
+  fs.writeFileSync(path.join(dir, "assets/ManagerWorkspaceV3-synthetic.css"), "synthetic");
+  assert.ok(inspectHostingBuild(dir, "expected", [], sandbox).some(e => e.file.includes("ManagerWorkspaceV3")));
+  fs.rmSync(path.join(dir, "design-system"), { recursive: true });
+  const production = { environment: "production", projectId: "clean-flow-prototipo", managerExperience: "v2" };
+  fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", ...production }));
+  assert.throws(() => inspectHostingBuild(dir, "expected", [], production), /Unexpected/);
+});

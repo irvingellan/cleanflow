@@ -101,6 +101,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     if (!selectedJob) {
       return;
     }
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const isCurrent = () => selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId;
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -110,11 +113,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     try {
       const offers = await loadDetailOperation("offers", () => getJobOffers(selectedJob.id));
-      setDetailData((currentData) => ({ ...currentData, offers }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, offers }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasOffersError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasOffersError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingOffers: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingOffers: false }));
     }
   }
 
@@ -122,6 +125,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     if (!selectedJob) {
       return;
     }
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const isCurrent = () => selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId;
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -131,11 +137,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     try {
       const issues = await loadDetailOperation("issues", () => getJobIssues(selectedJob.id));
-      setDetailData((currentData) => ({ ...currentData, issues }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, issues }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasIssuesError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasIssuesError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingIssues: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingIssues: false }));
     }
   }
 
@@ -144,6 +150,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       setDetailData((currentData) => ({ ...currentData, assignments: [] }));
       return;
     }
+    const jobId = job.id;
+    const epoch = selectedJobEpochRef.current;
+    const isCurrent = () => selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId;
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -153,11 +162,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     try {
       const assignments = await loadDetailOperation("assignments", () => getJobAssignments(job.id));
-      setDetailData((currentData) => ({ ...currentData, assignments }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, assignments }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingAssignments: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingAssignments: false }));
     }
   }
 

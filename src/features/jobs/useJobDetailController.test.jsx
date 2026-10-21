@@ -88,6 +88,24 @@ function deferred() {
   return { promise, resolve };
 }
 
+describe("persistent workspace rapid Job switching", () => {
+  it.each([
+    ["offers", "getJobOffers"], ["issues", "getJobIssues"], ["assignments", "getJobAssignments"],
+  ])("late %s from Job A never overwrites Job B", async (field, method) => {
+    const a = deferred(), b = deferred();
+    mocks[method].mockImplementation(id => id === "synthetic-a" ? a.promise : b.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", actorUid: "synthetic-manager", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob({ id: "synthetic-a", schemaVersion: 2, operationalStatus: "ASSIGNED" }));
+    await waitFor(() => expect(mocks[method]).toHaveBeenCalledWith("synthetic-a"));
+    act(() => result.current.openJob({ id: "synthetic-b", schemaVersion: 2, operationalStatus: "ASSIGNED" }));
+    await waitFor(() => expect(mocks[method]).toHaveBeenCalledWith("synthetic-b"));
+    await act(async () => b.resolve([{ id: "b-only" }]));
+    expect(result.current.detail[field]).toEqual([{ id: "b-only" }]);
+    await act(async () => a.resolve([{ id: "a-stale" }]));
+    expect(result.current.detail[field]).toEqual([{ id: "b-only" }]);
+  });
+});
+
 describe("useJobDetailController checklist refresh", () => {
   it("does not let a stale manager refresh overwrite a different Job's checklist run", async () => {
     const first = deferred();

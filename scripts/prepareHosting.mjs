@@ -31,7 +31,7 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
   const allowed = new Set(required);
   for (const file of files) {
     // Vite's shared src/index.css is extracted as src-*.css for this multi-entry build.
-    const catalogAsset = sandboxCatalog && (/^assets\/(?:designSystemCatalog|catalogShared)-[A-Za-z0-9_-]+\.(js|css)$/.test(file) || /^assets\/(?:src|DashboardV2Pilot|ServicesV2Pilot|JobDetailV2Pilot|SandboxManagerShell|primitives)-[A-Za-z0-9_-]+\.css$/.test(file));
+    const catalogAsset = sandboxCatalog && (/^assets\/(?:designSystemCatalog|catalogShared)-[A-Za-z0-9_-]+\.(js|css)$/.test(file) || /^assets\/(?:src|DashboardV2Pilot|ServicesV2Pilot|JobDetailV2Pilot|SandboxManagerShell|ManagerWorkspaceV3|primitives)-[A-Za-z0-9_-]+\.css$/.test(file));
     const productionV2Asset = productionV2 && (/^assets\/managerV2-[A-Za-z0-9_-]+\.js$/.test(file)
       || /^assets\/(?:DashboardV2Pilot|ServicesV2Pilot|JobDetailV2Pilot|SandboxManagerShell|primitives)-[A-Za-z0-9_-]+\.css$/.test(file));
     if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file) && !catalogAsset && !productionV2Asset) {

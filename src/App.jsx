@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { integratedPilotEnabled } from "./components/v2/integratedPilot.js";
+import { workspaceV3Enabled } from "./features/workspace/workspaceV3Model.js";
 import { appVersion } from "./appVersion.js";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
@@ -90,13 +91,15 @@ const content = {
 };
 
 // Build-time only: CURRENT default; Production has no query/storage opt-in.
-const IntegratedSandboxShell = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+const IntegratedSandboxShell = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
   ? lazy(() => import("./components/v2/SandboxManagerShell.jsx").then(module => ({ default: module.V2ManagerShell }))) : null;
-const SandboxDashboard = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+const ManagerWorkspaceV3 = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator")
+  ? lazy(() => import("./features/workspace/ManagerWorkspaceV3.jsx")) : null;
+const SandboxDashboard = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
   ? lazy(() => import("./features/dashboard/DashboardV2Pilot.jsx")) : null;
-const SandboxServices = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+const SandboxServices = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
   ? lazy(() => import("./features/jobs/ServicesV2Pilot.jsx")) : null;
-const SandboxJobDetail = (import.meta.env.MODE === "sandbox" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+const SandboxJobDetail = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator" || __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
   ? lazy(() => import("./features/jobs/JobDetailV2Pilot.jsx").then(module => ({ default: module.JobDetailV2Pilot }))) : null;
 
 function publicOfferTokenFromPathname(pathname = window.location.pathname) {
@@ -436,11 +439,17 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
   const canPreviewLifecycle = import.meta.env.MODE === "sandbox"
     && canShowEnvironmentNavigation(authUser, "sandbox");
+  const canPreviewWorkspace = (import.meta.env.MODE === "sandbox" || import.meta.env.MODE === "emulator")
+    && canShowEnvironmentNavigation(authUser, "sandbox");
+  const [workspaceChoice, setWorkspaceChoice] = useState(() => workspaceV3Enabled({
+    mode: import.meta.env.MODE, authorized: canPreviewWorkspace, search: window.location.search,
+  }));
+  const useWorkspaceV3 = canPreviewWorkspace && workspaceChoice;
   const [integratedChoice, setIntegratedChoice] = useState(() => integratedPilotEnabled({
     mode: import.meta.env.MODE, authorized: canPreviewLifecycle, search: window.location.search,
     buildExperience: __CLEANFLOW_MANAGER_EXPERIENCE__,
   }));
-  const useIntegratedV2 = (import.meta.env.MODE === "production" && __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
+  const useIntegratedV2 = useWorkspaceV3 || (import.meta.env.MODE === "production" && __CLEANFLOW_MANAGER_EXPERIENCE__ === "v2")
     || (canPreviewLifecycle && integratedChoice);
   const DashboardPresentation = useIntegratedV2 ? SandboxDashboard : Dashboard;
   const ServicesPresentation = useIntegratedV2 ? SandboxServices : JobsPage;
@@ -450,6 +459,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     const url = new URL(window.location.href);
     url.searchParams.set("experience", enabled ? "v2" : "current");
     window.history.replaceState(window.history.state, "", url);
+  }
+  function chooseWorkspace(enabled) {
+    setWorkspaceChoice(enabled);
+    const url = new URL(window.location.href);
+    if (enabled) url.searchParams.set("workspace", "v3"); else url.searchParams.delete("workspace");
+    window.history.replaceState(null, "", url);
+    showDashboard();
   }
 
   useEffect(() => {
@@ -461,8 +477,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     }
   }, [view]);
   const jobWorklist = useJobsWorklist({
-    view,
-    preserveLoadedJobs: Boolean(jobsScrollRestore),
+    view: useWorkspaceV3 && ["job-detail", "offer-cleaners", "checklist-run", "cleaner-job"].includes(view) ? "job-list" : view,
+    preserveLoadedJobs: !useWorkspaceV3 && Boolean(jobsScrollRestore),
     includeArchived,
   });
   const jobDetail = useJobDetailController({
@@ -708,6 +724,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   function showJobs() {
     showJobList();
   }
+  function showWorkspaceOperations(updates) {
+    setActiveSection("jobs");
+    closeJobDetail();
+    clearOffersCreatedCount();
+    if (updates) setJobListFilters(current => ({ ...current, ...updates }));
+    setView("job-list");
+  }
 
   function showNewJob() {
     setActiveSection("jobs");
@@ -936,6 +959,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
                 <DeveloperEnvironmentControls user={authUser} />
+                {canPreviewWorkspace && !useWorkspaceV3 && <button className="button button--small" type="button"
+                  onClick={() => chooseWorkspace(true)}>Workspace V3</button>}
                 {canPreviewLifecycle && <button className="button button--small" type="button"
                   onClick={() => setView("sandbox-lifecycle-preview")}>
                   {translate("lifecycle.previewEntry")}
@@ -956,7 +981,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 {translate("auth.signOutError")}
               </p>
             )}
-    {canPreviewLifecycle && <div role="group" aria-label={translate("jobV2.comparison")}>
+    {canPreviewLifecycle && !useWorkspaceV3 && <div role="group" aria-label={translate("jobV2.comparison")}>
       <button className="button button--small" type="button" aria-pressed={!useIntegratedV2}
         onClick={() => chooseIntegratedPresentation(false)}>{translate("jobV2.current")}</button>
       <button className="button button--small" type="button" aria-pressed={useIntegratedV2}
@@ -980,11 +1005,26 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     ...(devCenterController.access.authorized ? [{ key: "dev-center", labelKey: "navigation.devCenter", icon: "tools", group: "internal", onClick: showDevCenter }] : []),
   ];
   const Shell = useIntegratedV2 ? IntegratedSandboxShell : CurrentManagerShell;
+  const WorkspaceBoundary = useWorkspaceV3 ? ManagerWorkspaceV3 : WorkspacePassthrough;
+  const workspaceWorklistProps = {
+    jobs, isLoading: isLoadingJobs, hasError: hasJobError, onSelect: openJob, onCreate: showNewJob,
+    filters: jobListFilters, cleaners: jobFilterCleaners, properties,
+    onFiltersChange: updates => setJobListFilters(current => ({ ...current, ...updates })),
+    onClearFilters: () => setJobListFilters(createJobListFilters()),
+    hasMore: hasMoreJobs, isLoadingMore: isLoadingMoreJobs, onLoadMore: loadMoreJobs,
+    restoreScroll: jobsScrollRestore, onScrollRestored: () => setJobsScrollRestore(null),
+    canManageExcluded: canManageExcludedRecords, showExcluded: showExcludedRecords,
+    onToggleExcluded: () => setShowExcludedRecords(current => !current), onRetry: jobWorklist.refresh,
+  };
   return (
     <Suspense fallback={<StateCard message={translate("auth.loading")} status="status" />}>
       <Shell {...{ foundationClass, legacyHeader, utilities, destinations, activeSection, view, language, translate }} environment={cleanflowEnvironment} integratedComparison>
 
         <PwaUpdatePrompt />
+        <WorkspaceBoundary view={view} selectedJob={selectedJob}
+          dashboard={{ dashboardData, isLoading: isLoadingDashboard, hasError: hasDashboardError, onRefresh: refreshDashboard, onOpenJob: openDashboardJob }}
+          worklist={workspaceWorklistProps} onNow={showDashboard} onOperation={showWorkspaceOperations}
+          onExit={() => chooseWorkspace(false)} onBack={jobDetailOrigin === "dashboard" ? showDashboard : returnToJobs}>
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
           && <SandboxLifecyclePreview onBack={showDashboard} />}
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
@@ -1326,7 +1366,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             isRevokingChecklistCapability={isRevokingChecklistCapability}
             hasRevokeChecklistCapabilityError={hasRevokeChecklistCapabilityError}
             onBack={
-              jobDetailOrigin === "dashboard"
+              useWorkspaceV3 && window.history.state?.workspaceV3Detail
+                ? () => window.history.back()
+                : jobDetailOrigin === "dashboard"
                 ? showDashboard
                 : jobDetailOrigin === "property"
                   ? returnToPropertyDetail
@@ -1414,10 +1456,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "issue-success" && selectedJob && (
           <IssueSuccess onBackToCleaning={() => setView("cleaner-job")} />
         )}
+        </WorkspaceBoundary>
       </Shell>
     </Suspense>
   );
 }
+
+function WorkspacePassthrough({ children }) { return children; }
 
 function CurrentManagerShell({ foundationClass, legacyHeader, children }) {
   return <main className="app-shell"><section className={foundationClass} aria-labelledby="page-title">{legacyHeader}{children}</section></main>;

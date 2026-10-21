@@ -32,6 +32,8 @@ test-results/
 blob-report/
 artifacts/visual-smoke/
 artifacts/v2-production-rc/
+artifacts/workspace-v3/
+.superpowers/sdd/2026-10-21-workspace-v3-hybrid/
 artifacts/authenticated-v2/
 artifacts/services-v2/
 dist-v2-candidate/
