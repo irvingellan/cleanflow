@@ -53,6 +53,8 @@ not completedAt and not new Firestore presets. The selected Job remains open
 outside a changed period, with a visible explanation. Search/filter state and the
 worklist DOM/scroll are retained. A different Job remounts its own form subtree,
 so an old pending save cannot overwrite the next Job's unsaved local form.
+An inherited Client-origin filter retains its existing visible Client context;
+it is not silently hidden by the new filter presentation.
 
 Existing bounded service cursors and sort stay authoritative. Manual Load more
 remains available even when the current local date range is empty. New request
@@ -119,3 +121,12 @@ component/CSS, prototype or synthetic fixture. No Production rollout, backend
 change, cloud data mutation, billing change or other candidate update is part of
 this task. Final build SHA, channel receipt, test totals and screenshot paths are
 recorded in the local sanitized handoff.
+
+Isolated preview (Sandbox only):
+https://clean-flow-sandbox-irving--workspace-v3-hybrid-2026102-xypi989y.web.app/?workspace=v3
+Expires 2026-10-28 (Los Angeles; exact timestamp in final receipt). Hosting-only, no Auth domain
+synchronization, 32 prepared files. Existing Sandbox live is unchanged. The CLI
+warned that publicOffer/publicChecklist/publicClientReport are absent in Sandbox;
+no backend was deployed/provisioned. Real login and human/device trial of this
+new integration remain pending. Browser-control capture failed independently of
+HTTP/artifact verification; do not infer an application failure or acceptance.

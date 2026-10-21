@@ -22,20 +22,20 @@ Production excluded at build time. No Functions/Rules/Storage/index/business-rul
 ### Task1 — bounded presentation/date contract
 
 Files: src/features/workspace/workspaceV3Model.js and tests; workspaceMessages.js.
-- [ ] RED: gate, LA midnight/DST, Monday–Sunday, invalid date and range navigation tests.
-- [ ] Implement/adapt dependency-free prototype calendar helpers; no prototype imports.
-- [ ] GREEN: focused tests. Existing getJobs/sortJobWorklist contracts unchanged.
+- [x] RED: gate, LA midnight/DST, Monday–Sunday, invalid date and range navigation tests.
+- [x] Implement/adapt dependency-free prototype calendar helpers; no prototype imports.
+- [x] GREEN: focused tests. Existing getJobs/sortJobWorklist contracts unchanged.
 
 ### Task2 — real application integration
 
 Files: src/features/workspace/ManagerWorkspaceV3.jsx, workspaceV3.css, App.jsx; component tests and e2e/workspace-v3 harness.
-- [ ] RED: automatically-loaded attention, correct Job, retained range/search/selection, empty/error/retry and no mutation.
-- [ ] Add authenticated developer preview gate, easy exit, Agora and persistent worklist/detail; reuse all original action handlers.
-- [ ] GREEN: focused + full tests, real App synthetic Playwright across widths/themes/languages and current/V2 regressions.
+- [x] RED: automatically-loaded attention, correct Job, retained range/search/selection, empty/error/retry and no mutation.
+- [x] Add authenticated developer preview gate, easy exit, Agora and persistent worklist/detail; reuse all original action handlers.
+- [x] GREEN: focused + full tests, real App synthetic Playwright across widths/themes/languages and current/V2 regressions.
 
 ### Task3 — safe preview and handoff
 
-- [ ] Production/Sandbox builds, artifact exclusion and protected-source hashes.
-- [ ] Independent final read-only review; fix concrete findings with regressions.
-- [ ] Commit isolated branch; no public push. Sandbox-only isolated Hosting channel if available; otherwise local authenticated/emulator fallback.
-- [ ] CURRENT_STATE, factual Issue51 update, screenshots and local integrity ZIP; no Production deployment.
+- [x] Production/Sandbox builds, artifact exclusion and protected-source hashes.
+- [x] Independent final read-only review; fix concrete findings with regressions.
+- [x] Commit isolated branch; no public push. Sandbox-only isolated Hosting channel if available; otherwise local authenticated/emulator fallback.
+- [x] CURRENT_STATE and screenshots ready; factual Issue51 update and integrity ZIP are final completion steps; no Production deployment.

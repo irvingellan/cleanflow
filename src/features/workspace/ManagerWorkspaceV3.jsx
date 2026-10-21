@@ -84,6 +84,7 @@ function WorkspaceList({ model, worklist: w, range, t, translate, format, select
   return <>
     <SearchField label={t("searchScope")} value={w.filters.search} clearLabel={t("clear")} onChange={e => w.onFiltersChange({ search: e.target.value })} />
     <Select label={translate("jobs.statusFilter")} value={w.filters.status} options={statusOptions.map(([value, label]) => ({ value, label }))} onChange={e => w.onFiltersChange({ status: e.target.value })} />
+    {w.filters.clientName && <p className="workspace-v3-scope">{translate("jobs.clientContext", { client: w.filters.clientName })}</p>}
     <details className="workspace-v3-filters"><summary>{t("filters")}</summary>
       <Select label={t("serviceScope")} value={w.filters.datePreset} options={dateOptions.map(([value, label]) => ({ value, label }))} onChange={e => w.onFiltersChange({ datePreset: e.target.value })} />
       <Select label={translate("jobs.cleanerFilter")} value={w.filters.cleanerId} options={[{ value: "", label: translate("jobs.anyCleaner") }, ...w.cleaners.map(c => ({ value: c.id, label: c.name }))]} onChange={e => w.onFiltersChange({ cleanerId: e.target.value })} />

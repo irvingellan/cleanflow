@@ -46,6 +46,11 @@ it("opening or changing presentation never calls assignment, completion or creat
   fireEvent.click(screen.getByRole("button", { name: "Week", exact: true }));
   expect(props.worklist.onCreate).not.toHaveBeenCalled(); expect(props.worklist.onSelect).not.toHaveBeenCalled();
 });
+it("keeps an existing Client-origin filter explicit instead of silently narrowing the worklist", () => {
+  const { props, unmount } = mount(); unmount();
+  mount({ worklist: { ...props.worklist, filters: { ...props.worklist.filters, clientId: "synthetic-client", clientName: "Synthetic client" } } });
+  expect(screen.getByText(/Synthetic client/)).toBeVisible();
+});
 it("EN/PT/ES contain every workspace key without untranslated placeholders", () => {
   for (const lang of ["en", "pt", "es"]) {
     expect(Object.keys(workspaceMessages[lang]).sort()).toEqual(Object.keys(workspaceMessages.en).sort());

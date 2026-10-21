@@ -12,8 +12,12 @@ it covers loaded pages, not a complete agenda. Overall Dashboard counts retain
 their original scope. No new queries, backend rules, simulated operational data
 or Production opt-in. Existing controller response-publication races are guarded.
 Code is local integration, not a Production release or new human acceptance.
-Isolated Sandbox Hosting publication is the only authorized cloud surface; its
-final receipt and human-test status must be distinguished from synthetic tests.
+Isolated Sandbox Hosting channel `workspace-v3-hybrid-20261021` is published:
+HTTPS 200 and 32/32 prepared file hashes verified. Existing Sandbox live remains
+`7f122070f32a3e25`; Production still serves `5c2e524`. No Auth domain change,
+backend deployment or data mutation. New authenticated human/device acceptance
+remains pending; browser-control capture was unavailable, not evidence of an App
+failure. The final channel URL/SHA/expiry are in the local sanitized handoff.
 The repository is public, so conditional private-only push/PR authorization does
 not apply. No branch push/PR or merge. See
 [integration contract and limits](MANAGER_WORKSPACE_V3_HYBRID.md).
