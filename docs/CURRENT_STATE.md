@@ -1,5 +1,12 @@
 # CleanFlow — Current State
 
+## Issue #83 — local source-preservation registry (2026-10-21)
+
+The isolated audit branch owns `engineering/WORKTREE_RELEASE_CANDIDATE_REGISTRY.md`:
+exact source/ref/worktree inventory, private preservation evidence, unresolved
+stash-fixture backup boundary and dependency-aware next actions. It is not merge,
+push or release authorization. Existing application worktrees remain untouched.
+
 ## Issue #76 — Compact Lifecycle V0 (released 2026-10-04)
 
 Presentation slice from `0b1dff1`: compact five-stage strip on Jobs
