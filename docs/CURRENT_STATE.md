@@ -1,5 +1,19 @@
 # CleanFlow — Current State
 
+## Issue #81 — functional-only revalidation (2026-10-21)
+
+Resumed existing `codex/checklist-multi-photo-v1` at `588a1fd`, without rebuild
+or visual polish. No application/backend behavior changes were needed. Added
+regressions for partial batch failure/retry, selection21 admission and persisted
+ordered20-photo reload/display/report. Fresh Node22 local evidence:282 focused,
+119 files /1,351 unit,82 security,28 optimizer +4 gallery +4 actual emulator
+Chromium/WebKit integrations and22 build/environment/Hosting guards passed.
+Historical single-photo compatibility is preserved. READY FOR CONTROLLED PREVIEW
+/ RELEASE REVIEW, not Production GO: preserve the separate Node22 STOP and
+reconcile runtime/capacity/source before release; complete physical-device gates
+beyond the earlier10-photo/reload PASS. No push/merge/deploy/billing/Production
+data access or visual changes. See `MULTI_PHOTO_FUNCTIONAL_READINESS_2026-10-21.md`.
+
 ## Issue #81 — Production-compatible release-review candidate (2026-10-14)
 
 Existing isolated `codex/checklist-multi-photo-v1` implementation is preserved;

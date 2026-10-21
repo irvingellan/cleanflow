@@ -36,6 +36,10 @@ test("twenty saved photos load no images until explicit view; READY is read-only
   await page.evaluate(() => window.resetGallery({ count: 20 }));
   await expect(page.getByRole("button", { name: "View photo", exact: true })).toHaveCount(20);
   expect(images).toBe(0);
+  await page.getByLabel("Choose photos").setInputFiles({ name: "synthetic.jpg", mimeType: "image/jpeg", buffer: Buffer.from([255, 216, 255, 217]) });
+  await expect(page.getByRole("alert")).toHaveText("Photo capacity was reached. Refresh saved photos; remove a saved photo or choose fewer images.");
+  expect(await page.evaluate(() => window.gallerySummary())).toMatchObject({ count: 20, uploads: 0 });
+  await expect(page.getByRole("button", { name: "Retry photo", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "View photo", exact: true }).nth(10).click();
   await expect(page.locator(".checklist-photo-gallery img")).toHaveCount(1);
   await expect.poll(() => images).toBe(1);

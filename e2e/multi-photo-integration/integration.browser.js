@@ -92,6 +92,17 @@ test('actual gallery, retry, private storage, review, manager and client report'
         }
       }
       const before = await read(run); assertPrivateProjection(before.body);
+      const savedOrder = before.body.checklist.evidence.map(photo => photo.evidenceId);
+      await page.reload();
+      await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(20);
+      assert.deepEqual((await read(run)).body.checklist.evidence.map(photo => photo.evidenceId), savedOrder);
+      const displayedOrder = [];
+      for (let index = 0; index < 20; index++) {
+        await page.locator('.checklist-photo-gallery__list li').nth(index).getByRole('button', { name: 'View photo', exact: true }).click();
+        const source = await page.locator('.checklist-photo-gallery img').getAttribute('src');
+        displayedOrder.push(new URL(source, page.url()).searchParams.get('evidenceId'));
+      }
+      assert.deepEqual(displayedOrder, savedOrder);
       assert.equal((await upload(run, syntheticChecklistPng(201))).status, 413);
       const duplicate = await upload(run, syntheticChecklistPng(21)); assert.equal(duplicate.status, 200); assert.equal(duplicate.body.duplicate, true);
       assert.equal((await upload(run, syntheticChecklistPng(21), 'living-belongings')).status, 409);
@@ -150,6 +161,7 @@ test('actual gallery, retry, private storage, review, manager and client report'
       const report = await call('createClientReport', { jobId: run.jobId }); assert.ok(report.token);
       const response = await fetch(`http://127.0.0.1:5012/api/client-report?${new URLSearchParams({ token: report.token })}`);
       const data = await response.json(); assertPrivateProjection(data); assert.equal(data.report.evidence.length, 20);
+      assert.deepEqual(data.report.evidence.map(photo => photo.evidenceId), (await read(run)).body.checklist.evidence.map(photo => photo.evidenceId));
       for (const photo of data.report.evidence) {
         const response = await fetch(`http://127.0.0.1:5012/api/client-report?${new URLSearchParams({ token: report.token, photo: '1', evidenceId: photo.evidenceId })}`);
         assert.equal(response.status, 200); assert.equal((await response.arrayBuffer()).byteLength, photo.sizeBytes);

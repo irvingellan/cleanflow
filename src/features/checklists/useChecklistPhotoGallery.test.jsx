@@ -18,6 +18,49 @@ function setup(overrides = {}) {
 }
 
 describe("sequential bounded photo gallery", () => {
+  it("continues after one batch upload fails and retries only that retained photo", async () => {
+    const optimized = ["first", "second", "third"].map((value) => new Blob([value], { type: "image/jpeg" }));
+    const accepted = [];
+    const sent = [];
+    let encodeIndex = 0;
+    let revision = 0;
+    let failedOnce = false;
+    const { result } = setup({
+      optimize: async () => ({ blob: optimized[encodeIndex++] }),
+      upload: async ({ file: blob, requirementId }) => {
+        sent.push(blob);
+        if (blob === optimized[1] && !failedOnce) {
+          failedOnce = true;
+          throw new TypeError("synthetic transient network failure");
+        }
+        const item = photo(String(optimized.indexOf(blob) + 1), requirementId);
+        accepted.push(item);
+        return { evidenceId: item.evidenceId, evidenceRevision: ++revision, evidence: [...accepted] };
+      },
+    });
+    act(() => result.current.append([file(), file(), file()]));
+    await waitFor(() => expect(result.current.saved.map((p) => p.evidenceId)).toEqual(["1", "3"]));
+    expect(result.current.local).toHaveLength(1);
+    expect(result.current.local[0].state).toBe("FAILED");
+    expect(result.current.pendingCount).toBe(1);
+    act(() => result.current.retry(result.current.local[0].id));
+    await waitFor(() => expect(result.current.pendingCount).toBe(0));
+    expect(result.current.saved.map((p) => p.evidenceId)).toEqual(["1", "3", "2"]);
+    expect(sent).toEqual([optimized[0], optimized[1], optimized[2], optimized[1]]);
+    expect(encodeIndex).toBe(3);
+  });
+
+  it("rejects selection twenty-one without starting another optimization or losing the twenty saved photos", async () => {
+    const optimize = vi.fn();
+    const saved = Array.from({ length: 20 }, (_, index) => photo(String(index), index ? "additional" : "living-belongings"));
+    const { result } = setup({ checklist: { ...checklist, evidenceRevision: 20, evidence: saved }, optimize });
+    act(() => result.current.append([file()]));
+    expect(result.current.error).toBe("checklist_photo_limit");
+    expect(result.current.saved).toEqual(saved);
+    expect(result.current.pendingCount).toBe(0);
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
   it("a removed required photo cannot be restored by its late upload acknowledgement", async () => {
     const held = deferred(); const required = photo("required", "living-belongings");
     const { result } = setup({ upload: async () => held.promise,
