@@ -1,0 +1,115 @@
+// Cleaner-facing copy. Always rendered in the cleaner's own language, not the
+// manager's. Messages never include a full address, access code or door code.
+const C = {
+  "co.brand": ["Oferta de serviço", "Job offer", "Oferta de servicio"],
+  "co.from": ["Enviada pela sua gerente pelo CleanFlow", "Sent by your manager through CleanFlow", "Enviada por su gerente por CleanFlow"],
+  "co.when": ["Quando", "When", "Cuándo"],
+  "co.where": ["Onde", "Where", "Dónde"],
+  "co.whereNote": ["Endereço completo e acesso aparecem só se você for confirmada.", "Full address and access appear only if you are confirmed.", "Dirección completa y acceso solo si la confirman."],
+  "co.what": ["Serviço", "Job", "Servicio"],
+  "co.pay": ["Você recebe", "You get", "Usted recibe"],
+  "co.fixed": ["valor fixo pelo serviço", "fixed amount for the job", "monto fijo por el servicio"],
+  "co.hourly": ["por hora · estimativa {total} para {hours} h", "per hour · estimate {total} for {hours} h", "por hora · estimado {total} por {hours} h"],
+  "co.duration": ["cerca de {hours} h", "about {hours} h", "unas {hours} h"],
+  "co.expect": ["O que esperar", "What to expect", "Qué esperar"],
+  "co.expectChecklist": ["Checklist de {count} itens, com fotos", "Checklist of {count} items, with photos", "Checklist de {count} ítems, con fotos"],
+  "co.expectGuest": ["Próximo hóspede chega às {time} — terminar antes", "Next guest arrives at {time} — finish before", "El próximo huésped llega a las {time} — terminar antes"],
+  "co.expectLinen": ["Roupa de cama e toalhas estão no local", "Linen and towels are on site", "La ropa de cama y toallas están en el lugar"],
+  "co.interested": ["Tenho interesse", "I'm interested", "Me interesa"],
+  "co.decline": ["Não posso", "I can't", "No puedo"],
+  "co.why": ["Responda aqui: é assim que sua resposta chega à gerente. Uma mensagem de texto pode não ser vista a tempo.", "Answer here: this is how your reply reaches the manager. A text message may not be seen in time.", "Responda aquí: así su respuesta llega a la gerente. Un mensaje de texto puede no verse a tiempo."],
+  "co.notAssign": ["Tocar em “Tenho interesse” ainda não confirma o serviço.", "Tapping “I'm interested” does not confirm the job yet.", "Tocar “Me interesa” aún no confirma el servicio."],
+  "co.sentTitle": ["Interesse enviado", "Interest sent", "Interés enviado"],
+  "co.sentBody": ["A gerente já vê sua resposta. Ainda não é uma confirmação.", "The manager can already see your reply. It is not a confirmation yet.", "La gerente ya ve su respuesta. Aún no es una confirmación."],
+  "co.next": ["O que acontece agora", "What happens next", "Qué pasa ahora"],
+  "co.next1": ["A gerente escolhe quem vai fazer o serviço.", "The manager chooses who does the job.", "La gerente elige quién hará el servicio."],
+  "co.next2": ["Se for você, chega uma mensagem com o link do serviço.", "If it's you, you'll get a message with the job link.", "Si es usted, recibirá un mensaje con el enlace."],
+  "co.next3": ["Endereço, acesso e checklist ficam nesse link.", "Address, access and checklist will be in that link.", "Dirección, acceso y checklist estarán en ese enlace."],
+  "co.changeMind": ["Mudei de ideia, não posso", "Changed my mind, I can't", "Cambié de idea, no puedo"],
+  "co.declinedTitle": ["Resposta enviada: não pode", "Reply sent: you can't", "Respuesta enviada: no puede"],
+  "co.declinedBody": ["Obrigada por avisar. A gerente já vê.", "Thanks for letting us know. The manager can see it.", "Gracias por avisar. La gerente ya lo ve."],
+  "co.secureNote": ["Link pessoal. Não compartilhe.", "Personal link. Do not share.", "Enlace personal. No lo comparta."],
+  "co.messageTitle": ["Mensagem recebida", "Message received", "Mensaje recibido"],
+  "co.openLink": ["Abrir o link", "Open the link", "Abrir el enlace"],
+
+  "cc.title": ["Checklist do serviço", "Job checklist", "Checklist del servicio"],
+  "cc.draft": ["Rascunho — ainda não enviado", "Draft — not submitted yet", "Borrador — aún no enviado"],
+  "cc.saved": ["Salvo automaticamente às {time}", "Saved automatically at {time}", "Guardado automáticamente a las {time}"],
+  "cc.submittedBanner": ["Enviado para revisão às {time}", "Submitted for review at {time}", "Enviado para revisión a las {time}"],
+  "cc.reviewedBanner": ["Revisado pela gerente", "Reviewed by the manager", "Revisado por la gerente"],
+  "cc.changesBanner": ["A gerente pediu uma correção", "The manager asked for a fix", "La gerente pidió una corrección"],
+  "cc.progress": ["{done} de {total} feitos", "{done} of {total} done", "{done} de {total} hechos"],
+  "cc.access": ["Acesso à propriedade", "Property access", "Acceso a la propiedad"],
+  "cc.accessLocked": ["Liberado às {time} (2 h antes do início)", "Unlocks at {time} (2 h before start)", "Se libera a las {time} (2 h antes)"],
+  "cc.accessSimulate": ["Simular horário liberado", "Simulate unlock time", "Simular hora liberada"],
+  "cc.accessCode": ["Código do cofre: {code}", "Lockbox code: {code}", "Código de la caja: {code}"],
+  "cc.accessNote": ["Fictício. Só você vê, só neste serviço. Cada visualização fica registrada.", "Fictitious. Only you see it, only for this job. Every view is logged.", "Ficticio. Solo usted lo ve, solo en este servicio."],
+  "cc.instructions": ["Instruções", "Instructions", "Instrucciones"],
+  "cc.photoRequired": ["Foto obrigatória", "Photo required", "Foto obligatoria"],
+  "cc.takePhoto": ["Tirar foto", "Take photo", "Tomar foto"],
+  "cc.library": ["Escolher várias da galeria", "Pick several from library", "Elegir varias de la galería"],
+  "cc.uploading": ["Enviando {p}%", "Uploading {p}%", "Subiendo {p}%"],
+  "cc.failed": ["Falhou", "Failed", "Falló"],
+  "cc.retry": ["Tentar de novo", "Try again", "Intentar de nuevo"],
+  "cc.photoSaved": ["Salva", "Saved", "Guardada"],
+  "cc.photosSummary": ["{count} fotos salvas · fotos salvas nunca são apagadas", "{count} photos saved · saved photos are never deleted", "{count} fotos guardadas · nunca se borran"],
+  "cc.limit": ["Sem limite fixo nesta proposta (o piloto atual usa 20).", "No fixed cap in this proposal (current pilot uses 20).", "Sin límite fijo en esta propuesta (el piloto usa 20)."],
+  "cc.pending": ["{count} pendências", "{count} to do", "{count} pendientes"],
+  "cc.reviewSubmit": ["Revisar e enviar", "Review and submit", "Revisar y enviar"],
+  "cc.beforeSubmit": ["Antes de enviar", "Before you submit", "Antes de enviar"],
+  "cc.allDone": ["Tudo pronto. Confira e envie.", "All done. Check and submit.", "Todo listo. Revise y envíe."],
+  "cc.missingList": ["Ainda falta:", "Still missing:", "Aún falta:"],
+  "cc.goTo": ["Ir", "Go", "Ir"],
+  "cc.missingNote": ["Explique o que ficou faltando (obrigatório para enviar com pendência)", "Explain what is missing (required to submit with gaps)", "Explique qué falta (obligatorio para enviar con pendientes)"],
+  "cc.notes": ["Observações para a gerente", "Notes for the manager", "Notas para la gerente"],
+  "cc.workDone": ["Confirmo que terminei a limpeza no local", "I confirm the cleaning is finished on site", "Confirmo que terminé la limpieza"],
+  "cc.submit": ["Enviar checklist para revisão", "Submit checklist for review", "Enviar checklist para revisión"],
+  "cc.submitting": ["Enviando…", "Submitting…", "Enviando…"],
+  "cc.waitUploads": ["Espere as fotos terminarem de enviar", "Wait for photos to finish uploading", "Espere a que suban las fotos"],
+  "cc.needWorkDone": ["Marque que terminou a limpeza", "Confirm the cleaning is finished", "Confirme que terminó"],
+  "cc.needNote": ["Escreva o que ficou faltando", "Write what is missing", "Escriba qué falta"],
+  "cc.retryFailed": ["Reenvie as fotos que falharam", "Retry the failed photos", "Reenvíe las fotos que fallaron"],
+  "cc.successTitle": ["Checklist enviado", "Checklist submitted", "Checklist enviado"],
+  "cc.successBody": ["Recebido às {time}. A gerente foi avisada e vai revisar.", "Received at {time}. The manager was notified and will review it.", "Recibido a las {time}. La gerente fue avisada."],
+  "cc.successSummary": ["{items} itens · {photos} fotos", "{items} items · {photos} photos", "{items} ítems · {photos} fotos"],
+  "cc.successNext": ["Pode fechar esta página. Esqueceu algo? Adicione uma foto complementar — nada do que foi enviado será trocado ou apagado.", "You can close this page. Forgot something? Add an extra photo — nothing already sent will be replaced or deleted.", "Puede cerrar esta página. ¿Olvidó algo? Agregue una foto extra — nada enviado se reemplaza."],
+  "cc.addExtra": ["Adicionar foto complementar", "Add an extra photo", "Agregar foto extra"],
+  "cc.extra": ["Complementar", "Extra", "Extra"],
+  "cc.backToList": ["Voltar ao checklist", "Back to checklist", "Volver al checklist"],
+  "cc.sectionDone": ["{done}/{total}", "{done}/{total}", "{done}/{total}"],
+  "cc.draftWarn": ["Seu progresso está salvo, mas a gerente só recebe quando você enviar.", "Your progress is saved, but the manager only gets it when you submit.", "Su progreso está guardado, pero la gerente solo lo recibe al enviar."],
+  "cc.offline": ["Simular falha de envio na próxima foto", "Simulate an upload failure on the next photo", "Simular falla en la próxima foto"],
+};
+
+const index = { pt: 0, en: 1, es: 2 };
+export function cleanerT(lang, key, params = {}) {
+  const entry = C[key];
+  let text = entry ? (entry[index[lang]] ?? entry[1]) : key;
+  Object.entries(params).forEach(([k, v]) => { text = text.split(`{${k}}`).join(String(v)); });
+  return text;
+}
+export function hasCleanerMessage(key) { return Boolean(C[key]); }
+
+const TEMPLATES = {
+  details: {
+    pt: "Olá, {name}! Tenho um serviço para você:\n{type} · {area}\n{day}, {time} (cerca de {hours} h)\nVocê recebe: {pay}\n\nPara pegar, abra o link e toque em “Tenho interesse”:\n{link}\n\nSó a resposta pelo link chega certinho para mim. Mensagem de texto pode passar despercebida.",
+    en: "Hi {name}! I have a job for you:\n{type} · {area}\n{day}, {time} (about {hours} h)\nYou get: {pay}\n\nTo take it, open the link and tap “I'm interested”:\n{link}\n\nOnly a reply through the link reaches me reliably. A text may be missed.",
+    es: "¡Hola, {name}! Tengo un servicio para usted:\n{type} · {area}\n{day}, {time} (unas {hours} h)\nUsted recibe: {pay}\n\nPara tomarlo, abra el enlace y toque “Me interesa”:\n{link}\n\nSolo la respuesta por el enlace me llega bien. Un mensaje de texto puede perderse.",
+  },
+  button: {
+    pt: "{name}, serviço disponível {day}, {time}\n{area} · {pay} · {type}\n\n→ Responda pelo link (leva poucos segundos):\n{link}\n\nLá você vê tudo e toca em “Tenho interesse” ou “Não posso”.",
+    en: "{name}, job available {day}, {time}\n{area} · {pay} · {type}\n\n→ Reply through the link (takes a few seconds):\n{link}\n\nYou'll see everything there and tap “I'm interested” or “I can't”.",
+    es: "{name}, servicio disponible {day}, {time}\n{area} · {pay} · {type}\n\n→ Responda por el enlace (toma unos segundos):\n{link}\n\nAhí ve todo y toca “Me interesa” o “No puedo”.",
+  },
+  reminder: {
+    pt: "Olá, {name}! Lembrete do serviço de {day}, {time} — {property} ({area}).\nChecklist, instruções e acesso estão no seu link protegido:\n{link}\n\nPode confirmar que vai? Toque em “Confirmo” no link.",
+    en: "Hi {name}! Reminder for {day}, {time} — {property} ({area}).\nChecklist, instructions and access are in your protected link:\n{link}\n\nCan you confirm you're going? Tap “I confirm” in the link.",
+    es: "¡Hola, {name}! Recordatorio del servicio {day}, {time} — {property} ({area}).\nChecklist, instrucciones y acceso están en su enlace protegido:\n{link}\n\n¿Puede confirmar que va? Toque “Confirmo” en el enlace.",
+  },
+};
+
+export function buildMessage(concept, lang, params) {
+  let text = (TEMPLATES[concept] || TEMPLATES.details)[lang] || TEMPLATES.details.en;
+  Object.entries(params).forEach(([k, v]) => { text = text.split(`{${k}}`).join(String(v)); });
+  return text;
+}

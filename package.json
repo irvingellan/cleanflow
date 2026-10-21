@@ -24,7 +24,10 @@
     "seed:cleaners": "node scripts/seedCleaners.js",
     "seed:dashboard": "node scripts/seedDashboard.js",
     "inventory:data": "node scripts/inventoryData.mjs",
-    "seed:public-offer-emulator": "npm --prefix functions run seed:public-offer-emulator"
+    "seed:public-offer-emulator": "npm --prefix functions run seed:public-offer-emulator",
+    "prototype:v3": "vite --config prototypes/manager-workspace-v3/vite.config.js",
+    "prototype:v3:build": "vite build --config prototypes/manager-workspace-v3/vite.config.js",
+    "prototype:v3:test": "vitest run --config prototypes/manager-workspace-v3/vite.config.js"
   },
   "dependencies": {
     "firebase": "^12.18.0",

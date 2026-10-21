@@ -57,3 +57,6 @@ tmp/
 .DS_Store
 Thumbs.db
 logs/
+
+# Synthetic prototype builds
+dist-prototypes/
