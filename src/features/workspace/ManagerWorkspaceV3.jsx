@@ -5,7 +5,7 @@ import { JobsPage } from "../jobs/JobsPage.jsx";
 import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
 import { CompactServiceLifecycle } from "../jobs/CompactServiceLifecycle.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
-import { Button, EmptyState, ErrorState, Panel, Row, SearchField, SegmentedControl, Select, Skeleton, StateLabel } from "../../components/v2/primitives.jsx";
+import { Banner, Button, EmptyState, ErrorState, Icon, Panel, Row, SearchField, SegmentedControl, Select, Skeleton, StateLabel } from "../../components/v2/primitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { inRange, laDateKey, rangeFor, shiftRange } from "./workspaceV3Model.js";
 import { workspaceText } from "./workspaceMessages.js";
@@ -45,7 +45,7 @@ export default function ManagerWorkspaceV3({ view, dashboard, worklist, selected
   const format = date => formatDate(date, translate, language);
   return <section className="workspace-v3" data-workspace="hybrid-c-a" aria-labelledby="workspace-v3-title">
     <header className="workspace-v3-header">
-      <div><StateLabel tone="sandbox" icon="flask">{t("preview")}</StateLabel><h2 id="workspace-v3-title">{isNow ? t("now") : t("operation")}</h2></div>
+      <div><h2 id="workspace-v3-title">{isNow ? t("now") : t("operation")}</h2><span className="workspace-v3-preview-label">{t("preview")}</span></div>
       <div className="workspace-v3-actions"><Button variant="secondary" onClick={onExit}>{t("exit")}</Button>
         <Button onClick={worklist.onCreate}>{translate("jobs.newService")}</Button></div>
     </header>
@@ -53,9 +53,9 @@ export default function ManagerWorkspaceV3({ view, dashboard, worklist, selected
       <SegmentedControl label={t("preview")} value={isNow ? "now" : "operation"} onChange={v => v === "now" ? onNow() : onOperation()}
         options={[{ value: "now", label: t("now") }, { value: "operation", label: t("operation") }]} />
       <div className="workspace-v3-dates" role="group" aria-label={t("timezone")}>
-        <Button variant="secondary" aria-label={t("previous")} onClick={() => setRange(r => shiftRange(r, -1, today))}>‹</Button>
+        <Button variant="secondary" icon="chevron" className="workspace-v3-prev" aria-label={t("previous")} onClick={() => setRange(r => shiftRange(r, -1, today))} />
         {["today", "tomorrow", "week"].map(kind => <Button key={kind} variant="secondary" aria-pressed={range.kind === kind} onClick={() => setRange(rangeFor(kind, range.anchor, today))}>{t(kind)}</Button>)}
-        <Button variant="secondary" aria-label={t("next")} onClick={() => setRange(r => shiftRange(r, 1, today))}>›</Button>
+        <Button variant="secondary" icon="chevron" aria-label={t("next")} onClick={() => setRange(r => shiftRange(r, 1, today))} />
         <label className="workspace-v3-date-input">{t("date")}<input type="date" value={range.anchor} onChange={e => { if (e.target.validity.valid && e.target.value) setRange(rangeFor("day", e.target.value, today)); }} /></label>
       </div>
     </div>
@@ -116,7 +116,7 @@ function WorkspaceAgora({ active, model, dashboard: d, t, translate, range, toda
     function shortcut(e) { if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.closest("input,textarea,select,[contenteditable=true]")) { e.preventDefault(); searchHost.current?.querySelector("input")?.focus(); } }
     document.addEventListener("keydown", shortcut); return () => document.removeEventListener("keydown", shortcut);
   }, [active]);
-  const ready = Boolean(d.dashboardData);
+  const ready = Boolean(d.dashboardData) && !d.isLoading && !d.hasError;
   const { visibleAttentionItems, hasMoreAttention, counts, next48HourGroups } = model;
   const attention = visibleAttentionItems.filter(item => inRange(item.job.scheduledDate, range)
     || inRange(today, range) && item.job.scheduledDate < today);
@@ -125,27 +125,32 @@ function WorkspaceAgora({ active, model, dashboard: d, t, translate, range, toda
   const matches = candidates.filter(j => (j.propertyName || "").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return <div className="workspace-v3-now">
     <div ref={searchHost} className="workspace-v3-command"><SearchField label={t("command")} value={search} clearLabel={t("clear")} onChange={e => setSearch(e.target.value)} />
-      <div className="workspace-v3-actions"><Button variant="secondary" onClick={() => onOperation({ status: "needs-assignment" })}>{translate("jobs.intent.assignment")}</Button>
-        <Button variant="secondary" onClick={() => onOperation({ status: "in-progress" })}>{translate("dashboard.inProgress")}</Button>
-        <Button variant="secondary" onClick={onCreate}>{translate("jobs.newService")}</Button></div>
+      <div className="workspace-v3-actions"><Button variant="secondary" icon="user" onClick={() => onOperation({ status: "needs-assignment" })}>{translate("jobs.intent.assignment")}</Button>
+        <Button variant="secondary" icon="clock" onClick={() => onOperation({ status: "in-progress" })}>{translate("dashboard.inProgress")}</Button>
+        <Button variant="secondary" icon="jobs" onClick={onCreate}>{translate("jobs.newService")}</Button></div>
     </div>
-    {d.isLoading && <Skeleton label={translate("dashboard.loading")} rows={3} />}
-    {d.hasError && <ErrorState title={translate("dashboard.error")} retryLabel={translate("auth.managerAccessRetry")} onRetry={d.onRefresh} />}
+    {d.isLoading && <WorkspaceLoading label={translate("dashboard.loading")} active={active} />}
+    {d.hasError && <div className="workspace-v3-load-error"><Banner tone="risk" role="alert" title={translate("dashboard.error")}
+      action={<Button variant="secondary" icon="refresh" onClick={d.onRefresh}>{translate("auth.managerAccessRetry")}</Button>}>
+      <p>{t(d.loadFailure?.code === "deadline-exceeded" ? "failureTimeout" : d.loadFailure?.code === "permission-denied" || d.loadFailure?.code === "unauthenticated" ? "failureAccess" : d.loadFailure?.code === "failed-precondition" ? "failureConfiguration" : "failureRead")}</p>
+      {d.loadFailure && <details><summary>{t("technical")}</summary><code>{d.loadFailure.code} · {d.loadFailure.stages.join(", ") || "unknown"}</code></details>}
+    </Banner><Button variant="tertiary" icon="jobs" onClick={() => onOperation()}>{t("openServices")}</Button></div>}
     {ready && <>
-      <p className="workspace-v3-scope">{t("dashboardScope")}</p>
+      <p className="workspace-v3-scope workspace-v3-data-notice"><Icon name="info" />{t("dashboardScope")}</p>
       {search ? <Panel title={t("searchScope")}>{matches.length ? matches.map(job => <Row key={job.id} onClick={() => onOpen(job)}>{job.propertyName} · {job.scheduledStart || translate("jobs.notSet")}</Row>) : <EmptyState title={t("empty")} />}</Panel> :
       <div className="workspace-v3-now-columns">
         <div><Panel title={t("start")} className="workspace-v3-start">
           {attention[0] ? <AttentionItem item={attention[0]} {...{ onOpen, translate, t }} primary /> : <EmptyState title={t("noAttention")} />}
         </Panel><Panel title={`${t("attention")} · ${attention.length}`}>
-          {attention.slice(1).map(item => <AttentionItem key={item.id} {...{ item, onOpen, translate, t }} />)}
+          {attention.length > 1 ? attention.slice(1).map(item => <AttentionItem key={item.id} {...{ item, onOpen, translate, t }} />) : <p className="workspace-v3-scope">{t("noAdditionalAttention")}</p>}
           {hasMoreAttention && <Button variant="tertiary" onClick={() => onOperation()}>{translate("dashboard.viewAll")}</Button>}
         </Panel></div>
         <div><Panel title={t("summary")}><dl className="workspace-v3-metrics">
-          {[["needsAssignment", "dashboard.needsAssignment"], ["inProgress", "dashboard.inProgress"], ["openIssues", "dashboard.openIssues"]].map(([field, key]) => <div key={field}><dt>{translate(key)}</dt><dd>{counts[field] ?? translate("common.notProvided")}</dd></div>)}
+          {[["needsAssignment", "dashboard.needsAssignment", "user", "attention"], ["inProgress", "dashboard.inProgress", "clock", "info"], ["openIssues", "dashboard.openIssues", "warning", "risk"]].map(([field, key, icon, tone]) => <div key={field} data-tone={tone}><dt><Icon name={icon} />{translate(key)}</dt><dd>{counts[field] ?? translate("common.notProvided")}</dd></div>)}
         </dl></Panel>
         {[today, rangeFor("tomorrow", today, today).start].map((date, i) => <Panel key={date} title={`${t(i ? "tomorrow" : "today")} · ${format(date)}`}>
-          {nextJobs.filter(job => job.scheduledDate === date).slice(0, 4).map(job => <Row key={job.id} onClick={() => onOpen(job)}><strong>{job.scheduledStart || translate("jobs.notSet")}</strong><span>{job.propertyName}</span></Row>)}
+          {!nextJobs.some(job => job.scheduledDate === date) && <p className="workspace-v3-scope">{t("dayEmpty")}</p>}
+          {nextJobs.filter(job => job.scheduledDate === date).slice(0, 4).map(job => <Row key={job.id} onClick={() => onOpen(job)}><strong>{job.scheduledStart || translate("jobs.notSet")}</strong><span className="workspace-v3-day-identity"><strong>{job.propertyName}</strong><small>{assignedCleanerSummary(job, d.dashboardData.cleanerNamesById || {}, translate)}</small></span></Row>)}
           <Button variant="tertiary" onClick={() => openDay(date)}>{t("viewDay")}</Button>
         </Panel>)}</div>
       </div>}
@@ -154,10 +159,22 @@ function WorkspaceAgora({ active, model, dashboard: d, t, translate, range, toda
   </div>;
 }
 function AttentionItem({ item, onOpen, t, primary }) {
-  return <div className="workspace-v3-attention" data-tone={item.type === "issue" ? "risk" : "attention"}>
-    <StateLabel tone={item.type === "issue" ? "risk" : "attention"} icon={item.type === "issue" ? "warning" : "info"}>{item.label}</StateLabel>
-    <h3>{item.job.propertyName}</h3><p>{item.detail}</p>
-    {item.type === "interested" && <p>{t("interest")}</p>}
-    <Button variant={primary ? "primary" : "secondary"} onClick={() => onOpen(item.job)} aria-label={`${item.action} · ${item.job.propertyName}`}>{item.action} →</Button>
+  return <div className="workspace-v3-attention" data-primary={primary || undefined} data-tone={item.type === "issue" ? "risk" : "attention"}>
+    <div className="workspace-v3-attention-copy"><StateLabel tone={item.type === "issue" ? "risk" : "attention"} icon={item.type === "issue" ? "warning" : "info"}>{item.label}</StateLabel>
+    <h3>{item.job.propertyName}</h3><p>{item.job.scheduledStart} · {item.detail}</p>
+    {item.type === "interested" && <p>{t("interest")}</p>}</div>
+    <Button icon="arrow" variant={primary ? "primary" : "secondary"} onClick={() => onOpen(item.job)} aria-label={`${item.action} · ${item.job.propertyName}`}>{item.action}</Button>
+  </div>;
+}
+
+function WorkspaceLoading({ label, active }) {
+  const [visible, setVisible] = useState(() => !document.hidden);
+  useEffect(() => { const change = () => setVisible(!document.hidden); document.addEventListener("visibilitychange", change); return () => document.removeEventListener("visibilitychange", change); }, []);
+  return <div className="workspace-v3-loading" role="status" aria-label={label} data-paused={!visible || !active}>
+    <p>{label}</p><div className="workspace-v3-loading-grid" aria-hidden="true">
+      <div className="workspace-v3-loading-main"><div className="workspace-v3-loading-panel workspace-v3-loading-hero"><span /><span /><span /></div>
+        <div className="workspace-v3-loading-panel">{[0, 1, 2, 3].map(i => <div className="workspace-v3-loading-row" key={i}><span /><span /></div>)}</div></div>
+      <div className="workspace-v3-loading-side">{[0, 1, 2].map(i => <div className="workspace-v3-loading-panel" key={i}><span /><span /><span /></div>)}</div>
+    </div>
   </div>;
 }

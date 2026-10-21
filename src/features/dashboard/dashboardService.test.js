@@ -37,6 +37,14 @@ import {
   visibleDashboardCounts,
 } from "./dashboardService.js";
 
+it("attributes a failed initial read without exposing raw provider messages or changing the queries", async () => {
+  services.getDocs.mockReset().mockResolvedValue({ docs: [] }).mockRejectedValueOnce(Object.assign(new Error("sensitive provider details"), { code: "failed-precondition" }));
+  const pending = vi.fn();
+  await expect(getOperationalDashboard({ onPendingStages: pending })).rejects.toMatchObject({ code: "failed-precondition", dashboardStage: "properties" });
+  expect(pending).toHaveBeenCalled();
+  expect(services.getDocs).toHaveBeenCalledTimes(7);
+});
+
 describe("composeAttentionJobCandidates", () => {
   it("keeps bounded stale attention work while adding current assignment candidates", () => {
     const staleAttentionJobs = Array.from({ length: 10 }, (_, index) => ({

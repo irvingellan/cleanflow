@@ -41,6 +41,22 @@ it("offers a recoverable Dashboard error using its existing refresh handler", ()
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(props.dashboard.onRefresh).toHaveBeenCalledOnce();
 });
+it("loading uses a structured skeleton, never stale attention data or artificial progress", () => {
+  const { props, unmount } = mount(); unmount();
+  mount({ view: "dashboard", dashboard: { ...props.dashboard, isLoading: true } });
+  expect(document.querySelector(".workspace-v3-loading")).toBeVisible();
+  expect(document.querySelector(".workspace-v3-start")).toBeNull();
+  expect(screen.queryByRole("progressbar")).toBeNull();
+});
+it("a failed load stops its skeleton and explains verified failure category without leaking provider data", () => {
+  const { props, unmount } = mount(); unmount();
+  const current = mount({ view: "dashboard", dashboard: { ...props.dashboard, hasError: true, loadFailure: { code: "deadline-exceeded", stages: ["jobs-next48"] } } });
+  expect(screen.getByRole("alert")).toHaveTextContent(/20 seconds/);
+  expect(document.querySelector(".workspace-v3-loading")).toBeNull();
+  expect(document.querySelector(".workspace-v3-start")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Open services", exact: true }));
+  expect(current.props.onOperation).toHaveBeenCalled();
+});
 it("opening or changing presentation never calls assignment, completion or create", () => {
   const { props } = mount();
   fireEvent.click(screen.getByRole("button", { name: "Week", exact: true }));

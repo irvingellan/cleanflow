@@ -117,7 +117,16 @@ export function composeAttentionJobCandidates(attentionJobs, next48HoursJobs) {
   ]);
 }
 
-export async function getOperationalDashboard() {
+export async function getOperationalDashboard({ onPendingStages } = {}) {
+  // Ephemeral diagnostic labels only: never records, raw messages or persistence.
+  const pending = new Map();
+  const publish = () => onPendingStages?.([...pending.keys()]);
+  async function read(stage, operation) {
+    pending.set(stage, (pending.get(stage) || 0) + 1); publish();
+    try { return await operation(); }
+    catch (error) { throw Object.assign(new Error("Dashboard read unavailable"), { code: error?.code, dashboardStage: stage }); }
+    finally { const count = pending.get(stage) - 1; if (count) pending.set(stage, count); else pending.delete(stage); publish(); }
+  }
   const now = new Date();
   const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   const today = localDateKey(now);
@@ -145,20 +154,20 @@ export async function getOperationalDashboard() {
     weeklyScheduledSnapshot,
     weeklyCompletedSnapshot,
   ] = await Promise.all([
-    getDocs(propertiesCollection()),
-    getDocs(
+    read("properties", () => getDocs(propertiesCollection())),
+    read("jobs-open", () => getDocs(
       query(
         jobs,
         where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
       ),
-    ),
-    getDocs(
+    )),
+    read("jobs-in-progress", () => getDocs(
       query(
         jobs,
         where("operationalStatus", "==", "IN_PROGRESS"),
       ),
-    ),
-    getDocs(
+    )),
+    read("jobs-next48", () => getDocs(
       query(
         jobs,
         where("operationalStatus", "in", activeOperationalStatuses),
@@ -166,23 +175,23 @@ export async function getOperationalDashboard() {
         where("scheduledDate", "<=", endDate),
         orderBy("scheduledDate", "asc"),
       ),
-    ),
-    getDocs(
+    )),
+    read("jobs-recent", () => getDocs(
       query(
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
         orderBy("completedAt", "desc"),
       ),
-    ),
-    getDocs(
+    )),
+    read("jobs-week", () => getDocs(
       query(
         jobs,
         where("scheduledDate", ">=", weekStartDate),
         where("scheduledDate", "<=", weekEndDate),
         orderBy("scheduledDate", "asc"),
       ),
-    ),
-    getDocs(
+    )),
+    read("jobs-completed-week", () => getDocs(
       query(
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
@@ -190,7 +199,7 @@ export async function getOperationalDashboard() {
         where("completedAt", "<", Timestamp.fromDate(nextWeekStart)),
         orderBy("completedAt", "desc"),
       ),
-    ),
+    )),
   ]);
   const propertiesById = Object.fromEntries(propertiesSnapshot.docs.map((property) => [
     property.id,
@@ -230,8 +239,8 @@ export async function getOperationalDashboard() {
     Promise.all(
       offeredAttentionJobs.map(async (job) => {
         const [interestedOffers, pendingOffers] = await Promise.all([
-          getInterestedJobOffers(job.id),
-          getPendingJobOffers(job.id),
+          read("offers", () => getInterestedJobOffers(job.id)),
+          read("offers", () => getPendingJobOffers(job.id)),
         ]);
 
         return {
@@ -244,11 +253,11 @@ export async function getOperationalDashboard() {
     Promise.all(
       issueCandidateJobs.map(async (job) => ({
         job,
-        issues: await getOpenJobIssues(job.id),
+        issues: await read("issues", () => getOpenJobIssues(job.id)),
       })),
     ),
   ]);
-  const cleanerNamesById = await getCleanerNamesById([
+  const cleanerNamesById = await read("cleaner-names", () => getCleanerNamesById([
     ...[...recentlyCompletedJobs, ...next48HoursJobs].flatMap((job) => [
       ...getAssignedCleanerIds(job),
       job.assignedCleanerId,
@@ -256,7 +265,7 @@ export async function getOperationalDashboard() {
     ...offeredJobOffers.flatMap(({ interestedOffers }) =>
       interestedOffers.map((offer) => offer.cleanerId),
     ),
-  ]);
+  ]));
 
   return {
     counts: {

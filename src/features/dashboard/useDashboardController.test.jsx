@@ -121,3 +121,23 @@ it("surfaces real dependency rejection without inventing data", async () => {
   expect(result.current.dashboardData).toBe(null);
   expect(vi.getTimerCount()).toBe(0);
 });
+it("retains only allowlisted failure category/stage and clears it on a successful retry", async () => {
+  getOperationalDashboard.mockRejectedValueOnce(Object.assign(new Error("private payload must not render"), { code: "permission-denied", dashboardStage: "properties" }));
+  const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
+  await act(async () => {});
+  expect(result.current.loadFailure).toEqual({ code: "permission-denied", stages: ["properties"] });
+  getOperationalDashboard.mockResolvedValueOnce({ counts: {} });
+  await act(() => result.current.refresh());
+  expect(result.current.loadFailure).toBe(null);
+});
+it("a deadline identifies pending reads without exposing data or accepting late progress", async () => {
+  let progress;
+  getOperationalDashboard.mockImplementationOnce(({ onPendingStages }) => { progress = onPendingStages; onPendingStages(["jobs-next48"]); return new Promise(() => {}); });
+  const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
+  await act(() => vi.advanceTimersByTimeAsync(20_000));
+  expect(result.current.loadFailure).toEqual({ code: "deadline-exceeded", stages: ["jobs-next48"] });
+  getOperationalDashboard.mockResolvedValueOnce({ counts: {} });
+  await act(() => result.current.refresh());
+  act(() => progress(["private-path"]));
+  expect(result.current.loadFailure).toBe(null);
+});

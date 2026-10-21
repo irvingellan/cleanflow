@@ -26,6 +26,22 @@ it("local pagination/filtering leaves the source context unchanged",()=>{
  expect(c.jobs).toHaveLength(41);
 });
 it("provider/business-rule boundaries are exactly Phase B",()=>{
- for(const f of ["src/features/jobs/jobService.js","src/features/jobs/assignmentService.js","src/features/jobs/jobCompatibility.js","src/features/jobs/jobScheduleService.js","src/features/dashboard/dashboardService.js","firestore.rules","storage.rules","firebase.json"]){
+ for(const f of ["src/features/jobs/jobService.js","src/features/jobs/assignmentService.js","src/features/jobs/jobCompatibility.js","src/features/jobs/jobScheduleService.js","firestore.rules","storage.rules","firebase.json"]){
  expect(fs.readFileSync(f,"utf8"),f).toBe(execFileSync("git",["show",`e4a3cfc:${f}`],{encoding:"utf8"}));}
+});
+it("Dashboard queries and composition remain unchanged underneath ephemeral read-stage labels",()=>{
+ const file="src/features/dashboard/dashboardService.js";
+ let source=fs.readFileSync(file,"utf8").replace("getOperationalDashboard({ onPendingStages } = {})","getOperationalDashboard()");
+ const start=source.indexOf("  // Ephemeral diagnostic labels only:");
+ const end=source.indexOf("  const now = new Date();",start);
+ source=source.slice(0,start)+source.slice(end);
+ // Unwrap only the named diagnostic operation. Compare the entire remaining
+ // service, not just query counts, so filters, sorting and results stay protected.
+ for(let match;(match=/read\("[a-z0-9-]+", \(\) => /.exec(source));){
+  const operationStart=match.index+match[0].length;let depth=1,i=operationStart;
+  for(;i<source.length;i++){if(source[i]==="(")depth++;if(source[i]===")"&&!--depth)break;}
+  source=source.slice(0,match.index)+source.slice(operationStart,i)+source.slice(i+1);
+ }
+ const baseline=execFileSync("git",["show",`e4a3cfc:${file}`],{encoding:"utf8"});
+ expect(source.replace(/\s/g,"")).toBe(baseline.replace(/\s/g,""));
 });

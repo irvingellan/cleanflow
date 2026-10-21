@@ -1022,7 +1022,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
         <PwaUpdatePrompt />
         <WorkspaceBoundary view={view} selectedJob={selectedJob}
-          dashboard={{ dashboardData, isLoading: isLoadingDashboard, hasError: hasDashboardError, onRefresh: refreshDashboard, onOpenJob: openDashboardJob }}
+          dashboard={{ dashboardData, isLoading: isLoadingDashboard, hasError: hasDashboardError, loadFailure: dashboardController.loadFailure, onRefresh: refreshDashboard, onOpenJob: openDashboardJob }}
           worklist={workspaceWorklistProps} onNow={showDashboard} onOperation={showWorkspaceOperations}
           onExit={() => chooseWorkspace(false)} onBack={jobDetailOrigin === "dashboard" ? showDashboard : returnToJobs}>
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
