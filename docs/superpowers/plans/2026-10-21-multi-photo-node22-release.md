@@ -19,20 +19,20 @@ No Production deploy/mutation, main merge, push, billing/secret change or visual
 
 ## Task1 — selective runtime composition
 Files: functions/package.json, functions/package-lock.json, functions/src/index.js, scripts/functionsRuntime.test.mjs.
-- [ ] Port existing runtime tests; run RED on engine20.
-- [ ] Change only root engine22 and global preserveExternalChanges/max20, retaining Storage7.22.0 and handler bytes.
-- [ ] Assert publicChecklist60s; runtime tests GREEN; local source checkpoint.
+- [x] Port existing runtime tests; run RED on engine20.
+- [x] Change only root engine22 and global preserveExternalChanges/max20, retaining Storage7.22.0 and handler bytes.
+- [x] Assert publicChecklist60s; runtime tests GREEN; local source checkpoint3f21ab5.
 
 ## Task2 — combined-source regression
-- [ ] Reuse exact ba3fa84 evidence:1351unit/282focused/82security/28optimizer/4gallery; verify source hashes.
-- [ ] Fresh synthetic emulator build and serial actual Chromium/WebKit integration (minimumWebKit2).
-- [ ] Verify1/10/20/reload/failure-retry/private manager-report/legacy/quota/revocation; hostNode22.
-- [ ] Production/Sandbox compile, Hosting preparation/guards/exclusion. Never deploy.
+- [x] Reuse exact ba3fa84 evidence:1351unit/282focused/82security/28optimizer/4gallery; verify source hashes.
+- [x] Fresh synthetic emulator build and serial actual WebKit2;225focused regressions passed.
+- [x] Verify1/10/20/reload/failure-retry/private manager-report/legacy/quota/revocation; hostNode22.
+- [x] Production/Sandbox compile, Hosting preparation/guards/exclusion through22guards. Exact finalSHA Production manifest follows documentation checkpoint. Never deploy.
 
 ## Task3 — preflight and handoff
-- [ ] Refresh31cloud runtime/config/revision/scaling; compare8targets/unaffected23.
-- [ ] Read-only IAM/secretVERSION/triggers/schedules/Hosting/Storage/quota/activity, no customer content.
-- [ ] Exact order, policy2-safe recovery and STOP disposition for separateGO.
-- [ ] Independent source review; local finalSHA and exactSHA Hosting manifest.
-- [ ] Requirements audit and final evidenceZIP; no cloudwrites.
+- [x] Refresh31cloud runtime/config/revision/scaling; compare8targets, capture/exclude23untouched targets.
+- [x] Read-only IAM/secretVERSION/triggers/schedules/Hosting/Storage/quota/activity, no customer content.
+- [x] Exact order, policy2-safe recovery and STOP disposition for separateGO.
+- [x] Independent source review found no integration blocker at3f21ab5; documentation-only finalSHA/manifest are emitted in final receipts.
+- [x] Requirements audit/finalZIP are the terminal local steps, recorded by final audit receipt rather than a self-referential commit. No cloudwrites.
 

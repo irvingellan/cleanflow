@@ -1,5 +1,23 @@
 # CleanFlow — Current State
 
+## Issues #81/#82 — integrated Multi-Photo + Node22 candidate (2026-10-21)
+
+Local-only `codex/multi-photo-node22-release-candidate` selectively composes
+Multi-Photo `ba3fa84` with PolicyB `1d8a6b6`; original trees/WIP/refs preserved.
+Only engine22/global preserveExternalChanges/max20 change runtime source; gallery,
+optimizer, evidence contracts, permissions and visual styling are not rebuilt.
+Fresh runtime3, focused225, actual WebKit2 and build/Hosting guards22 pass;
+same-day full1351/security82/optimizer28/gallery4 evidence is byte-bound/reused.
+Read-only Production:31ACTIVE,26Node22/5Node20; exact8update plan, no create/delete/
+recreate/IAM mutation. Hosting still5c2e524; both STOP files remain authoritative.
+No deploy/merge/push/billing/customer-data change. Stage compatible4Functions,
+then exactSHA Hosting, then createChecklistRun LAST for new20photo/50MiB Runs;
+runtime-only publicOffer/reminder upgrades are separately named in the plan.
+Legacy Runs stay single-photo; never blind-roll back after policy2 state exists.
+Physical camera/detail/retry/submission/PWA/report gates remain distinct from
+the prior private iPhone10photo/reload PASS. See
+`MULTI_PHOTO_NODE22_RELEASE_CANDIDATE.md`; exact finalSHA/manifest in local handoff.
+
 ## Issue #81 — functional-only revalidation (2026-10-21)
 
 Resumed existing `codex/checklist-multi-photo-v1` at `588a1fd`, without rebuild
