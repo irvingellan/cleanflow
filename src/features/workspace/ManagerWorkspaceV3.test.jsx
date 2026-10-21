@@ -48,6 +48,13 @@ it("loading uses a structured skeleton, never stale attention data or artificial
   expect(document.querySelector(".workspace-v3-start")).toBeNull();
   expect(screen.queryByRole("progressbar")).toBeNull();
 });
+it("the visual motion preview announces demonstration, never a real Dashboard request", () => {
+  const {props}=mount({view:"dashboard"});
+  fireEvent.click(screen.getByRole("button",{name:"Preview loading animation",exact:true}));
+  const preview=document.querySelector(".workspace-v3-motion-preview");
+  expect(within(preview).getByRole("status",{name:"Loading animation · visual preview"})).toBeVisible();
+  expect(props.dashboard.onRefresh).not.toHaveBeenCalled();
+});
 it("a failed load stops its skeleton and explains verified failure category without leaking provider data", () => {
   const { props, unmount } = mount(); unmount();
   const current = mount({ view: "dashboard", dashboard: { ...props.dashboard, hasError: true, loadFailure: { code: "deadline-exceeded", stages: ["jobs-next48"] } } });

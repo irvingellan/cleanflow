@@ -130,7 +130,7 @@ function WorkspaceAgora({ active, model, dashboard: d, t, translate, range, toda
         <Button variant="secondary" icon="clock" onClick={() => onOperation({ status: "in-progress" })}>{translate("dashboard.inProgress")}</Button>
         <Button variant="secondary" icon="jobs" onClick={onCreate}>{translate("jobs.newService")}</Button></div>
     </div>
-    <LoadingMotionPreview active={active} label={translate("dashboard.loading")} />
+    <LoadingMotionPreview active={active} />
     {d.isLoading && <WorkspaceLoading label={translate("dashboard.loading")} active={active} />}
     {d.hasError && <div className="workspace-v3-load-error"><Banner tone="risk" role="alert" title={translate("dashboard.error")}
       action={<Button variant="secondary" icon="refresh" onClick={d.onRefresh}>{translate("auth.managerAccessRetry")}</Button>}>
@@ -181,7 +181,7 @@ function WorkspaceLoading({ label, active }) {
   </div>;
 }
 
-function LoadingMotionPreview({active,label}) {
+function LoadingMotionPreview({active}) {
   const {language}=useTranslation();const t=key=>settingsText(language,key);
   const [show,setShow]=useState(false);const trigger=useRef(null);
   useEffect(()=>{
@@ -195,6 +195,6 @@ function LoadingMotionPreview({active,label}) {
   return <><Button ref={trigger} variant="tertiary" icon="refresh" onClick={()=>setShow(true)} aria-expanded={show}>{t("motion")}</Button>
     {show&&active&&<aside className="workspace-v3-motion-preview" aria-label={t("motionTitle")}>
       <header><strong>{t("motionTitle")}</strong><button className="cfv2-button cfv2-button-icon" type="button" aria-label={t("close")} onClick={()=>{setShow(false);trigger.current?.focus();}}><Icon name="close"/></button></header>
-      <p>{t("motionNote")}</p><WorkspaceLoading active={active} label={label}/>
+      <p>{t("motionNote")}</p><WorkspaceLoading active={active} label={t("motionTitle")}/>
     </aside>}</>;
 }
