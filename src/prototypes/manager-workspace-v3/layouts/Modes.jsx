@@ -6,6 +6,7 @@ import { addDays, rangeFor, rangeDays } from "../model/time.js";
 import { Icon } from "../ui/Icon.jsx";
 import { AttentionTag, CleanerCell, JobRow, JobStatus, SimTag, cleanerName, dayWord, propertyOf, useT, whenText, whyText } from "../ui/kit.jsx";
 import { Worklist } from "./Worklist.jsx";
+import { EditableLabel, StudioArea } from "../studio/Studio.jsx";
 
 // On phones the detail opens over the current screen, so Back returns there.
 const workScreen = () => (typeof window !== "undefined" && window.innerWidth < 720 ? {} : { hybridScreen: "work" });
@@ -197,53 +198,56 @@ export function HybridNow() {
   const run = useActions();
   const openJob = job => setUi({ selectedJobId: job.id, filter: "needsYou", ...workScreen() });
   const openDay = date => setUi({ range: date === data.clock.date ? rangeFor("today", date, data.clock.date) : rangeFor("day", date, data.clock.date), filter: "all", hybridScreen: "work" });
-  return (
-    <div className="mw-now">
+  const week = ui.range.kind === "week";
+  const items = {
+    headline: (
       <div className="mw-now-head">
         <Headline counts={counts} needs={queue.length} />
-        <button type="button" className="cfv2-button cfv2-button-secondary mw-btn" onClick={() => setUi({ hybridScreen: "work", filter: "all" })}><Icon name="list" size={17} />{t("hy.openWork")}</button>
+        <button type="button" className="cfv2-button cfv2-button-secondary mw-btn" onClick={() => setUi({ hybridScreen: "work", filter: "all" })}><Icon name="list" size={17} /><EditableLabel k="hy.openWork">{t("hy.openWork")}</EditableLabel></button>
       </div>
-      <CommandBar value={text} onChange={setText} />
-      {text ? <CommandResults text={text} onCreate={() => { setText(""); setUi({ overlay: { type: "newService" } }); }} /> : (
-        <div className="mw-now-grid">
-          <div className="mw-now-main">
-            {first && (
-              <article className={`mw-hero tone-${first.tone}`}>
-                <span className="mw-micro">{t("now.startWith")}</span>
-                <div className="mw-hero-row">
-                  <div className="mw-grow">
-                    <AttentionTag item={first} />
-                    <h2>{propertyOf(data, first.job).name}</h2>
-                    <p className="mw-sec">{whenText(t, data, first.job)} · {whyText(t, data, first, first.job)}</p>
-                  </div>
-                  <div className="mw-hero-actions">
-                    <button type="button" className="cfv2-button cfv2-button-primary mw-btn cfv2-button-large" onClick={() => run(first.action, first.job)}>{t(`a.${first.action}`)}<Icon name="arrowR" size={17} /></button>
-                    <button type="button" className="mw-linkbtn" onClick={() => openJob(first.job)}>{t("hy.work")}<Icon name="arrowR" size={14} /></button>
-                  </div>
-                </div>
-              </article>
-            )}
-            <section className="mw-panel">
-              <header className="mw-panel-head"><h2>{t("now.queue")}<span className="mw-count">{queue.length}</span></h2><span className="mw-sec">{t("now.exceptionsOnly")}</span></header>
-              <AttentionQueue items={queue.slice(1)} limit={8} onOpen={openJob} />
-              {queue.length > 9 && <button type="button" className="mw-linkbtn" onClick={() => setUi({ hybridScreen: "work", filter: "needsYou" })}>{t("now.queueMore", { count: queue.length - 9 })}</button>}
-            </section>
+    ),
+    command: <CommandBar value={text} onChange={setText} />,
+    startWith: text ? <CommandResults text={text} onCreate={() => { setText(""); setUi({ overlay: { type: "newService" } }); }} /> : first ? (
+      <article className={`mw-hero tone-${first.tone}`}>
+        <EditableLabel k="now.startWith" className="mw-micro">{t("now.startWith")}</EditableLabel>
+        <div className="mw-hero-row">
+          <div className="mw-grow">
+            <AttentionTag item={first} />
+            <h2>{propertyOf(data, first.job).name}</h2>
+            <p className="mw-sec">{whenText(t, data, first.job)} · {whyText(t, data, first, first.job)}</p>
           </div>
-          <div className="mw-now-side">
-            <QuestionStrip counts={counts} onPick={key => setUi({ hybridScreen: "work", filter: questionFilter[key] })} />
-            {ui.range.kind === "week" ? <WeekStrip range={ui.range} onOpenDay={openDay} /> : (
-              <>
-                <DayCard date={ui.range.start} onOpenDay={openDay} />
-                <DayCard date={addDays(ui.range.start, 1)} onOpenDay={openDay} />
-              </>
-            )}
-            <section className="mw-future" aria-label={t("fut.title")}>
-              <span className="mw-micro">{t("fut.title")} <SimTag kind="future" /></span>
-              <p className="mw-sec">{t("fut.body")}</p>
-            </section>
+          <div className="mw-hero-actions">
+            <button type="button" className="cfv2-button cfv2-button-primary mw-btn cfv2-button-large" onClick={() => run(first.action, first.job)}><EditableLabel k={`a.${first.action}`}>{t(`a.${first.action}`)}</EditableLabel><Icon name="arrowR" size={17} /></button>
+            <button type="button" className="mw-linkbtn" onClick={() => openJob(first.job)}>{t("hy.work")}<Icon name="arrowR" size={14} /></button>
           </div>
         </div>
-      )}
+      </article>
+    ) : null,
+    queue: text ? null : (
+      <section className="mw-panel">
+        <header className="mw-panel-head"><h2><EditableLabel k="now.queue">{t("now.queue")}</EditableLabel><span className="mw-count">{queue.length}</span></h2><span className="mw-sec">{t("now.exceptionsOnly")}</span></header>
+        <AttentionQueue items={queue.slice(1)} limit={8} onOpen={openJob} />
+        {queue.length > 9 && <button type="button" className="mw-linkbtn" onClick={() => setUi({ hybridScreen: "work", filter: "needsYou" })}>{t("now.queueMore", { count: queue.length - 9 })}</button>}
+      </section>
+    ),
+    questions: <QuestionStrip counts={counts} onPick={key => setUi({ hybridScreen: "work", filter: questionFilter[key] })} />,
+    today: week ? <WeekStrip range={ui.range} onOpenDay={openDay} /> : <DayCard date={ui.range.start} onOpenDay={openDay} />,
+    tomorrow: week ? null : <DayCard date={addDays(ui.range.start, 1)} onOpenDay={openDay} />,
+    future: (
+      <section className="mw-future" aria-label={t("fut.title")}>
+        <span className="mw-micro">{t("fut.title")} <SimTag kind="future" /></span>
+        <p className="mw-sec">{t("fut.body")}</p>
+        <button type="button" className="mw-linkbtn" onClick={() => setUi({ overlay: { type: "reservations" } })}>{t("rx.open")}<Icon name="arrowR" size={14} /></button>
+      </section>
+    ),
+  };
+  return (
+    <div className="mw-now">
+      <StudioArea screen="now" region="top" className="mw-now-top" items={items} />
+      <div className="mw-now-grid">
+        <StudioArea screen="now" region="main" className="mw-now-main" items={items} />
+        <StudioArea screen="now" region="side" className="mw-now-side" items={items} />
+      </div>
     </div>
   );
 }

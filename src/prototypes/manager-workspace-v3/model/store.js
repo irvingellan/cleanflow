@@ -6,7 +6,7 @@ import { laDateKey, rangeFor } from "./time.js";
 // Switching layout only changes `ui.mode`; operational truth lives in `data`.
 
 const STORAGE_KEY = "cleanflow-manager-workspace-v3-demo";
-const SCHEMA = 3;
+const SCHEMA = 4;
 
 export function initialState(today = laDateKey()) {
   return {
@@ -15,7 +15,7 @@ export function initialState(today = laDateKey()) {
     ui: {
       mode: "hybrid", hybridScreen: "now", range: rangeFor("today", today, today), filter: "needsYou", search: "",
       selectedJobId: null, overlay: null, cleanerView: null, mobileTab: "home", toast: null, lang: "pt", theme: null,
-      notificationFilter: "all", inboxDemoState: "ready", offerConcept: "details",
+      notificationFilter: "all", notificationQuery: "", inboxDemoState: "ready", offerConcept: "details", pushBanner: null,
     },
   };
 }
@@ -39,8 +39,10 @@ function logged(job, data, key, params = {}) {
   return [...job.activity, { at: now(data), key, params }];
 }
 function notify(data, notification) {
-  return { ...data, notifications: [{ id: `n${Date.now()}${Math.random().toString(16).slice(2, 5)}`, at: now(data), read: false, delivery: { accepted: true, displayed: "unknown", openedAt: null }, simulated: true, ...notification }, ...data.notifications] };
+  return { ...data, notifications: [{ id: `n${Date.now()}${Math.random().toString(16).slice(2, 5)}`, at: now(data), read: false, delivery: { targets: 2, accepted: true, displayed: "unknown", openedAt: null, openTracked: true }, source: "cleaner", simulated: true, ...notification }, ...data.notifications] };
 }
+
+const bodyKeyFor = { cleanerInterested: "nb.offerInterest", checklistReceived: "nb.checklist", assignmentConfirmed: "nb.assignConfirmed" };
 
 export function domainReducer(data, action) {
   const d = tick(data);
@@ -61,7 +63,7 @@ export function domainReducer(data, action) {
       const next = updateJob(d, action.jobId, j => ({ ...j, offers: j.offers.map(o => (o.cleanerId === action.cleanerId ? { ...o, response: action.response, respondedAt: now(d), via: action.via } : o)),
         activity: logged(j, d, action.response === "interested" ? (action.via === "message" ? "act.interestByMessage" : "act.interest") : "act.declined", { name: action.cleanerName }) }));
       if (action.via === "message") return next;
-      return notify(next, { type: "offer", jobId: job.id, titleKey: action.response === "interested" ? "n.offerInterest" : "n.offerDeclined", params: { name: action.cleanerName, property: prop(job.id).name } });
+      return notify(next, { category: action.response === "interested" ? "cleanerInterested" : "offerDeclined", bodyKey: action.response === "interested" ? "nb.offerInterest" : "nb.offerDeclined", jobId: job.id, titleKey: action.response === "interested" ? "n.offerInterest" : "n.offerDeclined", params: { name: action.cleanerName, property: prop(job.id).name } });
     }
     case "REMINDER_PREPARED":
       return updateJob(d, action.jobId, job => ({ ...job, ack: job.ack === "not_notified" ? "pending" : job.ack, activity: logged(job, d, "act.reminder", {}) }));
@@ -96,7 +98,7 @@ export function domainReducer(data, action) {
     }
     case "CL_SUBMIT":
       return notify(updateJob(d, action.jobId, job => ({ ...job, checklist: { ...job.checklist, state: "submitted", submittedAt: now(d), workDone: true, notes: action.note || job.checklist.notes, missingNote: action.missingNote || "" },
-        activity: logged(job, d, "act.submitted", { name: action.cleanerName }) })), { type: "checklist", jobId: action.jobId, titleKey: "n.checklist", params: { name: action.cleanerName, property: prop(action.jobId).name } });
+        activity: logged(job, d, "act.submitted", { name: action.cleanerName }) })), { category: "checklistReceived", bodyKey: "nb.checklist", jobId: action.jobId, titleKey: "n.checklist", params: { name: action.cleanerName, property: prop(action.jobId).name } });
     case "CREATE_JOB": {
       const id = action.job.id || `j${String(d.jobs.length + 1).padStart(2, "0")}n`;
       const property = d.properties.find(p => p.id === action.job.propertyId);
@@ -115,6 +117,19 @@ export function domainReducer(data, action) {
       return { ...data, notifications: data.notifications.map(n => (n.id === action.id ? { ...n, read: true } : n)) };
     case "NOTIF_READ_ALL":
       return { ...data, notifications: data.notifications.map(n => ({ ...n, read: true })) };
+    case "NOTIF_UNREAD":
+      return { ...data, notifications: data.notifications.map(n => (n.id === action.id ? { ...n, read: false } : n)) };
+    case "NOTIF_PUSH_SIM": { // a new push arrives and is displayed as a banner
+      const sample = action.sample;
+      return notify(d, { ...sample, id: action.id, bodyKey: sample.bodyKey || bodyKeyFor[sample.category], params: { ...sample.params, property: prop(sample.jobId).name },
+        delivery: { targets: 2, accepted: true, displayed: "confirmed", openedAt: null, openTracked: true } });
+    }
+    case "NOTIF_OPENED": // tapped from the push banner: opened, but NOT read
+      return { ...d, notifications: d.notifications.map(n => (n.id === action.id ? { ...n, tappedBeforeRead: !n.read, delivery: { ...n.delivery, openedAt: now(d) } } : n)) };
+    case "NOTIF_PREF":
+      return { ...data, notificationSettings: { ...data.notificationSettings, prefs: { ...data.notificationSettings.prefs, [action.category]: action.value } } };
+    case "NOTIF_PERMISSION":
+      return { ...data, notificationSettings: { ...data.notificationSettings, permission: action.permission } };
     default:
       return data;
   }

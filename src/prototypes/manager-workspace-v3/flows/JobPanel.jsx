@@ -2,6 +2,8 @@ import { Button } from "../../../components/v2/primitives.jsx";
 import { attentionFor, checklistSummary, nextActionFor, offerSummary, otherActionsFor } from "../model/selectors.js";
 import { useStore } from "../model/store.js";
 import { Icon } from "../ui/Icon.jsx";
+import { EditableLabel, StudioArea, useLabel, useLayout, useStudio } from "../studio/Studio.jsx";
+const useStudioFlags = () => useStudio();
 import { AttentionTag, JobStatus, Rail, SimTag, cleanerName, clientOf, compText, propertyOf, useT, whenText, whyText } from "../ui/kit.jsx";
 
 const actionIcon = { assign: "userCheck", sendOffer: "send", reviewOffers: "users", remind: "msg", message: "msg", review: "clipCheck", viewProgress: "clipboard", viewReport: "clipboard", complete: "checkCircle", newLink: "link", issue: "alert", property: "building", cleanerView: "phone" };
@@ -38,7 +40,7 @@ export function ActionButton({ action, job, variant = "secondary", size, block }
   const run = useActions();
   return (
     <button type="button" className={`cfv2-button cfv2-button-${variant === "quiet" ? "tertiary" : variant} mw-btn${size ? ` cfv2-button-${size}` : ""}${block ? " mw-btn-block" : ""}`} onClick={() => run(action, job)}>
-      <Icon name={actionIcon[action] || "arrowR"} size={17} />{t(`a.${action}`)}
+      <Icon name={actionIcon[action] || "arrowR"} size={17} /><EditableLabel k={`a.${action}`}>{t(`a.${action}`)}</EditableLabel>
     </button>
   );
 }
@@ -59,24 +61,24 @@ export function NextStep({ job, sticky = false }) {
   }
   return (
     <section className={`mw-nextstep${top ? ` tone-${top.tone}` : ""}`} aria-label={t("j.nextStep")}>
-      <span className="mw-micro">{t("j.nextStep")}</span>
+      <EditableLabel k="j.nextStep" className="mw-micro">{t("j.nextStep")}</EditableLabel>
       {top ? <><AttentionTag item={top} /><p className="mw-why">{whyText(t, data, top, job)}</p></>
         : <p className="mw-why"><strong>{t(`att.${next.kind}`)}</strong></p>}
       <ActionButton action={next.action} job={job} variant={top || next.action === "complete" ? "primary" : "secondary"} size="large" block />
       {others.length > 0 && (
         <div className="mw-other-actions">
-          <span className="mw-micro">{t("j.otherActions")}</span>
-          {others.map(a => <ActionButton key={a} action={a} job={job} variant="quiet" block />)}
+          <EditableLabel k="j.otherActions" className="mw-micro">{t("j.otherActions")}</EditableLabel>
+          <StudioArea screen="actions" region="other" items={Object.fromEntries(others.map(a => [a, <ActionButton key={a} action={a} job={job} variant="quiet" block />]))} />
         </div>
       )}
     </section>
   );
 }
 
-function Block({ title, icon, children, aside }) {
+function Block({ title, titleKey, icon, children, aside }) {
   return (
     <section className="mw-block">
-      <header><h3><Icon name={icon} size={16} />{title}</h3>{aside}</header>
+      <header><h3><Icon name={icon} size={16} />{titleKey ? <EditableLabel k={titleKey}>{title}</EditableLabel> : title}</h3>{aside}</header>
       {children}
     </section>
   );
@@ -91,23 +93,17 @@ export function JobDetail({ job, withNextStep = true, onClose, outOfRange }) {
   const offers = offerSummary(job);
   const openIssues = job.issues.filter(i => i.status === "open");
   const pct = cl.total ? Math.round((cl.done / cl.total) * 100) : 0;
-  return (
-    <article className="mw-detail" aria-labelledby={`job-title-${job.id}`}>
-      <header className="mw-detail-head">
-        <div className="mw-detail-titles">
-          <span className="mw-micro">{whenText(t, data, job)} · {t(`type.${job.type}`)}</span>
-          <h2 id={`job-title-${job.id}`} tabIndex={-1}>{property.name}</h2>
-          <p className="mw-sec">{property.area} · {clientOf(data, property)}{job.guestOut ? ` · ${t("j.guests", { out: t.time(job.guestOut), in: t.time(job.guestIn) })}` : ""}</p>
-        </div>
-        {onClose && <button type="button" className="mw-iconbtn" onClick={onClose} aria-label={t("j.close")}><Icon name="x" /></button>}
-      </header>
-      {outOfRange && <p className="mw-inline-note"><Icon name="info" size={15} />{t("j.outOfRange")}</p>}
-      <div className="mw-detail-status"><JobStatus job={job} /></div>
-      <Rail job={job} />
-      {withNextStep && <NextStep job={job} />}
-
-      <div className="mw-blocks">
-        <Block title={t("j.cleaner")} icon="users" aside={job.cleanerIds.length > 1 ? <span className="mw-tag">{t("j.team")}</span> : null}>
+  const { editing } = useStudioFlags();
+  const layout = useLayout("job");
+  const label = useLabel();
+  const top = {
+    status: <div className="mw-detail-status"><JobStatus job={job} /></div>,
+    rail: <Rail job={job} />,
+    nextStep: withNextStep ? <NextStep job={job} /> : null,
+  };
+  const blocksMap = {
+    cleaner: (
+<Block titleKey="j.cleaner" title={t("j.cleaner")} icon="users" aside={job.cleanerIds.length > 1 ? <span className="mw-tag">{t("j.team")}</span> : null}>
           {job.cleanerIds.length ? (
             <ul className="mw-plainlist">
               {job.cleanerIds.map(id => (
@@ -130,8 +126,9 @@ export function JobDetail({ job, withNextStep = true, onClose, outOfRange }) {
             </ul>
           )}
         </Block>
-
-        <Block title={t("j.checklist")} icon="clipCheck" aside={<span className={`mw-flag tone-${cl.state === "submitted" ? "attention" : cl.state === "reviewed" ? "success" : "neutral"}`}>{t(`cl.${cl.state}`)}</span>}>
+    ),
+    checklist: (
+<Block titleKey="j.checklist" title={t("j.checklist")} icon="clipCheck" aside={<span className={`mw-flag tone-${cl.state === "submitted" ? "attention" : cl.state === "reviewed" ? "success" : "neutral"}`}>{t(`cl.${cl.state}`)}</span>}>
           {cl.state !== "none" ? (
             <>
               <div className="mw-progress" role="img" aria-label={t("j.items", { done: cl.done, total: cl.total })}><span style={{ width: `${pct}%` }} /></div>
@@ -142,20 +139,23 @@ export function JobDetail({ job, withNextStep = true, onClose, outOfRange }) {
           <p className={`mw-flag tone-${cl.link === "stale" ? "attention" : "neutral"}`}><Icon name="link" size={14} />{t(`link.${cl.link || "none"}`)}</p>
           {cl.state !== "none" && <button type="button" className="mw-linkbtn" onClick={() => run("review", job)}>{t(cl.state === "submitted" ? "a.review" : cl.state === "draft" ? "a.viewProgress" : "a.viewReport")}<Icon name="arrowR" size={15} /></button>}
         </Block>
-
-        <Block title={t("j.payment")} icon="dollar" aside={job.comp?.mode === "hourly" ? <SimTag kind="proposal" /> : null}>
+    ),
+    payment: (
+<Block titleKey="j.payment" title={t("j.payment")} icon="dollar" aside={job.comp?.mode === "hourly" ? <SimTag kind="proposal" /> : null}>
           <p><strong>{compText(t, job.comp)}</strong></p>
           {job.comp?.source === "property" && <p className="mw-sec">{t("comp.fromProperty")}</p>}
           {job.comp?.source === "override" && <p className="mw-flag tone-attention">{t("comp.override", { reason: job.comp.reason })}</p>}
         </Block>
-
-        <Block title={t("j.property")} icon="building">
+    ),
+    property: (
+<Block titleKey="j.property" title={t("j.property")} icon="building">
           <p className="mw-sec">{property.instructions[t.lang] || property.instructions.en}</p>
           <p className="mw-flag tone-neutral"><Icon name="lock" size={14} />{t("j.accessMasked")}</p>
           <button type="button" className="mw-linkbtn" onClick={() => run("property", job)}>{t("a.property")}<Icon name="arrowR" size={15} /></button>
         </Block>
-
-        <Block title={t("j.issues")} icon="alert">
+    ),
+    issues: (
+<Block titleKey="j.issues" title={t("j.issues")} icon="alert">
           {openIssues.length ? openIssues.map(issue => (
             <div key={issue.id} className="mw-issue">
               <p><strong>{issue.title[t.lang] || issue.title.en}</strong></p>
@@ -164,14 +164,39 @@ export function JobDetail({ job, withNextStep = true, onClose, outOfRange }) {
             </div>
           )) : <p className="mw-sec">{t("j.noIssues")}</p>}
         </Block>
-
-        <Block title={t("j.activity")} icon="history">
+    ),
+    activity: (
+<Block titleKey="j.activity" title={t("j.activity")} icon="history">
           <ol className="mw-activity">
             {[...job.activity].reverse().slice(0, 6).map((entry, i) => <li key={i}><span className="tnum">{t.stamp(entry.at)}</span>{t(entry.key, entry.params)}</li>)}
             {!job.activity.length && <li className="mw-sec">—</li>}
           </ol>
         </Block>
-      </div>
+    ),
+  };
+  const all = { ...top, ...blocksMap };
+  const detailIds = layout.filter(b => b.region === "details" && all[b.id] != null).map(b => b.id);
+  const hasDetails = detailIds.length > 0 || editing;
+  const detailNames = detailIds.map(id => label(`j.${id}`, t(`ws.block.job.${id}`))).join(" · ");
+  return (
+    <article className="mw-detail" aria-labelledby={`job-title-${job.id}`}>
+      <header className="mw-detail-head">
+        <div className="mw-detail-titles">
+          <span className="mw-micro">{whenText(t, data, job)} · {t(`type.${job.type}`)}</span>
+          <h2 id={`job-title-${job.id}`} tabIndex={-1}>{property.name}</h2>
+          <p className="mw-sec">{property.area} · {clientOf(data, property)}{job.guestOut ? ` · ${t("j.guests", { out: t.time(job.guestOut), in: t.time(job.guestIn) })}` : ""}</p>
+        </div>
+        {onClose && <button type="button" className="mw-iconbtn" onClick={onClose} aria-label={t("j.close")}><Icon name="x" /></button>}
+      </header>
+      {outOfRange && <p className="mw-inline-note"><Icon name="info" size={15} />{t("j.outOfRange")}</p>}
+      <StudioArea screen="job" region="top" className="mw-detail-top" items={all} />
+      <StudioArea screen="job" region="main" className="mw-blocks" items={all} />
+      {hasDetails && (
+        <details className="mw-moredetails" open={editing || undefined}>
+          <summary><Icon name="chevronR" size={15} /><EditableLabel k="j.moreDetails">{t("j.moreDetails")}</EditableLabel><span className="mw-sec">{detailNames}</span></summary>
+          <StudioArea screen="job" region="details" className="mw-blocks" items={all} />
+        </details>
+      )}
     </article>
   );
 }

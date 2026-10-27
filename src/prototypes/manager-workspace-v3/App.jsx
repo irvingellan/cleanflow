@@ -1,18 +1,20 @@
 import { useEffect } from "react";
 import { EnvironmentIndicator } from "../../components/v2/primitives.jsx";
 import { CleanerPreview } from "./cleaner/CleanerViews.jsx";
-import { InboxContent, InboxSheet } from "./flows/Inbox.jsx";
+import { InboxContent, InboxSheet, PushBanner } from "./flows/Inbox.jsx";
 import { JobDetail, NextStep } from "./flows/JobPanel.jsx";
 import { AssignSheet, CompleteSheet, IssueSheet, OfferComposer, ReminderSheet, ReviewSheet } from "./flows/OperationalSheets.jsx";
 import { NewServiceSheet, PropertySheet } from "./flows/SetupSheets.jsx";
 import { HybridNow, HybridWork, ModeA, ModeB, ModeC } from "./layouts/Modes.jsx";
 import { Worklist } from "./layouts/Worklist.jsx";
-import { LANGS } from "./model/messages.js";
 import { unreadCount } from "./model/selectors.js";
 import { StoreProvider, useStore } from "./model/store.js";
 import { inRange } from "./model/time.js";
 import { Icon } from "./ui/Icon.jsx";
 import { DateNav, Overlay, Toast, propertyOf, useT, useViewport } from "./ui/kit.jsx";
+import { StudioArea, StudioPanel, StudioProvider, useStudio } from "./studio/Studio.jsx";
+import { AccountSheet } from "./flows/AccountSettings.jsx";
+import { ReservationChangesSheet } from "./flows/ReservationChanges.jsx";
 import "./prototype.css";
 
 const MODES = ["hybrid", "a", "b", "c"];
@@ -46,21 +48,14 @@ function ModeSwitch({ compact }) {
   );
 }
 
-function Settings({ compact }) {
+function StudioToggle({ compact }) {
   const t = useT();
-  const { ui, setUi, reset } = useStore();
-  const system = useSystemTheme();
-  const theme = ui.theme || system;
-  const controls = (
-    <>
-      <label className="mw-langselect"><Icon name="globe" size={16} /><span className="mw-visually-hidden">{t("app.language")}</span>
-        <select value={ui.lang} onChange={e => setUi({ lang: e.target.value })}>{LANGS.map(l => <option key={l} value={l}>{l === "pt" ? "Português" : l === "en" ? "English" : "Español"}</option>)}</select>
-      </label>
-      <button type="button" className="mw-iconbtn" aria-label={t("app.theme")} onClick={() => setUi({ theme: theme === "dark" ? "light" : "dark" })}><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
-      <button type="button" className="cfv2-button cfv2-button-tertiary mw-btn cfv2-button-small" onClick={reset}><Icon name="refresh" size={15} />{t("app.reset")}</button>
-    </>
+  const { studio, dispatch } = useStudio();
+  return (
+    <button type="button" className={`mw-studio-toggle${studio.enabled ? " is-on" : ""}`} aria-pressed={studio.enabled} onClick={() => dispatch({ type: "TOGGLE" })} title={t("ws.toggleHint")}>
+      <Icon name="sliders" size={16} />{!compact && t("ws.toggle")}
+    </button>
   );
-  return <details className="mw-menu"><summary className="mw-iconbtn" aria-label={t("c.more")}><Icon name="more" /></summary><div className="mw-menu-pop">{controls}</div></details>;
 }
 
 function Header() {
@@ -74,12 +69,21 @@ function Header() {
         <div className="mw-brand"><span className="mw-wordmark">CleanFlow</span>{vp.xwide && <span className="mw-sec">{t("app.title")}</span>}</div>
         <ModeSwitch compact={!vp.wide} />
         <div className="mw-header-actions">
-          {!vp.compact && <button type="button" className="cfv2-button cfv2-button-primary mw-btn cfv2-button-small" onClick={() => setUi({ overlay: { type: "newService" } })}><Icon name="plus" size={16} />{t("app.newService")}</button>}
-          <button type="button" className="mw-iconbtn mw-bell" aria-label={`${t("app.inbox")}${unread ? ` · ${t("inbox.unread", { count: unread })}` : ""}`} onClick={() => setUi({ overlay: { type: "inbox" } })}>
-            <Icon name="bell" />{unread > 0 && <span className="mw-badge">{unread}</span>}
-          </button>
-          {!vp.compact && <button type="button" className="mw-iconbtn" aria-label={t("app.cleanerView")} title={t("app.cleanerView")} onClick={() => setUi({ cleanerView: { kind: "chooser" } })}><Icon name="phone" /></button>}
-          <Settings compact={vp.compact} />
+          <StudioToggle compact={vp.compact} />
+          <StudioArea screen="header" region="bar" className="mw-header-tools" items={{
+            newService: vp.compact ? null : <button type="button" className="cfv2-button cfv2-button-primary mw-btn cfv2-button-small" onClick={() => setUi({ overlay: { type: "newService" } })}><Icon name="plus" size={16} />{t("app.newService")}</button>,
+            bell: (
+              <button type="button" className="mw-iconbtn mw-bell" aria-label={`${t("app.inbox")}${unread ? ` · ${t("inbox.unread", { count: unread })}` : ""}`} onClick={() => setUi({ overlay: { type: "inbox" } })}>
+                <Icon name="bell" />{unread > 0 && <span className="mw-badge">{unread > 9 ? "9+" : unread}</span>}
+              </button>
+            ),
+            cleanerView: vp.compact ? null : <button type="button" className="mw-iconbtn" aria-label={t("app.cleanerView")} title={t("app.cleanerView")} onClick={() => setUi({ cleanerView: { kind: "chooser" } })}><Icon name="phone" /></button>,
+            account: (
+              <button type="button" className="mw-account-btn" aria-label={t("acc.open")} onClick={() => setUi({ overlay: { type: "account" } })}>
+                <span className="mw-avatar" aria-hidden="true">{t("acc.initials")}</span>{vp.xwide && <span>{t("acc.short")}</span>}
+              </button>
+            ),
+          }} />
         </div>
       </div>
       <div className="mw-header-row mw-header-sub">
@@ -125,7 +129,9 @@ function OverlaySwitch() {
     case "issue": return <IssueSheet jobId={o.jobId} onClose={close} />;
     case "property": return <PropertySheet propertyId={o.propertyId} onClose={close} />;
     case "newService": return <NewServiceSheet onClose={close} />;
-    case "inbox": return <InboxSheet onClose={close} />;
+    case "inbox": return <InboxSheet onClose={close} notificationId={o.notificationId} />;
+    case "reservations": return <ReservationChangesSheet onClose={close} />;
+    case "account": return <AccountSheet onClose={close} section={o.section} />;
     case "detail": return job ? <Overlay onClose={close} wide><JobDetail job={job} onClose={close} /></Overlay> : null;
     default: return null;
   }
@@ -179,8 +185,9 @@ function Shell() {
   }, []);
   useEffect(() => { window.scrollTo(0, 0); }, [ui.mode, ui.hybridScreen, ui.mobileTab]);
   const selected = data.jobs.find(j => j.id === ui.selectedJobId);
+  const { studio } = useStudio();
   return (
-    <div className={`mw-app mode-${ui.mode}${vp.compact ? " is-compact" : ""}`}>
+    <div className={`mw-app mode-${ui.mode}${vp.compact ? " is-compact" : ""}${studio.enabled ? " has-studio" : ""}${studio.enabled && studio.view === "original" ? " is-original" : ""}`}>
       <a className="mw-skip" href="#mw-main">{t("app.skip")}</a>
       <Header />
       <main id="mw-main" className="mw-main">
@@ -190,11 +197,13 @@ function Shell() {
       <OverlaySwitch />
       {ui.cleanerView && <CleanerPreview view={ui.cleanerView} onClose={() => setUi({ cleanerView: null })} />}
       {vp.compact && <TabBar />}
+      <PushBanner />
+      {studio.enabled && <StudioPanel />}
       <Toast />
     </div>
   );
 }
 
-export function App({ initial }) {
-  return <StoreProvider initial={initial}><Shell /></StoreProvider>;
+export function App({ initial, studioInitial }) {
+  return <StoreProvider initial={initial}><StudioProvider initial={studioInitial}><Shell /></StudioProvider></StoreProvider>;
 }

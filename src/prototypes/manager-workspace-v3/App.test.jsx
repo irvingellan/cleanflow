@@ -65,16 +65,59 @@ describe("Manager Workspace V3 prototype", () => {
     setup();
     fireEvent.click(screen.getByRole("button", { name: /^Notificações/ }));
     expect(screen.getByText(/Você tocou nesta notificação às 10:01/)).toBeInTheDocument();
-    const item = screen.getByText("Renata enviou o checklist de Sunset Duplex").closest("li");
-    act(() => { fireEvent.click(within(item).getByRole("button", { name: /Abrir serviço/ })); });
+    fireEvent.click(screen.getByRole("button", { name: /Renata enviou o checklist de Sunset Duplex/ }));
+    act(() => { fireEvent.click(screen.getByRole("button", { name: /Abrir serviço/ })); });
     expect(screen.getByRole("heading", { name: "Sunset Duplex" })).toBeInTheDocument();
+  });
+
+  it("tap push → job opens, notification stays unread and can be reopened from the inbox", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /^Notificações/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Simular push chegando" }));
+    const banner = screen.getByRole("button", { name: /Lucia tem interesse em Willow Row 12/ });
+    act(() => { fireEvent.click(banner); });
+    expect(screen.getByRole("heading", { name: "Willow Row 12" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Notificações/ }));
+    const row = screen.getByRole("button", { name: /Lucia tem interesse em Willow Row 12/ });
+    expect(row).toHaveClass("is-unread");
+    expect(within(row).getByText(/Você tocou nesta notificação/)).toBeInTheDocument();
+    fireEvent.click(row);
+    expect(screen.getAllByText(/Aberta pelo push/).length).toBeGreaterThan(0);
+    act(() => { fireEvent.click(screen.getByRole("button", { name: /Abrir serviço/ })); });
+    expect(screen.getByRole("heading", { name: "Willow Row 12" })).toBeInTheDocument();
+  });
+
+  it("delivery never claims display or opening without confirmation", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /^Notificações/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Nora tem interesse em Birch Cottage/ }));
+    const timeline = screen.getByRole("list", { name: "Entrega" });
+    expect(within(timeline).getByText("desconhecido — o aparelho não confirmou")).toBeInTheDocument();
+    expect(within(timeline).getByText("ainda não aberta")).toBeInTheDocument();
   });
 
   it("switches language without changing data", () => {
     setup();
-    fireEvent.click(screen.getByLabelText("Mais"));
-    fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "en" } });
+    fireEvent.click(screen.getByRole("button", { name: "Conta e configurações" }));
+    fireEvent.click(screen.getByRole("button", { name: /Preferências/ }));
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.getByText("Start with")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Dune House" })).toBeInTheDocument();
+  });
+
+  it("workshop: hide a block, compare with the original, undo", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /Oficina/ }));
+    expect(screen.getByRole("complementary", { name: "Massinha" })).toBeInTheDocument();
+    const queueBlock = document.querySelector('[data-studio-block="now/queue"]');
+    fireEvent.click(within(queueBlock).getByRole("button", { name: "Esconder" }));
+    expect(document.querySelector('[data-studio-block="now/queue"]')).toBeNull();
+    expect(screen.getByRole("tab", { name: /Mudanças · 1/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Original" }));
+    expect(screen.getByText("Precisa de você")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Proposta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(document.querySelector('[data-studio-block="now/queue"]')).not.toBeNull();
   });
 });

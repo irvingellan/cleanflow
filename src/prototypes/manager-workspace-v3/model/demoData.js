@@ -1,3 +1,4 @@
+import { DEFAULT_PREFS } from "./notificationModel.js";
 import { addDays, hhmm } from "./time.js";
 
 // Every record here is invented. No real client, property, cleaner, address,
@@ -206,21 +207,30 @@ export function buildDemoState(today) {
   jobs.push(job(today, "juniper", 3, "15:00", { status: "ASSIGNED", cleanerIds: ["paula"], ack: "confirmed", type: "touchup", durationMin: 120,
     comp: { mode: "hourly", rate: 28, estHours: 2, source: "manual" }, checklist: ck("juniper", "none"), proposal: true }));
 
+  // Synthetic notification history. Production keeps no history today; this is the proposed inbox.
+  const yesterday = addDays(today, -1);
+  const dl = (displayed, openedAt = null, extra = {}) => ({ targets: 2, accepted: true, displayed, openedAt, openTracked: true, ...extra });
   const notifications = [
-    { id: "n1", type: "offer", jobId: "j15", at: at(today, 7 * 60 + 58), titleKey: "n.offerInterest", params: { name: "Nora", property: "Birch Cottage" }, read: false, delivery: { accepted: true, displayed: "unknown", openedAt: null } },
-    { id: "n2", type: "issue", jobId: "j08", at: at(today, 9 * 60 + 47), titleKey: "n.issue", params: { name: "Paula", property: "Alder Court 3" }, read: true, delivery: { accepted: true, displayed: "confirmed", openedAt: at(today, 9 * 60 + 49) } },
-    { id: "n3", type: "checklist", jobId: "j05", at: at(today, 9 * 60 + 58), titleKey: "n.checklist", params: { name: "Renata", property: "Sunset Duplex" }, read: false, tappedBeforeRead: true, delivery: { accepted: true, displayed: "confirmed", openedAt: at(today, 10 * 60 + 1) } },
-    { id: "n4", type: "checklist", jobId: "j06", at: at(today, 10 * 60 + 12), titleKey: "n.checklist", params: { name: "Marta", property: "Ocean Loft 2" }, read: false, delivery: { accepted: true, displayed: "unknown", openedAt: null } },
-    { id: "n5", type: "summary", jobId: null, at: at(today, 7 * 60), titleKey: "n.summary", params: { count: 7 }, read: true, delivery: { accepted: true, displayed: "unknown", openedAt: null } },
-    { id: "n6", type: "offer", jobId: "j15", at: at(addDays(today, -1), 21 * 60 + 40), titleKey: "n.offerDeclined", params: { name: "Paula", property: "Birch Cottage" }, read: true, delivery: { accepted: true, displayed: "unknown", openedAt: null } },
-    { id: "n7", type: "test", jobId: null, at: at(addDays(today, -1), 18 * 60 + 2), titleKey: "n.test", params: {}, read: true, genericOnDevice: true, delivery: { accepted: true, displayed: "generic", openedAt: null } },
+    { id: "n1", category: "cleanerInterested", jobId: "j15", at: at(today, 7 * 60 + 58), titleKey: "n.offerInterest", bodyKey: "nb.offerInterest", params: { name: "Nora", property: "Birch Cottage" }, source: "cleaner", read: false, delivery: dl("unknown") },
+    { id: "n2", category: "issueReported", jobId: "j08", at: at(today, 9 * 60 + 47), titleKey: "n.issue", bodyKey: "nb.issue", params: { name: "Paula", property: "Alder Court 3" }, source: "cleaner", read: true, delivery: dl("confirmed", at(today, 9 * 60 + 49)) },
+    { id: "n3", category: "checklistReceived", jobId: "j05", at: at(today, 9 * 60 + 58), titleKey: "n.checklist", bodyKey: "nb.checklist", params: { name: "Renata", property: "Sunset Duplex" }, source: "cleaner", read: false, tappedBeforeRead: true, delivery: dl("confirmed", at(today, 10 * 60 + 1)) },
+    { id: "n4", category: "checklistReceived", jobId: "j06", at: at(today, 10 * 60 + 12), titleKey: "n.checklist", bodyKey: "nb.checklist", params: { name: "Marta", property: "Ocean Loft 2" }, source: "cleaner", read: false, delivery: dl("unknown") },
+    { id: "n5", category: "todayReminder", jobId: null, at: at(today, 7 * 60), titleKey: "n.summary", bodyKey: "nb.summary", params: { count: 7 }, source: "system", read: true, delivery: dl("unknown", null, { openTracked: false }) },
+    { id: "n8", category: "assignmentConfirmed", jobId: "j12", at: at(today, 8 * 60 + 20), titleKey: "n.assignConfirmed", bodyKey: "nb.assignConfirmed", params: { name: "Joana", property: "Maple Studio A" }, source: "cleaner", read: true, delivery: dl("confirmed", at(today, 8 * 60 + 31)) },
+    { id: "n9", category: "missingCleaner", jobId: "j14", at: at(today, 10 * 60 + 30), titleKey: "n.missingCleaner", bodyKey: "nb.missingCleaner", params: { property: "Juniper Loft", time: "14:00" }, source: "system", read: false, delivery: dl("unknown") },
+    { id: "n6", category: "offerDeclined", jobId: "j15", at: at(yesterday, 21 * 60 + 40), titleKey: "n.offerDeclined", bodyKey: "nb.offerDeclined", params: { name: "Paula", property: "Birch Cottage" }, source: "cleaner", read: true, delivery: dl("unknown") },
+    { id: "n10", category: "tomorrowPlanning", jobId: null, at: at(yesterday, 19 * 60), titleKey: "n.tomorrow", bodyKey: "nb.tomorrow", params: { count: 15, missing: 2 }, source: "system", read: true, delivery: dl("unknown", null, { openTracked: false }) },
+    { id: "n7", category: "deviceTest", jobId: null, at: at(yesterday, 18 * 60 + 2), titleKey: "n.test", bodyKey: "nb.test", params: {}, source: "manager", read: true, delivery: dl("generic") },
+    { id: "n11", category: "admin", jobId: null, at: at(yesterday, 17 * 60 + 38), titleKey: "n.admin", bodyKey: "nb.admin", params: {}, source: "system", read: true, delivery: { targets: 1, accepted: true, displayed: "confirmed", openedAt: null, openTracked: true } },
+    { id: "n12", category: "checklistReceived", jobId: "j02", at: at(yesterday, 14 * 60 + 5), titleKey: "n.checklist", bodyKey: "nb.checklist", params: { name: "Marta", property: "Harbor House" }, source: "cleaner", read: true, delivery: { targets: 2, accepted: false, displayed: "unknown", openedAt: null, openTracked: true } },
   ];
 
   return {
-    version: 3, today, clock: { date: today, minutes: DEMO_CLOCK_MINUTES },
+    version: 4, today, clock: { date: today, minutes: DEMO_CLOCK_MINUTES },
     properties, templates, jobs, notifications, devices: [
-      { id: "d1", labelKey: "dev.thisPhone", owner: "manager", status: "ok", lastTest: at(addDays(today, -1), 18 * 60 + 2) },
-      { id: "d2", labelKey: "dev.otherPhone", owner: "second", status: "silent", lastTest: at(addDays(today, -1), 17 * 60 + 40) },
+      { id: "d1", labelKey: "dev.thisPhone", kindKey: "dev.kind.iphone", owner: "manager", status: "ok", current: true, lastTest: at(addDays(today, -1), 18 * 60 + 2), enabledAt: at(addDays(today, -9), 9 * 60) },
+      { id: "d2", labelKey: "dev.otherPhone", kindKey: "dev.kind.android", owner: "second", status: "silent", current: false, lastTest: at(addDays(today, -1), 17 * 60 + 40), enabledAt: at(addDays(today, -1), 17 * 60 + 36) },
     ],
+    notificationSettings: { permission: "granted", prefs: { ...DEFAULT_PREFS } },
   };
 }
