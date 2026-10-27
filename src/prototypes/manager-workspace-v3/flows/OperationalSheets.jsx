@@ -247,6 +247,11 @@ export function ReminderSheet({ jobId, fromAssign, onClose }) {
       {fromAssign && <Banner tone="success" title={t("as.assigned")} />}
       <p className="mw-sec">{t("rm.intro", { name: cleaner.name })}</p>
       <div className="mw-bubble"><pre>{text}</pre></div>
+      <div className="mw-msgscope">
+        <div><h4 className="mw-micro"><Icon name="check" size={13} /> {t("rm.inMsg")}</h4><ul>{["rm.in.when", "rm.in.area", "rm.in.link"].map(k => <li key={k}>{t(k)}</li>)}</ul></div>
+        <div><h4 className="mw-micro"><Icon name="lock" size={13} /> {t("rm.notInMsg")}</h4><ul>{["rm.out.code", "rm.out.address", "rm.out.others"].map(k => <li key={k}>{t(k)}</li>)}</ul></div>
+      </div>
+      <p className="mw-hint"><Icon name="info" size={14} />{t("rm.releaseRule")}</p>
     </Overlay>
   );
 }

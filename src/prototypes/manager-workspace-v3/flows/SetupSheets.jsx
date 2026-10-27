@@ -18,8 +18,11 @@ export function PropertySheet({ propertyId, onClose }) {
   const [sections, setSections] = useState(() => clone(template.sections));
   const [reveal, setReveal] = useState(false);
   const [savedVersion, setSavedVersion] = useState(null);
+  const [view, setView] = useState("edit");
+  const [openItem, setOpenItem] = useState(null);
   const lang = t.lang;
   const dirty = JSON.stringify(sections) !== JSON.stringify(template.sections);
+  const pinned = data.jobs.filter(j => j.propertyId === propertyId && (j.checklist?.state || "none") !== "none");
   const upcoming = data.jobs.filter(j => j.propertyId === propertyId && j.date >= data.clock.date && j.status !== "COMPLETED" && (j.checklist?.state || "none") === "none").length;
   const setLabel = (obj, value) => ({ ...obj, [lang]: value, ...(lang === "pt" ? {} : {}) });
   const update = fn => setSections(prev => { const next = clone(prev); fn(next); return next; });
@@ -55,6 +58,22 @@ export function PropertySheet({ propertyId, onClose }) {
         </div>
         {savedVersion && !dirty && <Banner tone="success" title={t("pr.saved", { v: savedVersion })} />}
         <p className="mw-hint"><Icon name="history" size={14} />{t("pr.versionNote", { next: template.version + 1 })}</p>
+        <div className="cfv2-segmented mw-seg-control" role="group" aria-label={t("pr.template")}>
+          {["edit", "preview", "history"].map(v => <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}>{t(`pr.view.${v}`)}</button>)}
+        </div>
+        {view === "preview" && <TemplatePreview sections={sections} lang={lang} />}
+        {view === "history" && (
+          <div className="mw-tplhistory">
+            <ol>
+              {[...template.history].reverse().map(h => (
+                <li key={h.version}><span className="mw-tag">{t("pr.version", { v: h.version })}</span>{h.version === template.version ? <strong>{t("pr.current")}</strong> : <span className="mw-sec">{t(`pr.h.${h.note}`)}</span>}
+                  <span className="mw-sec">{t("pr.h.inUse", { count: pinned.filter(j => j.checklist.templateVersion === h.version).length })}</span></li>
+              ))}
+            </ol>
+            <p className="mw-hint"><Icon name="lock" size={14} />{t("pr.immutable")}</p>
+          </div>
+        )}
+        {view === "edit" && (<>
         <ol className="mw-template">
           {sections.map((section, si) => (
             <li key={section.id} className="mw-template-section">
@@ -66,11 +85,31 @@ export function PropertySheet({ propertyId, onClose }) {
               </div>
               <ul>
                 {section.items.map((item, ii) => (
-                  <li key={item.id} className="mw-template-row">
-                    <input aria-label={t("pr.newItem")} value={item.label[lang] || item.label.en || ""} onChange={e => update(s => { s[si].items[ii].label = setLabel(s[si].items[ii].label, e.target.value); })} />
-                    <label className="mw-check mw-check-small"><input type="checkbox" checked={Boolean(item.photo)} onChange={e => update(s => { s[si].items[ii].photo = e.target.checked; })} /><Icon name="camera" size={14} />{t("pr.photo")}</label>
-                    <button type="button" className="mw-iconbtn" aria-label={t("pr.moveUp")} onClick={() => update(s => move(s[si].items, ii, -1))}><Icon name="up" size={16} /></button>
-                    <button type="button" className="mw-iconbtn" aria-label={t("pr.remove")} onClick={() => update(s => s[si].items.splice(ii, 1))}><Icon name="trash" size={16} /></button>
+                  <li key={item.id} className={`mw-template-item${openItem === item.id ? " is-open" : ""}`}>
+                    <div className="mw-template-row">
+                      <input aria-label={t("pr.newItem")} value={item.label[lang] || item.label.en || ""} onChange={e => update(s => { s[si].items[ii].label = setLabel(s[si].items[ii].label, e.target.value); })} />
+                      <span className="mw-tplbadges">
+                        <span className={`mw-tag${item.optional ? "" : " is-strong"}`}>{t(item.optional ? "pr.optional" : "pr.required")}</span>
+                        {item.photo && <span className="mw-tag"><Icon name="camera" size={12} />{t("pr.photo")}</span>}
+                        {item.allowNa && <span className="mw-tag">{t("pr.na")}</span>}
+                      </span>
+                      <button type="button" className="mw-iconbtn" aria-expanded={openItem === item.id} aria-label={t("pr.itemDetails")} onClick={() => setOpenItem(openItem === item.id ? null : item.id)}><Icon name="edit" size={16} /></button>
+                      <button type="button" className="mw-iconbtn" aria-label={t("pr.moveUp")} onClick={() => update(s => move(s[si].items, ii, -1))}><Icon name="up" size={16} /></button>
+                      <button type="button" className="mw-iconbtn" aria-label={t("pr.remove")} onClick={() => update(s => s[si].items.splice(ii, 1))}><Icon name="trash" size={16} /></button>
+                    </div>
+                    {openItem === item.id && (
+                      <div className="mw-template-details">
+                        <div className="cfv2-segmented mw-seg-control" role="group" aria-label={t("pr.required")}>
+                          <button type="button" aria-pressed={!item.optional} onClick={() => update(s => { s[si].items[ii].optional = false; })}>{t("pr.required")}</button>
+                          <button type="button" aria-pressed={Boolean(item.optional)} onClick={() => update(s => { s[si].items[ii].optional = true; })}>{t("pr.optional")}</button>
+                        </div>
+                        <label className="mw-check mw-check-small"><input type="checkbox" checked={Boolean(item.photo)} onChange={e => update(s => { s[si].items[ii].photo = e.target.checked; })} /><Icon name="camera" size={14} />{t("pr.photoNeeded")}</label>
+                        {item.photo && <label className="mw-field"><span>{t("pr.photoHint")}</span><input value={item.photoHint?.[lang] || ""} placeholder={t("pr.photoHintPh")} onChange={e => update(s => { s[si].items[ii].photoHint = setLabel(s[si].items[ii].photoHint || {}, e.target.value); })} /></label>}
+                        <label className="mw-check mw-check-small"><input type="checkbox" checked={Boolean(item.allowNa)} onChange={e => update(s => { s[si].items[ii].allowNa = e.target.checked; })} />{t("pr.allowNa")}</label>
+                        <label className="mw-field"><span>{t("pr.note")}</span><input value={item.note?.[lang] || ""} placeholder={t("pr.notePh")} onChange={e => update(s => { s[si].items[ii].note = setLabel(s[si].items[ii].note || {}, e.target.value); })} /></label>
+                        <p className="mw-hint">{t("pr.langNote")}</p>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -79,8 +118,38 @@ export function PropertySheet({ propertyId, onClose }) {
           ))}
         </ol>
         <button type="button" className={btn("secondary", "cfv2-button-small")} onClick={() => update(s => { s.push({ id: `s${Date.now()}`, title: { pt: t("pr.newSection"), en: t("pr.newSection"), es: t("pr.newSection") }, items: [] }); })}><Icon name="plus" size={15} />{t("pr.addSection")}</button>
+        </>)}
       </section>
     </Overlay>
+  );
+}
+
+/** Read-only preview of the template as the cleaner will see it. */
+function TemplatePreview({ sections, lang }) {
+  const t = useT();
+  const text = obj => (obj ? obj[lang] || obj.en || obj.pt || "" : "");
+  return (
+    <div className="mw-tplpreview" aria-label={t("pr.view.preview")}>
+      <p className="mw-hint">{t("pr.previewNote")}</p>
+      {sections.map(section => (
+        <section key={section.id} className="mw-tplpreview-section">
+          <h4>{text(section.title)}</h4>
+          <ul>
+            {section.items.map(item => (
+              <li key={item.id}>
+                <span className="mw-tplpreview-box" aria-hidden="true">{item.photo ? <Icon name="camera" size={14} /> : null}</span>
+                <span className="mw-grow">
+                  <span>{text(item.label)} {item.optional ? <em className="mw-sec">({t("pr.optional").toLowerCase()})</em> : null}</span>
+                  {item.photo && <span className="mw-sec">{text(item.photoHint) || t("pr.photoDefaultHint")}</span>}
+                  {text(item.note) && <span className="mw-flag tone-info"><Icon name="info" size={13} />{text(item.note)}</span>}
+                </span>
+                {item.allowNa && <span className="mw-tag">{t("pr.na")}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }
 

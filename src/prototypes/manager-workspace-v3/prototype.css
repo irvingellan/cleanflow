@@ -805,3 +805,22 @@ button.mw-notif:hover { border-color: var(--v2-color-border-selected); }
 .mw-sent-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .cw-decision.is-assignedYou { border-color: var(--v2-color-success-border); background: var(--v2-color-success-bg); }
 .cw-decision.is-assignedOther { opacity: 0.9; }
+
+/* Checklist template editor */
+.mw-template-item { display: grid; gap: 6px; }
+.mw-template-item.is-open { padding: 6px; border-radius: var(--v2-radius-card); background: var(--v2-color-surface-internal); }
+.mw-tplbadges { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.mw-tag.is-strong { background: var(--v2-color-surface-selected); color: var(--v2-color-brand-text); }
+.mw-template-details { display: grid; gap: 10px; padding: 6px 4px 10px 8px; }
+.mw-tplpreview { display: grid; gap: 12px; max-width: 420px; padding: 14px; border-radius: 24px; border: 8px solid var(--v2-color-text-primary); background: var(--v2-color-canvas); }
+.mw-tplpreview-section h4 { margin: 0 0 6px; font-size: 16px; font-weight: 800; }
+.mw-tplpreview-section ul { display: grid; gap: 6px; }
+.mw-tplpreview-section li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); }
+.mw-tplpreview-section li > .mw-grow { display: grid; gap: 2px; }
+.mw-tplpreview-box { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--v2-color-border-input); flex: none; color: var(--v2-color-text-secondary); }
+.mw-tplhistory ol { display: grid; gap: 6px; }
+.mw-tplhistory li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--v2-color-border); background: var(--v2-color-surface); }
+.mw-msgscope { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 12px; }
+.mw-msgscope > div { padding: 10px 12px; border-radius: var(--v2-radius-card); border: 1px solid var(--v2-color-border); background: var(--v2-color-surface); }
+.mw-msgscope h4 { display: flex; gap: 4px; align-items: center; margin: 0 0 6px; }
+.mw-msgscope ul { display: grid; gap: 3px; font-size: 14px; }
