@@ -133,23 +133,37 @@ export function OfferComposer({ jobId, onClose }) {
   const copy = text => { try { navigator.clipboard?.writeText(text); } catch { /* demo */ } setUi({ toast: { id: Date.now(), text: t("c.copied"), icon: "check" } }); };
 
   if (sent) {
+    const live = data.jobs.find(j => j.id === jobId);
+    const openWhatsApp = name => setUi({ toast: { id: Date.now(), text: t("of.waSim", { name }), icon: "msg" } });
     return (
       <Overlay title={t("of.title")} onClose={onClose}>
         <Banner tone="success" title={t("of.sent")} />
+        <div className="mw-paysum">
+          <Icon name="dollar" size={18} />
+          <span className="mw-grow"><strong>{compText(t, live.comp)}</strong>
+            <span className="mw-sec">{live.comp?.source === "override" ? t("comp.override", { reason: live.comp.reason }) : live.comp?.source === "property" ? t("comp.fromProperty") : t("of.paySumManual")}</span></span>
+        </div>
         <ul className="mw-optionlist">
           {sent.map(id => {
             const c = cleaners.find(x => x.id === id);
             const text = buildMessage(concept, c.lang, offerParams(data, { ...job, comp }, c, linkFor(job, id), c.lang));
+            const response = live.offers.find(o => o.cleanerId === id)?.response;
             return (
               <li key={id} className="mw-option-static mw-sent-row">
                 <span className="mw-avatar">{c.name.slice(0, 2).toUpperCase()}</span>
-                <span className="mw-grow"><strong>{c.name}</strong><span className="mw-sec mw-mono">{linkFor(job, id)}</span></span>
-                <button type="button" className={btn("secondary", "cfv2-button-small")} onClick={() => copy(text)}><Icon name="clipboard" size={15} />{t("c.copy")}</button>
-                <button type="button" className={btn("primary", "cfv2-button-small")} onClick={() => setUi({ overlay: null, cleanerView: { kind: "offer", jobId, cleanerId: id } })}><Icon name="phone" size={15} />{t("of.openCleaner", { name: c.name })}</button>
+                <span className="mw-grow"><strong>{c.name}</strong>
+                  <span className={`mw-flag tone-${response === "interested" ? "attention" : response === "declined" ? "neutral" : "info"}`}><Icon name={response === "interested" ? "userCheck" : response === "declined" ? "x" : "clock"} size={14} />{t(`offer.${response || "waiting"}`)}</span>
+                  <span className="mw-sec mw-mono">{linkFor(job, id)}</span></span>
+                <span className="mw-sent-actions">
+                  <button type="button" className={btn("secondary", "cfv2-button-small")} onClick={() => copy(text)}><Icon name="clipboard" size={15} />{t("c.copy")}</button>
+                  <button type="button" className={btn("secondary", "cfv2-button-small")} onClick={() => openWhatsApp(c.name)}><Icon name="msg" size={15} />{t("of.openWa")}</button>
+                  <button type="button" className={btn("tertiary", "cfv2-button-small")} onClick={() => setUi({ overlay: null, cleanerView: { kind: "offer", jobId, cleanerId: id } })}><Icon name="phone" size={15} />{t("of.openCleaner", { name: c.name })}</button>
+                </span>
               </li>
             );
           })}
         </ul>
+        <p className="mw-hint">{t("of.privacy")}</p>
       </Overlay>
     );
   }

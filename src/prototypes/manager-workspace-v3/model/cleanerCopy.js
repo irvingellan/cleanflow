@@ -112,6 +112,18 @@ const C = {
   "pb.step.submitted": ["Enviado para a gerente", "Submitted to the manager", "Enviado a la gerente"],
   "pb.step.physicallyDone": ["Limpeza feita (você confirmou)", "Cleaning done (you confirmed)", "Limpieza hecha (usted confirmó)"],
   "pb.step.formallyDone": ["Concluído pela gerente", "Completed by the manager", "Completado por la gerente"],
+  // Returning to an answered offer
+  "co.returnTitle": ["Você já respondeu este convite", "You already answered this offer", "Ya respondió esta oferta"],
+  "co.returnInterested": ["Você disse “Tenho interesse” às {time}.", "You said “I'm interested” at {time}.", "Dijo “Me interesa” a las {time}."],
+  "co.returnDeclined": ["Você disse que não pode às {time}.", "You said you can't at {time}.", "Dijo que no puede a las {time}."],
+  "co.statusTitle": ["Situação agora", "Status now", "Situación ahora"],
+  "co.status.waiting": ["A gerente ainda está decidindo", "The manager is still deciding", "La gerente aún está decidiendo"],
+  "co.status.waiting.hint": ["Ninguém foi confirmada ainda. Você recebe uma mensagem se for escolhida.", "Nobody is confirmed yet. You'll get a message if you're chosen.", "Nadie está confirmada aún. Recibirá un mensaje si la eligen."],
+  "co.status.assignedYou": ["Você foi confirmada para este serviço", "You are confirmed for this job", "Usted está confirmada para este servicio"],
+  "co.status.assignedYou.hint": ["Endereço e acesso aparecem no checklist, perto do horário.", "Address and access appear in the checklist, close to the time.", "Dirección y acceso aparecen en el checklist, cerca de la hora."],
+  "co.status.assignedOther": ["Este serviço já foi preenchido", "This job has been filled", "Este servicio ya está cubierto"],
+  "co.status.assignedOther.hint": ["Obrigada pela resposta. Novos convites chegam por mensagem.", "Thanks for answering. New offers arrive by message.", "Gracias por responder. Las nuevas ofertas llegan por mensaje."],
+  "co.changeToInterested": ["Mudei de ideia: tenho interesse", "Changed my mind: I'm interested", "Cambié de opinión: me interesa"],
 };
 
 const index = { pt: 0, en: 1, es: 2 };

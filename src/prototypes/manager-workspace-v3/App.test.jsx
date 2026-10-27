@@ -74,11 +74,11 @@ describe("Manager Workspace V3 prototype", () => {
     setup();
     fireEvent.click(screen.getByRole("button", { name: /^Notificações/ }));
     fireEvent.click(screen.getByRole("button", { name: "Simular push chegando" }));
-    const banner = screen.getByRole("button", { name: /Lucia tem interesse em Willow Row 12/ });
+    const banner = screen.getByRole("button", { name: /Lúcia tem interesse em Willow Row 12/ });
     act(() => { fireEvent.click(banner); });
     expect(screen.getByRole("heading", { name: "Willow Row 12" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Notificações/ }));
-    const row = screen.getByRole("button", { name: /Lucia tem interesse em Willow Row 12/ });
+    const row = screen.getByRole("button", { name: /Lúcia tem interesse em Willow Row 12/ });
     expect(row).toHaveClass("is-unread");
     expect(within(row).getByText(/Você tocou nesta notificação/)).toBeInTheDocument();
     fireEvent.click(row);
@@ -119,5 +119,15 @@ describe("Manager Workspace V3 prototype", () => {
     fireEvent.click(screen.getByRole("button", { name: "Proposta" }));
     fireEvent.click(screen.getByRole("button", { name: "Desfazer" }));
     expect(document.querySelector('[data-studio-block="now/queue"]')).not.toBeNull();
+  });
+
+  it("a cleaner who opens the offer link again sees her earlier answer and the live status", () => {
+    const initial = initialState(TODAY);
+    initial.ui.cleanerView = { kind: "offer", jobId: "j15", cleanerId: "paula" };
+    render(<App initial={initial} />);
+    expect(screen.getByText("Você já respondeu este convite")).toBeInTheDocument();
+    expect(screen.getByText(/Você disse que não pode/)).toBeInTheDocument();
+    expect(screen.getByText("A gerente ainda está decidindo")).toBeInTheDocument();
+    expect(within(document.querySelector(".mw-phone")).queryByText(/Nora/)).toBeNull();
   });
 });

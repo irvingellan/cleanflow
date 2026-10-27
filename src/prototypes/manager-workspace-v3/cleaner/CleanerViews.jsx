@@ -19,6 +19,8 @@ function CleanerOffer({ job, cleaner }) {
   const property = propertyOf(data, job);
   const offer = job.offers.find(o => o.cleanerId === cleaner.id);
   const [screen, setScreen] = useState(offer?.response ? "result" : "message");
+  // Opening the link again after answering: show what she already said.
+  const [returning] = useState(Boolean(offer?.response));
   const cl = checklistSummary(data, job);
   const hours = Math.round(job.durationMin / 60);
   const pay = job.comp?.mode === "hourly" ? `$${job.comp.rate}` : job.comp?.amount ? `$${job.comp.amount}` : "—";
@@ -43,21 +45,36 @@ function CleanerOffer({ job, cleaner }) {
     );
   }
   if (screen === "result") {
-    const current = data.jobs.find(j => j.id === job.id).offers.find(o => o.cleanerId === cleaner.id);
+    const live = data.jobs.find(j => j.id === job.id);
+    const current = live.offers.find(o => o.cleanerId === cleaner.id);
     const interested = current?.response === "interested";
+    const assigned = live.cleanerIds.length > 0 && ["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(live.status);
+    const decision = assigned ? (live.cleanerIds.includes(cleaner.id) ? "assignedYou" : "assignedOther") : "waiting";
     return (
       <div className="cw-screen cw-result">
+        {returning && (
+          <div className={`cw-state tone-${decision === "assignedYou" ? "success" : decision === "assignedOther" ? "neutral" : "info"}`} role="status">
+            <Icon name="history" size={18} />
+            <span><strong>{ct(lang, "co.returnTitle")}</strong>
+              <span>{ct(lang, interested ? "co.returnInterested" : "co.returnDeclined", { time: current?.respondedAt ? formatTime(hhmm(current.respondedAt.min), lang) : "" })}</span></span>
+          </div>
+        )}
         <div className={`cw-result-mark ${interested ? "is-ok" : "is-neutral"}`}><Icon name={interested ? "checkCircle" : "x"} size={40} /></div>
         <h2>{ct(lang, interested ? "co.sentTitle" : "co.declinedTitle")}</h2>
         <p>{ct(lang, interested ? "co.sentBody" : "co.declinedBody")}</p>
-        {interested && (
+        <section className={`cw-card cw-decision is-${decision}`}>
+          <h3>{ct(lang, "co.statusTitle")}</h3>
+          <p><strong>{ct(lang, `co.status.${decision}`)}</strong></p>
+          <span className="cw-note">{ct(lang, `co.status.${decision}.hint`)}</span>
+        </section>
+        {interested && decision === "waiting" && (
           <section className="cw-card">
             <h3>{ct(lang, "co.next")}</h3>
             <ol className="cw-steps"><li>{ct(lang, "co.next1")}</li><li>{ct(lang, "co.next2")}</li><li>{ct(lang, "co.next3")}</li></ol>
           </section>
         )}
         <section className="cw-card cw-summary"><strong>{translate(lang, `type.${job.type}`)} · {property.area}</strong><span>{formatDay(job.date, lang, "long")} · {job.start ? formatTime(job.start, lang) : "—"} · {pay}</span></section>
-        {interested && <button type="button" className="mw-linkbtn" onClick={() => respond("declined")}>{ct(lang, "co.changeMind")}</button>}
+        {decision === "waiting" && <button type="button" className="mw-linkbtn" onClick={() => respond(interested ? "declined" : "interested")}>{ct(lang, interested ? "co.changeMind" : "co.changeToInterested")}</button>}
       </div>
     );
   }

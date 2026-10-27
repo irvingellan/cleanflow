@@ -48,9 +48,9 @@ export function filterNotifications(list, { filter = "all", query = "", text = n
 
 /** Templates used by "Simulate push" in the demo. */
 export const PUSH_SAMPLES = [
-  { category: "cleanerInterested", jobId: "j17", titleKey: "n.offerInterest", params: { name: "Lucia" } },
+  { category: "cleanerInterested", jobId: "j17", titleKey: "n.offerInterest", params: { name: "Lúcia" } },
   { category: "checklistReceived", jobId: "j07", titleKey: "n.checklist", params: { name: "Sofia" } },
-  { category: "assignmentConfirmed", jobId: "j11", titleKey: "n.assignConfirmed", params: { name: "Lucia" } },
+  { category: "assignmentConfirmed", jobId: "j11", titleKey: "n.assignConfirmed", params: { name: "Lúcia" } },
 ];
 
 export const DEFAULT_PREFS = Object.fromEntries(CATEGORIES.map(c => [c.id, c.id !== "tomorrowPlanning"]));

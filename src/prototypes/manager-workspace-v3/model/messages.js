@@ -730,6 +730,10 @@ const M = {
   "rx.d.nov4": ["saída 4 nov", "checkout Nov 4", "salida 4 nov"],
   "rx.d.nov5": ["saída 5 nov", "checkout Nov 5", "salida 5 nov"],
   "rx.d.nov5_9": ["5–9 nov", "Nov 5–9", "5–9 nov"],
+  "of.openWa": ["Abrir WhatsApp", "Open WhatsApp", "Abrir WhatsApp"],
+  "of.waSim": ["Abriria o WhatsApp com a mensagem para {name} (simulado — nada foi enviado).", "Would open WhatsApp with the message for {name} (simulated — nothing sent).", "Abriría WhatsApp con el mensaje para {name} (simulado — nada se envió)."],
+  "of.paySumManual": ["Valor digitado nesta oferta", "Amount typed for this offer", "Monto escrito en esta oferta"],
+  "of.privacy": ["Cada cleaner vê só a própria resposta. Ninguém vê quem mais recebeu a oferta.", "Each cleaner sees only her own answer. Nobody sees who else got the offer.", "Cada cleaner ve solo su respuesta. Nadie ve a quién más se ofreció."],
 };
 
 export const LANGS = ["pt", "en", "es"];
