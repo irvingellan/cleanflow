@@ -8,6 +8,7 @@ import { formatDay, formatTime, hhmm, minutesOf } from "../model/time.js";
 import { linkFor } from "../flows/OperationalSheets.jsx";
 import { Icon } from "../ui/Icon.jsx";
 import { Overlay, PhotoTile, cleanerName, propertyOf, useT } from "../ui/kit.jsx";
+import { PhotoPicker, QuotaLine, SubmissionSteps, UploadQueue, photoMb, quotaOf, useSequentialUpload } from "./PhotoBatch.jsx";
 
 const ct = (lang, key, params) => cleanerT(lang, key, params);
 
@@ -92,22 +93,6 @@ function CleanerOffer({ job, cleaner }) {
 }
 
 /* ---------------- Checklist (cleaner side) ---------------- */
-function useUploadSimulation(job) {
-  const { act } = useStore();
-  const uploading = (job.checklist.photos || []).filter(p => p.status === "uploading");
-  useEffect(() => {
-    if (!uploading.length) return undefined;
-    const id = setTimeout(() => {
-      uploading.forEach(p => {
-        const progress = Math.min(100, (p.progress || 0) + 34);
-        if (p.willFail && progress >= 60) act("CL_PHOTO_STATUS", { jobId: job.id, photoId: p.id, status: "failed", progress: 60 });
-        else act("CL_PHOTO_STATUS", { jobId: job.id, photoId: p.id, status: progress >= 100 ? "saved" : "uploading", progress });
-      });
-    }, 420);
-    return () => clearTimeout(id);
-  }, [JSON.stringify(uploading.map(p => [p.id, p.progress]))]);
-}
-
 function CleanerChecklist({ job: initialJob, cleaner }) {
   const { data, act } = useStore();
   const job = data.jobs.find(j => j.id === initialJob.id);
@@ -123,21 +108,35 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
   const [workDone, setWorkDone] = useState(false);
   const [failNext, setFailNext] = useState(false);
   const [accessOverride, setAccessOverride] = useState(false);
-  useUploadSimulation(job);
+  const [pickerFor, setPickerFor] = useState(null);
+  const [future, setFuture] = useState(false);
+  useSequentialUpload(job);
   const locked = cl.state === "submitted" || cl.state === "reviewed" || job.status === "COMPLETED";
   const photos = job.checklist.photos || [];
   const missing = items.filter(i => !job.checklist.items?.[i.id]);
-  const uploadingCount = photos.filter(p => p.status === "uploading").length;
+  const uploadingCount = photos.filter(p => p.status === "uploading" || p.status === "queued").length;
+  const quota = quotaOf(photos, future);
   const failedCount = photos.filter(p => p.status === "failed").length;
   const unlockAt = job.start ? minutesOf(job.start) - 120 : null;
   const accessOpen = accessOverride || (job.date === data.clock.date && unlockAt !== null && data.clock.minutes >= unlockAt) || job.date < data.clock.date;
   const savedTime = job.checklist.savedAt ? formatTime(hhmm(job.checklist.savedAt.min), lang) : "—";
-  const addPhotos = (item, count, extra = false) => {
+  // Every new photo enters a queue; uploads run one at a time (see useSequentialUpload).
+  const addPhotos = (item, picked, extra = false) => {
     const stamp = Date.now();
-    const list = Array.from({ length: count }, (_, i) => ({ id: `${job.id}-x${stamp}-${i}`, itemId: item.id, sectionId: item.sectionId, status: "uploading", progress: 6, n: photos.length + i + 1, willFail: failNext && i === 0, extra }));
+    const list = picked.map((g, i) => {
+      const n = photos.length + i + 1;
+      return { id: `${job.id}-x${stamp}-${i}`, itemId: item.id, sectionId: item.sectionId, status: "queued", progress: 0, n, mb: g.mb ?? photoMb(n), batch: stamp, willFail: failNext && (i === 1 || (picked.length === 1 && i === 0) || i === 4), extra };
+    });
     setFailNext(false);
     act("CL_PHOTOS_ADD", { jobId: job.id, photos: list });
   };
+  const takePhoto = (item, extra = false) => { if (quota.leftPhotos > 0) addPhotos(item, [{}], extra); };
+  const tileLabel = p => (p.status === "failed" ? ct(lang, "cc.failed") : p.status === "queued" ? ct(lang, "pb.queued") : ct(lang, "cc.uploading", { p: p.progress || 0 }));
+  const tile = (p, label) => (
+    <PhotoTile key={p.id} photo={p} label={label} statusLabel={tileLabel(p)}
+      retryLabel={ct(lang, "cc.retry")} onRetry={() => act("CL_PHOTO_STATUS", { jobId: job.id, photoId: p.id, status: "queued", progress: 0 })}
+      removeLabel={ct(lang, "pb.remove", { n: p.n })} onRemove={locked || p.status === "uploading" ? null : () => act("CL_PHOTO_REMOVE", { jobId: job.id, photoId: p.id })} />
+  );
   const blocked = uploadingCount ? ct(lang, "cc.waitUploads") : failedCount ? ct(lang, "cc.retryFailed")
     : (missing.length && !missingNote.trim()) ? ct(lang, "cc.needNote") : !workDone ? ct(lang, "cc.needWorkDone") : null;
   const banner = cl.state === "submitted" ? { tone: "success", icon: "checkCircle", text: ct(lang, "cc.submittedBanner", { time: formatTime(hhmm(job.checklist.submittedAt.min), lang) }) }
@@ -159,11 +158,15 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
         <p>{ct(lang, "cc.successBody", { time: job.checklist.submittedAt ? formatTime(hhmm(job.checklist.submittedAt.min), lang) : "" })}</p>
         <section className="cw-card cw-summary"><strong>{property.name}</strong><span>{ct(lang, "cc.successSummary", { items: cl.done, photos: cl.photos })}</span></section>
         <p className="cw-note">{ct(lang, "cc.successNext")}</p>
-        <button type="button" className="cfv2-button cfv2-button-secondary mw-btn mw-btn-block" onClick={() => addPhotos(items.find(i => i.photo) || items[0], 1, true)}><Icon name="camera" size={18} />{ct(lang, "cc.addExtra")}</button>
-        {photos.some(p => p.extra) && <div className="mw-photostrip">{photos.filter(p => p.extra).map(p => <PhotoTile key={p.id} photo={p} label={ct(lang, "cc.extra")} statusLabel={p.status === "failed" ? ct(lang, "cc.failed") : ct(lang, "cc.uploading", { p: p.progress || 0 })} />)}</div>}
+        <button type="button" className="cfv2-button cfv2-button-secondary mw-btn mw-btn-block" onClick={() => takePhoto(items.find(i => i.photo) || items[0], true)}><Icon name="camera" size={18} />{ct(lang, "cc.addExtra")}</button>
+        {photos.some(p => p.extra) && <div className="mw-photostrip">{photos.filter(p => p.extra).map(p => tile(p, ct(lang, "cc.extra")))}</div>}
         <button type="button" className="mw-linkbtn" onClick={() => setScreen("list")}>{ct(lang, "cc.backToList")}</button>
       </div>
     );
+  }
+
+  if (screen === "section" && pickerFor) {
+    return <PhotoPicker lang={lang} photos={photos} future={future} onCancel={() => setPickerFor(null)} onAdd={picked => { addPhotos(pickerFor, picked); setPickerFor(null); }} />;
   }
 
   if (screen === "section") {
@@ -173,6 +176,7 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
       <div className="cw-screen">
         <div className="cw-topbar"><button type="button" className="mw-linkbtn" onClick={() => setScreen("list")}><Icon name="arrowL" size={16} />{ct(lang, "cc.backToList")}</button></div>
         <Banner />
+        <UploadQueue job={job} lang={lang} />
         <h2 className="cw-title">{section.title[lang] || section.title.en}</h2>
         <ul className="cw-items">
           {sItems.map(item => {
@@ -184,17 +188,14 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
                   <div className="cw-photo-item">
                     <p className="cw-item-label"><Icon name={done ? "checkCircle" : "camera"} size={20} />{item.label[lang] || item.label.en}<span className="cw-req">{ct(lang, "cc.photoRequired")}</span></p>
                     {itemPhotos.length > 0 && (
-                      <div className="mw-photostrip">
-                        {itemPhotos.map(p => (
-                          <PhotoTile key={p.id} photo={p} label={`${p.n}`} statusLabel={p.status === "failed" ? ct(lang, "cc.failed") : ct(lang, "cc.uploading", { p: p.progress || 0 })}
-                            retryLabel={ct(lang, "cc.retry")} onRetry={() => act("CL_PHOTO_STATUS", { jobId: job.id, photoId: p.id, status: "uploading", progress: 8 })} />
-                        ))}
+                      <div className={`mw-photostrip${itemPhotos.length > 8 ? " is-dense" : ""}`}>
+                        {itemPhotos.map(p => tile(p, `${p.n}`))}
                       </div>
                     )}
                     {!locked && (
                       <div className="cw-photo-actions">
-                        <button type="button" className="cfv2-button cfv2-button-secondary mw-btn" onClick={() => addPhotos(item, 1)}><Icon name="camera" size={18} />{ct(lang, "cc.takePhoto")}</button>
-                        <button type="button" className="cfv2-button cfv2-button-tertiary mw-btn" onClick={() => addPhotos(item, 4)}><Icon name="image" size={18} />{ct(lang, "cc.library")}</button>
+                        <button type="button" className="cfv2-button cfv2-button-primary mw-btn" disabled={!quota.leftPhotos} onClick={() => setPickerFor(item)}><Icon name="image" size={18} />{ct(lang, "cc.library")}</button>
+                        <button type="button" className="cfv2-button cfv2-button-secondary mw-btn" disabled={!quota.leftPhotos} onClick={() => takePhoto(item)}><Icon name="camera" size={18} />{ct(lang, "cc.takePhoto")}</button>
                       </div>
                     )}
                   </div>
@@ -208,8 +209,8 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
             );
           })}
         </ul>
+        <QuotaLine photos={photos} lang={lang} future={future} onToggleFuture={locked ? null : setFuture} />
         {!locked && <label className="cw-sim"><input type="checkbox" checked={failNext} onChange={e => setFailNext(e.target.checked)} />{ct(lang, "cc.offline")}</label>}
-        <p className="cw-note">{ct(lang, "cc.limit")}</p>
       </div>
     );
   }
@@ -248,6 +249,8 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
         <p>{formatDay(job.date, lang, "long")} · {job.start ? formatTime(job.start, lang) : "—"}</p>
       </header>
       <Banner />
+      <UploadQueue job={job} lang={lang} />
+      <SubmissionSteps job={job} lang={lang} missingCount={missing.length} />
       {cl.state !== "submitted" && cl.state !== "reviewed" && <p className="cw-note"><Icon name="info" size={14} />{ct(lang, "cc.draftWarn")}</p>}
       <section className="cw-card cw-access">
         <h3><Icon name={accessOpen ? "unlock" : "lock"} size={17} />{ct(lang, "cc.access")}</h3>

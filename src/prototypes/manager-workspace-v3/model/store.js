@@ -87,6 +87,16 @@ export function domainReducer(data, action) {
       return updateJob(d, action.jobId, job => ({ ...job, status: job.status === "ASSIGNED" ? "IN_PROGRESS" : job.status,
         checklist: { ...job.checklist, state: job.checklist.state === "none" ? "draft" : job.checklist.state, savedAt: now(d),
           photos: [...(job.checklist.photos || []), ...action.photos] } }));
+    case "CL_PHOTO_REMOVE": // a draft photo can be removed; it frees one slot of the limit
+      return updateJob(d, action.jobId, job => {
+        const gone = job.checklist.photos.find(p => p.id === action.photoId);
+        const photos = job.checklist.photos.filter(p => p.id !== action.photoId);
+        const items = { ...job.checklist.items };
+        if (gone && !photos.some(p => p.itemId === gone.itemId && p.status === "saved")) items[gone.itemId] = false;
+        return { ...job, checklist: { ...job.checklist, photos, items, savedAt: now(d) } };
+      });
+    case "CL_RETRY_FAILED": // only the failed photos go back in the queue
+      return updateJob(d, action.jobId, job => ({ ...job, checklist: { ...job.checklist, photos: job.checklist.photos.map(p => (p.status === "failed" ? { ...p, status: "queued", progress: 0, willFail: false } : p)) } }));
     case "CL_PHOTO_STATUS": {
       return updateJob(d, action.jobId, job => {
         const photos = job.checklist.photos.map(p => (p.id === action.photoId ? { ...p, status: action.status, progress: action.progress ?? p.progress } : p));
