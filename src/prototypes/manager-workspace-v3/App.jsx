@@ -15,10 +15,12 @@ import { DateNav, Overlay, Toast, propertyOf, useT, useViewport } from "./ui/kit
 import { StudioArea, StudioPanel, StudioProvider, useStudio } from "./studio/Studio.jsx";
 import { AccountSheet } from "./flows/AccountSettings.jsx";
 import { ModelingWorkbench } from "./modeling/Modeling.jsx";
+import { ModeCompact } from "./layouts/Compact.jsx";
+import { TaskTrial } from "./strategies/TaskTrial.jsx";
 import { ReservationChangesSheet } from "./flows/ReservationChanges.jsx";
 import "./prototype.css";
 
-const MODES = ["hybrid", "a", "b", "c"];
+const MODES = ["hybrid", "a", "b", "c", "compact"];
 // A host page may already pin a theme on <html>; honour it as the default.
 const HOST_THEME = typeof document !== "undefined" ? document.documentElement.dataset.theme : undefined;
 
@@ -95,6 +97,7 @@ function Header() {
             {["now", "work"].map(s => <button key={s} type="button" role="tab" aria-selected={ui.hybridScreen === s} onClick={() => setUi({ hybridScreen: s })}><Icon name={s === "now" ? "spark" : "list"} size={15} />{t(`hy.${s}`)}</button>)}
           </div>
         )}
+        <button type="button" className="mw-linkbtn mw-trial-btn" aria-pressed={Boolean(ui.trialOpen)} onClick={() => setUi({ trialOpen: !ui.trialOpen })}><Icon name="flask" size={15} />{t("tt.open")}</button>
         <div className="mw-demo"><EnvironmentIndicator>{vp.compact ? t("app.demoShort") : t("app.demo")}</EnvironmentIndicator>{!vp.compact && <span className="mw-sec tnum">{t("app.clock", { time: t.time(`${String(Math.floor(data.clock.minutes / 60)).padStart(2, "0")}:${String(data.clock.minutes % 60).padStart(2, "0")}`) })}</span>}</div>
       </div>
     </header>
@@ -165,6 +168,7 @@ function Main() {
   if (ui.mode === "a") return <ModeA />;
   if (ui.mode === "b") return <ModeB />;
   if (ui.mode === "c") return <ModeC />;
+  if (ui.mode === "compact") return <ModeCompact />;
   return ui.hybridScreen === "work" ? <HybridWork /> : <HybridNow />;
 }
 
@@ -200,6 +204,7 @@ function Shell() {
       {ui.cleanerView && <CleanerPreview view={ui.cleanerView} onClose={() => setUi({ cleanerView: null })} />}
       {vp.compact && <TabBar />}
       <PushBanner />
+      {ui.trialOpen && <TaskTrial onClose={() => setUi({ trialOpen: false })} />}
       {ui.workbench && <ModelingWorkbench onClose={() => setUi({ workbench: false })} />}
       {studio.enabled && <StudioPanel />}
       <Toast />

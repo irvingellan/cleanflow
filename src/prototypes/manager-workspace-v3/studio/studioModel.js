@@ -32,6 +32,11 @@ export const SCREENS = {
       ["viewProgress", "other"], ["complete", "other"], ["property", "other"], ["cleanerView", "other"],
     ],
   },
+  row: { // columns of the compact service list (strategy 3)
+    titleKey: "ws.screen.row",
+    regions: ["row", "hidden"],
+    blocks: [["when", "row"], ["title", "row"], ["cleaner", "row"], ["status", "row"], ["offer", "row"], ["checklist", "row"], ["issues", "row"], ["primary", "row"]],
+  },
   header: {
     titleKey: "ws.screen.header",
     regions: ["bar", "hidden"],
@@ -50,12 +55,13 @@ export function initialStudio() {
     view: "candidate", // "candidate" or "original"
     layouts: Object.fromEntries(Object.keys(SCREENS).map(s => [s, defaultLayout(s)])),
     labels: {}, // { "a.assign": "Escolher cleaner" }
+    emph: {}, // { "row/cleaner": "prominent" | "secondary" }
     decisions: {}, // { "job/payment": { status, note } , "label/a.assign": {...} }
     past: [], future: [],
   };
 }
 
-const SNAPSHOT_KEYS = ["layouts", "labels", "decisions"];
+const SNAPSHOT_KEYS = ["layouts", "labels", "decisions", "emph"];
 const snapshot = s => JSON.parse(JSON.stringify(Object.fromEntries(SNAPSHOT_KEYS.map(k => [k, s[k]]))));
 
 function commit(state, next) {
@@ -106,12 +112,17 @@ export function studioReducer(state, action) {
       if (!action.text || action.text === action.original) delete labels[action.key]; else labels[action.key] = action.text;
       return commit(state, { ...state, labels });
     }
+    case "EMPH": { // prominence of one block: "prominent", "secondary" or null
+      const emph = { ...(state.emph || {}) };
+      if (action.level === "prominent" || action.level === "secondary") emph[action.target] = action.level; else delete emph[action.target];
+      return commit(state, { ...state, emph });
+    }
     case "DECIDE":
       return commit(state, { ...state, decisions: { ...state.decisions, [action.target]: { status: action.status, note: action.note ?? state.decisions[action.target]?.note ?? "" } } });
     case "RESET_SCREEN":
       return commit(state, { ...state, layouts: { ...state.layouts, [action.screen]: defaultLayout(action.screen) } });
     case "RESET_ALL":
-      return commit(state, { ...state, layouts: initialStudio().layouts, labels: {}, decisions: {} });
+      return commit(state, { ...state, layouts: initialStudio().layouts, labels: {}, decisions: {}, emph: {} });
     case "UNDO": {
       if (!state.past.length) return state;
       const prev = state.past[state.past.length - 1];
@@ -143,7 +154,8 @@ export function validateImport(payload) {
   const labels = Object.fromEntries(Object.entries(payload.labels || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string" && v.length <= 80));
   const decisions = Object.fromEntries(Object.entries(payload.decisions || {}).filter(([, d]) => d && ["proposed", "approved", "question", "rejected"].includes(d.status))
     .map(([k, d]) => [k, { status: d.status, note: String(d.note || "").slice(0, 400) }]));
-  return { layouts, labels, decisions };
+  const emph = Object.fromEntries(Object.entries(payload.emph || {}).filter(([k, v]) => typeof k === "string" && k.length < 60 && (v === "prominent" || v === "secondary")));
+  return { layouts, labels, decisions, emph };
 }
 
 /** Human-readable list of every difference from the original. */
@@ -167,6 +179,7 @@ export function changesOf(state) {
     });
   }
   Object.entries(state.labels).forEach(([key, text]) => changes.push({ target: `label/${key}`, kind: "renamed", key, text }));
+  Object.entries(state.emph || {}).forEach(([target, level]) => { const [screen, id] = target.split("/"); changes.push({ target: `emph/${target}`, screen, id, kind: "emph", level }); });
   return changes.map(c => ({ ...c, decision: state.decisions[c.target] || { status: "proposed", note: "" } }));
 }
 

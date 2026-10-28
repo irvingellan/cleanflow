@@ -10,7 +10,7 @@ const StudioContext = createContext(null);
 function load() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(KEY));
-    if (saved?.schema === 1) return { ...initialStudio(), ...saved, enabled: false, past: [], future: [] };
+    if (saved?.schema === 1) { const init = initialStudio(); return { ...init, ...saved, layouts: { ...init.layouts, ...saved.layouts }, emph: saved.emph || {}, enabled: false, past: [], future: [] }; }
   } catch { /* local only */ }
   return initialStudio();
 }
@@ -87,6 +87,8 @@ function StudioBlock({ screen, id, region, index, children }) {
         <select aria-label={t("ws.region")} value={region} onChange={e => dispatch({ type: "MOVE", screen, id, region: e.target.value })}>
           {regions.map(r => <option key={r} value={r}>{t(`ws.region.${r}`)}</option>)}
         </select>
+        <button type="button" aria-label={`${t("ws.emph")}: ${t(`ws.emph.${studio.emph?.[`${screen}/${id}`] || "normal"}`)}`} title={t("ws.emph")} aria-pressed={Boolean(studio.emph?.[`${screen}/${id}`])}
+          onClick={() => { const cur = studio.emph?.[`${screen}/${id}`]; dispatch({ type: "EMPH", target: `${screen}/${id}`, level: cur === "prominent" ? "secondary" : cur === "secondary" ? null : "prominent" }); }}><Icon name="spark" size={14} /></button>
         <button type="button" aria-label={t("ws.hide")} onClick={() => dispatch({ type: "MOVE", screen, id, region: "hidden" })}><Icon name="eye" size={14} /></button>
       </div>
       {children}
@@ -98,7 +100,7 @@ function StudioBlock({ screen, id, region, index, children }) {
 export function StudioArea({ screen, region, items, className, as: Tag = "div", empty = null }) {
   const t = useT();
   const layout = useLayout(screen);
-  const { editing, dispatch } = useStudio();
+  const { editing, dispatch, studio, original } = useStudio();
   const blocks = layout.filter(b => b.region === region && items[b.id] != null);
   const [over, setOver] = useState(false);
   if (!blocks.length && !editing) return empty;
@@ -106,7 +108,7 @@ export function StudioArea({ screen, region, items, className, as: Tag = "div", 
     <Tag className={`${className || ""}${editing ? " st-area" : ""}`} data-studio-area={`${screen}/${region}`}>
       {blocks.map((b, i) => (editing
         ? <StudioBlock key={b.id} screen={screen} id={b.id} region={region} index={i}>{items[b.id]}</StudioBlock>
-        : <FragmentKey key={b.id}>{items[b.id]}</FragmentKey>))}
+        : studio.emph?.[`${screen}/${b.id}`] && !original ? <div key={b.id} className="st-emph" data-emph={studio.emph[`${screen}/${b.id}`]}>{items[b.id]}</div> : <FragmentKey key={b.id}>{items[b.id]}</FragmentKey>))}
       {editing && (
         <div className={`st-drop${over ? " is-over" : ""}`}
           onDragOver={e => { if (e.dataTransfer.types.includes(DRAG)) { e.preventDefault(); setOver(true); } }} onDragLeave={() => setOver(false)}
@@ -144,6 +146,7 @@ export function StudioPanel() {
   const describe = c => {
     if (c.kind === "renamed") return t("ws.ch.renamed", { text: c.text });
     if (c.kind === "hidden") return t("ws.ch.hidden");
+    if (c.kind === "emph") return t(`ws.emph.${c.level}`);
     if (c.kind === "moved") return t("ws.ch.moved", { from: t(`ws.region.${c.from}`), to: t(`ws.region.${c.to}`) });
     return t("ws.ch.reordered");
   };
