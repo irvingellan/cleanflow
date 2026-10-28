@@ -1,0 +1,487 @@
+{
+ "specVersion": "cleanflow-figma-components/1",
+ "note": "Repeated UI classes across captured frames: candidates for Figma components. Build each once, then swap instances.",
+ "components": [
+  {
+   "component": "button",
+   "sourceClass": "cfv2-button",
+   "instances": 137,
+   "exampleNodeIds": [
+    "v2dashboardd-7",
+    "v2dashboardd-e",
+    "v2dashboardd-h",
+    "v2dashboardd-m",
+    "v2dashboardd-p"
+   ]
+  },
+  {
+   "component": "sr only",
+   "sourceClass": "cfv2-sr-only",
+   "instances": 123,
+   "exampleNodeIds": [
+    "v2servicesd-3p",
+    "v2servicesd-41",
+    "v2servicesd-44",
+    "v2servicesd-47",
+    "v2servicesd-4a"
+   ]
+  },
+  {
+   "component": "lifecycle stage",
+   "sourceClass": "cfv2-lifecycle-stage",
+   "instances": 120,
+   "exampleNodeIds": [
+    "v2servicesd-3z",
+    "v2servicesd-42",
+    "v2servicesd-45",
+    "v2servicesd-48",
+    "v2servicesd-4b"
+   ]
+  },
+  {
+   "component": "shell nav text",
+   "sourceClass": "cfv2-shell-nav-text",
+   "instances": 80,
+   "exampleNodeIds": [
+    "v2dashboardd-g",
+    "v2dashboardd-j",
+    "v2dashboardd-o",
+    "v2dashboardd-r",
+    "v2dashboardd-u"
+   ]
+  },
+  {
+   "component": "grow",
+   "sourceClass": "mw-grow",
+   "instances": 42,
+   "exampleNodeIds": [
+    "pin-z",
+    "pin-19",
+    "pin-1j",
+    "pin-1r",
+    "pin-1z"
+   ]
+  },
+  {
+   "component": "shell group",
+   "sourceClass": "cfv2-shell-group",
+   "instances": 40,
+   "exampleNodeIds": [
+    "v2dashboardd-c",
+    "v2dashboardd-k",
+    "v2dashboardd-v",
+    "v2dashboardd-10",
+    "v2servicesd-c"
+   ]
+  },
+  {
+   "component": "row shell",
+   "sourceClass": "cfv2-row-shell",
+   "instances": 24,
+   "exampleNodeIds": [
+    "v2servicesd-3m",
+    "v2servicesd-4j",
+    "v2servicesd-5g",
+    "v2servicesd-6d",
+    "v2servicesd-7a"
+   ]
+  },
+  {
+   "component": "row",
+   "sourceClass": "cfv2-row",
+   "instances": 24,
+   "exampleNodeIds": [
+    "v2servicesd-3n",
+    "v2servicesd-4k",
+    "v2servicesd-5h",
+    "v2servicesd-6e",
+    "v2servicesd-7b"
+   ]
+  },
+  {
+   "component": "lifecycle",
+   "sourceClass": "cfv2-lifecycle",
+   "instances": 24,
+   "exampleNodeIds": [
+    "v2servicesd-3x",
+    "v2servicesd-4u",
+    "v2servicesd-5r",
+    "v2servicesd-6o",
+    "v2servicesd-7l"
+   ]
+  },
+  {
+   "component": "lifecycle stages",
+   "sourceClass": "cfv2-lifecycle-stages",
+   "instances": 24,
+   "exampleNodeIds": [
+    "v2servicesd-3y",
+    "v2servicesd-4v",
+    "v2servicesd-5s",
+    "v2servicesd-6p",
+    "v2servicesd-7m"
+   ]
+  },
+  {
+   "component": "catbadge",
+   "sourceClass": "mw-catbadge",
+   "instances": 21,
+   "exampleNodeIds": [
+    "pin-41",
+    "pin-46",
+    "pin-4b",
+    "pin-4g",
+    "pin-4l"
+   ]
+  },
+  {
+   "component": "state",
+   "sourceClass": "cfv2-state",
+   "instances": 17,
+   "exampleNodeIds": [
+    "v2dashboardd-1h",
+    "v2dashboardd-2x",
+    "v2dashboardd-38",
+    "v2dashboardd-3j",
+    "v2dashboardd-3u"
+   ]
+  },
+  {
+   "component": "foundation",
+   "sourceClass": "cfv2-foundation",
+   "instances": 14,
+   "exampleNodeIds": [
+    "v2dashboardd-1",
+    "v2servicesd-1",
+    "v2jobunassignedd-1",
+    "v2jobofferedd-1",
+    "v2jobprogressd-1"
+   ]
+  },
+  {
+   "component": "shell",
+   "sourceClass": "cfv2-shell",
+   "instances": 14,
+   "exampleNodeIds": [
+    "v2dashboardd-2",
+    "v2servicesd-2",
+    "v2jobunassignedd-2",
+    "v2jobofferedd-2",
+    "v2jobprogressd-2"
+   ]
+  },
+  {
+   "component": "shell skip",
+   "sourceClass": "cfv2-shell-skip",
+   "instances": 14,
+   "exampleNodeIds": [
+    "v2dashboardd-3",
+    "v2servicesd-3",
+    "v2jobunassignedd-3",
+    "v2jobofferedd-3",
+    "v2jobprogressd-3"
+   ]
+  },
+  {
+   "component": "shell main",
+   "sourceClass": "cfv2-shell-main",
+   "instances": 14,
+   "exampleNodeIds": [
+    "v2dashboardd-1b",
+    "v2servicesd-1b",
+    "v2jobunassignedd-1b",
+    "v2jobofferedd-1b",
+    "v2jobprogressd-1b"
+   ]
+  },
+  {
+   "component": "shell content",
+   "sourceClass": "cfv2-shell-content",
+   "instances": 14,
+   "exampleNodeIds": [
+    "v2dashboardd-1e",
+    "v2servicesd-1e",
+    "v2jobunassignedd-1g",
+    "v2jobofferedd-1g",
+    "v2jobprogressd-1g"
+   ]
+  },
+  {
+   "component": "panel",
+   "sourceClass": "cfv2-panel",
+   "instances": 13,
+   "exampleNodeIds": [
+    "v2dashboardd-2n",
+    "v2dashboardd-4d",
+    "v2dashboardd-eo",
+    "v2dashboardd-fh",
+    "v2jobunassignedd-5t"
+   ]
+  },
+  {
+   "component": "panel body",
+   "sourceClass": "cfv2-panel-body",
+   "instances": 13,
+   "exampleNodeIds": [
+    "v2dashboardd-2o",
+    "v2dashboardd-4e",
+    "v2dashboardd-ep",
+    "v2dashboardd-fi",
+    "v2jobunassignedd-5u"
+   ]
+  },
+  {
+   "component": "notif icon",
+   "sourceClass": "mw-notif-icon",
+   "instances": 13,
+   "exampleNodeIds": [
+    "pin-x",
+    "pin-17",
+    "pin-1h",
+    "pin-1p",
+    "pin-1x"
+   ]
+  },
+  {
+   "component": "notif",
+   "sourceClass": "mw-notif",
+   "instances": 12,
+   "exampleNodeIds": [
+    "pin-w",
+    "pin-16",
+    "pin-1g",
+    "pin-1o",
+    "pin-1w"
+   ]
+  },
+  {
+   "component": "notif title",
+   "sourceClass": "mw-notif-title",
+   "instances": 12,
+   "exampleNodeIds": [
+    "pin-10",
+    "pin-1a",
+    "pin-1k",
+    "pin-1s",
+    "pin-20"
+   ]
+  },
+  {
+   "component": "notif meta",
+   "sourceClass": "mw-notif-meta",
+   "instances": 12,
+   "exampleNodeIds": [
+    "pin-13",
+    "pin-1d",
+    "pin-1l",
+    "pin-1t",
+    "pin-21"
+   ]
+  },
+  {
+   "component": "sec",
+   "sourceClass": "mw-sec",
+   "instances": 11,
+   "exampleNodeIds": [
+    "pin-6",
+    "pin-5g",
+    "pin-61",
+    "pin-6i",
+    "pin-6n"
+   ]
+  },
+  {
+   "component": "shell sidebar",
+   "sourceClass": "cfv2-shell-sidebar",
+   "instances": 10,
+   "exampleNodeIds": [
+    "v2dashboardd-4",
+    "v2servicesd-4",
+    "v2jobunassignedd-4",
+    "v2jobofferedd-4",
+    "v2jobprogressd-4"
+   ]
+  },
+  {
+   "component": "shell brand",
+   "sourceClass": "cfv2-shell-brand",
+   "instances": 10,
+   "exampleNodeIds": [
+    "v2dashboardd-5",
+    "v2servicesd-5",
+    "v2jobunassignedd-5",
+    "v2jobofferedd-5",
+    "v2jobprogressd-5"
+   ]
+  },
+  {
+   "component": "environment",
+   "sourceClass": "cfv2-environment",
+   "instances": 10,
+   "exampleNodeIds": [
+    "v2dashboardd-9",
+    "v2servicesd-9",
+    "v2jobunassignedd-9",
+    "v2jobofferedd-9",
+    "v2jobprogressd-9"
+   ]
+  },
+  {
+   "component": "chip",
+   "sourceClass": "mw-chip",
+   "instances": 10,
+   "exampleNodeIds": [
+    "pin-h",
+    "pin-i",
+    "pin-j",
+    "pin-k",
+    "pin-l"
+   ]
+  },
+  {
+   "component": "switchrow",
+   "sourceClass": "mw-switchrow",
+   "instances": 10,
+   "exampleNodeIds": [
+    "pac-1m",
+    "pac-1t",
+    "pac-20",
+    "pac-27",
+    "pac-2e"
+   ]
+  },
+  {
+   "component": "switchlabel",
+   "sourceClass": "mw-switchlabel",
+   "instances": 10,
+   "exampleNodeIds": [
+    "pac-1o",
+    "pac-1v",
+    "pac-22",
+    "pac-29",
+    "pac-2g"
+   ]
+  },
+  {
+   "component": "switch",
+   "sourceClass": "mw-switch",
+   "instances": 10,
+   "exampleNodeIds": [
+    "pac-1s",
+    "pac-1z",
+    "pac-26",
+    "pac-2d",
+    "pac-2k"
+   ]
+  },
+  {
+   "component": "segmented",
+   "sourceClass": "cfv2-segmented",
+   "instances": 7,
+   "exampleNodeIds": [
+    "v2dashboardd-1j",
+    "v2jobunassignedd-1j",
+    "v2jobofferedd-1j",
+    "v2jobprogressd-1j",
+    "v2jobcompletedd-1j"
+   ]
+  },
+  {
+   "component": "setnav item",
+   "sourceClass": "mw-setnav-item",
+   "instances": 5,
+   "exampleNodeIds": [
+    "pac-8",
+    "pac-c",
+    "pac-g",
+    "pac-k",
+    "pac-o"
+   ]
+  },
+  {
+   "component": "shell mobile header",
+   "sourceClass": "cfv2-shell-mobile-header",
+   "instances": 4,
+   "exampleNodeIds": [
+    "v2dashboardm-1c",
+    "v2servicesm-1c",
+    "v2jobprogressm-1c",
+    "v2cleanerjobm-1c"
+   ]
+  },
+  {
+   "component": "visually hidden",
+   "sourceClass": "mw-visually-hidden",
+   "instances": 4,
+   "exampleNodeIds": [
+    "pin-e",
+    "pin-12",
+    "pin-1c",
+    "pin-2a"
+   ]
+  },
+  {
+   "component": "micro",
+   "sourceClass": "mw-micro",
+   "instances": 4,
+   "exampleNodeIds": [
+    "pin-t",
+    "pin-2m",
+    "pin-5x",
+    "pin-6a"
+   ]
+  },
+  {
+   "component": "flag",
+   "sourceClass": "mw-flag",
+   "instances": 4,
+   "exampleNodeIds": [
+    "pin-3b",
+    "pin-63",
+    "pac-18",
+    "pac-1f"
+   ]
+  },
+  {
+   "component": "hint",
+   "sourceClass": "mw-hint",
+   "instances": 4,
+   "exampleNodeIds": [
+    "pin-3w",
+    "pin-73",
+    "pac-1h",
+    "pac-1k"
+   ]
+  },
+  {
+   "component": "field",
+   "sourceClass": "cf-field",
+   "instances": 3,
+   "exampleNodeIds": [
+    "oad-c",
+    "ocd-c",
+    "ocm-2w"
+   ]
+  },
+  {
+   "component": "linkbtn",
+   "sourceClass": "mw-linkbtn",
+   "instances": 3,
+   "exampleNodeIds": [
+    "pin-p",
+    "pin-5h",
+    "pac-3k"
+   ]
+  },
+  {
+   "component": "unread dot",
+   "sourceClass": "mw-unread-dot",
+   "instances": 3,
+   "exampleNodeIds": [
+    "pin-11",
+    "pin-1b",
+    "pin-29"
+   ]
+  }
+ ]
+}
