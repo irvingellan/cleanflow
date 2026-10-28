@@ -945,3 +945,28 @@ button.cx-row:hover { background: var(--v2-color-surface-internal); }
 .tt.is-running .tt-running { grid-auto-flow: column; align-items: center; gap: 12px; }
 .tt.is-running .tt-hint { display: none; }
 @media (max-width: 719px) { .tt.is-running { bottom: 84px; left: 12px; right: 12px; transform: none; } .tt.is-running .tt-running { grid-auto-flow: row; } }
+/* Guided manager route */
+.gr { position: fixed; left: 16px; bottom: 16px; z-index: 44; width: min(360px, calc(100vw - 24px)); max-height: 72vh; overflow-y: auto; display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--v2-radius-card); border: 1px solid var(--v2-color-border); background: var(--v2-color-surface-elevated); box-shadow: var(--v2-elevation-overlay); color: var(--v2-color-text-primary); }
+.gr .tt-head { gap: 8px; }
+.gr .tt-head strong { flex: 1; }
+.gr-steps { display: grid; gap: 2px; }
+.gr-steps li { display: flex; gap: 8px; align-items: flex-start; padding: 5px 6px; border-radius: 8px; font-size: 13.5px; color: var(--v2-color-text-muted); }
+.gr-steps li > .mw-grow { display: grid; gap: 2px; }
+.gr-steps li.is-done { color: var(--v2-color-text-primary); }
+.gr-steps li.is-done .mw-icon { color: var(--v2-color-success-text); }
+.gr-steps li.is-current { background: var(--v2-color-surface-selected); color: var(--v2-color-text-primary); }
+.mw-header-sub .mw-trial-btn { margin-left: 0; }
+.mw-route-btn { margin-left: auto; }
+@media (max-width: 719px) { .gr { left: 12px; right: 12px; width: auto; bottom: 84px; max-height: 50vh; } .mw-route-btn, .mw-trial-btn { display: none; } }
+.mw-app.has-route { padding-right: 372px; }
+.gr { left: auto; right: 0; top: var(--mw-header-h); bottom: 0; width: 372px; max-height: none; border-radius: 0; border-width: 0 0 0 1px; box-shadow: none; }
+@media (max-width: 1099px) {
+  .mw-app.has-route { padding-right: 0; padding-bottom: 42vh; }
+  .gr { top: auto; left: 0; right: 0; width: auto; max-height: 42vh; border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: var(--v2-elevation-overlay); }
+}
+@media (max-width: 719px) { .gr { bottom: 72px; } }
+/* A side panel (route, workshop) takes ~370px: drop the third column under the detail */
+.mw-app:is(.has-route, .has-studio) .mw-worklist.is-three { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
+.mw-app:is(.has-route, .has-studio) .mw-worklist.is-three > .mw-worklist-actions { grid-column: 2; position: static; max-height: none; padding: 0; }
+.mw-app:is(.has-route, .has-studio) .mw-worklist.is-three > .mw-worklist-detail { max-height: none; position: static; }
+@media (min-width: 1100px) { .gr { top: 0; z-index: 46; } }

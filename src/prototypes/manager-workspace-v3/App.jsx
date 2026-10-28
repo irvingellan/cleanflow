@@ -17,6 +17,7 @@ import { AccountSheet } from "./flows/AccountSettings.jsx";
 import { ModelingWorkbench } from "./modeling/Modeling.jsx";
 import { ModeCompact } from "./layouts/Compact.jsx";
 import { TaskTrial } from "./strategies/TaskTrial.jsx";
+import { GuidedRoute } from "./strategies/GuidedRoute.jsx";
 import { ReservationChangesSheet } from "./flows/ReservationChanges.jsx";
 import "./prototype.css";
 
@@ -97,6 +98,7 @@ function Header() {
             {["now", "work"].map(s => <button key={s} type="button" role="tab" aria-selected={ui.hybridScreen === s} onClick={() => setUi({ hybridScreen: s })}><Icon name={s === "now" ? "spark" : "list"} size={15} />{t(`hy.${s}`)}</button>)}
           </div>
         )}
+        <button type="button" className="mw-linkbtn mw-route-btn" aria-pressed={Boolean(ui.routeOpen)} onClick={() => setUi({ routeOpen: !ui.routeOpen })}><Icon name="list" size={15} />{t("gr.open")}</button>
         <button type="button" className="mw-linkbtn mw-trial-btn" aria-pressed={Boolean(ui.trialOpen)} onClick={() => setUi({ trialOpen: !ui.trialOpen })}><Icon name="flask" size={15} />{t("tt.open")}</button>
         <div className="mw-demo"><EnvironmentIndicator>{vp.compact ? t("app.demoShort") : t("app.demo")}</EnvironmentIndicator>{!vp.compact && <span className="mw-sec tnum">{t("app.clock", { time: t.time(`${String(Math.floor(data.clock.minutes / 60)).padStart(2, "0")}:${String(data.clock.minutes % 60).padStart(2, "0")}`) })}</span>}</div>
       </div>
@@ -193,7 +195,7 @@ function Shell() {
   const selected = data.jobs.find(j => j.id === ui.selectedJobId);
   const { studio } = useStudio();
   return (
-    <div className={`mw-app mode-${ui.mode}${vp.compact ? " is-compact" : ""}${studio.enabled ? " has-studio" : ""}${studio.enabled && studio.view === "original" ? " is-original" : ""}`}>
+    <div className={`mw-app mode-${ui.mode}${vp.compact ? " is-compact" : ""}${studio.enabled ? " has-studio" : ""}${studio.enabled && studio.view === "original" ? " is-original" : ""}${ui.routeOpen && !studio.enabled ? " has-route" : ""}`}>
       <a className="mw-skip" href="#mw-main">{t("app.skip")}</a>
       <Header />
       <main id="mw-main" className="mw-main">
@@ -204,6 +206,7 @@ function Shell() {
       {ui.cleanerView && <CleanerPreview view={ui.cleanerView} onClose={() => setUi({ cleanerView: null })} />}
       {vp.compact && <TabBar />}
       <PushBanner />
+      {ui.routeOpen && <GuidedRoute onClose={() => setUi({ routeOpen: false })} />}
       {ui.trialOpen && <TaskTrial onClose={() => setUi({ trialOpen: false })} />}
       {ui.workbench && <ModelingWorkbench onClose={() => setUi({ workbench: false })} />}
       {studio.enabled && <StudioPanel />}
