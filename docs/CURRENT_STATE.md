@@ -632,6 +632,16 @@ stalls cover initial reads, Offers, Issues and Cleaner names. The incident's
 specific pending read is unproven: existing telemetry records completed loads
 only and has no Dashboard stage events. Authorization/data semantics are unchanged.
 
+## Manager Workspace V3 — visual studio round (prototype only, 2026-10-27)
+
+Branch `feature/gabi-visual-studio` (local, not pushed) extends the synthetic V3
+prototype with a co-design workshop, a Notification Center (proposed history,
+delivery honesty, simulated push), Account & Settings, cleaner batch photo upload
+with separate submission states, returning-cleaner offer status, and a checklist
+template editor. No Production, Firebase, Functions, rules or deploy change.
+Backend needs are in `docs/manager-workspace-v3/VISUAL_STUDIO_CODEX_HANDOFF.md`.
+Figma was not written (connector not authorised): `FIGMA_HANDOFF.md`.
+
 ## Fresh-session resume
 
 Issue #64 Job Detail Intent Layer V0 is implemented only on
