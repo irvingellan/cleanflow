@@ -1,0 +1,222 @@
+[
+ {
+  "id": "orig-a-desktop",
+  "title": "A · Calm Workspace · Desktop",
+  "source": "original",
+  "device": "desktop",
+  "width": 1440,
+  "height": 900,
+  "nodes": 315,
+  "cssRef": "fbc30780d2"
+ },
+ {
+  "id": "orig-a-mobile",
+  "title": "A · Calm Workspace · Mobile",
+  "source": "original",
+  "device": "mobile",
+  "width": 390,
+  "height": 844,
+  "nodes": 106,
+  "cssRef": "fbc30780d2"
+ },
+ {
+  "id": "orig-b-desktop",
+  "title": "B · Attention Cockpit · Desktop",
+  "source": "original",
+  "device": "desktop",
+  "width": 1440,
+  "height": 900,
+  "nodes": 345,
+  "cssRef": "fbc30780d2"
+ },
+ {
+  "id": "orig-b-mobile",
+  "title": "B · Attention Cockpit · Mobile",
+  "source": "original",
+  "device": "mobile",
+  "width": 390,
+  "height": 844,
+  "nodes": 102,
+  "cssRef": "fbc30780d2"
+ },
+ {
+  "id": "orig-c-desktop",
+  "title": "C · Intent First · Desktop",
+  "source": "original",
+  "device": "desktop",
+  "width": 1440,
+  "height": 900,
+  "nodes": 114,
+  "cssRef": "fbc30780d2"
+ },
+ {
+  "id": "orig-c-mobile",
+  "title": "C · Intent First · Mobile",
+  "source": "original",
+  "device": "mobile",
+  "width": 390,
+  "height": 844,
+  "nodes": 109,
+  "cssRef": "fbc30780d2"
+ },
+ {
+  "id": "v2-dashboard-desktop",
+  "title": "Painel · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 2602,
+  "nodes": 635,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-services-desktop",
+  "title": "Serviços · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 1309,
+  "nodes": 553,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-job-unassigned-desktop",
+  "title": "Detalhe · sem cleaner · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 993,
+  "nodes": 239,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-job-offered-desktop",
+  "title": "Detalhe · oferecido · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 993,
+  "nodes": 245,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-job-progress-desktop",
+  "title": "Detalhe · em andamento · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 1052,
+  "nodes": 257,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-job-completed-desktop",
+  "title": "Detalhe · concluído · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 1086,
+  "nodes": 245,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-offer-desktop",
+  "title": "Oferecer a cleaners · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 900,
+  "nodes": 83,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-checklist-desktop",
+  "title": "Checklist (execução) · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 3475,
+  "nodes": 321,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-property-desktop",
+  "title": "Detalhe da propriedade · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 1043,
+  "nodes": 127,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-cleaner-job-desktop",
+  "title": "Visão da cleaner · Desktop",
+  "source": "v2",
+  "device": "desktop",
+  "width": 1440,
+  "height": 900,
+  "nodes": 84,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-dashboard-mobile",
+  "title": "Painel · Celular",
+  "source": "v2",
+  "device": "mobile",
+  "width": 390,
+  "height": 5622,
+  "nodes": 635,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-services-mobile",
+  "title": "Serviços · Celular",
+  "source": "v2",
+  "device": "mobile",
+  "width": 390,
+  "height": 2513,
+  "nodes": 553,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-job-progress-mobile",
+  "title": "Detalhe · em andamento · Celular",
+  "source": "v2",
+  "device": "mobile",
+  "width": 390,
+  "height": 1606,
+  "nodes": 260,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "v2-cleaner-job-mobile",
+  "title": "Visão da cleaner · Celular",
+  "source": "v2",
+  "device": "mobile",
+  "width": 390,
+  "height": 844,
+  "nodes": 84,
+  "cssRef": "8d0835a024"
+ },
+ {
+  "id": "proto-inbox-desktop",
+  "title": "Central de notificações · Desktop",
+  "source": "prototype",
+  "device": "desktop",
+  "width": 980,
+  "height": 900,
+  "nodes": 256,
+  "cssRef": "1d07f04756"
+ },
+ {
+  "id": "proto-account-desktop",
+  "title": "Conta e configurações · Desktop",
+  "source": "prototype",
+  "device": "desktop",
+  "width": 980,
+  "height": 900,
+  "nodes": 137,
+  "cssRef": "1d07f04756"
+ }
+]

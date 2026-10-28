@@ -14,6 +14,7 @@ import { Icon } from "./ui/Icon.jsx";
 import { DateNav, Overlay, Toast, propertyOf, useT, useViewport } from "./ui/kit.jsx";
 import { StudioArea, StudioPanel, StudioProvider, useStudio } from "./studio/Studio.jsx";
 import { AccountSheet } from "./flows/AccountSettings.jsx";
+import { ModelingWorkbench } from "./modeling/Modeling.jsx";
 import { ReservationChangesSheet } from "./flows/ReservationChanges.jsx";
 import "./prototype.css";
 
@@ -69,6 +70,7 @@ function Header() {
         <div className="mw-brand"><span className="mw-wordmark">CleanFlow</span>{vp.xwide && <span className="mw-sec">{t("app.title")}</span>}</div>
         <ModeSwitch compact={!vp.wide} />
         <div className="mw-header-actions">
+          <button type="button" className="mw-studio-toggle mw-model-btn" onClick={() => setUi({ workbench: true, overlay: null })} title={t("md.openHint")}><Icon name="layout" size={16} />{!vp.compact && t("md.open")}</button>
           <StudioToggle compact={vp.compact} />
           <StudioArea screen="header" region="bar" className="mw-header-tools" items={{
             newService: vp.compact ? null : <button type="button" className="cfv2-button cfv2-button-primary mw-btn cfv2-button-small" onClick={() => setUi({ overlay: { type: "newService" } })}><Icon name="plus" size={16} />{t("app.newService")}</button>,
@@ -198,6 +200,7 @@ function Shell() {
       {ui.cleanerView && <CleanerPreview view={ui.cleanerView} onClose={() => setUi({ cleanerView: null })} />}
       {vp.compact && <TabBar />}
       <PushBanner />
+      {ui.workbench && <ModelingWorkbench onClose={() => setUi({ workbench: false })} />}
       {studio.enabled && <StudioPanel />}
       <Toast />
     </div>
