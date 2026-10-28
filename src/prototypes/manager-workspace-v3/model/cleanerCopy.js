@@ -84,6 +84,8 @@ const C = {
   "pb.keepOpen": ["Pode continuar o checklist. As fotos vão uma por vez.", "You can keep going. Photos go one at a time.", "Puede seguir. Las fotos suben una por vez."],
   "pb.failedCount": ["{count} foto(s) não enviaram", "{count} photo(s) did not upload", "{count} foto(s) no se subieron"],
   "pb.retryFailed": ["Reenviar só essas {count}", "Retry just these {count}", "Reintentar solo esas {count}"],
+  "pb.removeConfirm": ["Remover?", "Remove?", "¿Quitar?"],
+  "pb.ack": ["Confirmação do servidor às {time}: seu checklist está guardado (simulado nesta demo). Se esta tela não aparecer, o envio não terminou — tente de novo.", "Server confirmation at {time}: your checklist is stored (simulated in this demo). If you don't see this screen, the submit did not finish — try again.", "Confirmación del servidor a las {time}: su checklist está guardado (simulado). Si no ve esta pantalla, intente de nuevo."],
   "pb.queued": ["Na fila", "Queued", "En cola"],
   "pb.remove": ["Remover foto {n}", "Remove photo {n}", "Quitar foto {n}"],
   "pb.quota": ["{used} de {limit} fotos", "{used} of {limit} photos", "{used} de {limit} fotos"],

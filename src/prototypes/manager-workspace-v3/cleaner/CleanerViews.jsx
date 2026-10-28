@@ -127,6 +127,7 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
   const [accessOverride, setAccessOverride] = useState(false);
   const [pickerFor, setPickerFor] = useState(null);
   const [future, setFuture] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(null);
   useSequentialUpload(job);
   const locked = cl.state === "submitted" || cl.state === "reviewed" || job.status === "COMPLETED";
   const photos = job.checklist.photos || [];
@@ -152,7 +153,12 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
   const tile = (p, label) => (
     <PhotoTile key={p.id} photo={p} label={label} statusLabel={tileLabel(p)}
       retryLabel={ct(lang, "cc.retry")} onRetry={() => act("CL_PHOTO_STATUS", { jobId: job.id, photoId: p.id, status: "queued", progress: 0 })}
-      removeLabel={ct(lang, "pb.remove", { n: p.n })} onRemove={locked || p.status === "uploading" ? null : () => act("CL_PHOTO_REMOVE", { jobId: job.id, photoId: p.id })} />
+      removeLabel={confirmRemove === p.id ? ct(lang, "pb.removeConfirm", { n: p.n }) : ct(lang, "pb.remove", { n: p.n })} confirming={confirmRemove === p.id}
+      onRemove={locked || p.status === "uploading" ? null : () => {
+        // A photo already saved on the server needs a second tap; queued or failed ones go at once.
+        if (p.status === "saved" && confirmRemove !== p.id) { setConfirmRemove(p.id); return; }
+        setConfirmRemove(null); act("CL_PHOTO_REMOVE", { jobId: job.id, photoId: p.id });
+      }} />
   );
   const blocked = uploadingCount ? ct(lang, "cc.waitUploads") : failedCount ? ct(lang, "cc.retryFailed")
     : (missing.length && !missingNote.trim()) ? ct(lang, "cc.needNote") : !workDone ? ct(lang, "cc.needWorkDone") : null;
@@ -174,6 +180,7 @@ function CleanerChecklist({ job: initialJob, cleaner }) {
         <h2>{ct(lang, "cc.successTitle")}</h2>
         <p>{ct(lang, "cc.successBody", { time: job.checklist.submittedAt ? formatTime(hhmm(job.checklist.submittedAt.min), lang) : "" })}</p>
         <section className="cw-card cw-summary"><strong>{property.name}</strong><span>{ct(lang, "cc.successSummary", { items: cl.done, photos: cl.photos })}</span></section>
+        <p className="cw-ack"><Icon name="checkCircle" size={16} />{ct(lang, "pb.ack", { time: job.checklist.submittedAt ? formatTime(hhmm(job.checklist.submittedAt.min), lang) : "" })}</p>
         <p className="cw-note">{ct(lang, "cc.successNext")}</p>
         <button type="button" className="cfv2-button cfv2-button-secondary mw-btn mw-btn-block" onClick={() => takePhoto(items.find(i => i.photo) || items[0], true)}><Icon name="camera" size={18} />{ct(lang, "cc.addExtra")}</button>
         {photos.some(p => p.extra) && <div className="mw-photostrip">{photos.filter(p => p.extra).map(p => tile(p, ct(lang, "cc.extra")))}</div>}

@@ -232,7 +232,7 @@ export function SimTag({ kind = "simulated" }) {
 }
 
 const roomHue = { entry: 150, kitchen: 32, bath: 200, bedrooms: 265, exit: 95, quick: 180 };
-export function PhotoTile({ photo, label, onRetry, retryLabel, statusLabel, onRemove, removeLabel }) {
+export function PhotoTile({ photo, label, onRetry, retryLabel, statusLabel, onRemove, removeLabel, confirming }) {
   const hue = roomHue[photo.sectionId] ?? 160;
   return (
     <figure className={`mw-photo is-${photo.status}`} style={{ "--hue": hue }}>
@@ -245,7 +245,8 @@ export function PhotoTile({ photo, label, onRetry, retryLabel, statusLabel, onRe
       {photo.status === "uploading" && <span className="mw-photo-progress" style={{ width: `${photo.progress || 10}%` }} />}
       {photo.status !== "saved" && <span className="mw-photo-state">{statusLabel}</span>}
       {photo.status === "failed" && onRetry && <button type="button" className="mw-photo-retry" onClick={onRetry}>{retryLabel}</button>}
-      {onRemove && <button type="button" className="mw-photo-remove" aria-label={removeLabel} onClick={onRemove}><Icon name="x" size={12} /></button>}
+      {photo.status === "saved" && <span className="mw-photo-saved" title={statusLabel}><Icon name="check" size={11} /></span>}
+      {onRemove && <button type="button" className={`mw-photo-remove${confirming ? " is-confirming" : ""}`} aria-label={removeLabel} onClick={onRemove}>{confirming ? <span>{removeLabel}</span> : <Icon name="x" size={12} />}</button>}
     </figure>
   );
 }
