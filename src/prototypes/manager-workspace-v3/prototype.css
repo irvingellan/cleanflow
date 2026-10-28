@@ -974,3 +974,14 @@ button.cx-row:hover { background: var(--v2-color-surface-internal); }
 .mw-photo-remove.is-confirming { width: auto; padding: 0 8px; border-radius: 999px; background: var(--v2-color-risk-text); border-color: var(--v2-color-risk-text); color: var(--v2-color-surface); font-size: 11px; font-weight: 800; }
 .cw-ack { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--v2-color-success-bg); color: var(--v2-color-success-text); font-size: 13.5px; text-align: left; }
 .cw-ack .mw-icon { flex: none; margin-top: 2px; }
+@media (max-width: 719px) {
+  .md-top { padding-top: 6px; padding-bottom: 6px; }
+  .md-titlebox .mw-micro { display: none; }
+  .md-bar { gap: 6px; padding-top: 6px; padding-bottom: 6px; }
+  .md-screenpick { flex: 1 1 100%; }
+  .md-screenpick select { width: 100%; max-width: none; min-height: 40px; }
+  .md-bar .mw-seg-control button { min-height: 36px; padding: 0 10px; font-size: 13px; }
+  .md-showhidden { font-size: 12.5px; min-height: 32px; }
+  .md-prov { font-size: 12px; line-height: 16px; padding-top: 6px; padding-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .md-panel:not(.is-sheet) { max-height: 24vh; }
+}
