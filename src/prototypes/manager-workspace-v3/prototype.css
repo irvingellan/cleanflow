@@ -824,3 +824,17 @@ button.mw-notif:hover { border-color: var(--v2-color-border-selected); }
 .mw-msgscope > div { padding: 10px 12px; border-radius: var(--v2-radius-card); border: 1px solid var(--v2-color-border); background: var(--v2-color-surface); }
 .mw-msgscope h4 { display: flex; gap: 4px; align-items: center; margin: 0 0 6px; }
 .mw-msgscope ul { display: grid; gap: 3px; font-size: 14px; }
+/* Workshop on in a narrow top bar: let the tools wrap instead of widening the page */
+.mw-app.has-studio .mw-header-row { flex-wrap: wrap; }
+.mw-app.has-studio .mw-header-actions { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.mw-app.has-studio .mw-header .st-area { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+@media (max-width: 1099px) {
+  .mw-header .st-drop { display: none; }
+  .mw-app.has-studio .mw-header-actions { margin-left: 0; width: 100%; }
+}
+.mw-page { grid-template-columns: minmax(0, 1fr); }
+.mw-ncenter, .mw-ncenter-list, .mw-inbox-tools, .mw-inbox-tools > * { min-width: 0; }
+.mw-inbox-row { flex-wrap: wrap; }
+@media (max-width: 719px) {
+  button.mw-notif { flex-wrap: nowrap; }
+}

@@ -765,6 +765,9 @@ const M = {
   "rm.out.address": ["Endereço completo", "Full address", "Dirección completa"],
   "rm.out.others": ["Quem mais recebeu oferta", "Who else got an offer", "A quién más se ofreció"],
   "rm.releaseRule": ["O código aparece só dentro do checklist, para a cleaner atribuída, a partir de 2 horas antes do início (proposta).", "The code shows only inside the checklist, to the assigned cleaner, from 2 hours before the start (proposal).", "El código aparece solo en el checklist, para la cleaner asignada, desde 2 horas antes (propuesta)."],
+  "ws.originals": ["Originais A, B e C", "Originals A, B and C", "Originales A, B y C"],
+  "ws.originalsNote": ["Os layouts A, B e C deste protótipo são recriações sobre os mesmos dados, não os arquivos originais. Os originais de 30/09 estão no canvas de conceitos.", "Layouts A, B and C in this prototype are recreations on the same data, not the original files. The Sep 30 originals are on the concepts canvas.", "Los diseños A, B y C de este prototipo son recreaciones, no los originales. Los originales del 30/09 están en el canvas."],
+  "ws.originalsLink": ["Abrir canvas dos originais (privado)", "Open the originals canvas (private)", "Abrir canvas de originales (privado)"],
 };
 
 export const LANGS = ["pt", "en", "es"];

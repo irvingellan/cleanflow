@@ -130,4 +130,14 @@ describe("Manager Workspace V3 prototype", () => {
     expect(screen.getByText("A gerente ainda está decidindo")).toBeInTheDocument();
     expect(within(document.querySelector(".mw-phone")).queryByText(/Nora/)).toBeNull();
   });
+
+  it("on a phone, opening a settings page keeps focus inside so Escape still closes", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Conta e configurações" }));
+    fireEvent.click(screen.getByRole("button", { name: /Preferências/ }));
+    expect(document.activeElement).toHaveTextContent("Conta e configurações");
+    fireEvent.keyDown(document.activeElement, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });

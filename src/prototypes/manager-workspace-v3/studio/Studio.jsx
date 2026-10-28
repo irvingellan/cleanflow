@@ -208,6 +208,11 @@ export function StudioPanel() {
             </section>
           ))}
           <button type="button" className="cfv2-button cfv2-button-danger mw-btn cfv2-button-small" onClick={() => dispatch({ type: "RESET_ALL" })}>{t("ws.resetAll")}</button>
+          <section className="st-screen st-originals">
+            <header><strong>{t("ws.originals")}</strong></header>
+            <p className="mw-hint">{t("ws.originalsNote")}</p>
+            <a className="mw-linkbtn" href="https://claude.ai/artifact/D51aPdEBUm6PVoLpJoyXKm" target="_blank" rel="noreferrer">{t("ws.originalsLink")}<Icon name="arrowR" size={14} /></a>
+          </section>
         </div>
       )}
       {tab === "share" && (

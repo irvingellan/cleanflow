@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EmptyState, ErrorState, Skeleton } from "../../../components/v2/primitives.jsx";
 import { CATEGORIES, FILTERS, PUSH_SAMPLES, categoryOf, deliverySteps, filterNotifications } from "../model/notificationModel.js";
 import { unreadCount } from "../model/selectors.js";
@@ -48,7 +48,7 @@ export function NotificationRow({ notification: n, selected, onSelect }) {
   const cat = categoryOf(n);
   return (
     <li>
-      <button type="button" className={`mw-notif${n.read ? "" : " is-unread"}${selected ? " is-selected" : ""}`} aria-current={selected ? "true" : undefined} onClick={() => onSelect(n)}>
+      <button type="button" data-nid={n.id} className={`mw-notif${n.read ? "" : " is-unread"}${selected ? " is-selected" : ""}`} aria-current={selected ? "true" : undefined} onClick={() => onSelect(n)}>
         <span className={`mw-notif-icon tone-${cat.tone}`}><Icon name={cat.icon} size={17} /></span>
         <span className="mw-grow">
           <span className="mw-notif-title">{!n.read && <span className="mw-unread-dot" aria-hidden="true" />}{!n.read && <span className="mw-visually-hidden">{t("inbox.new")}: </span>}{t(n.titleKey, n.params)}</span>
@@ -140,6 +140,15 @@ export function NotificationCenter({ initialId = null, split = false }) {
   const selected = data.notifications.find(n => n.id === selectedId) || (split ? list[0] : null);
   // Reading the detail marks it read (only when the person chose it).
   useEffect(() => { if (selectedId && selected && !selected.read) act("NOTIF_READ", { id: selected.id }); }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const root = useRef(null);
+  const lastId = useRef(selectedId);
+  // List and detail replace each other when not split: keep keyboard focus inside.
+  useEffect(() => {
+    if (split || lastId.current === selectedId) return;
+    const target = selectedId ? root.current?.querySelector(".mw-ndetail-back") : root.current?.querySelector(`[data-nid="${lastId.current}"]`);
+    target?.focus();
+    lastId.current = selectedId;
+  }, [selectedId, split]);
   const groups = [
     { key: "today", items: list.filter(n => n.at.date === data.clock.date) },
     { key: "earlier", items: list.filter(n => n.at.date !== data.clock.date) },
@@ -197,7 +206,7 @@ export function NotificationCenter({ initialId = null, split = false }) {
       </div>
     );
   }
-  return <div className="mw-ncenter">{selectedId && selected ? <NotificationDetail notification={selected} onBack={() => setSelectedId(null)} onOpenJob={openJob} /> : listView}</div>;
+  return <div ref={root} className="mw-ncenter">{selectedId && selected ? <NotificationDetail notification={selected} onBack={() => setSelectedId(null)} onOpenJob={openJob} /> : listView}</div>;
 }
 
 /** Name kept for the mobile tab. */

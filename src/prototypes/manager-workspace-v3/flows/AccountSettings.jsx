@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EnvironmentIndicator } from "../../../components/v2/primitives.jsx";
 import { LANGS } from "../model/messages.js";
 import { CATEGORIES } from "../model/notificationModel.js";
@@ -218,10 +218,19 @@ export function AccountSheet({ onClose, section: initial }) {
   const vp = useViewport();
   const [section, setSection] = useState(initial || (vp.compact ? null : "account"));
   const Body = section && CONTENT[section];
+  const root = useRef(null);
+  const last = useRef(section);
+  // On phones the list and the page replace each other: move focus so it is never lost.
+  useEffect(() => {
+    if (!vp.compact || last.current === section) return;
+    const target = section ? root.current?.querySelector(".mw-setpage .mw-linkbtn") : root.current?.querySelector(`[data-section="${last.current}"]`);
+    target?.focus();
+    last.current = section;
+  }, [section, vp.compact]);
   const nav = (
     <nav className="mw-setnav" aria-label={t("acc.title")}>
       {SECTIONS.map(s => (
-        <button key={s.id} type="button" className="mw-setnav-item" aria-current={section === s.id ? "page" : undefined} onClick={() => setSection(s.id)}>
+        <button key={s.id} type="button" data-section={s.id} className="mw-setnav-item" aria-current={section === s.id ? "page" : undefined} onClick={() => setSection(s.id)}>
           <Icon name={s.icon} size={18} /><span className="mw-grow"><strong>{t(`acc.s.${s.id}`)}</strong>{vp.compact && <span className="mw-sec">{t(`acc.s.${s.id}.hint`)}</span>}</span>
           {vp.compact && <Icon name="arrowR" size={16} />}
         </button>
@@ -230,7 +239,7 @@ export function AccountSheet({ onClose, section: initial }) {
   );
   return (
     <Overlay title={t("acc.title")} onClose={onClose} wide={!vp.compact}>
-      <div className={`mw-settings${vp.compact ? " is-compact" : ""}`}>
+      <div ref={root} className={`mw-settings${vp.compact ? " is-compact" : ""}`}>
         {(!vp.compact || !section) && nav}
         {Body && (
           <section className="mw-setpage" aria-labelledby="mw-setpage-title">
