@@ -6,7 +6,7 @@ no network calls. All data is invented; nothing is sent.
 
 ```sh
 npm run prototype:v3          # dev server, opens /prototypes/manager-workspace-v3/index.html
-npm run prototype:v3:test     # 51 model and interaction tests
+npm run prototype:v3:test     # 64 model and interaction tests
 npm run prototype:v3:build    # static build in dist-prototypes/manager-workspace-v3 (git-ignored)
 ```
 
@@ -22,6 +22,8 @@ What you can do:
 - **Oficina** (dashed button): co-design "massinha" mode. Move, reorder, hide, restore and rename blocks on Agora, job detail, job actions and the top bar; compare with the original; approve/question each change; undo/redo; save and import a JSON file. Local to this browser — not live multi-person editing.
 - Cleaner checklist: pick many photos at once, one-at-a-time upload with overall progress, retry only failed photos, remove draft photos, limits of 20 photos / 50 MB / 5 MB each (a 50-photo option is a labelled simulation), and a stepper from draft to formally completed.
 - Property sheet: checklist items required/optional, photo guidance, N/A, notes, preview as the cleaner, versions.
+- **Modelar telas** (phase 2): editable copies of the exact original A/B/C artboards and of real CleanFlow V2 screens (synthetic data). Proposal, Original or side by side; select, move, rename, hide, emphasis; decisions; download a decision record and a session file.
+- **Lista compacta** layout, **Testar tarefas** (counts navigation per task and strategy) and **Roteiro da gerente** (14-step guided journey).
 Demo state is kept in this browser only.
 
 Specs: `docs/manager-workspace-v3/` (Codex handoff for this round: `VISUAL_STUDIO_CODEX_HANDOFF.md`; Figma plan: `FIGMA_HANDOFF.md`).

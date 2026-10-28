@@ -642,6 +642,15 @@ template editor. No Production, Firebase, Functions, rules or deploy change.
 Backend needs are in `docs/manager-workspace-v3/VISUAL_STUDIO_CODEX_HANDOFF.md`.
 Figma was not written (connector not authorised): `FIGMA_HANDOFF.md`.
 
+## Manager Workspace V3 — visual studio phase 2 (prototype only, 2026-10-27)
+
+Same branch. Adds "Modelar telas": exact original A/B/C artboards and real V2
+components (captured from the synthetic integrated harness) as editable copies
+with an untouched original, plus a compact-list strategy, a task counter, a
+guided manager route and a Figma import spec (`docs/manager-workspace-v3/figma/`).
+No Production or backend change; nothing is operator-approved. See
+`CODEX_FUNCTIONAL_HANDOFF_PHASE2.md` and `MASSINHA_COMPONENT_CONTRACT.md`.
+
 ## Fresh-session resume
 
 Issue #64 Job Detail Intent Layer V0 is implemented only on
