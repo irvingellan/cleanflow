@@ -26,6 +26,15 @@ export function assertFirebaseEnvironmentBinding({ environment, firebaseProjectI
   throw new Error("Invalid Firebase environment binding; refusing initialization.");
 }
 
+// Sandbox has a separate opt-in and key. Normal Sandbox and emulator builds
+// retain their previous notification configuration.
+export function webPushVapidKey(mode, values) {
+  if (mode === "sandbox") {
+    return values.VITE_CLEANFLOW_SANDBOX_PUSH_PILOT === "enabled" ? values.VITE_FIREBASE_SANDBOX_VAPID_KEY : "";
+  }
+  return values.VITE_FIREBASE_VAPID_KEY;
+}
+
 /** Shared by Vite, generated messaging worker and browser SDK initialization. */
 export function assertBuildEnvironment(mode, values, { approvedPrivateEmulatorOrigin } = {}) {
   privateOriginForBuild(mode, values, approvedPrivateEmulatorOrigin);
@@ -40,6 +49,13 @@ export function assertBuildEnvironment(mode, values, { approvedPrivateEmulatorOr
     || ![projectId + ".appspot.com", projectId + ".firebasestorage.app"].includes(values.VITE_FIREBASE_STORAGE_BUCKET)
     || !values.VITE_FIREBASE_APP_ID.startsWith(`1:${values.VITE_FIREBASE_MESSAGING_SENDER_ID}:web:`)) {
     throw new Error("Firebase Auth/Storage/app configuration crosses project boundaries.");
+  }
+  const sandboxPushPilot = values.VITE_CLEANFLOW_SANDBOX_PUSH_PILOT;
+  const sandboxVapid = values.VITE_FIREBASE_SANDBOX_VAPID_KEY;
+  if ((sandboxPushPilot || sandboxVapid) && (environment !== "sandbox" || sandboxPushPilot !== "enabled"
+    || !sandboxVapid || values.VITE_NOTIFICATION_INBOX_MODE !== "enabled"
+    || values.VITE_AUTOMATIC_OFFERS_MODE !== "disabled")) {
+    throw new Error("Sandbox push pilot requires its separate key, Inbox enabled and automatic offers disabled.");
   }
   if (environment === "sandbox") {
     resolveSandboxOrigin({ sandboxProjectId: projectId, sandboxOrigin: values.VITE_CLEANFLOW_SANDBOX_ORIGIN });

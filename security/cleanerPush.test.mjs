@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { assertFails, initializeTestEnvironment } from "@firebase/rules-unit-testing";
+import { serverTimestamp } from "firebase/firestore";
 import { cleanerPushDisplay } from "../src/features/notifications/cleanerPushBinding.js";
 
 for (const [name, expected] of Object.entries({
@@ -18,7 +19,7 @@ initializeApp({ projectId: "demo-cleanflow" });
 const {
   assignCleanerDirectly, createAutomaticJobOffers, deactivateCleanerPushDevice, getCleanerPushDeviceStatus,
   issueCleanerAccessCode, listNotificationInbox, openNotificationInboxItem, redeemCleanerAccessCode,
-  registerCleanerPushDevice, respondToMyOffer, revokeCleanerHubAccess,
+  registerCleanerPushDevice, rescheduleJob, respondToMyOffer, revokeCleanerHubAccess,
 } = await import("../functions/src/index.js");
 const { processCleanerNotification } = await import("../functions/src/cleanerPushDelivery.js");
 const { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } = await import("../functions/src/cleanerNotificationEvents.js");
@@ -144,10 +145,25 @@ test("additional-device Hub sessions coexist, enrollment paths are private, and 
 
   const otherAuth = await link(cleanerB);
   const switched = { ...installationB, token: `${installationB.token}-new-account` };
-  await register(otherAuth, switched);
+  const switchedRegistration = await register(otherAuth, switched);
   assert.deepEqual(await status(secondAuth, installationB), { state: "superseded", registrationRevision: second.registrationRevision });
   await deactivate(secondAuth, installationB, second);
   assert.deepEqual(await status(otherAuth, switched), { state: "active", registrationRevision: 1 });
+
+  const oldOwnerEvent = await assignAndRecord("synthetic-switch-old-owner", cleanerA);
+  const newOwnerEvent = await assignAndRecord("synthetic-switch-new-owner", cleanerB);
+  const batches = [];
+  const provider = async (messages) => {
+    batches.push(messages);
+    return { responses: [{ success: true, messageId: "synthetic-switch-accepted" }], successCount: 1, failureCount: 0 };
+  };
+  assert.deepEqual(await dispatch(cleanerA, oldOwnerEvent.id, provider), { skipped: "NO_ACTIVE_DEVICES" });
+  assert.deepEqual(await dispatch(cleanerB, newOwnerEvent.id, provider), { deliveryStatus: "FCM_ACCEPTED" });
+  assert.equal(batches.length, 1);
+  assert.deepEqual(batches[0].map(({ token, data }) => [token, data.cleanerBindingId]),
+    [[switched.token, switchedRegistration.bindingId]]);
+  assert.deepEqual(await open(otherAuth, oldOwnerEvent.id), { state: "unavailable", destination: null });
+  assert.equal(cleanerPushDisplay({ data: batches[0][0].data }, { bindingId: second.bindingId }), null);
 
   await revokeCleanerHubAccess.run(manager({ cleanerId: cleanerA }));
   for (const auth of [firstAuth, secondAuth]) {
@@ -191,6 +207,15 @@ test("a real Inbox event fans out only to authorized current sessions through an
     assert.doesNotMatch(JSON.stringify(data), /synthetic-job-with-inbox|Synthetic property marker|synthetic-cleaner/);
   }
   assert.deepEqual(await status(firstAuth, installationA), { state: "invalidated", registrationRevision: first.registrationRevision });
+  assert.deepEqual(await status(secondAuth, installationB), { state: "active", registrationRevision: second.registrationRevision });
+  await assert.rejects(register(firstAuth, installationA), {
+    code: "failed-precondition", details: { reason: "fcm-token-invalidated" },
+  });
+  const renewed = { ...installationA, token: `${installationA.token}-renewed` };
+  const replacement = await register(firstAuth, renewed);
+  assert.equal(replacement.registrationRevision, first.registrationRevision + 1);
+  assert.notEqual(replacement.bindingId, first.bindingId);
+  assert.deepEqual(await status(firstAuth, renewed), { state: "active", registrationRevision: replacement.registrationRevision });
   assert.deepEqual(await status(secondAuth, installationB), { state: "active", registrationRevision: second.registrationRevision });
   const receipt = functionDatabase.doc(`${root}/cleanerNotificationDeliveries/${event.id}`);
   const result = (await receipt.get()).data();
@@ -335,4 +360,68 @@ test("rotation in flight preserves the replacement; delayed cancelled and revoke
   await assert.rejects(open(second, event.id), { code: "permission-denied" });
   await assert.rejects(list(first), { code: "permission-denied" });
   assert.equal(attempts, 1);
+});
+
+test("only the latest reschedule attempts delivery and cancellation can notify without restoring Job access", async () => {
+  const auth = await link(cleanerA);
+  const other = await link(cleanerB);
+  const registration = await register(auth, installationA);
+  await register(other, installationB);
+  const jobId = "synthetic-reschedule-cancel";
+  const assignment = await assignAndRecord(jobId, cleanerA);
+  const job = jobReference(jobId);
+  async function recordTransition(before, eventId) {
+    const after = await job.get();
+    const context = { organizationId, jobId, before, after, eventId };
+    assert.equal(await recordCleanerJobInboxEvents(functionDatabase, context), 1);
+    assert.equal(await recordCleanerJobInboxEvents(functionDatabase, context), 0);
+    return after;
+  }
+  async function reschedule(before, scheduledStart, eventId) {
+    const result = await rescheduleJob.run(manager({ jobId, scheduledDate: "2026-11-19", scheduledStart }));
+    assert.equal(result.changed, true);
+    return recordTransition(before, eventId);
+  }
+  const first = await reschedule(await job.get(), "12:30", "synthetic-first-reschedule");
+  const latest = await reschedule(first, "14:15", "synthetic-latest-reschedule");
+  const moves = (await inboxReference(cleanerA).where("type", "==", "RESCHEDULED").get()).docs;
+  assert.equal(moves.length, 2);
+  const staleEvent = moves.find((event) => event.data().scheduleRevision === first.data().scheduleRevision);
+  const latestEvent = moves.find((event) => event.data().scheduleRevision === latest.data().scheduleRevision);
+  const attempts = [];
+  const provider = async (messages) => {
+    attempts.push(messages);
+    return { responses: [{ success: true, messageId: "synthetic-change-accepted" }], successCount: 1, failureCount: 0 };
+  };
+
+  assert.deepEqual(await dispatch(cleanerA, staleEvent.id, provider), { skipped: "STALE_EVENT" });
+  assert.equal((await receiptReference(staleEvent.id).get()).data().targetDeviceCount, 0);
+  assert.deepEqual(await dispatch(cleanerA, latestEvent.id, provider), { deliveryStatus: "FCM_ACCEPTED" });
+  assert.deepEqual(await open(auth, latestEvent.id), { state: "opened", destination: { kind: "JOB", jobId } });
+
+  const managerClient = environment.authenticatedContext("synthetic-manager", manager({}).auth.token).firestore();
+  await managerClient.doc(job.path).update({
+    archivedAt: serverTimestamp(), archivedBy: "synthetic-manager",
+    checklistContextRevision: latest.data().checklistContextRevision + 1,
+  });
+  await recordTransition(latest, "synthetic-cancel-assignment");
+  const cancelled = (await inboxReference(cleanerA).where("type", "==", "CANCELLED").get()).docs;
+  assert.equal(cancelled.length, 1);
+  assert.deepEqual(await dispatch(cleanerA, cancelled[0].id, provider), { deliveryStatus: "FCM_ACCEPTED" });
+  await dispatch(cleanerA, cancelled[0].id, provider);
+  assert.equal(attempts.length, 2);
+  for (const [index, event] of [latestEvent, cancelled[0]].entries()) {
+    const messages = attempts[index];
+    assert.deepEqual(messages.map(({ token, data }) => [token, data.cleanerBindingId, data.eventId]),
+      [[installationA.token, registration.bindingId, event.id]]);
+    assert.equal(messages[0].data.link, "/agenda");
+    assert.doesNotMatch(JSON.stringify(messages[0].data), /Synthetic property marker|synthetic-reschedule-cancel|2026-11-19|14:15/);
+  }
+  const { items } = await list(auth);
+  for (const event of [assignment, staleEvent, latestEvent, cancelled[0]]) {
+    assert.deepEqual(await open(auth, event.id), { state: "unavailable", destination: null });
+    const row = items.find(({ id }) => id === event.id);
+    assert.deepEqual([row.serviceLabel, row.openable], [null, false]);
+  }
+  assert.equal((await inboxReference(cleanerB).get()).size, 0);
 });

@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { assertBuildEnvironment } from './src/environment.js'
+import { assertBuildEnvironment, webPushVapidKey } from './src/environment.js'
 import {
   cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerPushBinding, cleanerPushDisplay, cleanerPushReceiptEvent, isCleanerVapidKey,
 } from './src/features/notifications/cleanerPushBinding.js'
@@ -198,7 +198,7 @@ function cleanflowServiceWorkers(buildInfo) {
 
       source = messagingWorkerSource(firebaseConfig)
       cleanerSource = cleanerMessagingWorkerSource(
-        config.mode !== 'emulator' && isCleanerVapidKey(environment.VITE_FIREBASE_VAPID_KEY)
+        config.mode !== 'emulator' && isCleanerVapidKey(webPushVapidKey(config.mode, environment))
           ? cleanerMessagingConfig(firebaseConfig, environment.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID) : null,
       )
     },
@@ -264,6 +264,12 @@ export default defineConfig(({ mode }) => {
   }
   const binding = assertBuildEnvironment(mode, environment, { approvedPrivateEmulatorOrigin });
   if (mode === "sandbox") {
+    const pilot = environment.VITE_CLEANFLOW_SANDBOX_PUSH_PILOT === "enabled";
+    if (pilot && (!isCleanerVapidKey(webPushVapidKey(mode, environment)) || !cleanerMessagingConfig({
+      appId: environment.VITE_FIREBASE_APP_ID, messagingSenderId: environment.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    }, environment.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID))) {
+      throw new Error("Sandbox push pilot requires its public VAPID key and dedicated same-project Web app.");
+    }
     // API keys route Firebase Auth independently of projectId. Reject known
     // local production credentials without logging or embedding them in Sandbox.
     for (const file of [".env", ".env.local", ".env.production", ".env.production.local"]) {
@@ -271,8 +277,9 @@ export default defineConfig(({ mode }) => {
       if (!existsSync(filename)) continue;
       const values = parseEnv(readFileSync(filename, "utf8"));
       if (values.VITE_FIREBASE_PROJECT_ID === "clean-flow-prototipo"
-        && values.VITE_FIREBASE_API_KEY === environment.VITE_FIREBASE_API_KEY) {
-        throw new Error("Sandbox must use its own verified Firebase Web configuration, not the production API key.");
+        && (values.VITE_FIREBASE_API_KEY === environment.VITE_FIREBASE_API_KEY
+          || (pilot && values.VITE_FIREBASE_VAPID_KEY === webPushVapidKey(mode, environment)))) {
+        throw new Error("Sandbox must use its own verified Firebase Web and push configuration.");
       }
     }
   }
@@ -283,7 +290,8 @@ export default defineConfig(({ mode }) => {
   }
   if (environment.VITE_NOTIFICATION_INBOX_MODE === 'disabled') {
     buildInfo.deploymentId = `${buildInfo.buildId}-inbox-off`
-  } else if (mode === 'production' && isCleanerVapidKey(environment.VITE_FIREBASE_VAPID_KEY)
+  } else if ((mode === 'production' || environment.VITE_CLEANFLOW_SANDBOX_PUSH_PILOT === 'enabled')
+    && isCleanerVapidKey(webPushVapidKey(mode, environment))
     && cleanerMessagingConfig({
       appId: environment.VITE_FIREBASE_APP_ID,
       messagingSenderId: environment.VITE_FIREBASE_MESSAGING_SENDER_ID,

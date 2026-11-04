@@ -14,12 +14,13 @@ test("VAPID preflight accepts a canonical public P-256 point and rejects malform
 });
 
 test("messaging app requires a distinct Web app in the same project and sender", () => {
-  const manager = { projectId: "demo-cleanflow", messagingSenderId: "42", appId: "1:42:web:aa" };
+  const manager = { projectId: "demo-cleanflow", messagingSenderId: "42", apiKey: "shared-public-binding", appId: "1:42:web:aa" };
   const cleaner = { ...manager, appId: "1:42:web:bb" };
   assert.deepEqual(dedicatedCleanerConfig(manager, cleaner), cleaner);
   assert.equal(dedicatedCleanerConfig(manager, manager), null);
   assert.equal(dedicatedCleanerConfig(manager, { ...cleaner, projectId: "wrong" }), null);
   assert.equal(dedicatedCleanerConfig(manager, { ...cleaner, appId: "1:43:web:bb" }), null);
+  assert.equal(dedicatedCleanerConfig(manager, { ...cleaner, apiKey: "different-binding" }), null);
 });
 
 test("release verification requires each passed suite and the exact SHA", () => {
@@ -33,10 +34,18 @@ test("release verification requires each passed suite and the exact SHA", () => 
   assert.equal(validReleaseVerification({ ...receipt, suites: { ...suites, webkit: { exitCode: 0, passed: 0 } } }, "test-sha"), false);
 });
 
-test("Release B requires physical observations and approval bound to the configuration", () => {
-  const identity = { sha: "candidate", appId: "1:42:web:bb", vapidFingerprint: "hash" };
-  const receipt = { ...identity, releaseAuthorized: true, iosHomeScreenObserved: true, androidObserved: true };
+test("Release B requires observed physical delivery for both roles bound to the exact manifest", () => {
+  const identity = { sha: "candidate", appId: "1:42:web:bb", vapidFingerprint: "a".repeat(64), hostingManifestSha256: "b".repeat(64),
+    pilotProject: "clean-flow-sandbox-irving", pilotManifestSha256: "d".repeat(64) };
+  const observations = ["manager", "cleaner"].flatMap((role) => ["ios-home-screen", "android"].map((platform) => ({
+    role, platform, evidenceId: `${role}-${platform}`, permissionGranted: true, registered: true,
+    providerAccepted: true, displayed: true, opened: true, inboxAvailable: true,
+  })));
+  const receipt = { ...identity, releaseAuthorized: true, environment: "isolated-pilot", pilotVapidFingerprint: "e".repeat(64), observations };
   assert.equal(validPhysicalVerification(receipt, identity), true);
   assert.equal(validPhysicalVerification({ ...receipt, releaseAuthorized: false }, identity), false);
-  assert.equal(validPhysicalVerification(receipt, { ...identity, vapidFingerprint: "different" }), false);
+  assert.equal(validPhysicalVerification({ ...receipt, observations: [...observations.slice(0, 3), observations[0]] }, identity), false);
+  assert.equal(validPhysicalVerification({ ...receipt, observations: observations.map((row) => ({ ...row, displayed: false })) }, identity), false);
+  assert.equal(validPhysicalVerification(receipt, { ...identity, hostingManifestSha256: "c".repeat(64) }), false);
+  assert.equal(validPhysicalVerification(receipt, { ...identity, pilotManifestSha256: "c".repeat(64) }), false);
 });

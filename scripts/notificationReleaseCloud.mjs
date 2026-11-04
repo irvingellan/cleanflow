@@ -61,7 +61,7 @@ const basePermissions = [...TARGET_PERMISSIONS.hosting, ...TARGET_PERMISSIONS.fu
   "cloudscheduler.jobs.get", "cloudscheduler.jobs.update"];
 const permissionsA = [...new Set([...basePermissions, ...TARGET_PERMISSIONS.storage,
   "cloudfunctions.functions.setIamPolicy", "firebaserules.releases.get"])];
-const permissionsB = basePermissions;
+const permissionsB = [...new Set([...basePermissions, "cloudfunctions.functions.setIamPolicy", "firebaserules.releases.get"])];
 const database = `${projectPath}/databases/(default)`;
 const releaseLockName = `${database}/documents/cleanflowReleaseControl/production`;
 const lockPermissions = ["datastore.entities.get", "datastore.entities.create", "datastore.entities.delete"];
@@ -76,9 +76,10 @@ const defaultEnv = {
   NOTIFICATION_INBOX_MODE: ["enabled", "disabled"],
 };
 
-function compatibleRuntime({ environmentVariables = {}, secretEnvironmentVariables = [], secretVolumes = [] }, secretVersion) {
+function compatibleRuntime({ environmentVariables = {}, secretEnvironmentVariables = [], secretVolumes = [] }, secretVersion, allowCleanerPush = false) {
   return Object.entries(environmentVariables).every(([key, value]) =>
-    managedEnv.has(key) || Object.hasOwn(defaultEnv, key) && defaultEnv[key].includes(value))
+    managedEnv.has(key) || (allowCleanerPush && key === "CLEANER_PUSH_MODE" && value === "enabled")
+    || Object.hasOwn(defaultEnv, key) && defaultEnv[key].includes(value))
     && secretVolumes.length === 0
     && secretEnvironmentVariables.every((ref) => ref.key === developerSecret && ref.secret === developerSecret
       && secretVersion.state === "ENABLED" && ref.version === secretVersion.name?.split("/").at(-1));
@@ -195,7 +196,10 @@ export async function readNotificationProduction(stage, managerAppId) {
     runtime: entry.buildConfig?.runtime,
     revision: entry.serviceConfig?.revision || null,
     configurationHash: functionConfigurationHash(entry),
-    runtimeCompatible: compatibleRuntime(entry.serviceConfig || {}, secretVersion),
+    runtimeCompatible: compatibleRuntime(entry.serviceConfig || {}, secretVersion,
+      stage === "B" && /\/(registerCleanerPushDevice|notifyCleanerInboxEvent)$/.test(entry.name)),
+    cleanerPushMode: entry.serviceConfig?.environmentVariables?.CLEANER_PUSH_MODE ?? "disabled",
+    automaticOffersMode: entry.serviceConfig?.environmentVariables?.AUTOMATIC_OFFERS_MODE ?? "disabled",
     secretBindingHash: sha256(JSON.stringify(unorderedRows(entry.serviceConfig?.secretEnvironmentVariables || []))),
     maxInstances: entry.serviceConfig?.maxInstanceCount,
     ...(/\/(listNotificationInbox|markNotificationRead|openNotificationInboxItem)$/.test(entry.name)
@@ -207,7 +211,7 @@ export async function readNotificationProduction(stage, managerAppId) {
   })).sort((a, b) => a.id.localeCompare(b.id));
   return {
     dedicatedApp: config && !config.error ? {
-      appId: config.appId, projectId: config.projectId, messagingSenderId: config.messagingSenderId,
+      appId: config.appId, projectId: config.projectId, messagingSenderId: config.messagingSenderId, apiKey: config.apiKey,
     } : null,
     report: {
       webAppCount: apps.error || apps.nextPageToken ? null : webApps.length,
@@ -232,5 +236,33 @@ export async function readNotificationProduction(stage, managerAppId) {
       reminderSchedules: schedules,
       iam,
     },
+  };
+}
+
+function snapshotCondition(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+export function productionSnapshot(report) {
+  snapshotCondition(report?.functionsComplete && report.noPendingFunctionOperations && report.iam?.ok
+    && report.deploymentPrerequisites?.existingServiceAgents && report.deploymentPrerequisites.unavailableApis.length === 0
+    && report.deploymentPrerequisites.artifactCleanupConfigured
+    && report.reminderSchedules?.length === 2 && report.reminderSchedules.every((schedule) => schedule.compatible)
+    && report.hostingVersion && report.hostingRelease && report.ruleset && report.rulesUpdated
+    && /^[a-f0-9]{64}$/.test(report.firestoreRulesSha256)
+    && report.functions.filter((row) => ["sendTomorrowPlanningReminder", "sendTodayExecutionReminder"].includes(row.id))
+      .every((row) => row.managerFcm === true)
+    && report.functions.every((row) => row.state === "ACTIVE" && row.runtime === "nodejs22" && row.maxInstances === 20
+      && row.region === "us-central1" && row.revision && /^[a-f0-9]{64}$/.test(row.configurationHash)),
+  "Production inventory is incomplete, unavailable or busy.");
+  return {
+    hosting: { version: report.hostingVersion, release: report.hostingRelease },
+    rules: { id: report.ruleset, hash: report.firestoreRulesSha256, updated: report.rulesUpdated },
+    schedules: report.reminderSchedules,
+    functions: Object.fromEntries(report.functions.map((row) => [row.id, {
+      revision: row.revision, hash: row.configurationHash,
+      secretBindingHash: row.secretBindingHash, runtimeCompatible: row.runtimeCompatible,
+      ...(row.inboxMode ? { inboxMode: row.inboxMode } : {}),
+    }]).sort(([a], [b]) => a.localeCompare(b))),
   };
 }

@@ -1,3 +1,4 @@
+import { webPushVapidKey } from "../../environment.js";
 import { httpsCallable } from "firebase/functions";
 import { getAuth } from "firebase/auth";
 import { deleteToken, getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
@@ -14,7 +15,7 @@ import { withProviderTimeout } from "./providerTimeout.js";
 const pushDeviceStorageKey = "cleanflow-push-device-id";
 const messagingWorkerPath = "/firebase-messaging-sw.js";
 const messagingWorkerScope = "/firebase-messaging-push/";
-const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+const vapidKey = webPushVapidKey(import.meta.env.MODE, import.meta.env);
 const registerPushDeviceCall = httpsCallable(functions, "registerManagerPushDevice");
 const deactivatePushDeviceCall = httpsCallable(functions, "deactivateManagerPushDevice");
 const currentDeviceTestCall = httpsCallable(functions, "sendCurrentManagerTestNotification", { timeout: 30_000 });
