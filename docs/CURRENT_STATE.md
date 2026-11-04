@@ -12,6 +12,17 @@ operations manager. See [DESIGN.md](../DESIGN.md) and
 [the Codex mission](definitive-ui/CODEX_NEXT_ACTION.md).
 
 
+## 2026-11-04 — Release B qualification prepared locally (Issue #85)
+
+A fresh read-only comparison matches the complete Release A receipt, including
+43 Function revisions, Rules, all 15 Hosting assets and manager FCM settings.
+The dedicated Production cleaner Web app is missing. Release B now has
+separate Sandbox pilot configuration, evidence gates, a sealed targeted
+executor and an Inbox-preserving rollback. The live A source and artifacts
+remain preserved. Device acceptance, Console VAPID confirmation and app
+configuration require separate authorization. See the
+[Release B runbook](NOTIFICATIONS_RELEASE_A_RUNBOOK.md#release-b-preparation-and-qualification).
+
 ## 2026-11-04 — Integrated Release A published and verified (Issue #85)
 
 Production serves `12f432dd46a6c93e45bfb78ac1993568143c3840`

@@ -1,3 +1,4 @@
+import { webPushVapidKey } from "../../environment.js";
 import { getApps, initializeApp } from "firebase/app";
 import { httpsCallable } from "firebase/functions";
 import { deleteToken, getMessaging, getToken, isSupported } from "firebase/messaging";
@@ -11,7 +12,7 @@ import { withProviderTimeout } from "./providerTimeout.js";
 
 const cleanerMessagingAppName = "cleanflow-cleaner-messaging";
 const storageKey = "cleanflow-cleaner-push-device-id";
-const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+const vapidKey = webPushVapidKey(import.meta.env.MODE, import.meta.env);
 const messagingConfig = useFirebaseEmulators || ["test", "emulator", "e2e"].includes(import.meta.env.MODE)
   ? null : cleanerMessagingConfig(firebaseConfig, import.meta.env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID);
 const workerIdentity = { scope: cleanerMessagingWorkerScope, script: cleanerMessagingWorkerPath };

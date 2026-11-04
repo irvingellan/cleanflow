@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadEnv } from "vite";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
-import { dedicatedCleanerAppName, notificationProject, readNotificationProduction, releaseApis, sha256 } from "./notificationReleaseCloud.mjs";
+import { dedicatedCleanerAppName, notificationProject, productionSnapshot, readNotificationProduction, releaseApis, sha256 } from "./notificationReleaseCloud.mjs";
 import { cleanerMessagingConfig } from "../src/features/notifications/cleanerPushBinding.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -16,6 +16,8 @@ const deployedSha = "a593daf636024d6830bf89c75bd7f6353b4b759f";
 const deployedManifestHash = "ddbc29c2e86ff71e5539acb6551c4679724d323efbad502b457cfdb558c173e5";
 const oldRuleset = "03de7532-ddb1-4f6e-b6d7-137d0717572d";
 export const expectedBranch = "codex/release-a-claude-ux-85";
+export const releaseBBranch = "codex/notification-release-b-85";
+export const publishedReleaseASha = "12f432dd46a6c93e45bfb78ac1993568143c3840";
 const origin = `https://${notificationProject}.web.app`;
 export const deployGroups = {
   create: [
@@ -53,7 +55,8 @@ export function validVapidFingerprint(value) {
 }
 
 export function dedicatedCleanerConfig(manager, candidate) {
-  if (candidate?.projectId !== manager.projectId || candidate.messagingSenderId !== manager.messagingSenderId) return null;
+  if (candidate?.projectId !== manager.projectId || candidate.messagingSenderId !== manager.messagingSenderId
+    || !manager.apiKey || candidate.apiKey !== manager.apiKey) return null;
   return cleanerMessagingConfig(manager, candidate.appId);
 }
 
@@ -67,10 +70,35 @@ export function validReleaseVerification(receipt, sha) {
     && Number.isSafeInteger(receipt.suites[name].passed) && receipt.suites[name].passed > 0);
 }
 
-export function validPhysicalVerification(receipt, { sha, appId, vapidFingerprint }) {
-  return Boolean(appId && vapidFingerprint && receipt?.sha === sha && receipt.appId === appId
-    && receipt.vapidFingerprint === vapidFingerprint && receipt.releaseAuthorized === true
-    && receipt.iosHomeScreenObserved === true && receipt.androidObserved === true);
+export function validPhysicalVerification(receipt, { sha, appId, vapidFingerprint, hostingManifestSha256, pilotProject, pilotManifestSha256 }) {
+  if (!appId || !safeHex.test(vapidFingerprint) || !safeHex.test(hostingManifestSha256)
+    || !pilotProject || pilotProject === notificationProject || !safeHex.test(pilotManifestSha256)
+    || receipt?.pilotProject !== pilotProject || receipt.pilotManifestSha256 !== pilotManifestSha256
+    || !safeHex.test(receipt.pilotVapidFingerprint) || receipt.pilotVapidFingerprint === vapidFingerprint
+    || receipt?.sha !== sha || receipt.appId !== appId || receipt.vapidFingerprint !== vapidFingerprint
+    || receipt.hostingManifestSha256 !== hostingManifestSha256 || receipt.environment !== "isolated-pilot"
+    || receipt.releaseAuthorized !== true || !Array.isArray(receipt.observations)
+    || receipt.observations.length !== 4) return false;
+  const expected = new Set(["manager:ios-home-screen", "manager:android", "cleaner:ios-home-screen", "cleaner:android"]);
+  return receipt.observations.every((row) => row && expected.delete(`${row.role}:${row.platform}`)
+    && /^[a-zA-Z0-9_-]{1,100}$/.test(row.evidenceId ?? "")
+    && ["permissionGranted", "registered", "providerAccepted", "displayed", "opened", "inboxAvailable"]
+      .every((field) => row[field] === true));
+}
+
+function releaseAEvidence(options, manifestBytes, manifest) {
+  if (!options["a-plan"] || !options["a-receipt"]) return null;
+  const planBytes = readFileSync(resolve(options["a-plan"]));
+  const receiptBytes = readFileSync(resolve(options["a-receipt"]));
+  const plan = JSON.parse(planBytes);
+  const receipt = JSON.parse(receiptBytes);
+  const binding = { planHash: sha256(planBytes), receiptHash: sha256(receiptBytes), manifestHash: sha256(manifestBytes) };
+  if (plan.schema !== 1 || receipt.schema !== 1 || plan.project !== notificationProject
+    || plan.sha !== publishedReleaseASha || receipt.sha !== plan.sha || manifest.buildId !== plan.sha
+    || manifest.projectId !== notificationProject || manifest.environment !== "production"
+    || receipt.action !== "publish" || receipt.state !== "COMPLETE" || receipt.planHash !== binding.planHash
+    || binding.manifestHash !== plan.manifests?.A || !receipt.snapshot) return null;
+  return { ...binding, snapshot: receipt.snapshot };
 }
 
 export async function readPublishedAssets(manifest) {
@@ -144,7 +172,7 @@ async function preflight(options) {
   }
   const head = git("rev-parse", "HEAD");
   const branch = git("branch", "--show-current");
-  check("worktree", head === sha && branch === expectedBranch && git("rev-parse", "--show-toplevel") === root
+  check("worktree", head === sha && branch === (stage === "A" ? expectedBranch : releaseBBranch) && git("rev-parse", "--show-toplevel") === root
     && resolve(process.cwd()) === root && !git("status", "--porcelain"),
   "Use the clean Issue 85 worktree at the requested SHA.");
   check("runtime", process.versions.node.split(".")[0] === "22"
@@ -158,9 +186,10 @@ async function preflight(options) {
   const vapidFingerprint = validVapidFingerprint(localVapid);
   const previousBytes = readFileSync(resolve(previousManifest));
   const previous = JSON.parse(previousBytes);
+  const releaseA = stage === "B" ? releaseAEvidence(options, previousBytes, previous) : null;
   check("previousManifest", stage === "A"
     ? previous.buildId === deployedSha && sha256(previousBytes) === deployedManifestHash
-    : previous.buildId === sha, "Use the recorded Hub manifest for A or the published Release A manifest for B.");
+    : releaseA, "Supply the recorded Hub manifest for A, or the exact A plan, COMPLETE publish receipt and manifest for B.");
 
   // SDK discovery imports declarations only, under a demo identity.
   process.env.GCLOUD_PROJECT = "demo-cleanflow";
@@ -184,7 +213,7 @@ async function preflight(options) {
     "The local manager Firebase binding must match the verified published worker and registered Web app.");
   check("productionHosting", Boolean(cloud?.hostingVersion) && (stage === "B" || cloud.hostingVersion === "53fd5625bddc1d95"),
     "Authenticated Hosting release metadata is unavailable or different.");
-  const expectedRules = execFileSync("git", ["show", `${stage === "A" ? deployedSha : "HEAD"}:firestore.rules`], { cwd: root });
+  const expectedRules = execFileSync("git", ["show", `${stage === "A" ? deployedSha : publishedReleaseASha}:firestore.rules`], { cwd: root });
   check("productionRules", cloud?.firestoreRulesSha256 === sha256(expectedRules)
     && (stage === "B" || cloud.ruleset === oldRuleset), "Live Firestore Rules differ or could not be verified.");
   check("productionFunctions", cloud && verifyFunctions(stage, cloud, declarations), "Live Functions inventory, runtime, or cleaner mode differs.");
@@ -209,16 +238,16 @@ async function preflight(options) {
     const version = staticAssets.find((row) => row.file === "version.json" && row.matched)?.bytes;
     const versionInfo = version && JSON.parse(version);
     check("releaseALive", oldCleanerWorker?.toString() === "// Cleaner push is disabled for this build.\n"
-      && versionInfo?.buildId === sha && !versionInfo.deploymentId,
+      && versionInfo?.buildId === publishedReleaseASha && !versionInfo.deploymentId,
     "Release B requires the live Inbox-enabled Release A build and its disabled cleaner worker.");
-    check("dedicatedCleanerApp", cleaner, "A dedicated same-project Cleaner Hub Web app is required.");
+    let matchesReleaseA = false;
+    try {
+      matchesReleaseA = Boolean(releaseA && JSON.stringify(productionSnapshot(cloud)) === JSON.stringify(releaseA.snapshot));
+    } catch { /* incomplete inventory fails closed */ }
+    check("releaseADrift", matchesReleaseA, "Live Hosting, Rules, schedules or Functions differ from the COMPLETE Release A receipt.");
+    check("dedicatedCleanerApp", cleaner, "A distinct registered Web app with the same project, sender and public API binding is required.");
     check("consoleVapidAttestation", vapidFingerprint && options["vapid-console-sha256"] === vapidFingerprint,
       "Compare the public VAPID key fingerprint from Firebase Console before Release B.");
-    const physical = options["physical-verification"]
-      && JSON.parse(readFileSync(resolve(options["physical-verification"]), "utf8"));
-    check("physicalAuthorizationReceipt", validPhysicalVerification(physical, {
-      sha, appId: cleaner?.appId, vapidFingerprint,
-    }), "Release B requires authorized physical-device validation and separate release approval.");
   }
   const receipt = verification && JSON.parse(readFileSync(resolve(verification), "utf8"));
   check("candidateVerification", validReleaseVerification(receipt, sha),
@@ -226,7 +255,7 @@ async function preflight(options) {
 
   let manifest = null;
   const buildGates = ["worktree", "runtime", "previousManifest", "managerFirebaseBinding", "managerVapid"];
-  if (stage === "B") buildGates.push("releaseALive", "dedicatedCleanerApp", "consoleVapidAttestation");
+  if (stage === "B") buildGates.push("previousManifest", "releaseALive", "releaseADrift", "dedicatedCleanerApp", "consoleVapidAttestation");
   if (build && buildGates.every((name) => checks[name])) {
     if (stage === "B") env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID = cleaner.appId;
     execFileSync("npm", ["run", "hosting:prepare", "--", sha, "production"], {
@@ -254,9 +283,36 @@ async function preflight(options) {
     manifest = { sha256: sha256(preparedBytes), files: current.length };
   }
   if (!manifest) check("manifest", false, "A stage-specific build manifest is required.");
+  let physicalEvidence = null;
+  if (stage === "B") {
+    const physicalBytes = options["physical-verification"] && readFileSync(resolve(options["physical-verification"]));
+    const pilotBytes = options["pilot-manifest"] && readFileSync(resolve(options["pilot-manifest"]));
+    const pilot = pilotBytes && JSON.parse(pilotBytes);
+    const sandbox = JSON.parse(readFileSync(resolve(root, ".firebaserc"), "utf8")).projects?.sandbox;
+    const validPilotManifest = sandbox && sandbox !== notificationProject && pilot?.buildId === sha
+      && pilot.environment === "sandbox" && pilot.projectId === sandbox
+      && Array.isArray(pilot.files) && pilot.files.some(({ file, sha256: hash }) =>
+        file === "cleaner-messaging-sw.js" && safeHex.test(hash)
+        && hash !== sha256("// Cleaner push is disabled for this build.\n"));
+    check("sandboxPilotManifest", validPilotManifest, "Supply the enabled-worker manifest from the authorized isolated Sandbox pilot at the candidate SHA.");
+    const passed = validPhysicalVerification(physicalBytes && JSON.parse(physicalBytes), {
+      sha, appId: cleaner?.appId, vapidFingerprint, hostingManifestSha256: manifest?.sha256,
+      pilotProject: sandbox, pilotManifestSha256: validPilotManifest ? sha256(pilotBytes) : null,
+    });
+    check("physicalAuthorizationReceipt", passed,
+      "Release B requires an authorized isolated pilot with observed manager and cleaner push on iPhone and Android, bound to the pilot and Production manifests.");
+    if (passed) physicalEvidence = { receiptHash: sha256(physicalBytes), pilotManifestHash: sha256(pilotBytes) };
+  }
   return {
     status: blockers.length ? "BLOCKED" : "DRY_RUN_READY",
     stage, sha, branch, compatibility, sdkVersion, messagingVersion, checks, blockers, manifest,
+    ...(stage === "B" ? {
+      releaseA: releaseA && { planHash: releaseA.planHash, receiptHash: releaseA.receiptHash, manifestHash: releaseA.manifestHash },
+      cleanerBinding: cleaner && vapidFingerprint
+        ? { appIdHash: sha256(cleaner.appId), apiKeyHash: sha256(cleaner.apiKey), vapidFingerprint } : null,
+      managerVapidFingerprint: vapidFingerprint,
+      physicalEvidence,
+    } : {}),
     production: cloud || null, publicHostingFiles: { matched: staticMatches, total: staticAssets.length },
     targets: stage === "A" ? { rules: ["firestore.rules"], hosting: true, functions: { create: deployGroups.create, update: deployGroups.update } }
       : { rules: [], hosting: true, createBeforeHosting: deployGroups.prepareB, createAfterHosting: deployGroups.enable },
@@ -277,6 +333,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const { values } = parseArgs({ options: {
       stage: { type: "string" }, sha: { type: "string" }, "env-dir": { type: "string" },
       "previous-manifest": { type: "string" }, verification: { type: "string" },
+      "pilot-manifest": { type: "string" },
+      "a-plan": { type: "string" }, "a-receipt": { type: "string" },
       "vapid-console-sha256": { type: "string" }, "physical-verification": { type: "string" }, report: { type: "string" },
       build: { type: "boolean" }, compatibility: { type: "boolean" },
     } });

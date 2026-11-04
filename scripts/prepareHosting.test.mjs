@@ -22,6 +22,14 @@ test("root and nested DS_Store are removed and never enter stable deployable man
   assert.equal(fs.existsSync(path.join(dir, ".DS_Store")), false);
   assert.deepEqual(inspectHostingBuild(dir, "expected", []), manifest);
 });
+test("release verification ignores Finder metadata without mutating a reviewed asset directory", t => {
+  const dir = fixture(t);
+  const finder = path.join(dir, "assets/.DS_Store");
+  fs.writeFileSync(finder, "Finder");
+  const files = inspectHostingBuild(dir, "expected", [], undefined, { removeFinderMetadata: false });
+  assert.equal(files.some(entry => entry.file.includes("DS_Store")), false);
+  assert.equal(fs.readFileSync(finder, "utf8"), "Finder");
+});
 test("unexpected temporary or harness files fail closed", t => {
   const dir = fixture(t);
   for (const file of ["upload.tmp", "test.html", "assets/.hidden"]) {

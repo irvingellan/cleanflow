@@ -77,8 +77,36 @@ test("Sandbox build binds synthetic client and messaging worker to its separate 
   const messagingWorker = fs.readFileSync(path.join(result.output, "firebase-messaging-sw.js"), "utf8");
   assert.ok(messagingWorker.includes(`"projectId":"${sandboxProjectId}"`));
   assert.ok(messagingWorker.includes(`"storageBucket":"${sandboxProjectId}.firebasestorage.app"`));
+  assert.equal(fs.readFileSync(path.join(result.output, "cleaner-messaging-sw.js"), "utf8"),
+    "// Cleaner push is disabled for this build.\n");
   const rootWorker = fs.readFileSync(path.join(result.output, "sw.js"), "utf8");
   assert.doesNotMatch(rootWorker, /addEventListener\(\s*["']fetch["']/);
+});
+
+test("Explicit Sandbox push pilot builds the dedicated worker with isolated bindings", (t) => {
+  const root = fixture(t);
+  const key = crypto.createECDH("prime256v1");
+  key.setPrivateKey(Buffer.from([1]));
+  const vapid = key.getPublicKey().toString("base64url");
+  const cleanerApp = "1:1234567890:web:syntheticcleaner";
+  const env = syntheticEnvironment({
+    VITE_CLEANFLOW_SANDBOX_PUSH_PILOT: "enabled",
+    VITE_FIREBASE_SANDBOX_VAPID_KEY: vapid,
+    VITE_FIREBASE_CLEANER_MESSAGING_APP_ID: cleanerApp,
+    VITE_NOTIFICATION_INBOX_MODE: "enabled",
+    VITE_AUTOMATIC_OFFERS_MODE: "disabled",
+  });
+  const result = build(root, env, "sandbox-push-pilot");
+  assert.equal(result.status, 0, result.diagnostic);
+  const marker = JSON.parse(fs.readFileSync(path.join(result.output, "version.json"), "utf8"));
+  assert.equal(marker.deploymentId, `${fixtureBuildId}-cleaner-push`);
+  assert.equal(marker.projectId, sandboxProjectId);
+  const worker = fs.readFileSync(path.join(result.output, "cleaner-messaging-sw.js"), "utf8");
+  assert.ok(worker.includes(JSON.stringify(cleanerApp)) && worker.includes(JSON.stringify(sandboxProjectId)));
+  assert.ok(worker.includes("/agenda?inbox=1"));
+  assert.notEqual(build(root, { ...env, VITE_CLEANFLOW_SANDBOX_PUSH_PILOT: "" }, "sandbox-push-no-opt-in").status, 0);
+  fs.writeFileSync(path.join(root, ".env.production"), `VITE_FIREBASE_PROJECT_ID=clean-flow-prototipo\nVITE_FIREBASE_VAPID_KEY=${vapid}\n`);
+  assert.notEqual(build(root, env, "sandbox-push-inherited-key").status, 0);
 });
 
 test("Production build excludes the synthetic lifecycle preview and local harness", (t) => {

@@ -36,14 +36,14 @@ export function inspectHostingFonts(dist, files) {
   return declared;
 }
 
-export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBinding) {
+export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBinding, { removeFinderMetadata = true } = {}) {
   const files = [];
   function walk(directory, prefix = "") {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const relative = prefix + entry.name;
       const absolute = path.join(directory, entry.name);
       if (entry.name === ".DS_Store") {
-        fs.rmSync(absolute, { force: true });
+        if (removeFinderMetadata) fs.rmSync(absolute, { force: true });
         continue;
       }
       if (entry.isSymbolicLink()) throw new Error(`Symlink rejected: ${relative}`);

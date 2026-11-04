@@ -7,14 +7,14 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { setTimeout } from "node:timers/promises";
-import { acquireReleaseLock, assertReleaseLock, notificationProject, readNotificationProduction,
+import { acquireReleaseLock, assertReleaseLock, notificationProject, productionSnapshot, readNotificationProduction,
   releaseReleaseLock, sha256 } from "./notificationReleaseCloud.mjs";
 import { deployGroups, expectedBranch, readPublishedAssets, validReleaseVerification } from "./preflightNotificationRelease.mjs";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const require = createRequire(import.meta.url);
-const releaseToolchain = () => ({ firebaseTools: require("firebase-tools/package.json").version, node: process.versions.node });
+export const releaseToolchain = () => ({ firebaseTools: require("firebase-tools/package.json").version, node: process.versions.node });
 const evidenceFiles = ["verification.json", "preflight-A.json", "preflight-rollback.json"];
 const recoveryEndpoints = ["listNotificationInbox", "markNotificationRead", "openNotificationInboxItem"];
 const registrationWriters = ["registerManagerPushDevice", "redeemCleanerAccessCode", "issueCleanerAccessCode"];
@@ -36,35 +36,12 @@ const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const encode = (value) => JSON.stringify(value, null, 2) + "\n";
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const shaFormat = /^[a-f0-9]{40}$/;
-const digestFormat = /^[a-f0-9]{64}$/;
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 function requireCondition(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-export function productionSnapshot(report) {
-  requireCondition(report?.functionsComplete && report.noPendingFunctionOperations && report.iam?.ok
-    && report.deploymentPrerequisites?.existingServiceAgents && report.deploymentPrerequisites.unavailableApis.length === 0
-    && report.deploymentPrerequisites.artifactCleanupConfigured
-    && report.reminderSchedules?.length === 2 && report.reminderSchedules.every((schedule) => schedule.compatible)
-    && report.hostingVersion && report.hostingRelease && report.ruleset && report.rulesUpdated
-    && digestFormat.test(report.firestoreRulesSha256)
-    && report.functions.filter((row) => ["sendTomorrowPlanningReminder", "sendTodayExecutionReminder"].includes(row.id))
-      .every((row) => row.managerFcm === true)
-    && report.functions.every((row) => row.state === "ACTIVE" && row.runtime === "nodejs22" && row.maxInstances === 20
-      && row.region === "us-central1" && row.revision && digestFormat.test(row.configurationHash)),
-  "Production inventory is incomplete, unavailable or busy.");
-  return {
-    hosting: { version: report.hostingVersion, release: report.hostingRelease },
-    rules: { id: report.ruleset, hash: report.firestoreRulesSha256, updated: report.rulesUpdated },
-    schedules: report.reminderSchedules,
-    functions: Object.fromEntries(report.functions.map((row) => [row.id, {
-      revision: row.revision, hash: row.configurationHash,
-      secretBindingHash: row.secretBindingHash, runtimeCompatible: row.runtimeCompatible,
-      ...(row.inboxMode ? { inboxMode: row.inboxMode } : {}),
-    }]).sort(([a], [b]) => a.localeCompare(b))),
-  };
-}
+export { productionSnapshot };
 
 export function verifyTransition(before, after, step, { rulesHash, inboxMode }) {
   const unchanged = (part) => requireCondition(equal(before[part], after[part]), `Concurrent ${part} change detected.`);
@@ -180,7 +157,7 @@ function validatePlan(plan, sha, directory) {
   "Release plan differs from the approved project, SHA or scope.");
 }
 
-function stageInputs(sha, artifact, action, workspace) {
+export function stageReleaseInputs(sha, artifact, { inboxMode, cleanerPushMode }, workspace) {
   const source = execFileSync("git", ["archive", sha, "firebase.json", "firestore.rules", "firestore.indexes.json", "functions"], {
     cwd: root, maxBuffer: 16 * 1024 * 1024,
   });
@@ -191,20 +168,24 @@ function stageInputs(sha, artifact, action, workspace) {
   writeFileSync(configFile, encode(config));
   const localDeps = join(root, "functions/node_modules");
   symlinkSync(localDeps, join(workspace, "functions/node_modules"), "dir");
-  const inboxMode = action === "publish" ? "enabled" : "disabled";
-  writeFileSync(join(workspace, "functions", `.env.${notificationProject}`),
-    `DEV_CENTER_SANDBOX_PROJECT_ID=\nMANAGER_REMINDER_PROVIDER=fcm\nAUTOMATIC_OFFERS_MODE=disabled\nCLEANER_PUSH_MODE=disabled\nNOTIFICATION_INBOX_MODE=${inboxMode}\n`,
-    { flag: "wx", mode: 0o600 });
+  writeReleaseModes(workspace, { inboxMode, cleanerPushMode }, "wx");
   for (const { file, sha256: hash } of artifact.manifest.files) {
     const dest = join(workspace, "dist", file);
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(join(artifact.dist, file), dest);
     requireCondition(sha256(readFileSync(dest)) === hash, "Staged Hosting file differs from reviewed bytes.");
   }
-  return inboxMode;
 }
 
-async function verifyLiveAssets(manifest) {
+export function writeReleaseModes(workspace, { inboxMode, cleanerPushMode }, flag) {
+  requireCondition(["enabled", "disabled"].includes(inboxMode) && ["enabled", "disabled"].includes(cleanerPushMode),
+    "Invalid release runtime mode.");
+  writeFileSync(join(workspace, "functions", `.env.${notificationProject}`),
+    `DEV_CENTER_SANDBOX_PROJECT_ID=\nMANAGER_REMINDER_PROVIDER=fcm\nAUTOMATIC_OFFERS_MODE=disabled\nCLEANER_PUSH_MODE=${cleanerPushMode}\nNOTIFICATION_INBOX_MODE=${inboxMode}\n`,
+    { flag, mode: 0o600 });
+}
+
+export async function verifyLiveAssets(manifest) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const assets = await readPublishedAssets(manifest);
     if (assets.length && assets.every((row) => row.matched)) return;
@@ -252,7 +233,8 @@ async function execute(action, directory, sha, approval, exclusiveWindow) {
     }
   };
   try {
-    const inboxMode = stageInputs(sha, artifact, action, workspace);
+    const inboxMode = action === "publish" ? "enabled" : "disabled";
+    stageReleaseInputs(sha, artifact, { inboxMode, cleanerPushMode: "disabled" }, workspace);
     record("STARTING", null, initial, true);
     updateTime = await acquireReleaseLock({ action, sha, planHash });
     const snapshot = await runReleaseSequence({
