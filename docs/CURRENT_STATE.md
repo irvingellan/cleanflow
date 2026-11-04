@@ -1,3 +1,15 @@
+> **2026-11-03 canonical development checkpoint — LOCAL ONLY.**
+> The single local integration line is now `codex/development`, created from
+> verified Production-compatibleb7 only after the private source-preservation gate.
+> It fast-forwards the reviewed Notification Reliability source through2eaa5fd;
+> original feature refs, main/origin8bc70165 and Productionb7 remain unchanged.
+> Local source declares32 Functions (one explicit new deactivation callable),
+> while dated Production metadata remains31. No callable/cloud resource, deploy,
+> provider change, UI import or real-data mutation occurred. The existing registry
+> contains the exact dependency/conflict plan and backup limits; prototype Hub
+> localStorage/auth/inbox contracts are not live services. See the canonical
+> component compatibility and validation documents in `docs/engineering/`.
+
 > **2026-11-03 local engineering checkpoint — source reconciliation + notification reliability.**
 > Current main/origin remain `8bc70165c9bdf8a48ba54aa5c3ff5b3583c6a526`;
 > separately verified Production Hosting remains `b7b0eeac5374a8ffb072972c671f8803b680a1a0`
