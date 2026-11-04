@@ -81,6 +81,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const checklistRunCreateInFlight = useRef(false);
   const checklistCapabilityInFlight = useRef(false);
   const capabilityJobsInFlight = useRef(new Set());
+  const offersRequestId = useRef(0);
   const checklistRunRequestId = useRef(0);
   const checklistCapabilityRequestId = useRef(0);
   const selectedJobIdRef = useRef(null);
@@ -112,9 +113,14 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   async function refreshOffers() {
-    if (!selectedJob) {
+    if (!selectedJob || selectedJobIdRef.current !== selectedJob.id) {
       return;
     }
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const requestId = ++offersRequestId.current;
+    const isCurrent = () => selectedJobIdRef.current === jobId
+      && selectedJobEpochRef.current === epoch && offersRequestId.current === requestId;
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -123,12 +129,12 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }));
 
     try {
-      const offers = await loadDetailOperation("offers", () => getJobOffers(selectedJob.id));
-      setDetailData((currentData) => ({ ...currentData, offers }));
+      const offers = await loadDetailOperation("offers", () => getJobOffers(jobId));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, offers }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasOffersError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasOffersError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingOffers: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingOffers: false }));
     }
   }
 

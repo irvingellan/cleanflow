@@ -92,7 +92,8 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
   await test.step("1. Manager creates a real Job and assigns Cleaner A with the existing screens", async () => {
     await loginManager(page, fixture);
     mapleRef = await createService(page, fixture, { propertyId: fixture.mapleId, propertyName: fixture.mapleName, scheduledDate: firstDate, scheduledStart: "10:30" });
-    await page.getByRole("button", { name: "Assign cleaner" }).click();
+    await page.locator(".job-intents__secondary > summary").click();
+    await page.locator(".job-intents__actions").getByRole("button", { name: "Assign cleaner" }).click();
     await page.getByLabel(fixture.cleanerAName).check();
     await page.getByRole("button", { name: "Confirm assignment" }).click();
     await expect(page.getByText("1 cleaner assigned")).toBeVisible();
@@ -106,7 +107,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await evidence(pageA, "00-sign-in-iphone-tab");
     await signInCleaner(pageA, code);
     await expect(pageA.getByRole("heading", { name: "Olá, Ana" })).toBeVisible();
-    await pageA.getByRole("button", { name: /^Próximas/ }).click();
+    await pageA.getByRole("button", { name: /^Agendadas/ }).click();
     const card = pageA.locator(`[data-job-id="${mapleRef.id}"]`);
     await expect(card).toContainText(fixture.mapleName);
     await expect(card).toContainText("10:30");
@@ -122,7 +123,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     const { code } = await managerCall(fixture, "issueCleanerAccessCode", { cleanerId: fixture.cleanerBId });
     await signInCleaner(pageB, code, { lang: "en" });
     await expect(pageB.getByRole("heading", { name: "Hi, Bia" })).toBeVisible();
-    await pageB.getByRole("button", { name: /^Upcoming/ }).click();
+    await pageB.getByRole("button", { name: /^Scheduled/ }).click();
     await expect(pageB.locator(`[data-job-id="${fixture.cedarJobId}"]`)).toContainText("8:15");
     await expect(pageB.locator("body")).not.toContainText(fixture.mapleName);
     await expect(pageA.locator("body")).not.toContainText(fixture.cedarName);
@@ -149,7 +150,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
   await test.step("9. The manager sees zero, one and multiple manual interests before assigning explicitly", async () => {
     birchRef = await createService(page, fixture, { propertyId: fixture.birchId, propertyName: fixture.birchName, scheduledDate: dateKey(6), scheduledStart: "09:00" });
     await page.locator("details.job-detail-section > summary", { hasText: "Offers" }).click();
-    await page.getByRole("button", { name: "Offer cleaning to cleaners" }).click();
+    await page.locator(".offers-section").getByRole("button", { name: "Offer cleaning to cleaners" }).click();
     await expect(page.getByLabel("Assign automatically to the first cleaner who accepts")).toHaveCount(0);
     await page.getByLabel(fixture.cleanerAName).check();
     await page.getByLabel(fixture.cleanerBName).check();
@@ -164,6 +165,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
       await expect(card.getByRole("link", { name: "Open public cleaner offer" })).toBeVisible();
     }
     await expect(offerCards.getByRole("button", { name: "Assign", exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("interest-decision")).toHaveCount(0);
     await evidence(page, "release-a-00-manual-zero-interested");
 
     await pageA.getByRole("button", { name: /^Ofertas/ }).click();
@@ -180,10 +182,13 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     const firstInterest = (await birchRef.get()).data();
     expect([firstInterest.operationalStatus, firstInterest.assignedCleanerIds]).toEqual(["OFFERED", []]);
     expect((await birchRef.collection("offers").doc(fixture.cleanerAId).get()).data().status).toBe("INTERESTED");
+    await expect(page.getByTestId("interest-decision").getByRole("button", { name: `Confirm ${fixture.cleanerAName}`, exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Next step: Confirm interested cleaner", exact: true }).click();
+    await expect(page.getByTestId("interest-decision")).toBeFocused();
     await evidence(page, "release-a-01-manual-one-interested");
     await pageA.getByRole("button", { name: "Voltar" }).click();
     await pageA.getByRole("button", { name: /^Agenda/ }).click();
-    await pageA.getByRole("button", { name: /^Próximas/ }).click();
+    await pageA.getByRole("button", { name: /^Agendadas/ }).click();
     await expect(pageA.locator(`[data-job-id="${birchRef.id}"]`)).toHaveCount(0);
 
     await pageB.getByRole("button", { name: /^Offers/ }).click();
@@ -192,7 +197,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await expect(pageB.locator(".hb-facts")).toContainText("You're interested · the manager decides");
     await pageB.getByRole("button", { name: "Back", exact: true }).click();
     await pageB.getByRole("button", { name: /^Schedule/ }).click();
-    await pageB.getByRole("button", { name: /^Upcoming/ }).click();
+    await pageB.getByRole("button", { name: /^Scheduled/ }).click();
     await page.getByRole("button", { name: "Refresh offers" }).click();
     await expect(offerCards.getByRole("button", { name: "Assign", exact: true })).toHaveCount(2);
     const multipleInterests = (await birchRef.get()).data();
@@ -201,7 +206,15 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     expect((await birchRef.collection("assignments").get()).empty).toBe(true);
     await evidence(page, "release-a-02-manual-many-interested");
 
-    await offerA.getByRole("button", { name: "Assign", exact: true }).click();
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+    const interestItem = page.getByRole("listitem").filter({ hasText: fixture.birchName })
+      .filter({ has: page.getByRole("heading", { name: "Cleaner expressed interest" }) }).first();
+    await interestItem.getByRole("button", { name: "Open", exact: true }).click();
+    const decision = page.getByTestId("interest-decision");
+    await expect(decision).toBeFocused();
+    await expect(decision.getByRole("button", { name: /^Confirm / })).toHaveCount(2);
+    await evidence(page, "release-a-03-inbox-interest-focus");
+    await decision.getByRole("button", { name: `Confirm ${fixture.cleanerAName}`, exact: true }).click();
     await expect.poll(async () => (await birchRef.get()).data().assignedCleanerIds).toEqual([fixture.cleanerAId]);
     expect((await birchRef.get()).data().firstAcceptClaim).toBeUndefined();
     expect((await birchRef.collection("offers").doc(fixture.cleanerBId).get()).data().status).toBe("INTERESTED");
@@ -321,7 +334,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
       propertyId: fixture.mapleId, propertyName: fixture.mapleName, scheduledDate: dateKey(3), scheduledStart: "11:15",
     });
     await page.locator("details.job-detail-section > summary", { hasText: "Offers" }).click();
-    await page.getByRole("button", { name: "Offer cleaning to cleaners" }).click();
+    await page.locator(".offers-section").getByRole("button", { name: "Offer cleaning to cleaners" }).click();
     await page.getByLabel(fixture.cleanerAName).check();
     await page.getByLabel(fixture.cleanerBName).check();
     const optIn = page.getByLabel("Assign automatically to the first cleaner who accepts");
@@ -386,13 +399,13 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await evidence(pageB, "86-03-other-invitee-unavailable");
 
     await pageA.goto("/agenda");
-    await expect(pageA.getByRole("button", { name: /^Próximas/ })).toBeVisible();
-    await pageA.getByRole("button", { name: /^Próximas/ }).click();
+    await expect(pageA.getByRole("button", { name: /^Agendadas/ })).toBeVisible();
+    await pageA.getByRole("button", { name: /^Agendadas/ }).click();
     await expect(pageA.locator(`[data-job-id="${job.id}"]`)).toContainText("Confirmada para você");
     await evidence(pageA, "86-04-confirmed-agenda-after-reload");
     await pageB.goto("/agenda");
-    await expect(pageB.getByRole("button", { name: /^Upcoming/ })).toBeVisible();
-    await pageB.getByRole("button", { name: /^Upcoming/ }).click();
+    await expect(pageB.getByRole("button", { name: /^Scheduled/ })).toBeVisible();
+    await pageB.getByRole("button", { name: /^Scheduled/ }).click();
     await expect(pageB.locator(`[data-job-id="${job.id}"]`)).toHaveCount(0);
     await pageB.getByRole("button", { name: /^Offers/ }).click();
     await expect(pageB.locator(`[data-job-id="${job.id}"]`)).toContainText(unavailable);

@@ -1,5 +1,16 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — Release A + Claude UX (isolated local candidate)
+
+`codex/release-a-claude-ux-85` selectively integrates the visual source
+`0b1f686` onto sealed Release A `1faf4ba`. The original worktree/seal remains
+preserved. Interested-cleaner decisions, complete future-agenda navigation,
+Inbox focus and checklist copy are integrated; private access, real pending
+checklist projection and server photo-requirement contracts remain deferred.
+Backend, Rules and the 4-create/18-update scope are unchanged. See the
+[integration comparison and gates](RELEASE_A_CLAUDE_UX_INTEGRATION.md).
+
+
 ## 2026-11-04 — Notifications Release A review (local candidate)
 
 Release A is narrowed to four creates and 18 updates, Firestore Rules and

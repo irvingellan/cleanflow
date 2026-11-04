@@ -453,6 +453,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     isManagerLoadDiagnosticsPath() ? "load-time-diagnostics" : isWeeklyClosePreviewPath() ? "weekly-close-preview" : "dashboard"
   ));
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
+  const [jobDetailInitialFocus, setJobDetailInitialFocus] = useState(null);
   const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
   const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
   const [showExcludedRecords, setShowExcludedRecords] = useState(false);
@@ -845,6 +846,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function openClientJob(job) {
+    setJobDetailInitialFocus(null);
     setActiveSection("clients");
     setJobDetailOrigin("client");
     openJobDetail(job);
@@ -852,6 +854,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function openCleanerJob(job) {
+    setJobDetailInitialFocus(null);
     setActiveSection("cleaners");
     setJobDetailOrigin("cleaner");
     openJobDetail(job);
@@ -875,6 +878,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function openJob(job, jobsOrigin) {
+    setJobDetailInitialFocus(null);
     if (view === "job-list") {
       setJobsScrollRestore(
         jobsOrigin || {
@@ -890,6 +894,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   function openPropertyJob(job) {
+    setJobDetailInitialFocus(null);
     setActiveSection("properties");
     setJobDetailOrigin("property");
     openJobDetail(job);
@@ -901,14 +906,14 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("property-detail");
   }
 
-  async function openInboxTarget(destination) {
+  async function openInboxTarget(destination, presentation) {
     if (destination?.kind === "DASHBOARD") {
       showDashboard();
       return true;
     }
     if (destination?.kind === "JOB" && typeof destination.jobId === "string") {
       try {
-        openDashboardJob(await getJobById(destination.jobId, { serverOnly: true }));
+        openDashboardJob(await getJobById(destination.jobId, { serverOnly: true }), presentation?.initialFocus);
         return true;
       } catch {
         return false;
@@ -917,7 +922,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     return false;
   }
 
-  function openDashboardJob(job) {
+  function openDashboardJob(job, initialFocus = null) {
+    setJobDetailInitialFocus(initialFocus === "interest" ? "interest" : null);
     setActiveSection("dashboard");
     setJobDetailOrigin("dashboard");
     openJobDetail(job);
@@ -1331,6 +1337,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "job-detail" && selectedJob && (
           <JobDetail
             job={selectedJob}
+            initialFocus={jobDetailInitialFocus}
             property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
             knownCleaners={directoryCleaners}
             availableCleaners={cleaners}

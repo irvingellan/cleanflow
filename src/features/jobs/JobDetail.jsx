@@ -1,6 +1,7 @@
 import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
+import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
 import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
 import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
@@ -109,6 +110,9 @@ export function JobDetail({
   onArchive,
   onRestore,
   canRestore,
+  // Optional entry point, e.g. a manager notice about a cleaner's interest:
+  // "interest" focuses the decision panel (or Offers when none is pending).
+  initialFocus = null,
 }) {
   const { language, translate } = useTranslation();
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
@@ -288,6 +292,13 @@ export function JobDetail({
 
     return secondCreatedAt - firstCreatedAt;
   });
+  // FB03: interested cleaners the manager can confirm now, using exactly the
+  // same availability as the Offers "Assign" button (see InterestDecisionPanel).
+  const pendingInterest = decidableInterestedOffers({
+    job, offers: sortedOffers, isAssignmentAware, assignedCleanerIds, isAssigned,
+    canManageOffers, canEditRoster, isLoadingOffers, hasOffersError,
+  });
+  const interestSectionRef = useRef(null);
   const lifecyclePresentation = serviceLifecyclePresentation({
     job, checklistRun, capability: checklistCapability,
     offers, offersLoading: isLoadingOffers, offersError: hasOffersError,
@@ -382,6 +393,16 @@ export function JobDetail({
     offersSection.focus({ preventScroll: true });
     offersSection.scrollIntoView?.({ block: "start", behavior: "auto" });
   }, [offersCreatedCount, isLoadingOffers, hasOffersError]);
+  const initialFocusJobRef = useRef(null);
+  useEffect(() => {
+    if (initialFocus !== "interest") {
+      initialFocusJobRef.current = null;
+      return;
+    }
+    if (initialFocusJobRef.current === job.id || isLoadingOffers) return;
+    initialFocusJobRef.current = job.id;
+    focusIntentSection(pendingInterest.length ? interestSectionRef : offersSectionRef);
+  });
   const scheduleBlock = jobScheduleAvailability(job, {
     run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
   });
@@ -396,8 +417,14 @@ export function JobDetail({
         ? { intent: "checklist", label: checklistRun.status === "READY_FOR_REVIEW"
           ? "jobs.intentReview" : checklistRun.status === "DRAFT"
             ? "jobs.intentExistingChecklist" : "checklists.open" }
-        : job.operationalStatus === "UNASSIGNED" || job.operationalStatus === "OFFERED"
-          ? { intent: "assignment", label: "jobs.assignCleanerDirectly" }
+        : (job.operationalStatus === "UNASSIGNED" || job.operationalStatus === "OFFERED") && pendingInterest.length
+          ? { intent: "interest", label: pendingInterest.length === 1 ? "jobs.intentConfirmInterested" : "jobs.intentReviewInterested" }
+          : job.operationalStatus === "OFFERED" && canManageOffers
+            ? { intent: "offers", label: isLoadingOffers || hasOffersError ? "jobs.intentSeeOffers" : "jobs.intentAwaitingResponses" }
+            : job.operationalStatus === "UNASSIGNED" && canOfferToCleaners
+              ? { intent: "offers", label: "offers.offerCleaningToCleaners" }
+              : job.operationalStatus === "UNASSIGNED" || job.operationalStatus === "OFFERED"
+                ? { intent: "assignment", label: "jobs.assignCleanerDirectly" }
           : job.operationalStatus === "ASSIGNED"
             ? { intent: "reminder", label: "jobs.intent.reminder" }
             : { intent: "completion", label: "jobs.intent.completion" };
@@ -444,6 +471,15 @@ export function JobDetail({
     }
     if (job.archivedAt || isCompleted) {
       setIntentNotice({ key: "jobs.intentHistorical", safe: Boolean(checklistRun) });
+      return;
+    }
+    if (intent === "interest") {
+      if (pendingInterest.length) focusIntentSection(interestSectionRef);
+      else focusIntentSection(offersSectionRef);
+      return;
+    }
+    if (intent === "offers") {
+      focusIntentSection(offersSectionRef);
       return;
     }
     if (intent === "assignment") {
@@ -1053,6 +1089,17 @@ export function JobDetail({
           : intentNotice?.safe === "assignment" ? "jobs.assignCleanerDirectly"
             : checklistRun?.status === "READY_FOR_REVIEW" ? "jobs.intentReview" : "jobs.intentExistingChecklist")}
       />
+      {pendingInterest.length > 0 && <InterestDecisionPanel
+        ref={interestSectionRef}
+        offers={pendingInterest}
+        cleanerName={(offer) => currentCleanerName(offer.cleanerId, offer.cleanerName, cleanerNamesById, translate("common.notProvided"))}
+        respondedAt={(offer) => formatCreatedAt(offer.respondedAt, language)}
+        assigningCleanerId={assigningCleanerId}
+        error={assignmentError}
+        onConfirm={assignCleaner}
+        onSeeAllOffers={() => focusIntentSection(offersSectionRef)}
+        onAssignManually={canDirectAssign ? () => chooseJobIntent("assignment") : null}
+      />}
       <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (

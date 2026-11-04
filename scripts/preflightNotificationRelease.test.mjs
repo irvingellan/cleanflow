@@ -23,11 +23,13 @@ test("messaging app requires a distinct Web app in the same project and sender",
 });
 
 test("release verification requires each passed suite and the exact SHA", () => {
-  const suites = Object.fromEntries(["unit", "manager-rules", "hub-rules", "webkit", "chromium", "guards", "worker-browser"]
+  const suites = Object.fromEntries(["unit", "manager-rules", "hub-rules", "webkit", "chromium", "guards", "worker-browser", "pilot-visual"]
     .map((name) => [name, { exitCode: 0, passed: 1 }]));
   const receipt = { sha: "test-sha", suites };
   assert.equal(validReleaseVerification(receipt, "test-sha"), true);
   assert.equal(validReleaseVerification(receipt, "other"), false);
+  const { ["pilot-visual"]: visual, ...withoutVisual } = suites;
+  assert.equal(validReleaseVerification({ ...receipt, suites: withoutVisual }, "test-sha"), false);
   assert.equal(validReleaseVerification({ ...receipt, suites: { ...suites, webkit: { exitCode: 0, passed: 0 } } }, "test-sha"), false);
 });
 

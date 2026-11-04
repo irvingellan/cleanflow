@@ -102,7 +102,7 @@ describe("JobDetail lifecycle actions", () => {
   it.each([{ isLoadingCleaners: true }, { hasCleanerError: true }])("picker remains cancellable while cleaner data is unavailable: %j", state => {
     const assign = vi.fn();
     renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] }, { onAssignCleanerDirectly: assign }, state);
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     expect(screen.queryByRole("button", { name: "Assign cleaner", exact: true })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
     expect(screen.getByRole("button", { name: "Assign cleaner", exact: true })).toBeVisible();
@@ -111,7 +111,7 @@ describe("JobDetail lifecycle actions", () => {
   it("search and explicit selection never assign until confirmation", async () => {
     const assign = vi.fn().mockResolvedValue({});
     renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] }, { onAssignCleanerDirectly: assign }, { availableCleaners: pickerCleaners });
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     expect(screen.queryByRole("radio", { name: "Ingrid Inactive" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "ing" } });
     expect(screen.getByRole("radio", { name: "Ingrid Demo" })).toBeVisible();
@@ -130,25 +130,25 @@ describe("JobDetail lifecycle actions", () => {
   });
   it("cancel clears search and selection on reopening; no matches are explicit", () => {
     renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] }, {}, { availableCleaners: pickerCleaners });
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     fireEvent.click(screen.getByRole("radio", { name: "Ingrid Demo" }));
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no-match" } });
     expect(screen.getByText("No cleaners match this search.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
     expect(screen.getByRole("button", { name: "Assign cleaner", exact: true })).toBeVisible();
     expect(screen.getByText("No cleaners assigned yet.")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     expect(screen.getByRole("searchbox")).toHaveValue("");
     expect(screen.getByRole("radio", { name: "Ingrid Demo" })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Confirm assignment" })).toBeDisabled();
   });
   it("Job switches clear the picker search and selection", () => {
     const view = renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] }, {}, { availableCleaners: pickerCleaners });
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "ing" } });
     fireEvent.click(screen.getByRole("radio", { name: "Ingrid Demo" }));
     view.rerender(<TranslationProvider><JobDetail job={{ id: "job-other", schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [] }} knownCleaners={[]} availableCleaners={pickerCleaners} offers={[]} assignments={[]} issues={[]} /></TranslationProvider>);
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     expect(screen.getByRole("searchbox")).toHaveValue("");
     expect(screen.getByRole("radio", { name: "Ingrid Demo" })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Confirm assignment" })).toBeDisabled();
@@ -172,9 +172,10 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(archive).toHaveBeenCalledTimes(1);
   });
-  it("UNASSIGNED next step opens the current direct-assignment form", () => {
+  it("UNASSIGNED manual assignment stays reachable as a secondary intent", () => {
     renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] });
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    expect(screen.queryByRole("button", { name: "Next step: Assign cleaner" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     expect(screen.getByRole("group", { name: "Matching cleaners" })).toBeVisible();
     expect(screen.getByText("Assign an active cleaner without an Offer or interest response.")).toBeVisible();
   });
@@ -1036,7 +1037,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(pendingOffer.querySelector(".offer-compensation-summary"))
       .toHaveTextContent("Offered compensation (USD): $125.00");
     expect(screen.getByRole("link", { name: "Open public cleaner offer" })).toBeVisible();
-    expect(screen.getByText("Interested")).toBeVisible();
+    expect(within(screen.getByText("Beatriz", { selector: ".offer-status-item strong" }).closest("article")).getByText("Interested")).toBeVisible();
     expect(screen.getByText("Not available")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Simulate offer" })).not.toBeInTheDocument();
     const whatsappLink = within(pendingOffer).getByRole("link", { name: "Open in WhatsApp" });

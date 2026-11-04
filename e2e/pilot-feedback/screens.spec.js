@@ -1,0 +1,78 @@
+// Integrated Release A screenshots, with synthetic fixtures and safe access only.
+// Output: $PILOT_SHOTS_DIR/<variant>/<project>-<name>.png (fictitious data).
+import path from "node:path";
+import { test, isMobile } from "./support.js";
+
+const variant = process.env.PILOT_VARIANT || "after";
+const dir = process.env.PILOT_SHOTS_DIR || path.resolve("test-results/pilot-feedback-shots");
+const shot = (page, testInfo, name, options = {}) => page.screenshot({ path: path.join(dir, variant, `${testInfo.project.name}-${name}.png`), ...options });
+
+async function openHub(page, query = "") {
+  await page.goto(`/?screen=hub&lang=pt${query}`);
+  await page.locator('[data-job-id="job-1"]').first().waitFor();
+}
+
+async function showGallery(page) {
+  await page.locator(".checklist-photo-gallery").waitFor();
+  await page.evaluate(() => {
+    document.querySelector(".checklist-photo-gallery").scrollIntoView({ block: "start" });
+    const stickyStatus = document.querySelector(".public-checklist__save-status");
+    window.scrollBy(0, -(stickyStatus?.getBoundingClientRect().height || 0) - 20);
+  });
+}
+
+test("FB03 manager — one interested cleaner", async ({ page }, testInfo) => {
+  await page.goto("/?screen=manager&scenario=one&lang=pt");
+  await page.locator(".job-intents").waitFor();
+  await shot(page, testInfo, "fb03-manager-one-interested", { fullPage: isMobile(testInfo) });
+});
+
+test("FB03 manager — several interested cleaners", async ({ page }, testInfo) => {
+  await page.goto("/?screen=manager&scenario=several&lang=pt");
+  await page.locator(".job-intents").waitFor();
+  await shot(page, testInfo, "fb03-manager-several-interested", { fullPage: isMobile(testInfo) });
+});
+
+test("FB02/FB04 cleaner — agenda today", async ({ page }, testInfo) => {
+  await openHub(page);
+  await shot(page, testInfo, "fb04-hub-today");
+});
+
+test("FB02 cleaner — scheduled list", async ({ page }, testInfo) => {
+  await openHub(page);
+  await page.locator(".hb-seg button").nth(1).click();
+  await shot(page, testInfo, "fb02-hub-scheduled");
+  const byMonth = page.locator('[data-sched-mode="month"]');
+  if (await byMonth.count()) {
+    await byMonth.click();
+    await shot(page, testInfo, "fb02-hub-scheduled-by-month");
+  }
+});
+
+test("FB01/FB04 cleaner — service detail", async ({ page }, testInfo) => {
+  await openHub(page);
+  await page.locator('[data-job-id="job-1"]').first().click();
+  await page.locator(".hb-checkcard").waitFor();
+  await page.waitForTimeout(400);
+  await shot(page, testInfo, "fb01-hub-job-detail");
+  await page.locator(".hb-access").scrollIntoViewIfNeeded();
+  await shot(page, testInfo, "fb01-hub-job-safe-access");
+});
+
+test("Release A cleaner — Inbox", async ({ page }, testInfo) => {
+  await page.goto("/?screen=hub&lang=pt&inbox=1");
+  await page.getByRole("heading", { name: "Caixa de entrada" }).waitFor();
+  await shot(page, testInfo, "inbox-loaded-count");
+});
+
+test("FB06 checklist — 16 photos guidance", async ({ page }, testInfo) => {
+  await page.goto("/?screen=checklist&photos=16&lang=pt");
+  await showGallery(page);
+  await shot(page, testInfo, "fb06-checklist-guidance");
+});
+
+test("FB06 checklist — example photo requirement list", async ({ page }, testInfo) => {
+  await page.goto("/?screen=checklist&photos=3&requirements=1&lang=pt");
+  await showGallery(page);
+  await shot(page, testInfo, "fb06-checklist-requirements");
+});

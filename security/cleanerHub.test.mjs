@@ -279,6 +279,35 @@ test("assignment through the real manager callable appears only in that cleaner'
   await assert.rejects(openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" })), { code: "permission-denied" });
 });
 
+test("complete agenda keeps more than seven assignments across months, including rebuild and removals", async () => {
+  const ids = Array.from({ length: 10 }, (_, index) => `scheduled-${index}`);
+  for (const [index, jobId] of ids.entries()) {
+    await createJob(jobId, { scheduledDate: dateKey(2 + index * 32) });
+    await assignCleanerDirectly.run(managerRequest({ jobId, cleanerId: "cleaner-a" }));
+    await sync(jobId);
+  }
+  await createJob("other-cleaner");
+  await assignCleanerDirectly.run(managerRequest({ jobId: "other-cleaner", cleanerId: "cleaner-b" }));
+  await sync("other-cleaner");
+  // Redeeming a code exercises the real projection rebuild, without a date or row cap.
+  await admin.collection(`${root}/cleanerAgenda`).get().then((snapshot) => Promise.all(snapshot.docs.map((doc) => doc.ref.delete())));
+  await link("cleaner-a");
+  const own = cleanerDb(uidA).collection(`${root}/cleanerAgenda`).where("cleanerId", "==", "cleaner-a");
+  const entries = (await assertSucceeds(own.get())).docs.map((doc) => doc.data()).filter((entry) => entry.kind === "ASSIGNED");
+  assert.deepEqual(entries.map((entry) => entry.jobId).sort(), [...ids].sort());
+  assert.ok(new Set(entries.map((entry) => entry.scheduledDate.slice(0, 7))).size > 2);
+  assert.ok(!JSON.stringify(entries).includes("private-"));
+  await assertFails(cleanerDb(uidA).collection(`${root}/cleanerAgenda`).where("cleanerId", "==", "cleaner-b").get());
+  await admin.doc(`${root}/jobs/${ids[0]}`).update({ archivedAt: Timestamp.now(), archivedBy: "manager" });
+  await admin.doc(`${root}/jobs/${ids[1]}`).update({ assignedCleanerIds: [], operationalStatus: "UNASSIGNED" });
+  await sync(ids[0]);
+  await sync(ids[1]);
+  // Replayed triggers cannot duplicate or resurrect removed schedule cards.
+  await Promise.all(ids.map((jobId) => sync(jobId)));
+  const remaining = (await assertSucceeds(own.get())).docs.map((doc) => doc.data()).filter((entry) => entry.kind === "ASSIGNED");
+  assert.deepEqual(remaining.map((entry) => entry.jobId).sort(), ids.slice(2).sort());
+});
+
 test("cross-organization: a cleaner of one organization reads nothing in another", async () => {
   await link("cleaner-a");
   await sync("other-job", "other-org");

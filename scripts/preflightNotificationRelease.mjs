@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 const deployedSha = "a593daf636024d6830bf89c75bd7f6353b4b759f";
 const deployedManifestHash = "ddbc29c2e86ff71e5539acb6551c4679724d323efbad502b457cfdb558c173e5";
 const oldRuleset = "03de7532-ddb1-4f6e-b6d7-137d0717572d";
-export const expectedBranch = "codex/notification-reliability-v1-85";
+export const expectedBranch = "codex/release-a-claude-ux-85";
 const origin = `https://${notificationProject}.web.app`;
 export const deployGroups = {
   create: [
@@ -60,7 +60,7 @@ export function dedicatedCleanerConfig(manager, candidate) {
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 const relativeFile = /^(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_.-]+$/;
 const safeHex = /^[a-f0-9]{64}$/;
-const requiredSuites = ["unit", "manager-rules", "hub-rules", "webkit", "chromium", "guards", "worker-browser"];
+const requiredSuites = ["unit", "manager-rules", "hub-rules", "webkit", "chromium", "guards", "worker-browser", "pilot-visual"];
 
 export function validReleaseVerification(receipt, sha) {
   return receipt?.sha === sha && requiredSuites.every((name) => receipt.suites?.[name]?.exitCode === 0

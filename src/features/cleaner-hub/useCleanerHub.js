@@ -228,5 +228,8 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     signOut,
     openChecklist: service.openMyChecklist,
     respondToOffer: service.respondToMyOffer,
+    // Release A does not authorize private Property fields or an access window.
+    // Keep the prepared UI disconnected until that server contract is approved.
+    loadJobAccess: null,
   };
 }

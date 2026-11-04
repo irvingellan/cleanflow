@@ -84,9 +84,73 @@ beforeEach(() => {
 
 function deferred() {
   let resolve;
-  const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
-  return { promise, resolve };
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => { resolve = resolvePromise; reject = rejectPromise; });
+  return { promise, resolve, reject };
 }
+
+describe("useJobDetailController offer refresh isolation", () => {
+  it.each(["success", "failure"])("ignores an old Job's late %s after the new Job's offers arrive", async (outcome) => {
+    const first = deferred();
+    const second = deferred();
+    mocks.getJobOffers.mockImplementation((jobId) => jobId === "job-a" ? first.promise : second.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob({ id: "job-a", operationalStatus: "OFFERED" }));
+    await waitFor(() => expect(mocks.getJobOffers).toHaveBeenCalledWith("job-a"));
+    act(() => result.current.openJob({ id: "job-b", operationalStatus: "OFFERED" }));
+    await waitFor(() => expect(mocks.getJobOffers).toHaveBeenCalledWith("job-b"));
+    const currentOffers = [{ id: "b-offer", cleanerId: "b-cleaner", status: "INTERESTED" }];
+    await act(async () => second.resolve(currentOffers));
+    await act(async () => outcome === "success"
+      ? first.resolve([{ id: "a-offer", cleanerId: "a-cleaner", status: "INTERESTED" }])
+      : first.reject(new Error("old read failed")));
+    expect(result.current.job.id).toBe("job-b");
+    expect(result.current.detail.offers).toEqual(currentOffers);
+    expect(result.current.detail.hasOffersError).toBe(false);
+    expect(result.current.detail.isLoadingOffers).toBe(false);
+  });
+
+  it("does not let an old request clear a new Job's loading state", async () => {
+    const first = deferred();
+    const second = deferred();
+    mocks.getJobOffers.mockImplementation((jobId) => jobId === "job-a" ? first.promise : second.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob({ id: "job-a", operationalStatus: "OFFERED" }));
+    act(() => result.current.openJob({ id: "job-b", operationalStatus: "OFFERED" }));
+    await act(async () => first.resolve([{ id: "a-offer", status: "INTERESTED" }]));
+    expect(result.current.detail.offers).toEqual([]);
+    expect(result.current.detail.isLoadingOffers).toBe(true);
+    await act(async () => second.resolve([]));
+    expect(result.current.detail.isLoadingOffers).toBe(false);
+  });
+
+  it("keeps the latest same-Job refresh when requests resolve backwards", async () => {
+    const first = deferred();
+    const second = deferred();
+    mocks.getJobOffers.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob({ id: "job-a", operationalStatus: "OFFERED" }));
+    act(() => { void result.current.detail.refreshOffers(); });
+    const currentOffers = [{ id: "a-offer", status: "DECLINED" }];
+    await act(async () => second.resolve(currentOffers));
+    await act(async () => first.resolve([{ id: "a-offer", status: "INTERESTED" }]));
+    expect(result.current.detail.offers).toEqual(currentOffers);
+  });
+
+  it("invalidates a pending read when the same Job is closed and reopened", async () => {
+    const first = deferred();
+    mocks.getJobOffers.mockReturnValue(first.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "checklist-run", onJobUpdated: vi.fn() }));
+    const job = { id: "job-a", operationalStatus: "OFFERED" };
+    act(() => result.current.openJob(job));
+    act(() => { void result.current.detail.refreshOffers(); });
+    act(() => result.current.closeJob());
+    act(() => result.current.openJob(job));
+    await act(async () => first.resolve([{ id: "a-offer", status: "INTERESTED" }]));
+    expect(result.current.detail.offers).toEqual([]);
+    expect(result.current.detail.isLoadingOffers).toBe(true);
+  });
+});
 
 describe("useJobDetailController checklist refresh", () => {
   it("does not let a stale manager refresh overwrite a different Job's checklist run", async () => {

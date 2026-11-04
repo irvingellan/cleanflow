@@ -158,7 +158,17 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
       const result = await inbox[method](id);
       if (!mounted.current || result?.state === "superseded") return;
       if (method === "open") {
-        if (result?.state !== "opened" || await onOpen(result.destination) === false) setError("inbox.targetUnavailable");
+        if (result?.state !== "opened") {
+          setError("inbox.targetUnavailable");
+        } else {
+          // This is a presentation hint only: the authorized server response
+          // remains the sole source of the destination and current Job id.
+          const interested = inbox.items.find((item) => item.id === id)?.type === "CLEANER_INTERESTED";
+          const opened = interested && result.destination?.kind === "JOB"
+            ? await onOpen(result.destination, { initialFocus: "interest" })
+            : await onOpen(result.destination);
+          if (opened === false) setError("inbox.targetUnavailable");
+        }
       } else if (result?.state !== "read") {
         setError("inbox.actionError");
       }

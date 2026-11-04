@@ -37,6 +37,77 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("CleanerHubApp (live data boundary)", () => {
+  it.each([
+    ["JOB", "JOB_ASSIGNED", "j1", "Maple Example House", "Abrir checklist"],
+    ["OFFER", "OFFER_CREATED", "j2", "Birch Example Flat", "Tenho interesse"],
+  ])("preserves Inbox deep links to %s after the visual port", async (kind, type, jobId, label, action) => {
+    const previous = window.location.href;
+    window.history.replaceState(null, "", "/agenda?inbox=1");
+    const { service, handlers } = fakeService();
+    const inboxService = {
+      list: vi.fn().mockResolvedValue({ items: [{ id: "event-1", type, read: false, serviceLabel: label, openable: true }], unreadCount: 1 }),
+      open: vi.fn().mockResolvedValue({ state: "opened", destination: { kind, jobId } }),
+    };
+    try {
+      render(<CleanerHubApp hubOptions={{ service, inboxService }} />);
+      act(() => handlers.agenda({ entries: entries.map((entry) => entry.kind === "OFFER" ? { ...entry, offerStatus: "PENDING" } : entry), fromCache: false }));
+      expect(screen.getByRole("heading", { name: "Caixa de entrada" })).toBeInTheDocument();
+      await userEvent.click(await screen.findByRole("button", { name: "Abrir" }));
+      expect(inboxService.open).toHaveBeenCalledWith("CLEANER", "event-1");
+      expect(screen.getByRole("heading", { name: label })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
+    } finally {
+      window.history.replaceState(null, "", previous);
+    }
+  });
+
+  it("discards a pending checklist result after the session changes", async () => {
+    const { service, handlers } = fakeService();
+    let completeOldRequest;
+    service.openMyChecklist.mockImplementation(() => new Promise((resolve) => { completeOldRequest = resolve; }));
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    await userEvent.click(document.querySelector('[data-job-id="j1"]'));
+    await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
+    expect(screen.getByRole("button", { name: "Abrindo…" })).toBeDisabled();
+    act(() => handlers.session({ status: "signed-in", uid: "u1", organizationId: "org", cleanerId: "ana", sessionId: "session-b" }));
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    expect(screen.getByRole("button", { name: "Abrir checklist" })).toBeEnabled();
+    await act(() => completeOldRequest({ state: "not-ready" }));
+    expect(screen.queryByText("A gerente ainda não liberou o checklist deste serviço.")).toBeNull();
+  });
+
+  it("drops the previous account's Job detail while a different cleaner signs in", async () => {
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    await userEvent.click(document.querySelector('[data-job-id="j1"]'));
+    await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
+    expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();
+    act(() => handlers.session({ status: "signed-in", uid: "u2", organizationId: "other-org", cleanerId: "bia", sessionId: "session-c" }));
+    expect(screen.queryByText("Maple Example House")).toBeNull();
+    expect(screen.queryByText("A gerente ainda não liberou o checklist deste serviço.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir checklist" })).toBeNull();
+  });
+
+  it("does not carry a checklist result into another Job opened from the Inbox", async () => {
+    const { service, handlers } = fakeService();
+    const second = { ...entries[0], id: "ana__j3", jobId: "j3", propertyName: "Oak Example House" };
+    const inboxService = {
+      list: vi.fn().mockResolvedValue({ items: [{ id: "event-3", type: "JOB_ASSIGNED", read: false, serviceLabel: second.propertyName, openable: true }], unreadCount: 1 }),
+      open: vi.fn().mockResolvedValue({ state: "opened", destination: { kind: "JOB", jobId: "j3" } }),
+    };
+    render(<CleanerHubApp hubOptions={{ service, inboxService }} />);
+    act(() => handlers.agenda({ entries: [...entries, second], fromCache: false }));
+    await userEvent.click(document.querySelector('[data-job-id="j1"]'));
+    await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
+    expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Caixa de entrada/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir" }));
+    expect(screen.getByRole("heading", { name: second.propertyName })).toBeInTheDocument();
+    expect(screen.queryByText("A gerente ainda não liberou o checklist deste serviço.")).toBeNull();
+  });
+
   it("keeps the agenda active and ignores an Inbox deep link on the rollback build", () => {
     vi.stubEnv("VITE_NOTIFICATION_INBOX_MODE", "disabled");
     const previous = window.location.href;
@@ -82,7 +153,7 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.getByRole("heading", { name: "Olá, Ana" })).toBeInTheDocument();
     expect(screen.getByText("Agenda atualizada")).toBeInTheDocument();
     expect(screen.getByText(/Saiu da sua agenda/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /^Próximas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
     const card = document.querySelector('[data-job-id="j1"]');
     expect(card).toHaveTextContent("Maple Example House");
     expect(card).toHaveTextContent("Confirmada para você");
@@ -232,9 +303,9 @@ describe("CleanerHubApp (live data boundary)", () => {
     const { service, handlers } = fakeService();
     render(<CleanerHubApp hubOptions={{ service }} />);
     act(() => handlers.agenda({ entries, fromCache: false }));
-    await userEvent.click(screen.getByRole("button", { name: /^Próximas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
     await userEvent.click(document.querySelector('[data-job-id="j1"]'));
-    expect(screen.getByText("Endereço e instruções de acesso continuam vindo da gerente.")).toBeInTheDocument();
+    expect(screen.getByText("Endereço, códigos e instruções da casa continuam vindo da gerente por enquanto.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
     expect(service.openMyChecklist).toHaveBeenCalledWith("j1");
     expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();

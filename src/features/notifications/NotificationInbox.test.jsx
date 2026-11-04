@@ -81,6 +81,26 @@ describe("Notification Inbox", () => {
     expect(service.list).toHaveBeenLastCalledWith("CLEANER", { pageSize: 25 });
   });
 
+  it("forwards M01 focus separately from the freshly authorized destination", async () => {
+    const item = { ...items[0], type: "CLEANER_INTERESTED" };
+    const onOpen = vi.fn(() => true);
+    const inbox = { state: "ready", items: [item], loadedUnreadCount: 1, refresh: vi.fn(),
+      open: vi.fn().mockResolvedValue({ state: "opened", destination: { kind: "JOB", jobId: "fresh-job" } }) };
+    render(<NotificationInbox inbox={inbox} language="en" onOpen={onOpen} />);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith({ kind: "JOB", jobId: "fresh-job" }, { initialFocus: "interest" });
+  });
+
+  it("an unavailable M01 target does not navigate or forward its focus hint", async () => {
+    const onOpen = vi.fn();
+    const inbox = { state: "ready", items: [{ ...items[0], type: "CLEANER_INTERESTED" }], loadedUnreadCount: 1, refresh: vi.fn(),
+      open: vi.fn().mockResolvedValue({ state: "unavailable", destination: null }) };
+    render(<NotificationInbox inbox={inbox} language="en" onOpen={onOpen} />);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("This item is no longer available.");
+  });
+
   it("labels zero as a partial count until an older unread notification is loaded", async () => {
     const service = {
       list: vi.fn()

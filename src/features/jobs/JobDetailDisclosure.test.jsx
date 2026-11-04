@@ -58,7 +58,7 @@ describe("Job Detail progressive disclosure", () => {
 
   it("primary assignment opens the same picker; selecting an option never assigns", async () => {
     const { section, mutation } = setup();
-    fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
     await waitFor(() => expect(section("Cleaner & assignment")).toHaveAttribute("open"));
     expect(screen.getByRole("region", { name: "Assigned cleaners" })).toHaveFocus();
     fireEvent.click(screen.getByRole("radio", { name: "Demo Cleaner Alpha" }));
@@ -142,7 +142,7 @@ describe("Job Detail progressive disclosure", () => {
       rerender(<TranslationProvider><JobDetail {...props} job={{ ...props.job, id: "synthetic-new-job" }} /></TranslationProvider>);
       act(() => frames.splice(0).forEach(callback => callback(0)));
       expect(container.querySelectorAll("details[open]")).toHaveLength(0);
-      fireEvent.click(screen.getByRole("button", { name: "Next step: Assign cleaner" }));
+      fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
       unmount();
       expect(() => act(() => frames.splice(0).forEach(callback => callback(0)))).not.toThrow();
     } finally { frame.mockRestore(); }
