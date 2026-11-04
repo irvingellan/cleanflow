@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FIRST_ACCEPT_WINS } from "../jobs/automaticOffers.js";
 import { HubIcon } from "./HubIcon.jsx";
 import { InstallGuide } from "./InstallGuide.jsx";
 import {
@@ -140,6 +141,12 @@ function FreshnessBanner({ t, freshness }) {
   );
 }
 
+function offerStatusKey(entry) {
+  return entry.offerDistributionMode === FIRST_ACCEPT_WINS && entry.offerStatus === "PENDING"
+    ? "hb.offer.autoPending"
+    : `hb.offer.${entry.offerStatus}`;
+}
+
 function JobCard({ t, entry, today, onOpen }) {
   const offer = entry.kind === "OFFER";
   const status = assignedStatusKey(entry);
@@ -154,7 +161,7 @@ function JobCard({ t, entry, today, onOpen }) {
           <strong>{entry.propertyName || "—"}</strong>
           {!entry.scheduledStart && <span className="mw-sec">{t("hb.timeNotSet")}</span>}
           {offer
-            ? <span className={`hb-status is-${entry.offerStatus === "INTERESTED" ? "interested" : "waiting"}`}>{t(`hb.offer.${entry.offerStatus}`)}</span>
+            ? <span className={`hb-status is-${entry.offerStatus === "INTERESTED" ? "interested" : "waiting"}`}>{t(offerStatusKey(entry))}</span>
             : <span className={`hb-status is-${status}`}>{t(`hb.st.${status}`)}</span>}
         </span>
         <HubIcon name="arrowR" size={18} />
@@ -285,39 +292,60 @@ function JobView({ t, hub, jobId, today }) {
   );
 }
 
-function OfferView({ t, hub, jobId, today }) {
+function OfferView({ t, hub, jobId, today, wasAutomatic }) {
   const entry = findAgendaEntry(hub.entries, jobId);
-  const [reply, setReply] = useState({ state: "idle" });
-  if (!entry || entry.kind !== "OFFER") return <JobView t={t} hub={hub} jobId={jobId} today={today} />;
+  const [reply, setReply] = useState("idle");
+
+  if (entry?.kind === "ASSIGNED" || (!entry && !wasAutomatic)) {
+    return <JobView t={t} hub={hub} jobId={jobId} today={today} />;
+  }
+  if (!entry) {
+    return <div className="hb-screen"><div className="hb-empty is-uncertain"><HubIcon name="userX" size={22} /><p role="status">{t(reply === "alreadyTaken" ? "hb.offer.ALREADY_TAKEN" : "hb.offer.unavailable")}</p></div></div>;
+  }
+
+  const automatic = entry.offerDistributionMode === FIRST_ACCEPT_WINS;
+  const taken = entry.offerStatus === "ALREADY_TAKEN" || reply === "alreadyTaken";
+  const canRespond = entry.offerStatus === "PENDING" && ["idle", "sending", "error"].includes(reply);
+  const waitingForNetwork = automatic && hub.freshness.reason === "offline";
+
   async function answer(status) {
-    setReply({ state: "sending" });
+    setReply("sending");
     try {
       const result = await hub.respondToOffer(entry.jobId, status);
-      setReply({ state: result?.state === "answered" ? "sent" : "unavailable" });
+      if (result?.state === "assigned" && result.status === "ACCEPTED" && status === "ACCEPTED") {
+        setReply("assigned");
+      } else if (result?.state === "already-taken") {
+        setReply("alreadyTaken");
+      } else {
+        setReply(result?.state === "answered" ? "sent" : "unavailable");
+      }
     } catch {
-      setReply({ state: "error" });
+      setReply("error");
     }
   }
+
   const amount = hubMoney(entry.offeredCompensation, t.lang);
+  const statusKey = taken ? "hb.offer.ALREADY_TAKEN" : reply === "assigned" ? "hb.offer.assigned" : offerStatusKey(entry);
   return (
     <div className="hb-screen">
       <div className="hb-jobhead">
-        <span className="mw-micro">{t("hb.st.offer")}</span>
+        <span className="mw-micro">{t(reply === "assigned" && !taken ? "hb.st.confirmed" : "hb.st.offer")}</span>
         <h2>{entry.propertyName || "—"}</h2>
       </div>
       <dl className="hb-facts">
         <div><dt><HubIcon name="calendar" size={15} />{t("hb.job.when")}</dt><dd>{`${dayLabel(t, entry.scheduledDate, today)} · ${t.time(entry.scheduledStart) || t("hb.timeNotSet")}`}</dd></div>
         <div><dt><HubIcon name="dollar" size={15} />{t("hb.job.pay")}</dt><dd>{amount || t("hb.job.payNotSet")}</dd></div>
-        <div><dt><HubIcon name="clipboard" size={15} />{t("hb.job.status")}</dt><dd>{t(`hb.offer.${entry.offerStatus}`)}</dd></div>
+        <div><dt><HubIcon name="clipboard" size={15} />{t("hb.job.status")}</dt><dd role={taken || reply === "assigned" ? "status" : undefined}>{t(statusKey)}</dd></div>
       </dl>
-      {entry.offerStatus === "PENDING" && (
+      {canRespond && !taken && (
         <div className="hb-offer-actions">
-          <button type="button" className="cfv2-button cfv2-button-primary mw-btn mw-btn-block" disabled={reply.state === "sending"} onClick={() => answer("INTERESTED")}>{t(reply.state === "sending" ? "hb.offer.sending" : "hb.offer.interested")}</button>
-          <button type="button" className="cfv2-button cfv2-button-secondary mw-btn mw-btn-block" disabled={reply.state === "sending"} onClick={() => answer("DECLINED")}>{t("hb.offer.decline")}</button>
+          <button type="button" className="cfv2-button cfv2-button-primary mw-btn mw-btn-block" disabled={reply === "sending" || waitingForNetwork} onClick={() => answer(automatic ? "ACCEPTED" : "INTERESTED")}>{t(reply === "sending" ? "hb.offer.sending" : automatic ? "hb.offer.accept" : "hb.offer.interested")}</button>
+          <button type="button" className="cfv2-button cfv2-button-secondary mw-btn mw-btn-block" disabled={reply === "sending" || waitingForNetwork} onClick={() => answer("DECLINED")}>{t("hb.offer.decline")}</button>
         </div>
       )}
-      {["sent", "unavailable", "error"].includes(reply.state) && <p className="mw-hint" role="status">{t(`hb.offer.${reply.state}`)}</p>}
-      <p className="mw-hint">{t("hb.offers.note")}</p>
+      {!taken && ["sent", "unavailable", "error"].includes(reply) && <p className="mw-hint" role="status">{t(`hb.offer.${reply}`)}</p>}
+      {waitingForNetwork && <p className="mw-hint" role="status">{t("hb.offer.onlineRequired")}</p>}
+      {!taken && reply !== "assigned" && <p className="mw-hint">{t(automatic ? "hb.offers.autoNote" : "hb.offers.note")}</p>}
     </div>
   );
 }
@@ -329,9 +357,9 @@ function Offers({ t, hub, go, today }) {
       <header className="hb-hello"><h2>{t("hb.offers.title")}</h2><p className="mw-sec">{t("hb.offers.sub")}</p></header>
       {!offers.length && <div className={`hb-empty${hub.freshness.state === "live" ? "" : " is-uncertain"}`}><HubIcon name="send" size={22} /><p>{t("hb.offers.empty")}</p></div>}
       <ul className="hb-jobs">
-        {offers.map((entry) => <JobCard key={entry.id} t={t} entry={entry} today={today} onOpen={() => go({ type: "offer", jobId: entry.jobId })} />)}
+        {offers.map((entry) => <JobCard key={entry.id} t={t} entry={entry} today={today} onOpen={() => go({ type: "offer", jobId: entry.jobId, wasAutomatic: entry.offerDistributionMode === FIRST_ACCEPT_WINS })} />)}
       </ul>
-      <p className="mw-hint">{t("hb.offers.note")}</p>
+      {offers.some((entry) => entry.offerDistributionMode !== FIRST_ACCEPT_WINS) && <p className="mw-hint">{t("hb.offers.note")}</p>}
     </div>
   );
 }
@@ -538,7 +566,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   if (!onboardingDone) {
     body = <FirstRun t={t} hub={hub} platform={platform} displayMode={displayMode} installPrompt={installPrompt} today={today} onDone={() => { writeStorage(onboardingStorageKey, session.uid); setOnboarded(session.uid); }} />;
   } else if (view.type === "job") body = <JobView t={t} hub={hub} jobId={view.jobId} today={today} />;
-  else if (view.type === "offer") body = <OfferView t={t} hub={hub} jobId={view.jobId} today={today} />;
+  else if (view.type === "offer") body = <OfferView key={view.jobId} t={t} hub={hub} jobId={view.jobId} today={today} wasAutomatic={view.wasAutomatic} />;
   else if (view.type === "install") body = <div className="hb-screen"><InstallGuide t={t} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onSkip={() => go({ type: "tab" })} /></div>;
   else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} today={today} />;
   else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} />;

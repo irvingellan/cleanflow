@@ -47,7 +47,8 @@ import {
 } from "./cleanerHubAccess.js";
 import { deactivateInvalidManagerDevices, loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
 import { processManagerOperationalNotification } from "./managerOperationalNotifications.js";
-import { canUsePublicOffer, publicOfferState as offerState, respondToPublicOffer } from "./publicOfferResponseService.js";
+import { publicOfferState as offerState, respondToPublicOffer } from "./publicOfferResponseService.js";
+import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import {
   createChecklistRunForManager,
   approveChecklistRunForManager,
@@ -73,6 +74,7 @@ import {
 import { removePublicChecklistEvidence } from "./checklistMultiPhotoService.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { rescheduleJobForManager } from "./jobScheduleService.js";
+import { createAutomaticJobOffersForManager } from "./managerAutomaticOffers.js";
 import { assignCleanerDirectlyForManager } from "./managerDirectAssignmentService.js";
 import {
   abandonChecklistRunAndCompleteJobForManager,
@@ -516,14 +518,19 @@ export function publicOfferResult(offerData, jobData, {
     return { state };
   }
 
+  const preferredLanguage = supportedCleanerLanguages.has(cleanerPreferredLanguage)
+    ? cleanerPreferredLanguage
+    : "en";
+  if (isAutomaticOfferJob(jobData)) {
+    return { state, offer: { offerDistributionMode: FIRST_ACCEPT_WINS, preferredLanguage } };
+  }
+
   const offer = {
     propertyName: jobData.propertyName || null,
     scheduledDate: jobData.scheduledDate || null,
     scheduledStart: jobData.scheduledStart || null,
     status: offerData.status,
-    preferredLanguage: supportedCleanerLanguages.has(cleanerPreferredLanguage)
-      ? cleanerPreferredLanguage
-      : "en",
+    preferredLanguage,
   };
 
   // The per-cleaner Offer snapshot is authoritative. Versionless/v1 Offers
@@ -803,6 +810,21 @@ export const approveChecklistRun = onCall(
     }
 
     return approveChecklistRunForManager(db, { organizationId, jobId });
+  },
+);
+
+export const createAutomaticJobOffers = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth?.uid || request.auth.token?.firebase?.sign_in_provider === "anonymous") {
+      throw new HttpsError("unauthenticated", "A non-anonymous account is required.");
+    }
+    return createAutomaticJobOffersForManager(db, {
+      organizationId,
+      actorUid: request.auth.uid,
+      jobId: request.data?.jobId,
+      cleanerIds: request.data?.cleanerIds,
+    });
   },
 );
 
@@ -1249,6 +1271,11 @@ export const publicOffer = onRequest(
           return;
         }
 
+        if (result.state === "already-taken") {
+          sendPublicError(response, 410, "offer_already_taken");
+          return;
+        }
+
         if (result.state === "unavailable") {
           sendPublicError(response, 410, "offer_unavailable");
           return;
@@ -1318,6 +1345,16 @@ export const publicOffer = onRequest(
 
       if (result.state === "expired") {
         sendPublicError(response, 410, "offer_expired");
+        return;
+      }
+
+      if (result.state === "already-taken") {
+        sendPublicError(response, 410, "offer_already_taken");
+        return;
+      }
+
+      if (result.state === "hub-required") {
+        sendPublicError(response, 403, "offer_hub_required");
         return;
       }
 

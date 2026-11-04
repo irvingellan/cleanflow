@@ -976,3 +976,21 @@ Checklist and Offer actions reuse the existing capability and public Offer servi
 system; eight more Functions and one IAM permission (custom-token signing) in
 Production; projection documents to clean up later (TTL). Phone/email sign-in and
 cleaner push notifications are deferred.
+
+## DEC-047 — First valid authenticated acceptance may fill one explicitly offered slot
+
+**Status:** Implemented in the local Issue #86 candidate. Publication requires
+separate approval.
+
+**Decision.** Keep manual interest as the default. A manager can select
+`FIRST_ACCEPT_WINS` for the first batch of an empty single-slot v2 Job. An
+authenticated recipient sends a distinct `ACCEPTED` action. The server awards the
+single slot in the same transaction as the canonical Assignment and its audit
+event. The manager's direct assignment reads the same roster. The public link
+prompts authentication and holds no assignment authority.
+
+**Consequences.** No migration for manual Offers. The immutable batch and
+close marker prevent later retries or removal from reopening old offers. The
+existing agenda projection converges after the commit. Per-recipient closed
+entries keep original invitation data. The existing notification, checklist,
+and payout boundaries apply. See [First Accept Wins V1](FIRST_ACCEPT_WINS_V1.md).

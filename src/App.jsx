@@ -41,6 +41,7 @@ import { useDashboardController } from "./features/dashboard/useDashboardControl
 import { DevCenter } from "./features/dev-center/DevCenter.jsx";
 import { useDevCenterController } from "./features/dev-center/useDevCenterController.js";
 import { JobDetail } from "./features/jobs/JobDetail.jsx";
+import { FIRST_ACCEPT_WINS } from "./features/jobs/automaticOffers.js";
 import { SandboxLifecyclePreview } from "./features/jobs/SandboxLifecyclePreview.jsx";
 import { canShowEnvironmentNavigation } from "./environment.js";
 import { CreateCleaningForm } from "./features/jobs/JobForm.jsx";
@@ -230,6 +231,17 @@ function PublicOfferPage({ token }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isResponding, setIsResponding] = useState(false);
   const [responseError, setResponseError] = useState(null);
+  const requiresHub = offer?.offerDistributionMode === FIRST_ACCEPT_WINS;
+
+  function handleResponseError(error) {
+    if (["offer_not_found", "offer_expired", "offer_unavailable", "offer_already_taken"].includes(error.code)) {
+      setLoadError(error.code);
+    } else if (error.code === "offer_hub_required") {
+      setOffer((current) => ({ ...current, offerDistributionMode: FIRST_ACCEPT_WINS }));
+    } else {
+      setResponseError(error.code || "request_failed");
+    }
+  }
 
   useEffect(() => {
     let isCurrent = true;
@@ -278,11 +290,7 @@ function PublicOfferPage({ token }) {
       const result = await respondToPublicOffer({ token, status });
       setOffer((currentOffer) => ({ ...currentOffer, status: result.status }));
     } catch (error) {
-      if (["offer_not_found", "offer_expired", "offer_unavailable"].includes(error.code)) {
-        setLoadError(error.code);
-      } else {
-        setResponseError(error.code || "request_failed");
-      }
+      handleResponseError(error);
     } finally {
       setIsResponding(false);
     }
@@ -299,11 +307,7 @@ function PublicOfferPage({ token }) {
         assignmentAcknowledgment: result.assignmentAcknowledgment,
       }));
     } catch (error) {
-      if (["offer_not_found", "offer_expired", "offer_unavailable"].includes(error.code)) {
-        setLoadError(error.code);
-      } else {
-        setResponseError(error.code || "request_failed");
-      }
+      handleResponseError(error);
     } finally {
       setIsResponding(false);
     }
@@ -313,6 +317,7 @@ function PublicOfferPage({ token }) {
     offer_not_found: "publicOffer.notFound",
     offer_expired: "publicOffer.expired",
     offer_unavailable: "publicOffer.unavailable",
+    offer_already_taken: "publicOffer.alreadyTaken",
   }[loadError] || "publicOffer.loadError";
   const hasAnswered = offer && offer.status !== "PENDING";
 
@@ -340,36 +345,38 @@ function PublicOfferPage({ token }) {
               {translate("publicOffer.title")}
             </h2>
 
-            <dl className="detail-list">
-              <DetailItem
-                label={translate("common.property")}
-                value={offer.propertyName || translate("properties.unnamed")}
-              />
-              <DetailItem
-                label={translate("publicOffer.serviceDate")}
-                value={formatDate(offer.scheduledDate, translate, language)}
-              />
-              {offer.scheduledStart && (
-                <DetailItem label={translate("publicOffer.startTime")} value={offer.scheduledStart} />
-              )}
-              <PublicOfferCompensation
-                amount={offer.offeredCompensation !== undefined
-                  ? offer.offeredCompensation
-                  : offer.cleanerPayout}
-              />
-              <DetailItem
-                label={translate("publicOffer.status")}
-                value={formatStatus(offer.status, translate)}
-              />
-              {offer.assignmentAcknowledgment && (
+            {!requiresHub && (
+              <dl className="detail-list">
                 <DetailItem
-                  label={translate("publicOffer.assignment")}
-                  value={translate(offer.assignmentAcknowledgment === "CONFIRMED"
-                    ? "publicOffer.assignmentAcknowledgedShort"
-                    : "publicOffer.assignmentAwaitingShort")}
+                  label={translate("common.property")}
+                  value={offer.propertyName || translate("properties.unnamed")}
                 />
-              )}
-            </dl>
+                <DetailItem
+                  label={translate("publicOffer.serviceDate")}
+                  value={formatDate(offer.scheduledDate, translate, language)}
+                />
+                {offer.scheduledStart && (
+                  <DetailItem label={translate("publicOffer.startTime")} value={offer.scheduledStart} />
+                )}
+                <PublicOfferCompensation
+                  amount={offer.offeredCompensation !== undefined
+                    ? offer.offeredCompensation
+                    : offer.cleanerPayout}
+                />
+                <DetailItem
+                  label={translate("publicOffer.status")}
+                  value={formatStatus(offer.status, translate)}
+                />
+                {offer.assignmentAcknowledgment && (
+                  <DetailItem
+                    label={translate("publicOffer.assignment")}
+                    value={translate(offer.assignmentAcknowledgment === "CONFIRMED"
+                      ? "publicOffer.assignmentAcknowledgedShort"
+                      : "publicOffer.assignmentAwaitingShort")}
+                  />
+                )}
+              </dl>
+            )}
 
             {responseError && (
               <p className="form-error" role="alert">
@@ -377,13 +384,22 @@ function PublicOfferPage({ token }) {
               </p>
             )}
 
-            <PublicOfferAssignmentAcknowledgment
-              state={offer.assignmentAcknowledgment}
-              isSaving={isResponding}
-              onConfirm={acknowledgeAssignment}
-            />
+            {requiresHub ? (
+              <>
+                <p className="public-offer-confirmation">{translate("publicOffer.hubRequired")}</p>
+                <div className="public-offer-actions">
+                  <a className="button button--primary" href="/agenda">{translate("publicOffer.openHub")}</a>
+                </div>
+              </>
+            ) : (
+              <PublicOfferAssignmentAcknowledgment
+                state={offer.assignmentAcknowledgment}
+                isSaving={isResponding}
+                onConfirm={acknowledgeAssignment}
+              />
+            )}
 
-            {offer.status === "PENDING" && (
+            {!requiresHub && offer.status === "PENDING" && (
               <div className="public-offer-actions" aria-label={translate("publicOffer.status")}>
                 <button
                   className="button button--primary"
@@ -404,7 +420,7 @@ function PublicOfferPage({ token }) {
               </div>
             )}
 
-            {hasAnswered && !offer.assignmentAcknowledgment && (
+            {!requiresHub && hasAnswered && !offer.assignmentAcknowledgment && (
               <p className="public-offer-confirmation" role="status">
                 {offer.status === "INTERESTED"
                   ? translate("publicOffer.interestedConfirmation")
@@ -517,6 +533,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       clearOffersCreatedCount,
       recordOffersCreated,
       createCleanerOfferLink,
+      revokeCleanerOffer,
     },
     actions: {
       assignCleaner,
@@ -1329,6 +1346,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onPrepareChecklistReminder={prepareChecklistReminder}
             onRevokeChecklistCapability={revokeJobChecklistCapability}
             onCreatePublicOfferLink={createCleanerOfferLink}
+            onRevokeAutomaticOffer={revokeCleanerOffer}
             onAssignCleaner={assignCleaner}
             onAssignCleanerDirectly={assignCleanerDirectly}
             onRemoveAssignment={removeCleanerAssignment}
@@ -1367,6 +1385,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             cleaners={cleaners}
             isLoading={isLoadingCleaners}
             hasError={hasCleanerError}
+            canOfferAutomatically={!isLoadingAssignments && !hasAssignmentsError && !hasOffersError
+              && jobOffers.length === 0 && jobAssignments.length === 0}
             onBack={returnToJobDetail}
             onSent={(count, updatedJob) => {
               recordOffersCreated(count, updatedJob);

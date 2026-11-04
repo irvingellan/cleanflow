@@ -46,7 +46,7 @@ export function buildCleanerAgenda(entries = [], { now = new Date() } = {}) {
     .filter((entry) => entry.jobStatus === "COMPLETED" && (!entry.scheduledDate || entry.scheduledDate >= completedFrom))
     .sort((first, second) => byTime(second, first));
   const offers = entries
-    .filter((entry) => entry.kind === "OFFER" && ["PENDING", "INTERESTED"].includes(entry.offerStatus))
+    .filter((entry) => entry.kind === "OFFER" && ["PENDING", "INTERESTED", "ALREADY_TAKEN"].includes(entry.offerStatus))
     .filter((entry) => Number.isFinite(entry.offerExpiresAtMs) && entry.offerExpiresAtMs > now.getTime())
     .filter((entry) => !entry.scheduledDate || entry.scheduledDate >= today)
     .sort(byTime);

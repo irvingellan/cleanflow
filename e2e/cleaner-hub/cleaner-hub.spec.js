@@ -262,3 +262,109 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
   await cleanerA.close();
   await cleanerB.close();
 });
+
+test("automatic offer confirms in the signed-in Hub and becomes unavailable to the other invitee", async ({ page, browser }) => {
+  const fixture = await seed();
+  const cleanerA = await cleanerContext("pt-BR");
+  const cleanerB = await cleanerContext("en-US");
+  const guest = await browser.newContext({ baseURL: "http://127.0.0.1:15281", locale: "en-US" });
+  const pageA = await cleanerA.newPage();
+  const pageB = await cleanerB.newPage();
+  const publicPage = await guest.newPage();
+  let releaseAcceptance;
+  const waitForRelease = new Promise((resolve) => { releaseAcceptance = resolve; });
+
+  try {
+    await loginManager(page, fixture);
+    const job = await createService(page, fixture, {
+      propertyId: fixture.mapleId, propertyName: fixture.mapleName, scheduledDate: dateKey(3), scheduledStart: "11:15",
+    });
+    await page.locator("details.job-detail-section > summary", { hasText: "Offers" }).click();
+    await page.getByRole("button", { name: "Offer cleaning to cleaners" }).click();
+    await page.getByLabel(fixture.cleanerAName).check();
+    await page.getByLabel(fixture.cleanerBName).check();
+    const optIn = page.getByLabel("Assign automatically to the first cleaner who accepts");
+    await expect(optIn).not.toBeChecked();
+    await optIn.check();
+    await page.getByRole("button", { name: "Create offers" }).click();
+    await expect(page.locator(".offers-section__success")).toContainText("Automatic offers created (2)");
+    expect((await job.get()).data().offerDistributionMode).toBe("FIRST_ACCEPT_WINS");
+
+    const otherOffer = page.locator(".offer-status-item").filter({ hasText: fixture.cleanerBName });
+    await expect(otherOffer).toContainText("Waiting for acceptance");
+    await otherOffer.getByRole("button", { name: "Create public link" }).click();
+    const publicLink = otherOffer.getByRole("link", { name: "Open public cleaner offer" });
+    await expect(publicLink).toBeVisible();
+    await publicPage.goto(await publicLink.getAttribute("href"));
+    await expect(publicPage.getByRole("link", { name: /schedule/i })).toHaveAttribute("href", "/agenda");
+    await expect(publicPage.getByRole("button", { name: /accept|interested|confirm/i })).toHaveCount(0);
+
+    const scenarios = [
+      { target: pageA, cleanerId: fixture.cleanerAId, lang: "pt", offers: /^Ofertas/, accept: "Aceitar serviço", interest: "Tenho interesse" },
+      { target: pageB, cleanerId: fixture.cleanerBId, lang: "en", offers: /^Offers/, accept: "Accept job", interest: "I'm interested" },
+    ];
+    for (const { target, cleanerId, lang, offers, accept, interest } of scenarios) {
+      const { code } = await managerCall(fixture, "issueCleanerAccessCode", { cleanerId });
+      await signInCleaner(target, code, { lang });
+      await target.getByRole("button", { name: offers }).click();
+      await target.locator(`[data-job-id="${job.id}"]`).click();
+      await expect(target.getByRole("button", { name: accept })).toBeEnabled();
+      await expect(target.getByRole("button", { name: interest })).toHaveCount(0);
+    }
+    await evidence(pageA, "86-01-automatic-offer");
+
+    // Pause the real request in transit to verify there is no optimistic confirmation.
+    await pageA.route("**/respondToMyOffer", async (route) => {
+      if (route.request().method() === "POST") await waitForRelease;
+      await route.continue();
+    });
+    const acceptanceRequest = pageA.waitForRequest((request) => request.url().endsWith("/respondToMyOffer") && request.method() === "POST");
+    await pageA.getByRole("button", { name: "Aceitar serviço" }).click();
+    await acceptanceRequest;
+    await expect(pageA.getByText("Serviço confirmado para você.")).toHaveCount(0);
+    expect((await job.get()).data().assignedCleanerIds).toEqual([]);
+    releaseAcceptance();
+
+    const confirmed = pageA.getByText("Serviço confirmado para você.").or(pageA.getByText("Confirmada para você"));
+    await expect(confirmed.first()).toBeVisible();
+    await evidence(pageA, "86-02-server-confirmed");
+    const unavailable = "Unavailable — this job has already been accepted.";
+    await expect(pageB.getByText(unavailable)).toBeVisible();
+    await expect(pageB.getByRole("button", { name: "Accept job" })).toHaveCount(0);
+    await expect(pageB.locator("body")).not.toContainText(fixture.cleanerAName);
+    await evidence(pageB, "86-03-other-invitee-unavailable");
+
+    await pageA.reload();
+    await pageA.getByRole("button", { name: /^Próximas/ }).click();
+    await expect(pageA.locator(`[data-job-id="${job.id}"]`)).toContainText("Confirmada para você");
+    await evidence(pageA, "86-04-confirmed-agenda-after-reload");
+    await pageB.reload();
+    await pageB.getByRole("button", { name: /^Upcoming/ }).click();
+    await expect(pageB.locator(`[data-job-id="${job.id}"]`)).toHaveCount(0);
+    await pageB.getByRole("button", { name: /^Offers/ }).click();
+    await expect(pageB.locator(`[data-job-id="${job.id}"]`)).toContainText(unavailable);
+
+    await publicPage.reload();
+    await expect(publicPage.getByText(/already been accepted/i)).toBeVisible();
+    await expect(publicPage.locator("body")).not.toContainText(fixture.cleanerAName);
+
+    const jobData = (await job.get()).data();
+    expect(jobData.assignedCleanerIds).toEqual([fixture.cleanerAId]);
+    expect(jobData.firstAcceptClaim.cleanerId).toBe(fixture.cleanerAId);
+    const assignments = await job.collection("assignments").get();
+    expect(assignments.docs.map((snapshot) => snapshot.data().assignmentMethod)).toEqual(["FIRST_ACCEPT_WINS"]);
+    await expect.poll(async () => {
+      const events = await job.collection("managerNotificationDeliveries").get();
+      return events.docs.map((snapshot) => [snapshot.get("eventType"), snapshot.get("deliveryStatus")]);
+    }).toEqual([["ASSIGNMENT_CONFIRMED", "NO_ACTIVE_DEVICES"]]);
+
+    await expect(otherOffer).toContainText("Unavailable");
+    await page.locator("details.job-detail-section > summary", { hasText: "Cleaner & assignment" }).click();
+    const rosterItem = page.locator(".assignment-roster__item").filter({ hasText: fixture.cleanerAName });
+    await expect(rosterItem).toContainText("Assigned automatically");
+    await evidence(page, "86-05-manager-assignment");
+  } finally {
+    releaseAcceptance();
+    await Promise.all([cleanerA.close(), cleanerB.close(), guest.close()]);
+  }
+});

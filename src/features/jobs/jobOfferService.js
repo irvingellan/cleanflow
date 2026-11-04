@@ -11,7 +11,9 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { db } from "../../services/firebase/client.js";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../../services/firebase/client.js";
+import { automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
 import {
   canManageAssignmentAwareOffers,
   isAssignmentAwareJob,
@@ -120,8 +122,14 @@ export async function respondToJobOffer({ jobId, cleanerId, status }) {
   });
 }
 
-export async function createJobOffers({ jobId, cleaners }) {
+export async function createJobOffers({ jobId, cleaners, automatic = false }) {
   const reference = jobDocument(jobId);
+
+  if (automatic) {
+    const createAutomaticOffers = httpsCallable(functions, "createAutomaticJobOffers");
+    await createAutomaticOffers({ jobId, cleanerIds: cleaners.map((cleaner) => cleaner.id) });
+    return jobFromSnapshot(await getDoc(reference));
+  }
 
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(reference);
@@ -133,7 +141,7 @@ export async function createJobOffers({ jobId, cleaners }) {
     }
 
     const job = jobFromSnapshot(snapshot);
-    if (!canCreateOffersForJob(job)) {
+    if (!canCreateOffersForJob(job) || isAutomaticOfferJob(job)) {
       const error = new Error("Offers cannot be created after work starts.");
       error.code = "offer-management-locked";
       throw error;
@@ -178,12 +186,11 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
 
   const token = createPublicOfferToken();
   const tokenHash = await hashPublicOfferToken(token);
-  const expiresAtMs = Date.now() + publicOfferTokenLifetimeMilliseconds;
-  const expiresAt = Timestamp.fromMillis(expiresAtMs);
+  const legacyExpiresAtMs = Date.now() + publicOfferTokenLifetimeMilliseconds;
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, cleanerId);
 
-  await runTransaction(db, async (transaction) => {
+  const result = await runTransaction(db, async (transaction) => {
     const [jobSnapshot, offerSnapshot] = await Promise.all([
       transaction.get(jobReference),
       transaction.get(offerReference),
@@ -196,23 +203,48 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
     }
 
     const job = jobFromSnapshot(jobSnapshot);
-    if (!canCreatePublicOfferLinkForJob(job) || offerSnapshot.data().status !== "PENDING") {
+    const offer = offerSnapshot.data();
+    const automatic = isAutomaticOfferJob(job);
+    const linkAvailable = automatic
+      ? automaticOfferDisplayStatus(job, offer) === "AWAITING_ACCEPTANCE"
+      : canCreatePublicOfferLinkForJob(job) && offer.status === "PENDING";
+    if (!linkAvailable) {
       const error = new Error("Offer is not available for a public link.");
       error.code = "offer-unavailable";
       throw error;
     }
 
+    const expiresAtMs = automatic ? offer.publicOfferExpiresAt.toMillis() : legacyExpiresAtMs;
     transaction.update(offerReference, {
       publicOfferTokenHash: tokenHash,
-      publicOfferExpiresAt: expiresAt,
-      offeredCompensation,
+      ...(!automatic ? {
+        publicOfferExpiresAt: Timestamp.fromMillis(expiresAtMs),
+        offeredCompensation,
+      } : {}),
     });
+    return { expiresAtMs, offeredCompensation: automatic ? offer.offeredCompensation ?? null : offeredCompensation };
   });
 
   return {
     url: new URL(`/offer/${token}`, window.location.origin).toString(),
-    offeredCompensation,
+    ...result,
     tokenHash,
-    expiresAtMs,
   };
+}
+
+export async function revokeAutomaticOffer({ jobId, offerId }) {
+  const jobReference = jobDocument(jobId);
+  const offerReference = offerDocument(jobId, offerId);
+
+  await runTransaction(db, async (transaction) => {
+    const [jobSnapshot, offerSnapshot] = await Promise.all([
+      transaction.get(jobReference),
+      transaction.get(offerReference),
+    ]);
+    if (!jobSnapshot.exists() || !offerSnapshot.exists()
+      || automaticOfferDisplayStatus(jobFromSnapshot(jobSnapshot), offerSnapshot.data()) !== "AWAITING_ACCEPTANCE") {
+      throw new Error("This offer is no longer available.");
+    }
+    transaction.update(offerReference, { status: "REVOKED", revokedAt: serverTimestamp() });
+  });
 }

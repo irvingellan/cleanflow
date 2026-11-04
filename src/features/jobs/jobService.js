@@ -7,6 +7,7 @@ import {
   getDocs,
   getDocsFromServer,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -59,6 +60,14 @@ export async function getJobById(jobId) {
     throw error;
   }
   return jobFromSnapshot(snapshot);
+}
+
+export function subscribeToJob(jobId, onChange) {
+  return onSnapshot(jobDocument(jobId), (snapshot) => {
+    if (snapshot.exists() && !snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+      onChange(jobFromSnapshot(snapshot));
+    }
+  }, () => { /* The existing Job Detail reload remains available on a listen error. */ });
 }
 
 /** Complete service-week read; never substitute cache or a capped worklist. */

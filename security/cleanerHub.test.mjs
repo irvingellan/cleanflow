@@ -1,5 +1,6 @@
 import { after, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
@@ -17,9 +18,11 @@ for (const [name, value] of Object.entries(expected)) {
 const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow" });
 const { getFirestore, Timestamp } = await import("firebase-admin/firestore");
+const { serverTimestamp } = await import("firebase/firestore");
 const functionsIndex = await import("../functions/src/index.js");
 const {
   assignCleanerDirectly,
+  createAutomaticJobOffers,
   createChecklistRun,
   issueChecklistCapability,
   issueCleanerAccessCode,
@@ -40,6 +43,7 @@ const org = "cleanflow-demo";
 const root = `organizations/${org}`;
 const uidA = cleanerAccountUid(org, "cleaner-a");
 const uidB = cleanerAccountUid(org, "cleaner-b");
+const uidC = cleanerAccountUid(org, "cleaner-c");
 const hubClaimsByUid = new Map();
 let environment;
 
@@ -80,15 +84,23 @@ async function refreshIdToken(refreshToken) {
   assert.equal(response.status, 200);
   return (await response.json()).id_token;
 }
-async function readPublicChecklist(token) {
-  const response = {
+function publicResponse() {
+  return {
     code: 200,
     set() {},
     status(code) { this.code = code; return this; },
     json(data) { this.body = data; return this; },
     send(data) { this.body = data; return this; },
   };
+}
+async function readPublicChecklist(token) {
+  const response = publicResponse();
   await functionsIndex.publicChecklist({ method: "GET", query: { token }, get() { return undefined; } }, response);
+  return response;
+}
+async function requestPublicOffer(method, token, data) {
+  const response = publicResponse();
+  await functionsIndex.publicOffer({ method, query: { token }, body: { token, ...data } }, response);
   return response;
 }
 function dateKey(days) {
@@ -148,7 +160,7 @@ beforeEach(async () => {
   batch.set(admin.doc(`${root}/properties/property`), {
     organizationId: org, name: "Maple Example House", keyCodeInfo: "private-door-code", accessInstructions: "private-access",
   });
-  for (const [id, name] of [["cleaner-a", "Ana Example"], ["cleaner-b", "Bia Example"]]) {
+  for (const [id, name] of [["cleaner-a", "Ana Example"], ["cleaner-b", "Bia Example"], ["cleaner-c", "Cris Example"]]) {
     batch.set(admin.doc(`${root}/cleaners/${id}`), { organizationId: org, name, active: true, preferredLanguage: "pt" });
   }
   batch.set(admin.doc(`${root}/cleaners/archived`), { organizationId: org, name: "Old Example", active: true, archivedAt: Timestamp.now() });
@@ -330,6 +342,7 @@ test("offers stay separate: interest is recorded through the existing Offer serv
   assert.deepEqual(agenda.map((item) => [item.kind, item.offerStatus, item.offeredCompensation]), [["OFFER", "PENDING", 140]]);
   assert.equal((await agendaFor("cleaner-b")).length, 0);
 
+  assert.deepEqual(await accept("job-offer", uidA), { state: "unavailable", status: null });
   const answer = await respondToMyOffer.run(cleanerRequest(uidA, { jobId: "job-offer", status: "INTERESTED" }));
   assert.deepEqual(answer, { state: "answered", status: "INTERESTED" });
   await sync("job-offer");
@@ -455,4 +468,258 @@ test("linking backfills Jobs assigned before access existed, including legacy si
   const agenda = await agendaFor("cleaner-a");
   assert.deepEqual(agenda.filter((item) => item.kind === "ASSIGNED").map((item) => item.jobId).sort(), ["job-early", "legacy"]);
   assert.equal(agenda.filter((item) => item.kind === "CHANGE").length, 0);
+});
+
+
+const autoMode = "FIRST_ACCEPT_WINS";
+const automaticCleaners = [["cleaner-a", uidA], ["cleaner-b", uidB], ["cleaner-c", uidC]];
+const jobDocument = (jobId) => admin.doc(`${root}/jobs/${jobId}`);
+
+async function createAutomaticOffer(jobId, cleanerId, extra = {}) {
+  const token = randomBytes(32).toString("base64url");
+  const offer = jobDocument(jobId).collection("offers").doc(cleanerId);
+  await offer.set({
+    jobId, cleanerId, cleanerName: cleanerId, status: "PENDING", offeredCompensation: 140,
+    publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+    publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 86400000),
+    createdAt: Timestamp.now(), offerDistributionMode: autoMode, offeredChecklistContextRevision: 0, ...extra,
+  });
+  return { token, offer };
+}
+
+function accept(jobId, uid, data = {}, claims) {
+  return respondToMyOffer.run(cleanerRequest(uid, { jobId, status: "ACCEPTED", ...data }, claims));
+}
+
+async function createAutomaticJob(jobId, extra = {}) {
+  await createJob(jobId, { operationalStatus: "OFFERED", offerDistributionMode: autoMode, ...extra });
+  return jobDocument(jobId);
+}
+
+async function assignmentsFor(job) {
+  const snapshot = await job.collection("assignments").get();
+  return snapshot.docs.map((entry) => entry.data());
+}
+
+test("three invited cleaners race for one automatic assignment with idempotent retry, isolated agenda, and checklist access", async () => {
+  await createJob("auto-race");
+  const job = jobDocument("auto-race");
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: automaticCleaners.map(([id]) => id) }));
+  for (const [cleanerId] of automaticCleaners) await link(cleanerId);
+  // An old Hub build's "interested" action cannot claim an automatic Offer.
+  const interest = await respondToMyOffer.run(cleanerRequest(uidA, { jobId: job.id, status: "INTERESTED" }));
+  assert.deepEqual(interest, { state: "unavailable", status: null });
+  assert.deepEqual(await assignmentsFor(job), []);
+  // The same state is contended in the real Firestore emulator, through the callable's handler.
+  const results = await Promise.all(automaticCleaners.map(([, uid]) => accept(job.id, uid)));
+  assert.deepEqual(results.map(({ state }) => state).sort(), ["already-taken", "already-taken", "assigned"]);
+  const [winnerId, winnerUid] = automaticCleaners[results.findIndex(({ state }) => state === "assigned")];
+  const losers = automaticCleaners.filter(([id]) => id !== winnerId);
+
+  const afterRace = (await job.get()).data();
+  assert.deepEqual([afterRace.operationalStatus, afterRace.assignedCleanerIds, afterRace.checklistContextRevision], ["ASSIGNED", [winnerId], 1]);
+  assert.equal(afterRace.cleanerPayout, 150);
+  const { cleanerId, offerId, assignmentId, acceptedAt } = afterRace.firstAcceptClaim;
+  assert.deepEqual([cleanerId, offerId], [winnerId, winnerId]);
+  const assignment = (await job.collection("assignments").doc(assignmentId).get()).data();
+  assert.equal(assignment.cleanerId, winnerId);
+  assert.equal(assignment.source, "OFFER");
+  assert.equal(assignment.assignmentMethod, autoMode);
+  assert.equal(assignment.sourceOfferId, offerId);
+  assert.equal(assignment.isActive, true);
+  assert.ok(assignment.assignedAt.isEqual(acceptedAt));
+  assert.ok(assignment.cleanerAcknowledgedAt.isEqual(acceptedAt));
+  assert.equal((await job.collection("offers").doc(winnerId).get()).data().status, "ACCEPTED");
+  const events = job.collection("managerNotificationDeliveries");
+  assert.deepEqual((await events.get()).docs.map((doc) => {
+    const { eventType, cleanerId, assignmentId } = doc.data();
+    return { eventType, cleanerId, assignmentId };
+  }), [{ eventType: "ASSIGNMENT_CONFIRMED", cleanerId: winnerId, assignmentId }]);
+
+  const retries = await Promise.all([accept(job.id, winnerUid), accept(job.id, winnerUid)]);
+  assert.deepEqual(retries.map(({ state }) => state), ["assigned", "assigned"]);
+  for (const [, uid] of losers) {
+    const result = await accept(job.id, uid);
+    assert.equal(result.state, "already-taken");
+    assert.ok(!JSON.stringify(result).includes(winnerId));
+  }
+  assert.deepEqual(await assignmentsFor(job), [assignment]);
+  assert.deepEqual((await job.get()).data(), afterRace);
+  assert.equal((await events.get()).size, 1);
+  assert.equal((await admin.collection(`${root}/payouts`).get()).size, 0);
+
+  // Real projection logic runs twice, as it may on trigger delivery retries.
+  await sync(job.id);
+  const entriesBeforeReplay = await admin.collection(`${root}/cleanerAgenda`).get();
+  await sync(job.id);
+  const entriesAfterReplay = await admin.collection(`${root}/cleanerAgenda`).get();
+  assert.deepEqual(entriesAfterReplay.docs.map((doc) => doc.data()), entriesBeforeReplay.docs.map((doc) => doc.data()));
+  assert.equal((await agendaFor(winnerId)).filter((entry) => entry.jobId === job.id && entry.kind === "ASSIGNED").length, 1);
+  for (const [loserId, loserUid] of losers) {
+    const visible = await assertSucceeds(cleanerDb(loserUid).collection(`${root}/cleanerAgenda`).where("cleanerId", "==", loserId).get());
+    const entries = visible.docs.map((doc) => doc.data());
+    assert.deepEqual(entries.map((entry) => [entry.jobId, entry.kind, entry.offerStatus]), [[job.id, "OFFER", "ALREADY_TAKEN"]]);
+    const serialized = JSON.stringify(entries);
+    for (const privateValue of [winnerId, "Synthetic Client", "private-guest", "private-manager-note", "clientPrice", "cleanerPayout"]) {
+      assert.ok(!serialized.includes(privateValue), `loser must not see ${privateValue}`);
+    }
+    await assertFails(cleanerDb(loserUid).doc(`${root}/cleanerAgenda/${winnerId}__${job.id}`).get());
+    await assertFails(cleanerDb(loserUid).doc(`${job.path}/offers/${winnerId}`).get());
+  }
+  assert.equal((await events.get()).size, 1);
+  await rescheduleJob.run(managerRequest({ jobId: job.id, scheduledDate: dateKey(4), scheduledStart: "13:00" }));
+  await sync(job.id);
+  const assigned = (await agendaFor(winnerId)).find((entry) => entry.kind === "ASSIGNED");
+  assert.deepEqual([assigned.scheduledDate, assigned.scheduledStart], [dateKey(4), "13:00"]);
+  for (const [id] of losers) {
+    const [lost] = await agendaFor(id);
+    assert.deepEqual([lost.offerStatus, lost.scheduledDate, lost.scheduledStart], ["ALREADY_TAKEN", dateKey(3), "10:30"]);
+    assert.equal(lost.jobStatus, "OFFERED");
+  }
+
+  await createChecklistRun.run(managerRequest({ jobId: job.id }));
+  assert.equal((await openMyChecklist.run(cleanerRequest(winnerUid, { jobId: job.id }))).state, "ready");
+  for (const [, uid] of losers) {
+    assert.equal((await openMyChecklist.run(cleanerRequest(uid, { jobId: job.id }))).state, "unavailable");
+  }
+});
+
+test("automatic acceptance and a simultaneous manual assignment contend for the same slot", async () => {
+  await link("cleaner-a");
+  const job = await createAutomaticJob("auto-manager-race");
+  await createAutomaticOffer(job.id, "cleaner-a");
+  const [automatic, manual] = await Promise.allSettled([
+    accept(job.id, uidA),
+    assignCleanerDirectly.run(managerRequest({ jobId: job.id, cleanerId: "cleaner-b" })),
+  ]);
+  assert.equal(automatic.status, "fulfilled");
+  const assignments = await assignmentsFor(job);
+  assert.equal(assignments.length, 1);
+  const winner = assignments[0].cleanerId;
+  assert.deepEqual((await job.get()).data().assignedCleanerIds, [winner]);
+  if (winner === "cleaner-a") {
+    assert.equal(automatic.value.state, "assigned");
+    assert.equal(manual.status, "rejected");
+    assert.equal(manual.reason.code, "failed-precondition");
+  } else {
+    assert.equal(winner, "cleaner-b");
+    assert.equal(manual.status, "fulfilled");
+    assert.equal(automatic.value.state, "already-taken");
+  }
+});
+
+test("automatic acceptance denies invalid sessions, cross-organization identities, and uninvited cleaners", async () => {
+  const job = await createAutomaticJob("auto-identity");
+  await createAutomaticOffer(job.id, "cleaner-a");
+  await link("cleaner-a");
+  await link("cleaner-b");
+  const claims = hubClaimsByUid.get(uidA);
+  await assert.rejects(respondToMyOffer.run({ data: { jobId: job.id, status: "ACCEPTED" } }), { code: "unauthenticated" });
+  await assert.rejects(accept(job.id, uidA, {}, { ...claims, organizationId: "other-org" }), { code: "permission-denied" });
+  await assert.rejects(accept(job.id, uidA, {}, { ...claims, cleanerId: "cleaner-b" }), { code: "permission-denied" });
+  assert.equal((await accept(job.id, uidB, { cleanerId: "cleaner-a", organizationId: org })).state, "unavailable");
+
+  await revokeCleanerHubAccess.run(managerRequest({ cleanerId: "cleaner-a" }));
+  await assert.rejects(accept(job.id, uidA, {}, claims), { code: "permission-denied" });
+  await link("cleaner-a");
+  await admin.doc(`${root}/cleaners/cleaner-a`).update({ active: false });
+  await assert.rejects(accept(job.id, uidA), { code: "permission-denied" });
+  assert.deepEqual(await assignmentsFor(job), []);
+});
+
+test("automatic acceptance leaves expired, revoked, cancelled, already assigned, and in-progress Jobs untouched", async () => {
+  await link("cleaner-a");
+  const cases = [
+    ["expired", "expired", {}, { publicOfferExpiresAt: Timestamp.fromMillis(Date.now() - 5000) }],
+    ["revoked", "unavailable", {}, { status: "REVOKED", revokedAt: Timestamp.now() }],
+    ["declined", "answered", {}, { status: "DECLINED" }],
+    ["archived", "unavailable", { archivedAt: Timestamp.now() }],
+    ["cancelled", "unavailable", { operationalStatus: "CANCELLED" }],
+    ["in-progress", "unavailable", { operationalStatus: "IN_PROGRESS" }],
+    ["completed", "unavailable", { operationalStatus: "COMPLETED" }],
+    ["assigned", "already-taken", { operationalStatus: "ASSIGNED", assignedCleanerIds: ["cleaner-b"] }],
+    ["legacy-roster", "unavailable", { assignedCleanerId: "cleaner-b" }],
+    ["multi-roster", "unavailable", { assignedCleanerIds: ["cleaner-b", "cleaner-c"] }],
+    ["multiple-slots", "unavailable", { requiredCleanerCount: 2 }],
+    ["revised", "unavailable", { checklistContextRevision: 1 }],
+    ["wrong-offer-mode", "unavailable", {}, { offerDistributionMode: null }],
+  ];
+  for (const [name, state, jobData, offerData] of cases) {
+    const job = await createAutomaticJob(`auto-${name}`, jobData);
+    await createAutomaticOffer(job.id, "cleaner-a", offerData);
+    const before = (await job.get()).data();
+    assert.deepEqual(await accept(job.id, uidA), { state, status: state === "answered" ? "DECLINED" : null }, name);
+    assert.deepEqual(await assignmentsFor(job), [], name);
+    assert.deepEqual((await job.get()).data(), before, name);
+  }
+});
+
+test("a forwarded public link cannot assign, record legacy interest, or confirm an automatic assignment", async () => {
+  await link("cleaner-a");
+  await link("cleaner-b");
+  const job = await createAutomaticJob("auto-public-link");
+  const linkA = await createAutomaticOffer(job.id, "cleaner-a");
+  const linkB = await createAutomaticOffer(job.id, "cleaner-b");
+  const open = await requestPublicOffer("GET", linkA.token);
+  assert.equal(open.code, 200);
+  assert.deepEqual(open.body, { offer: { offerDistributionMode: autoMode, preferredLanguage: "pt" } });
+  for (const data of [{ status: "ACCEPTED" }, { status: "INTERESTED" }, { action: "ACKNOWLEDGE_ASSIGNMENT" }]) {
+    const response = await requestPublicOffer("POST", linkA.token, data);
+    assert.ok(response.code >= 400);
+  }
+  assert.equal((await linkA.offer.get()).data().status, "PENDING");
+  assert.deepEqual(await assignmentsFor(job), []);
+  assert.equal((await accept(job.id, uidA)).state, "assigned");
+  const lost = await requestPublicOffer("GET", linkB.token);
+  assert.equal(lost.code, 410);
+  assert.deepEqual(lost.body, { error: "offer_already_taken" });
+  const confirmation = await requestPublicOffer("POST", linkA.token, { action: "ACKNOWLEDGE_ASSIGNMENT" });
+  assert.ok(confirmation.code >= 400);
+  assert.equal((await assignmentsFor(job)).length, 1);
+});
+
+
+test("the manager explicitly opts in once; a browser cannot forge automatic responses, mode, or assignment", async () => {
+  await createJob("auto-opt-in");
+  await link("cleaner-a");
+  const job = jobDocument("auto-opt-in");
+  const payload = { jobId: job.id, cleanerIds: ["cleaner-a", "cleaner-b"] };
+  await assert.rejects(createAutomaticJobOffers.run(cleanerRequest(uidA, payload)), { code: "permission-denied" });
+  const managerDb = environment.authenticatedContext("manager", { firebase: { sign_in_provider: "password" } }).firestore();
+  const browserJob = managerDb.doc(job.path);
+  await assertFails(browserJob.update({ offerDistributionMode: autoMode }));
+  await createAutomaticJobOffers.run(managerRequest(payload));
+  const offerPath = `${job.path}/offers/cleaner-a`;
+  const offer = (await admin.doc(offerPath).get()).data();
+  assert.equal(offer.status, "PENDING");
+  assert.equal(offer.offerDistributionMode, autoMode);
+  assert.equal(offer.offeredChecklistContextRevision, 0);
+  assert.ok(offer.publicOfferExpiresAt.toMillis() > Date.now());
+  assert.deepEqual([(await job.get()).data().offerDistributionMode, (await job.get()).data().operationalStatus], [autoMode, "OFFERED"]);
+  await assert.rejects(createAutomaticJobOffers.run(managerRequest(payload)), { code: "failed-precondition" });
+
+  await assertFails(browserJob.update({ offerDistributionMode: "MANUAL" }));
+  await assertFails(browserJob.update({ firstAcceptClaim: { cleanerId: "cleaner-a" } }));
+  await assertFails(browserJob.update({ assignedCleanerIds: ["cleaner-a"], operationalStatus: "ASSIGNED", checklistContextRevision: 1 }));
+  await assertFails(managerDb.doc(offerPath).update({ status: "ACCEPTED", respondedAt: new Date() }));
+  await assertFails(managerDb.doc(offerPath).update({ status: "INTERESTED", respondedAt: new Date() }));
+  await assertFails(managerDb.doc(`${job.path}/offers/cleaner-c`).set({ jobId: job.id, cleanerId: "cleaner-c", status: "PENDING" }));
+  await assertFails(cleanerDb(uidA).doc(offerPath).update({ status: "ACCEPTED" }));
+  await assertFails(cleanerDb(uidA).doc(job.path).update({ assignedCleanerIds: ["cleaner-a"] }));
+
+  // The same authorized revocation write made by the manager browser.
+  await assertSucceeds(managerDb.doc(offerPath).update({ status: "REVOKED", revokedAt: serverTimestamp() }));
+  assert.equal((await accept(job.id, uidA)).state, "unavailable");
+  assert.deepEqual(await assignmentsFor(job), []);
+});
+
+test("rescheduling through the manager endpoint invalidates acceptance of the earlier schedule", async () => {
+  await createJob("auto-rescheduled");
+  await link("cleaner-a");
+  const job = jobDocument("auto-rescheduled");
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] }));
+  await rescheduleJob.run(managerRequest({ jobId: job.id, scheduledDate: dateKey(4), scheduledStart: "13:00" }));
+  assert.equal((await accept(job.id, uidA)).state, "unavailable");
+  assert.equal((await job.get()).data().scheduledStart, "13:00");
+  assert.deepEqual(await assignmentsFor(job), []);
 });

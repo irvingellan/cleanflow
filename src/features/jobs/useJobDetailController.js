@@ -13,7 +13,7 @@ import {
 } from "../checklists/checklistCapabilityService.js";
 import { getCleaners } from "../cleaners/cleanerService.js";
 import { getJobIssues, resolveIssue } from "../issues/issueService.js";
-import { createPublicOfferLink, getJobOffers } from "./jobOfferService.js";
+import { createPublicOfferLink, getJobOffers, revokeAutomaticOffer } from "./jobOfferService.js";
 import {
   assignInterestedCleaner,
   assignCleanerDirectly as assignCleanerDirectlyRequest,
@@ -21,10 +21,12 @@ import {
   removeAssignment,
   replaceAssignment,
 } from "./assignmentService.js";
+import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { isAssignmentAwareJob } from "./jobCompatibility.js";
 import {
   assignCleanerToJob,
   getJobById,
+  subscribeToJob,
   startAssignedJob,
   updateJobPrices,
   updateJobDetails,
@@ -84,6 +86,18 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const selectedJobIdRef = useRef(null);
   const selectedJobEpochRef = useRef(0);
   const operationTrackerRef = useRef(null);
+  const automaticJobId = isAutomaticOfferJob(selectedJob) ? selectedJob.id : null;
+  const onJobUpdatedRef = useRef(onJobUpdated);
+  onJobUpdatedRef.current = onJobUpdated;
+
+  useEffect(() => {
+    if (view !== "job-detail" || !automaticJobId) return undefined;
+    return subscribeToJob(automaticJobId, (updatedJob) => {
+      if (selectedJobIdRef.current !== automaticJobId) return;
+      setSelectedJob(updatedJob);
+      onJobUpdatedRef.current(updatedJob);
+    });
+  }, [view, automaticJobId]);
 
   useEffect(() => {
     operationTrackerRef.current = view === "job-detail" && selectedJob?.id && actorUid
@@ -516,6 +530,12 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     });
   }
 
+  async function revokeCleanerOffer(offerId) {
+    if (!selectedJob) return;
+    await revokeAutomaticOffer({ jobId: selectedJob.id, offerId });
+    if (selectedJobIdRef.current === selectedJob.id) await refreshOffers();
+  }
+
   async function createChecklistRun() {
     if (!selectedJob || checklistRunCreateInFlight.current) {
       return detailData.checklistRun;
@@ -677,6 +697,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       clearOffersCreatedCount: () => setOffersCreatedCount(null),
       recordOffersCreated,
       createCleanerOfferLink,
+      revokeCleanerOffer,
     },
     actions: {
       assignCleaner,

@@ -17,8 +17,8 @@ These entities remain separate:
 - **Reservation** — an external or manual guest-stay/intake record.
 - **Cleaning Job (Job)** — the operational aggregate for one service event.
 - **Offer** — an invitation to one Cleaner, including their response.
-- **Assignment** — the manager's selection of one Cleaner to perform work on a
-  Job.
+- **Assignment** — the recorded responsibility of one Cleaner to perform work
+  on a Job.
 - **Cleaner / Worker** — a person eligible for operational assignments.
 - **Issue** — an operational exception separate from Job lifecycle.
 - **Invoice / Client Payment** — money owed by or received from a Client.
@@ -156,8 +156,10 @@ Conceptual fields include:
 - Job, Organization, and Cleaner references;
 - cleaner-name snapshot and optional source Offer reference;
 - optional `cleanerAcknowledgedAt` server timestamp and
-  `cleanerAcknowledgedOfferId`, written only by the public Offer Function when
-  that exact interested Offer produced the current active Assignment;
+  `cleanerAcknowledgedOfferId`, written by the public Offer Function when
+  that exact interested Offer produced the current active Assignment. In the
+  Issue #86 candidate the automatic assignment transaction sets both fields
+  during authenticated acceptance;
 - per-Cleaner execution/timing and future lifecycle timestamps;
 - fixed or hourly compensation configuration;
 - worked hours and manager-approved hours;
@@ -192,8 +194,12 @@ Conceptual statuses:
 - expired;
 - withdrawn.
 
-`accepted` is intentionally not an Offer status. The Cleaner expresses
-interest; the manager creates one or more Assignments.
+In manual distribution the Cleaner expresses interest and the manager creates
+one or more Assignments. In the Issue #86 candidate an explicitly opted-in
+`FIRST_ACCEPT_WINS` batch adds `ACCEPTED` for its winning Offer and `REVOKED`
+for manager withdrawal. Job-level claim and close metadata are authoritative.
+An unavailable competitor state is derived for the recipient without rewriting
+their response. See [the persisted contract](FIRST_ACCEPT_WINS_V1.md).
 
 An Offer may carry only the safe proposed compensation relevant to its
 recipient. That proposed amount is not an Assignment payout or a record of

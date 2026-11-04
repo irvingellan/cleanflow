@@ -28,7 +28,7 @@ vi.mock("firebase/firestore", () => ({
   updateDoc: mocks.updateDoc,
   where: mocks.where,
 }));
-vi.mock("../../services/firebase/client.js", () => ({ db: { testDatabase: true } }));
+vi.mock("../../services/firebase/client.js", () => ({ db: { testDatabase: true }, functions: {} }));
 
 const { createPublicOfferLink } = await import("./jobOfferService.js");
 

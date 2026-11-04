@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
+import { checklistContextRevision, emptySingleOfferRoster, isAutomaticOfferJob } from "./firstAcceptWins.js";
 
 const eligibleStatuses = new Set(["UNASSIGNED", "OFFERED", "ASSIGNED"]);
 
@@ -16,13 +17,6 @@ function validId(value) {
 
 function precondition(message, reason) {
   return new HttpsError("failed-precondition", message, { reason });
-}
-
-function contextRevision(job) {
-  if (!Object.prototype.hasOwnProperty.call(job, "checklistContextRevision")) return 0;
-  return Number.isSafeInteger(job.checklistContextRevision) && job.checklistContextRevision >= 0
-    ? job.checklistContextRevision
-    : null;
 }
 
 function assertRosterConsistent(job, activeAssignments, organizationId, jobId) {
@@ -129,7 +123,11 @@ export async function assignCleanerDirectlyForManager(database, {
     if (activeIds.has(cleanerId)) {
       throw precondition("This Cleaner is already assigned.", "cleaner-already-assigned");
     }
-    const revision = contextRevision(job);
+    const automatic = isAutomaticOfferJob(job);
+    if (automatic && !emptySingleOfferRoster(job)) {
+      throw precondition("The Job's single opening is unavailable.", "job-ineligible");
+    }
+    const revision = checklistContextRevision(job);
     if (revision === null || revision >= Number.MAX_SAFE_INTEGER) {
       throw precondition("The Job context revision needs manager review.", "invalid-revision");
     }
@@ -142,6 +140,7 @@ export async function assignCleanerDirectlyForManager(database, {
       assignedCleanerIds,
       operationalStatus: "ASSIGNED",
       checklistContextRevision: revision + 1,
+      ...(automatic && !job.offerDistributionClosedAt ? { offerDistributionClosedAt: FieldValue.serverTimestamp() } : {}),
     });
 
     return {

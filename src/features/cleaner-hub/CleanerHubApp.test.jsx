@@ -76,6 +76,62 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(offer).not.toHaveTextContent("Confirmada");
   });
 
+
+  it("waits for a server-confirmed automatic assignment before showing success", async () => {
+    const { service, handlers } = fakeService();
+    let finishResponse;
+    service.respondToMyOffer.mockImplementation(() => new Promise((resolve) => { finishResponse = resolve; }));
+    const automaticOffer = { ...entries[1], offerStatus: "PENDING", offerDistributionMode: "FIRST_ACCEPT_WINS" };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [automaticOffer], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
+    expect(screen.queryByRole("button", { name: "Tenho interesse" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Aceitar serviço" }));
+    expect(service.respondToMyOffer).toHaveBeenCalledExactlyOnceWith("j2", "ACCEPTED");
+    expect(screen.getByRole("button", { name: "Enviando…" })).toBeDisabled();
+    expect(screen.queryByText("Serviço confirmado para você.")).toBeNull();
+    await act(() => finishResponse({ state: "assigned", status: "ACCEPTED" }));
+    expect(screen.getByText("Serviço confirmado para você.")).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("button", { name: "Aceitar serviço" })).toBeNull();
+
+    const assignment = { ...entries[0], id: automaticOffer.id, jobId: automaticOffer.jobId, propertyName: automaticOffer.propertyName, acknowledged: true };
+    act(() => handlers.agenda({ entries: [assignment], fromCache: false }));
+    expect(screen.getByRole("button", { name: "Abrir checklist" })).toBeInTheDocument();
+  });
+
+  it("shows unavailability from the response and from a reopened server projection", async () => {
+    const { service, handlers } = fakeService();
+    const automaticOffer = { ...entries[1], offerStatus: "PENDING", offerDistributionMode: "FIRST_ACCEPT_WINS" };
+    service.respondToMyOffer.mockResolvedValue({ state: "already-taken", status: null });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [automaticOffer], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Aceitar serviço" }));
+    expect(screen.getByText("Indisponível — este serviço já foi aceito.")).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("button", { name: "Aceitar serviço" })).toBeNull();
+
+    act(() => handlers.agenda({ entries: [{ ...automaticOffer, offerStatus: "ALREADY_TAKEN", jobStatus: "ASSIGNED" }], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    expect(screen.getByRole("button", { name: /Birch Example Flat.*Indisponível/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
+    expect(screen.queryByRole("button", { name: "Aceitar serviço" })).toBeNull();
+  });
+
+  it("submits interest without confirming a manual offer", async () => {
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [{ ...entries[1], offerStatus: "PENDING" }], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Tenho interesse" }));
+    expect(service.respondToMyOffer).toHaveBeenCalledExactlyOnceWith("j2", "INTERESTED");
+    expect(screen.getByText("Resposta enviada para a gerente.")).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Serviço confirmado para você.")).toBeNull();
+  });
+
   it("labels cached or failed data as not confirmed instead of current", () => {
     const { service, handlers } = fakeService();
     render(<CleanerHubApp hubOptions={{ service }} />);

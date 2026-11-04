@@ -11,6 +11,33 @@ function availableOffer() {
 }
 
 describe("public offer projection", () => {
+
+  it("flags automatic links for authenticated Hub use and hides closed invites", () => {
+    const job = {
+      schemaVersion: 2,
+      operationalStatus: "OFFERED",
+      offerDistributionMode: "FIRST_ACCEPT_WINS",
+      assignedCleanerIds: [],
+      checklistContextRevision: 1,
+      propertyName: "Private service name",
+      scheduledDate: "2026-11-05",
+    };
+    const offer = {
+      ...availableOffer(),
+      offerDistributionMode: "FIRST_ACCEPT_WINS",
+      offeredChecklistContextRevision: 1,
+    };
+
+    expect(publicOfferResult(offer, job)).toEqual({
+      state: "available", offer: { offerDistributionMode: "FIRST_ACCEPT_WINS", preferredLanguage: "en" },
+    });
+    expect(publicOfferResult(offer, { ...job, checklistContextRevision: 2 })).toEqual({ state: "unavailable" });
+    expect(publicOfferResult(offer, {
+      ...job, operationalStatus: "ASSIGNED", assignedCleanerIds: ["private-cleaner-id"], offerDistributionClosedAt: {},
+    })).toEqual({ state: "already-taken" });
+    expect(publicOfferResult(availableOffer(), job)).toEqual({ state: "unavailable" });
+  });
+
   it.each([
     ["legacy", { operationalStatus: "OFFERED" }],
     ["v2 offered", { schemaVersion: 2, operationalStatus: "OFFERED" }],

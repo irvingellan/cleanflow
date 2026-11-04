@@ -5,7 +5,7 @@ import { rebuildCleanerAgenda } from "./cleanerAgenda.js";
 import { checklistCapabilityState, issueChecklistCapabilityForManager } from "./checklistCapabilityService.js";
 import { readHubChecklistGrants, recordHubChecklistGrant, revokeHubChecklistGrants } from "./cleanerHubChecklistAccess.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
-import { respondToPublicOffer } from "./publicOfferResponseService.js";
+import { respondToAuthenticatedOffer } from "./publicOfferResponseService.js";
 
 /**
  * Cleaner Hub identity boundary.
@@ -336,23 +336,16 @@ export async function openChecklistForCleaner(database, {
   }
 }
 
-/** Answers the cleaner's own Offer through the existing public Offer service. */
+/** Answers only the Offer addressed to this authenticated, active Cleaner. */
 export async function respondToOfferForCleaner(database, { organizationId, cleanerId, uid, sessionId, jobId, status }) {
-  if (!validCleanerId(jobId) || !["INTERESTED", "DECLINED"].includes(status)) {
+  if (!validCleanerId(jobId) || !["INTERESTED", "DECLINED", "ACCEPTED"].includes(status)) {
     throw new HttpsError("invalid-argument", "Offer response is invalid.");
   }
   const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
   const offerReference = jobReference.collection("offers").doc(cleanerId);
-  const offer = await offerReference.get();
-  const data = offer.exists ? offer.data() : null;
-  if (!data || data.cleanerId !== cleanerId || typeof data.publicOfferTokenHash !== "string") {
-    return { state: "unavailable" };
-  }
-  return respondToPublicOffer(database, {
-    organizationId, jobReference, offerReference, tokenHash: data.publicOfferTokenHash, status,
-    authorizeResponse: async ({ transaction, offer }) => {
-      await assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId });
-      if (offer.cleanerId !== cleanerId) throw new HttpsError("permission-denied", "Offer is unavailable.");
-    },
-  });
+  return respondToAuthenticatedOffer(database, {
+    organizationId, jobReference, offerReference, status,
+  }, { cleanerId, uid }, (transaction) => (
+    assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId })
+  ));
 }

@@ -19,7 +19,7 @@ test("Policy B emits explicit20 while preserving all other external service opti
   assert.equal(fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS), false);
   const handlers = await import("../functions/src/index.js");
   const endpoints = Object.entries(handlers).filter(([, value]) => value.__endpoint);
-  assert.equal(endpoints.length, 39);
+  assert.equal(endpoints.length, 40);
   for (const [name, handler] of endpoints) {
     const endpoint = JSON.parse(JSON.stringify(handler.__endpoint));
     assert.deepEqual(endpoint.region, ["us-central1"], name);
@@ -31,7 +31,7 @@ test("Policy B emits explicit20 while preserving all other external service opti
   }
 });
 
-test("all39 pilot declarations produce explicit20 in actual CLI JSON and update masks without invoking handlers", async () => {
+test("all 40 candidate declarations produce explicit20 in actual CLI JSON and update masks without invoking handlers", async () => {
   process.env.GCLOUD_PROJECT = "demo-cleanflow";
   process.env.FIREBASE_CONFIG = JSON.stringify({ projectId: "demo-cleanflow" });
   process.env.GOOGLE_APPLICATION_CREDENTIALS = "/private/tmp/cleanflow-no-credentials";
@@ -45,7 +45,7 @@ test("all39 pilot declarations produce explicit20 in actual CLI JSON and update 
   const { Client } = require("firebase-tools/lib/apiv2");
   const wire = stackToWire(await loadStack(path.join(root, "functions")));
   const candidate = buildFromV1Alpha1(wire, "demo-cleanflow", "us-central1", "nodejs22");
-  const expected = ["abandonChecklistRunAndCompleteJob", "approveChecklistRun", "assignCleanerDirectly", "clearDevCenterData", "completeJobWithoutChecklist", "createChecklistRun", "createClientReport", "generateDevCenterScenario", "getChecklistCapability", "getChecklistEvidence", "getChecklistRun", "getClientReportCapability", "getDevCenterAccess", "getManagerNotificationDiagnostics", "issueChecklistCapability", "previewManagerReminder", "registerManagerPushDevice", "reportManagerNotificationHealth", "rescheduleJob", "revokeChecklistCapability", "revokeClientReport", "sendCurrentManagerTestNotification", "sendDeveloperTestNotification", "submitFeedback", "notifyManagersChecklistReadyForReview", "notifyManagersOperationalEvent", "publicChecklist", "publicClientReport", "publicOffer", "sendTodayExecutionReminder", "sendTomorrowPlanningReminder", "issueCleanerAccessCode", "redeemCleanerAccessCode", "revokeCleanerHubAccess", "openMyChecklist", "respondToMyOffer", "syncCleanerAgendaOnJobWrite", "syncCleanerAgendaOnAssignmentWrite", "syncCleanerAgendaOnOfferWrite"].sort();
+  const expected = ["abandonChecklistRunAndCompleteJob", "approveChecklistRun", "assignCleanerDirectly", "clearDevCenterData", "completeJobWithoutChecklist", "createAutomaticJobOffers", "createChecklistRun", "createClientReport", "generateDevCenterScenario", "getChecklistCapability", "getChecklistEvidence", "getChecklistRun", "getClientReportCapability", "getDevCenterAccess", "getManagerNotificationDiagnostics", "issueChecklistCapability", "previewManagerReminder", "registerManagerPushDevice", "reportManagerNotificationHealth", "rescheduleJob", "revokeChecklistCapability", "revokeClientReport", "sendCurrentManagerTestNotification", "sendDeveloperTestNotification", "submitFeedback", "notifyManagersChecklistReadyForReview", "notifyManagersOperationalEvent", "publicChecklist", "publicClientReport", "publicOffer", "sendTodayExecutionReminder", "sendTomorrowPlanningReminder", "issueCleanerAccessCode", "redeemCleanerAccessCode", "revokeCleanerHubAccess", "openMyChecklist", "respondToMyOffer", "syncCleanerAgendaOnJobWrite", "syncCleanerAgendaOnAssignmentWrite", "syncCleanerAgendaOnOfferWrite"].sort();
   const resolved = await build.resolveBackend({ build: candidate, firebaseConfig: { projectId: "demo-cleanflow" }, userEnvs: { DEV_CENTER_SANDBOX_PROJECT_ID: "", MANAGER_REMINDER_PROVIDER: "fcm" }, nonInteractive: true, isEmulator: true });
   const endpoints = Object.values(resolved.backend.endpoints).flatMap(region => Object.values(region));
   assert.deepEqual(endpoints.map(endpoint => endpoint.id).sort(), expected);
@@ -55,7 +55,7 @@ test("all39 pilot declarations produce explicit20 in actual CLI JSON and update 
   try {
     for (const endpoint of endpoints) await gcf.updateFunction(gcf.functionFromEndpoint(endpoint));
   } finally { Client.prototype.request = original; }
-  assert.equal(captured.length, 39);
+  assert.equal(captured.length, expected.length);
   for (const request of captured) {
     const body = JSON.parse(JSON.stringify(request.body));
     assert.equal(request.method, "PATCH");

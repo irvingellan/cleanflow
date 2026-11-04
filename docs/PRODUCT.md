@@ -74,6 +74,11 @@ The manager retains assignment control. Cleaner interest is a response to an
 Offer, not an automatic assignment. A Job does not auto-complete merely because
 the last cleaner reports that their work is finished.
 
+**Issue #86 local candidate:** for an eligible single-slot Job, the manager may
+opt one batch into first-accept distribution. The first valid explicit
+acceptance from an invited, authenticated cleaner commits one Assignment.
+Manual interest remains the default. See [the V1 contract](FIRST_ACCEPT_WINS_V1.md).
+
 ## Reservation versus Cleaning Job
 
 A **Reservation** is a guest stay or external booking fact. A **Cleaning Job**
@@ -95,9 +100,9 @@ one or more cleaners when a team is needed. The common one-cleaner flow must
 remain simple. Offers and Assignments are
 different concepts:
 
-- an **Offer** records an invitation and a cleaner's interest or decline;
-- an **Assignment** records the manager's explicit selection of a cleaner for
-  the Job.
+- an **Offer** records an invitation and the cleaner's response;
+- an **Assignment** records the cleaner responsible for the Job, with the
+  selection method when available.
 
 Cleaners must not see competing cleaners, their responses, their compensation,
 or how many other cleaners received an Offer. Automatic matching or

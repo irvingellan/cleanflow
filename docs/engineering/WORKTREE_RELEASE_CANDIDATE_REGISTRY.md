@@ -2,6 +2,16 @@
 
 Issue #83 remains the canonical ledger. Latest source snapshot is below; historical observations are retained, not silently overwritten.
 
+## 2026-11-04 — First Accept Wins V1 local release candidate
+
+| Source / resource | State |
+|---|---|
+| Branch | `codex/first-accept-wins-86`, isolated managed worktree |
+| Baseline | `5469a32a3d7890b7a4e00ad0031ca1be8f09595b`, documentation-only descendant of `a593daf636024d6830bf89c75bd7f6353b4b759f` |
+| Live static readback | 14/14 files match the previously prepared Cleaner Hub manifest |
+| Review | [Issue #86 runbook](../FIRST_ACCEPT_WINS_V1.md), exact candidate SHA and validation in the local handoff |
+| Availability | Local candidate; no Production activation |
+
 ## 2026-11-03 — Cleaner Hub pilot: Production release record
 
 | Source / resource | Verified state |

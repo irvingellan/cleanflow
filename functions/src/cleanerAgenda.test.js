@@ -72,6 +72,33 @@ describe("cleaner agenda projection", () => {
     expect(sameEntry(entries.get("bia"), { ...entries.get("bia"), offerExpiresAtMs: future.toMillis() + 1 })).toBe(false);
   });
 
+
+  it("keeps a non-actionable automatic offer for the original recipient after another cleaner takes it", () => {
+    const offers = [{
+      jobId: "j",
+      cleanerId: "bia",
+      status: "PENDING",
+      offerDistributionMode: "FIRST_ACCEPT_WINS",
+      offeredChecklistContextRevision: 0,
+      offeredPropertyName: "Original Property",
+      offeredScheduledDate: "2026-11-05",
+      offeredScheduledStart: "09:00",
+      publicOfferExpiresAt: future,
+      offeredCompensation: 140,
+    }];
+    const entries = computeAgendaEntries({
+      organizationId: "o", jobId: "j",
+      job: job({ offerDistributionMode: "FIRST_ACCEPT_WINS", offerDistributionClosedAt: {} }),
+      offers, now,
+    });
+    expect(entries.get("bia")).toMatchObject({
+      kind: "OFFER", offerStatus: "ALREADY_TAKEN", offerDistributionMode: "FIRST_ACCEPT_WINS",
+      jobStatus: "OFFERED", propertyName: "Original Property", scheduledDate: "2026-11-05",
+      scheduledStart: "09:00", scheduleRevision: 0,
+    });
+    expect(JSON.stringify(entries.get("bia"))).not.toMatch(/ana|250|150|private|Maple|10:30/);
+  });
+
   it("never treats a v2 Job-level payout as one cleaner's offered amount", () => {
     expect(offeredCompensationFor({}, job())).toBeNull();
     expect(offeredCompensationFor({}, { cleanerPayout: 120 })).toBe(120);

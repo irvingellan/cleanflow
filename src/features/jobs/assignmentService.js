@@ -15,6 +15,7 @@ import {
   isAssignmentAwareJob,
   normalizeJobRecord,
 } from "./jobCompatibility.js";
+import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { buildAssignmentChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
 
 const organizationId = "cleanflow-demo";
@@ -62,6 +63,7 @@ export function canEditAssignmentRoster(job) {
 export function canAssignInterestedOffer(job, offer) {
   return (
     canEditAssignmentRoster(job) &&
+    !isAutomaticOfferJob(job) &&
     offer?.status === "INTERESTED" &&
     typeof offer.cleanerId === "string" &&
     Boolean(offer.cleanerId.trim()) &&
@@ -73,6 +75,7 @@ export function canAssignCleanerDirectly(job, cleaner) {
   return (
     job?.schemaVersion === 2 &&
     !job.archivedAt &&
+    (!isAutomaticOfferJob(job) || getAssignedCleanerIds(job).length === 0) &&
     ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus) &&
     cleaner?.active === true &&
     !cleaner.archivedAt &&
@@ -142,7 +145,7 @@ export function assignmentRemovalJobUpdate(job, cleanerId, hasActionableOffers) 
     assignedCleanerIds,
     operationalStatus: assignedCleanerIds.length
       ? "ASSIGNED"
-      : hasActionableOffers
+      : hasActionableOffers && !isAutomaticOfferJob(job)
         ? "OFFERED"
         : "UNASSIGNED",
   };
@@ -257,6 +260,9 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
       transaction.get(offerReference),
     ]);
     const job = assertRosterEditable(jobSnapshot);
+    if (isAutomaticOfferJob(job)) {
+      throw assignmentError("invalid-replacement", "Use direct assignment after removing the current cleaner.", job);
+    }
 
     if (!assignmentSnapshot.exists() || assignmentSnapshot.data().isActive !== true) {
       throw assignmentError("assignment-not-active", "This assignment is no longer active.", job);

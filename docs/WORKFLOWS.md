@@ -42,9 +42,14 @@ Manager creates Job
 → Manager creates one or more Assignments
 ```
 
-Interest never automatically assigns a Job. `accepted` is not an Offer status.
-Cleaners must not see competing Offers, responses, assignment count, or another
-cleaner's compensation.
+Interest never automatically assigns a Job. Cleaners must not see competing
+Offers, responses, assignment count, or another cleaner's compensation.
+
+**Issue #86 local candidate:** the manager can opt an eligible single-slot Job
+into automatic distribution. The Cleaner Hub sends an explicit `ACCEPTED`
+response. The first valid server commit produces the Assignment. The manager
+can still assign directly before the slot is filled. A public link points to
+authenticated `/agenda`. See [the V1 workflow](FIRST_ACCEPT_WINS_V1.md).
 
 **CURRENT v0 assignment acknowledgment:** after an interested cleaner's Offer
 produces a current active Assignment, that cleaner can use the same still-valid

@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { isAutomaticOfferRecord } from "./firstAcceptWins.js";
 import { createManagerOperationalNotification, managerOperationalNotificationTypes } from "./managerOperationalNotifications.js";
 
 export const assignmentAcknowledgmentStates = Object.freeze({
@@ -78,7 +79,7 @@ export async function loadPublicOfferAssignmentAcknowledgment(database, {
   tokenHash,
   now = new Date(),
 }) {
-  if (isCurrentInterestedOffer(offer, tokenHash, now) !== "available"
+  if (isAutomaticOfferRecord(offer, job) || isCurrentInterestedOffer(offer, tokenHash, now) !== "available"
     || !isV2AssignedJob(job)
     || !offer.cleanerId
     || !hasCleanerOnAssignedJob(job, offer.cleanerId)) return null;
@@ -122,6 +123,7 @@ export async function acknowledgePublicOfferAssignment(database, {
 
     const job = jobSnapshot.data();
     const offer = offerSnapshot.data();
+    if (isAutomaticOfferRecord(offer, job)) return { state: "unavailable" };
     const offerState = isCurrentInterestedOffer(offer, tokenHash, typeof now === "function" ? now() : now);
     if (offerState !== "available") return { state: offerState };
     if (!isV2AssignedJob(job) || !offer.cleanerId

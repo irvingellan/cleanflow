@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { publicOfferState } from "./publicOfferResponseService.js";
+import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 
 /**
  * Cleaner agenda projection (Cleaner Hub V1).
@@ -103,18 +104,32 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
   for (const offer of offers) {
     const cleanerId = offer?.cleanerId;
     if (!validId(cleanerId) || entries.has(cleanerId)) continue;
-    // Only Offers the cleaner was actually sent (a live public link) and has not declined.
+    // Keep a closed automatic Offer visible only to its original recipient
+    // through the invitation window, without reopening it or exposing the winner.
+    const automatic = isAutomaticOfferJob(offer);
+    if (automatic && offer.jobId !== jobId) continue;
     if (!visibleOfferStatuses.includes(offer.status)) continue;
     const expiry = offer.publicOfferExpiresAt;
     const offerExpiresAtMs = typeof expiry?.toMillis === "function" ? expiry.toMillis() : null;
-    if (!Number.isFinite(offerExpiresAtMs) || publicOfferState(offer, job, now) !== "available") continue;
+    if (!Number.isFinite(offerExpiresAtMs)) continue;
+    const state = publicOfferState(offer, job, now);
+    if (state !== "available" && state !== "already-taken") continue;
+    const closed = state === "already-taken";
+    // A former invite recipient is not entitled to learn later Job changes.
+    const details = closed ? {
+      operationalStatus: "OFFERED",
+      propertyName: offer.offeredPropertyName,
+      scheduledDate: offer.offeredScheduledDate,
+      scheduledStart: offer.offeredScheduledStart,
+    } : job;
     entries.set(cleanerId, {
-      ...baseEntry(organizationId, jobId, cleanerId, job),
+      ...baseEntry(organizationId, jobId, cleanerId, details),
       kind: agendaKinds.offer,
       acknowledged: false,
-      offerStatus: offer.status,
+      offerStatus: closed ? "ALREADY_TAKEN" : offer.status,
       offerExpiresAtMs,
       offeredCompensation: offeredCompensationFor(offer, job),
+      ...(automatic ? { offerDistributionMode: FIRST_ACCEPT_WINS } : {}),
     });
   }
   return entries;
@@ -127,6 +142,7 @@ export function agendaEntryId(cleanerId, jobId) {
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offerExpiresAtMs",
+  "offerDistributionMode",
 ];
 
 export function sameEntry(previous, next) {

@@ -9,6 +9,7 @@ import {
 import { useTranslation } from "../../i18n/translations.js";
 import { createIssue } from "../issues/issueService.js";
 import { createJobOffers, respondToJobOffer } from "./jobOfferService.js";
+import { canOptIntoAutomaticOffers } from "./automaticOffers.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 
 export function OfferCleaners({
@@ -16,6 +17,7 @@ export function OfferCleaners({
   cleaners,
   isLoading,
   hasError,
+  canOfferAutomatically = true,
   onBack,
   onSent,
 }) {
@@ -23,6 +25,8 @@ export function OfferCleaners({
   const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
   const [cleanerSearch, setCleanerSearch] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [automatic, setAutomatic] = useState(false);
+  const canOptIn = canOfferAutomatically && canOptIntoAutomaticOffers(job);
   const [hasSendError, setHasSendError] = useState(false);
   const visibleCleaners = filterCleanersByName(cleaners, cleanerSearch);
 
@@ -51,6 +55,7 @@ export function OfferCleaners({
       const updatedJob = await createJobOffers({
         jobId: job.id,
         cleaners: selectedCleaners,
+        ...(canOptIn && automatic ? { automatic: true } : {}),
       });
       onSent(selectedCleaners.length, updatedJob);
     } catch {
@@ -119,6 +124,18 @@ export function OfferCleaners({
                 </label>
               ))}
             </div>
+          )}
+
+          {canOptIn && (
+            <label className="cleaner-option">
+              <input
+                type="checkbox"
+                checked={automatic}
+                disabled={isSending}
+                onChange={(event) => setAutomatic(event.target.checked)}
+              />
+              <span>{translate("offers.firstAcceptOptIn")}</span>
+            </label>
           )}
 
           {hasSendError && (

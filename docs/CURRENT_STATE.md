@@ -1,5 +1,18 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — First Accept Wins V1 (Issue #86, local candidate)
+
+`codex/first-accept-wins-86` derives from the published Cleaner Hub source and
+its documentation checkpoint. A manager can opt an eligible single-slot Job
+into a new automatic batch. The authenticated server transaction awards one
+Assignment, records the method and timestamp, and closes the batch. The prior
+manual Offer flow remains the default. The cleaner-safe projection shows the
+winner's Job and the other invitees' unavailable state.
+
+See [First Accept Wins V1](FIRST_ACCEPT_WINS_V1.md) for the contract, test
+commands, release and rollback gates, physical-device protocol and visual
+handoff. This candidate is local. The deployed Hub pilot is recorded below.
+
 ## 2026-11-03 — Cleaner Hub V1 Production pilot (Issues #84 / #85)
 
 **Published for controlled pilot; physical iPhone and Android acceptance pending.**

@@ -19,6 +19,7 @@ import { getCleanerContactsById } from "../cleaners/cleanerService.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
+import { FIRST_ACCEPT_WINS, automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
 import { canAssignCleanerDirectly } from "./assignmentService.js";
 import { formatIssueCategory } from "../issues/issuePresentation.js";
 import {
@@ -92,6 +93,7 @@ export function JobDetail({
   onPrepareChecklistReminder,
   onRevokeChecklistCapability,
   onCreatePublicOfferLink,
+  onRevokeAutomaticOffer,
   onAssignCleaner,
   onAssignCleanerDirectly,
   onRemoveAssignment,
@@ -130,6 +132,8 @@ export function JobDetail({
   const [isCreatingPublicOfferLinkFor, setIsCreatingPublicOfferLinkFor] =
     useState(null);
   const [publicOfferLinkError, setPublicOfferLinkError] = useState(null);
+  const [revokingOfferId, setRevokingOfferId] = useState(null);
+  const [revokeOfferErrorId, setRevokeOfferErrorId] = useState(null);
   const [editingOfferCompensationFor, setEditingOfferCompensationFor] = useState(null);
   const [offerCompensationInput, setOfferCompensationInput] = useState("");
   const [offerCompensationErrorFor, setOfferCompensationErrorFor] = useState(null);
@@ -188,6 +192,7 @@ export function JobDetail({
   const startedAt = formatCreatedAt(job.startedAt, language);
   const completedAt = formatCreatedAt(job.completedAt, language);
   const isAssignmentAware = isAssignmentAwareJob(job);
+  const automaticOfferJob = isAutomaticOfferJob(job);
   const assignedCleanerIds = getAssignedCleanerIds(job);
   const activeAssignments = (assignments || []).filter(
     (assignment) => assignment.isActive === true,
@@ -222,6 +227,7 @@ export function JobDetail({
     isAssignmentAware &&
     ["OFFERED", "ASSIGNED"].includes(job.operationalStatus);
   const canDirectAssign = isAssignmentAware && !job.archivedAt
+    && (!automaticOfferJob || assignedCleanerIds.length === 0)
     && ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus);
   const directCleanerOptions = filterCleanersByName(
     availableCleaners.filter((cleaner) => canAssignCleanerDirectly(job, cleaner)),
@@ -231,7 +237,7 @@ export function JobDetail({
     ? canManageAssignmentAwareOffers(job)
     : !isCompleted;
   // An assignment-aware Job can still need additional cleaners before work starts.
-  const canOfferToCleaners = canManageOffers;
+  const canOfferToCleaners = canManageOffers && !automaticOfferJob;
   const knownCleanerNames = Object.fromEntries(
     knownCleaners.map((cleaner) => [cleaner.id, cleaner.name]),
   );
@@ -808,11 +814,11 @@ export function JobDetail({
   }
 
   async function createOfferLink(event, offer) {
-    event.preventDefault();
+    event?.preventDefault();
 
     let offeredCompensation;
     try {
-      offeredCompensation = parseOfferCompensationInput(offerCompensationInput);
+      offeredCompensation = automaticOfferJob ? null : parseOfferCompensationInput(offerCompensationInput);
     } catch {
       setOfferCompensationErrorFor(offer.id);
       return;
@@ -830,6 +836,19 @@ export function JobDetail({
       setPublicOfferLinkError(offer.id);
     } finally {
       setIsCreatingPublicOfferLinkFor(null);
+    }
+  }
+
+  async function revokeOffer(offerId) {
+    setRevokingOfferId(offerId);
+    setRevokeOfferErrorId(null);
+    try {
+      await onRevokeAutomaticOffer(offerId);
+      setPublicOfferLink((link) => link?.offerId === offerId ? null : link);
+    } catch {
+      setRevokeOfferErrorId(offerId);
+    } finally {
+      setRevokingOfferId(null);
     }
   }
 
@@ -1286,7 +1305,10 @@ export function JobDetail({
                   translate("common.notProvided"),
                 );
                 const isReplacing = replacementTargetId === assignment.id;
+                const automaticAssignment = assignment.assignmentMethod === FIRST_ACCEPT_WINS;
                 const acknowledgmentState = getAssignmentAcknowledgmentState(assignment, offers);
+                const methodLabel = automaticAssignment ? "offers.automaticAssignment"
+                  : automaticOfferJob ? "offers.manualAssignment" : null;
 
                 return (
                   <article key={assignment.id} className="assignment-roster__item">
@@ -1294,7 +1316,13 @@ export function JobDetail({
                     <span className="status-badge">
                       {formatOperationalStatus(assignment.executionStatus, translate)}
                     </span>
-                    {acknowledgmentState && (
+                    {methodLabel && (
+                      <span className="status-badge">{translate(methodLabel)}</span>
+                    )}
+                    {automaticAssignment && assignment.assignedAt && (
+                      <span>{formatCreatedAt(assignment.assignedAt, language)}</span>
+                    )}
+                    {!methodLabel && acknowledgmentState && (
                       <span className="status-badge" data-testid={`assignment-acknowledgment-${assignment.id}`}>
                         {translate(acknowledgmentState === "ASSIGNED_DIRECTLY"
                           ? "jobs.assignmentAssignedDirectly"
@@ -1713,7 +1741,7 @@ export function JobDetail({
 
         {offersCreatedCount !== null && (
           <p className="offers-section__success" role="status">
-            {translate("offers.createdReadyToShare", { count: offersCreatedCount })}
+            {translate(automaticOfferJob ? "offers.automaticCreated" : "offers.createdReadyToShare", { count: offersCreatedCount })}
           </p>
         )}
 
@@ -1743,8 +1771,10 @@ export function JobDetail({
                 cleanerNamesById,
                 translate("common.notProvided"),
               );
-              const canCreatePublicLink =
-                offer.status === "PENDING" &&
+              const automaticStatus = automaticOfferDisplayStatus(job, offer);
+              const canCreatePublicLink = automaticOfferJob
+                ? automaticStatus === "AWAITING_ACCEPTANCE"
+                : offer.status === "PENDING" &&
                 (!isAssignmentAware
                   ? job.operationalStatus === "OFFERED"
                   : ["OFFERED", "ASSIGNED"].includes(job.operationalStatus));
@@ -1772,7 +1802,11 @@ export function JobDetail({
                         PENDING: "status.pending",
                         INTERESTED: "status.interested",
                         DECLINED: "status.declined",
-                      }[offer.status] || "common.notProvided",
+                        ACCEPTED: "offers.accepted",
+                        AWAITING_ACCEPTANCE: "offers.waitingForAcceptance",
+                        UNAVAILABLE: "offers.unavailable",
+                        EXPIRED: "offers.expired",
+                      }[automaticStatus ?? offer.status] || "common.notProvided",
                     )}
                   </span>
                   {canManageOffers && (
@@ -1782,12 +1816,22 @@ export function JobDetail({
                           className="button"
                           type="button"
                           disabled={isCreatingPublicOfferLinkFor !== null}
-                          onClick={() => openOfferLinkForm(offer)}
+                          onClick={() => automaticOfferJob ? createOfferLink(null, offer) : openOfferLinkForm(offer)}
                         >
                           {translate("offers.createPublicLink")}
                         </button>
                       )}
-                      {offer.status === "INTERESTED" &&
+                      {automaticStatus === "AWAITING_ACCEPTANCE" && onRevokeAutomaticOffer && (
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={revokingOfferId !== null}
+                          onClick={() => revokeOffer(offer.id)}
+                        >
+                          {translate("offers.revoke")}
+                        </button>
+                      )}
+                      {!automaticOfferJob && offer.status === "INTERESTED" &&
                         (isAssignmentAware
                           ? canEditRoster && !assignedCleanerIds.includes(offer.cleanerId)
                           : !isAssigned) && (
@@ -1859,7 +1903,11 @@ export function JobDetail({
                       </div>
                     </form>
                   )}
-                  {publicOfferLink?.offerId === offer.id && !isEditingOfferCompensation && (
+                  {revokeOfferErrorId === offer.id && (
+                    <p className="form-error" role="alert">{translate("offers.revokeError")}</p>
+                  )}
+                  {publicOfferLink?.offerId === offer.id && !isEditingOfferCompensation &&
+                    (!automaticOfferJob || canCreatePublicLink) && (
                     <div className="public-offer-link-actions">
                       <a
                         className="public-offer-link"

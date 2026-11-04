@@ -20,14 +20,14 @@ beforeEach(() => {
   createIssue.mockReset();
 });
 
-function renderOfferCleaners(onSent = vi.fn(), language = "en") {
+function renderOfferCleaners(onSent = vi.fn(), language = "en", job = {}) {
   window.localStorage.setItem("cleanflow-language", language);
   return {
     onSent,
     ...render(
       <TranslationProvider>
         <OfferCleaners
-          job={{ id: "job-1", propertyName: "Pilot Property" }}
+          job={{ id: "job-1", propertyName: "Pilot Property", ...job }}
           cleaners={[{ id: "ana", name: "Ana" }, { id: "beatriz", name: "Beatríz" }]}
           isLoading={false}
           hasError={false}
@@ -85,5 +85,37 @@ describe("OfferCleaners name search", () => {
     await user.type(search, "missing");
     expect(screen.getByText(noMatch)).toBeVisible();
     expect(screen.getByRole("button", { name: createLabel })).toBeDisabled();
+  });
+});
+
+describe("automatic offer opt-in", () => {
+  it("opts a new single-slot Job in only after the manager checks the option", async () => {
+    const user = userEvent.setup();
+    renderOfferCleaners(vi.fn(), "en", {
+      schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [],
+    });
+    const optIn = screen.getByRole("checkbox", { name: "Assign automatically to the first cleaner who accepts" });
+    expect(optIn).not.toBeChecked();
+    await user.click(optIn);
+    await user.click(screen.getByLabelText("Ana"));
+    await user.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({
+      jobId: "job-1",
+      cleaners: [{ id: "ana", name: "Ana" }],
+      automatic: true,
+    });
+  });
+
+  it.each([
+    { operationalStatus: "OFFERED" },
+    { requiredCleanerCount: 2 },
+    { assignedCleanerIds: ["ana"] },
+    { archivedAt: new Date() },
+  ])("keeps the automatic option out of incompatible Jobs (%o)", (data) => {
+    renderOfferCleaners(vi.fn(), "en", {
+      schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], ...data,
+    });
+    expect(screen.queryByRole("checkbox", { name: "Assign automatically to the first cleaner who accepts" }))
+      .not.toBeInTheDocument();
   });
 });
