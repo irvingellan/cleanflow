@@ -69,6 +69,43 @@ test("2 · finds a Job for today through Services and keeps the list beside it",
   await context.close();
 });
 
+test("desktop Services pane keeps the Job open when its worklist query changes or returns empty", async ({ browser }) => {
+  test.skip(profile.name !== "chromium-1440", "desktop Services split pane");
+  const { context, page } = await managerPage(browser);
+  try {
+    await goSection(page, "Serviços");
+    await page.getByRole("button", { name: "Hoje", exact: true }).click();
+    await page.getByRole("button", { name: /Juniper Loft/ }).click();
+    const pane = page.getByRole("complementary", { name: "Serviços" });
+    const detail = page.getByRole("heading", { name: "Juniper Loft", level: 2 });
+    const today = pane.getByRole("button", { name: "Hoje", exact: true });
+    const completed = pane.getByRole("button", { name: "Concluídos", exact: true });
+    const job = (key) => pane.locator(`[data-job-id="${fixture.jobId(key)}"]`);
+    await expect(job("harborToday")).toBeVisible();
+
+    await completed.click();
+    await expect(completed).toHaveAttribute("aria-pressed", "true");
+    await expect(pane.getByText("Nenhum serviço encontrado.")).toBeVisible();
+    await expect(detail).toBeVisible();
+
+    await today.click();
+    await expect(job("mapleDone")).toBeVisible();
+    await expect(job("mapleToday")).toHaveCount(0);
+    await expect(job("harborToday")).toHaveCount(0);
+    await expect(detail).toBeVisible();
+
+    await completed.click();
+    await today.click();
+    await expect(today).toHaveAttribute("aria-pressed", "true");
+    await expect(job("harborToday")).toBeVisible();
+    await expect(job("juniperToday")).toHaveAttribute("aria-current", "true");
+    await expect(job("mapleDone")).toHaveCount(0);
+    await expect(detail).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 test("3 · two cleaners are interested; the manager confirms one, interest never assigns by itself", async ({ browser }) => {
   const { context, page } = await managerPage(browser);
   const run = counter("confirm one interested cleaner");

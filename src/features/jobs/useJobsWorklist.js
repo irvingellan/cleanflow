@@ -22,7 +22,7 @@ function mergeJobs(currentJobs, incomingJobs) {
  * Owns the bounded Jobs worklist. Navigation stays in the application shell so
  * Dashboard and detail-origin behavior remain explicit at the integration boundary.
  */
-export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchived = false }) {
+export function useJobsWorklist({ view, detailPaneActive = false, preserveLoadedJobs = false, includeArchived = false }) {
   const [jobs, setJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -31,6 +31,9 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
   const [pageCursors, setPageCursors] = useState(initialPageCursors);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const requestGeneration = useRef(0);
+  const loadedQuery = useRef(null);
+  const loadingMoreRequest = useRef(null);
   const previousViewRef = useRef(view);
   const isEnteringJobList =
     view === "job-list" && previousViewRef.current !== "job-list";
@@ -38,14 +41,30 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
 
   useEffect(() => {
     previousViewRef.current = view;
+    const generation = ++requestGeneration.current;
+    const isCurrent = () => requestGeneration.current === generation;
+    const cancel = () => { requestGeneration.current += 1; };
+    loadingMoreRequest.current = null;
+    setIsLoadingMore(false);
 
-    if (view !== "job-list") {
-      return undefined;
+    if (view !== "job-list" && !(view === "job-detail" && detailPaneActive)) {
+      setIsLoading(false);
+      return cancel;
     }
 
-    let isCurrent = true;
+    const queryKey = JSON.stringify([filters.status, filters.datePreset, includeArchived]);
+    // Opening a loaded list beside a Job reuses its page and cursors. Changing
+    // a server-side filter must instead start a fresh query, even in the pane.
+    if (view === "job-detail" && loadedQuery.current === queryKey) {
+      setIsLoading(false);
+      return cancel;
+    }
+    const preservePage = preserveLoadedJobs && loadedQuery.current === queryKey;
+    loadedQuery.current = null;
     setIsLoading(true);
     setHasError(false);
+    setPageCursors(initialPageCursors());
+    setHasMore(false);
 
     async function loadJobs() {
       try {
@@ -54,9 +73,10 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
           getAllCleaners(),
         ]);
 
-        if (isCurrent) {
+        if (isCurrent()) {
+          loadedQuery.current = queryKey;
           setJobs((currentJobs) =>
-            preserveLoadedJobs
+            preservePage
               ? mergeJobs(currentJobs, loadedJobPage.jobs)
               : loadedJobPage.jobs,
           );
@@ -65,11 +85,11 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
           setHasMore(loadedJobPage.hasMore);
         }
       } catch {
-        if (isCurrent) {
+        if (isCurrent()) {
           setHasError(true);
         }
       } finally {
-        if (isCurrent) {
+        if (isCurrent()) {
           setIsLoading(false);
         }
       }
@@ -77,23 +97,30 @@ export function useJobsWorklist({ view, preserveLoadedJobs = false, includeArchi
 
     loadJobs();
 
-    return () => {
-      isCurrent = false;
-    };
-  }, [view, filters.status, filters.datePreset, includeArchived]);
+    return cancel;
+  }, [view, detailPaneActive, filters.status, filters.datePreset, includeArchived]);
 
   async function loadMore() {
+    if (isWorklistLoading || hasError || !hasMore || loadingMoreRequest.current) return;
+    const generation = requestGeneration.current;
+    const request = {};
+    loadingMoreRequest.current = request;
+    const isCurrent = () => requestGeneration.current === generation && loadingMoreRequest.current === request;
     setIsLoadingMore(true);
 
     try {
       const loadedJobPage = await getJobs(filters, { ...pageCursors, includeArchived });
+      if (!isCurrent()) return;
       setJobs((currentJobs) => mergeJobs(currentJobs, loadedJobPage.jobs));
       setPageCursors(loadedJobPage.nextPageCursors);
       setHasMore(loadedJobPage.hasMore);
     } catch {
-      setHasError(true);
+      if (isCurrent()) setHasError(true);
     } finally {
-      setIsLoadingMore(false);
+      if (isCurrent()) {
+        loadingMoreRequest.current = null;
+        setIsLoadingMore(false);
+      }
     }
   }
 

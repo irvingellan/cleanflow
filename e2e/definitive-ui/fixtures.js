@@ -108,7 +108,7 @@ export async function seedOperation() {
   offered.update(orgRef.collection("jobs").doc(id("juniperToday")), { operationalStatus: "OFFERED", offeredAt: minutesAgo(180) });
   offered.update(orgRef.collection("jobs").doc(id("birchTomorrow")), { operationalStatus: "OFFERED", offeredAt: minutesAgo(90) });
   offered.update(orgRef.collection("jobs").doc(id("cedarTomorrow")), { operationalStatus: "IN_PROGRESS", startedAt: minutesAgo(30) });
-  offered.update(orgRef.collection("jobs").doc(id("mapleDone")), { operationalStatus: "COMPLETED", completedAt: minutesAgo(60 * 20) });
+  offered.update(orgRef.collection("jobs").doc(id("mapleDone")), { operationalStatus: "COMPLETED", completedAt: Timestamp.fromDate(new Date(`${dateKey(-1)}T10:00:00`)) });
   await offered.commit();
 
   // A submitted checklist waiting for review on the in-progress Job.

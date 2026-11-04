@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { appVersion } from "./appVersion.js";
 import { AppShell } from "./components/shell/AppShell.jsx";
 import { useMediaQuery } from "./components/shell/useMediaQuery.js";
@@ -456,6 +456,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const [view, setView] = useState(() => (
     isManagerLoadDiagnosticsPath() ? "load-time-diagnostics" : isWeeklyClosePreviewPath() ? "weekly-close-preview" : "dashboard"
   ));
+  const homeNoticeRequest = useRef(0);
+  const currentView = useRef(view);
+  if (currentView.current !== view) {
+    currentView.current = view;
+    homeNoticeRequest.current += 1;
+  }
+  useEffect(() => () => { homeNoticeRequest.current += 1; }, []);
   const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
   const [jobDetailInitialFocus, setJobDetailInitialFocus] = useState(null);
   const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
@@ -466,6 +473,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
   const canPreviewLifecycle = import.meta.env.MODE === "sandbox"
     && canShowEnvironmentNavigation(authUser, "sandbox");
+  const showServicesPane = isWideWorkspace && jobDetailOrigin === "jobs" && Boolean(jobsScrollRestore);
 
   useEffect(() => {
     if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
@@ -477,6 +485,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }, [view]);
   const jobWorklist = useJobsWorklist({
     view,
+    detailPaneActive: showServicesPane,
     preserveLoadedJobs: Boolean(jobsScrollRestore),
     includeArchived,
   });
@@ -910,14 +919,17 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("property-detail");
   }
 
-  async function openInboxTarget(destination, presentation) {
+  async function openInboxTarget(destination, presentation, canNavigate = () => true) {
+    if (!canNavigate()) return false;
     if (destination?.kind === "DASHBOARD") {
       showDashboard();
       return true;
     }
     if (destination?.kind === "JOB" && typeof destination.jobId === "string") {
       try {
-        openDashboardJob(await getJobById(destination.jobId, { serverOnly: true }), presentation?.initialFocus);
+        const job = await getJobById(destination.jobId, { serverOnly: true });
+        if (!canNavigate()) return false;
+        openDashboardJob(job, presentation?.initialFocus);
         return true;
       } catch {
         return false;
@@ -927,17 +939,20 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   }
 
   async function openInboxItemFromHome(item) {
+    const request = ++homeNoticeRequest.current;
+    const canNavigate = () => homeNoticeRequest.current === request && currentView.current === "dashboard";
     try {
       const result = await inbox.open(item.id);
+      if (!canNavigate()) return;
       if (result?.state === "opened") {
         const opened = await openInboxTarget(result.destination,
-          item.type === "CLEANER_INTERESTED" ? { initialFocus: "interest" } : undefined);
+          item.type === "CLEANER_INTERESTED" ? { initialFocus: "interest" } : undefined, canNavigate);
         if (opened !== false) return;
       }
     } catch {
       // Fall through to the Inbox, which explains unavailable items.
     }
-    setView("notification-inbox");
+    if (canNavigate()) setView("notification-inbox");
   }
 
   function openDashboardJob(job, initialFocus = null) {
@@ -984,7 +999,6 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const isInboxView = view === "notification-inbox";
   // Wide screens keep the Services list beside the open Job, so search, filters
   // and position survive switching between services.
-  const showServicesPane = isWideWorkspace && jobDetailOrigin === "jobs" && jobs.length > 0;
   const navigationItems = [
     { key: "dashboard", icon: "home", label: translate("navigation.dashboard"), active: activeSection === "dashboard" && !isInboxView, onSelect: showDashboard },
     { key: "jobs", icon: "calendar", label: translate("navigation.jobs"), active: activeSection === "jobs" && !isInboxView, onSelect: showJobs },
