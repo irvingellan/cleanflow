@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { EmptyState, ErrorState, Skeleton } from "../../../components/v2/primitives.jsx";
-import { CATEGORIES, FILTERS, PUSH_SAMPLES, categoryOf, deliverySteps, filterNotifications } from "../model/notificationModel.js";
+import { FILTERS, PUSH_SAMPLES, categoryOf, deliverySteps, filterNotifications, managerCategories } from "../model/notificationModel.js";
+import { inboxFor } from "../hub/hubModel.js";
 import { unreadCount } from "../model/selectors.js";
 import { useStore } from "../model/store.js";
 import { Icon } from "../ui/Icon.jsx";
@@ -100,7 +101,7 @@ function CategoryLegend() {
       <summary>{t("ncat.legend")}</summary>
       <p className="mw-hint">{t("ncat.legendNote")}</p>
       <ul>
-        {CATEGORIES.map(c => (
+        {managerCategories().map(c => (
           <li key={c.id}><Icon name={c.icon} size={15} /><span className="mw-grow">{t(`ncat.${c.id}`)}</span><CategoryBadge category={c} /></li>
         ))}
       </ul>
@@ -127,16 +128,17 @@ export function DeviceStatusCard({ onSettings }) {
 }
 
 /** The Notification Center. `split` shows list and detail side by side. */
-export function NotificationCenter({ initialId = null, split = false }) {
+export function NotificationCenter({ initialId = null, split = false, role = "manager", cleanerId = null, onOpenJob: onOpenJobProp, extra = null }) {
   const t = useT();
   const { data, ui, setUi, act } = useStore();
   const [selectedId, setSelectedId] = useState(initialId);
   const filter = ui.notificationFilter;
   const query = ui.notificationQuery || "";
   const state = ui.inboxDemoState;
-  const unread = unreadCount(data);
+  const cleaner = role === "cleaner";
+  const unread = unreadCount(data, cleaner ? cleanerId : null);
   const text = n => `${t(n.titleKey, n.params)} ${n.bodyKey ? t(n.bodyKey, n.params) : ""} ${t(`ncat.${categoryOf(n).id}`)}`;
-  const list = filterNotifications(data.notifications, { filter, query, text });
+  const list = filterNotifications(inboxFor(data.notifications, role, cleanerId), { filter: cleaner && !["all", "unread"].includes(filter) ? "all" : filter, query, text });
   const selected = data.notifications.find(n => n.id === selectedId) || (split ? list[0] : null);
   // Reading the detail marks it read (only when the person chose it).
   useEffect(() => { if (selectedId && selected && !selected.read) act("NOTIF_READ", { id: selected.id }); }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -155,6 +157,7 @@ export function NotificationCenter({ initialId = null, split = false }) {
   ].filter(g => g.items.length);
   const openJob = n => {
     act("NOTIF_READ", { id: n.id });
+    if (onOpenJobProp) { onOpenJobProp(n); return; }
     setUi({ selectedJobId: n.jobId, overlay: null, hybridScreen: "work", mobileTab: "services", filter: "all" });
   };
   const simulatePush = () => {
@@ -172,11 +175,11 @@ export function NotificationCenter({ initialId = null, split = false }) {
           <input type="search" value={query} placeholder={t("inbox.search")} onChange={e => setUi({ notificationQuery: e.target.value })} />
         </label>
         <div className="mw-chiprow mw-scrollrow" role="group" aria-label={t("f.label")}>
-          {FILTERS.map(f => <button key={f} type="button" className="mw-chip" aria-pressed={filter === f} onClick={() => setUi({ notificationFilter: f })}>{t(`inbox.f.${f}`)}{f === "unread" && unread ? ` · ${unread}` : ""}</button>)}
+          {(cleaner ? ["all", "unread"] : FILTERS).map(f => <button key={f} type="button" className="mw-chip" aria-pressed={filter === f} onClick={() => setUi({ notificationFilter: f })}>{t(`inbox.f.${f}`)}{f === "unread" && unread ? ` · ${unread}` : ""}</button>)}
         </div>
         <div className="mw-inbox-row">
           {unread > 0 ? <button type="button" className="mw-linkbtn" onClick={() => act("NOTIF_READ_ALL", {})}>{t("inbox.markAll")}</button> : <span />}
-          <button type="button" className="cfv2-button cfv2-button-secondary mw-btn cfv2-button-small" onClick={simulatePush}><Icon name="bell" size={15} />{t("push.simulate")}</button>
+          {cleaner ? extra : <button type="button" className="cfv2-button cfv2-button-secondary mw-btn cfv2-button-small" onClick={simulatePush}><Icon name="bell" size={15} />{t("push.simulate")}</button>}
         </div>
       </div>
       {state === "offline" && <p className="mw-flag tone-attention mw-offline"><Icon name="alertCircle" size={15} />{t("inbox.offline")}</p>}
@@ -190,8 +193,8 @@ export function NotificationCenter({ initialId = null, split = false }) {
           <ul>{group.items.map(n => <NotificationRow key={n.id} notification={n} selected={split && selected?.id === n.id} onSelect={x => setSelectedId(x.id)} />)}</ul>
         </section>
       ))}
-      <CategoryLegend />
-      <DeviceStatusCard onSettings={() => setUi({ overlay: { type: "account", section: "notifications" } })} />
+      {!cleaner && <CategoryLegend />}
+      {!cleaner && <DeviceStatusCard onSettings={() => setUi({ overlay: { type: "account", section: "notifications" } })} />}
       <details className="mw-demo-states">
         <summary>{t("inbox.demoStates")}</summary>
         <div className="mw-chiprow">{["ready", "loading", "error", "empty", "offline"].map(s => <button key={s} type="button" className="mw-chip" aria-pressed={state === s} onClick={() => setUi({ inboxDemoState: s })}>{t(`inbox.state.${s}`)}</button>)}</div>

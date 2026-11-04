@@ -13,7 +13,7 @@ import { PhotoPicker, QuotaLine, SubmissionSteps, UploadQueue, photoMb, quotaOf,
 const ct = (lang, key, params) => cleanerT(lang, key, params);
 
 /* ---------------- Offer (cleaner side) ---------------- */
-function CleanerOffer({ job, cleaner }) {
+export function CleanerOffer({ job, cleaner }) {
   const { data, act } = useStore();
   const lang = cleaner.lang;
   const property = propertyOf(data, job);
@@ -110,7 +110,7 @@ function CleanerOffer({ job, cleaner }) {
 }
 
 /* ---------------- Checklist (cleaner side) ---------------- */
-function CleanerChecklist({ job: initialJob, cleaner }) {
+export function CleanerChecklist({ job: initialJob, cleaner }) {
   const { data, act } = useStore();
   const job = data.jobs.find(j => j.id === initialJob.id);
   const lang = cleaner.lang;

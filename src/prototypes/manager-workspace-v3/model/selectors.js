@@ -196,7 +196,7 @@ export function cleanerLoad(state, cleanerId, date) {
   return state.jobs.filter(j => j.date === date && j.cleanerIds.includes(cleanerId) && j.status !== "COMPLETED");
 }
 
-export function unreadCount(state) { return state.notifications.filter(n => !n.read).length; }
+export function unreadCount(state, cleanerId = null) { return state.notifications.filter(n => !n.read && (cleanerId ? n.audience?.cleanerId === cleanerId : !n.audience)).length; }
 
 /** Simple deterministic intent parser for Intent-First and the hybrid command bar. */
 export function parseIntent(state, text) {

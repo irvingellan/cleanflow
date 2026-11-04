@@ -18,6 +18,8 @@ import { ModelingWorkbench } from "./modeling/Modeling.jsx";
 import { ModeCompact } from "./layouts/Compact.jsx";
 import { TaskTrial } from "./strategies/TaskTrial.jsx";
 import { GuidedRoute } from "./strategies/GuidedRoute.jsx";
+import { CleanerHub } from "./hub/CleanerHub.jsx";
+import { AwayCenter } from "./hub/AwayCenter.jsx";
 import { ReservationChangesSheet } from "./flows/ReservationChanges.jsx";
 import "./prototype.css";
 
@@ -73,6 +75,8 @@ function Header() {
         <div className="mw-brand"><span className="mw-wordmark">CleanFlow</span>{vp.xwide && <span className="mw-sec">{t("app.title")}</span>}</div>
         <ModeSwitch compact={!vp.wide} />
         <div className="mw-header-actions">
+          <button type="button" className="mw-studio-toggle mw-hub-btn" onClick={() => setUi({ role: "cleaner", overlay: null, workbench: false })} title={t("hb.openHint")}><Icon name="calendar" size={16} />{!vp.compact && t("hb.open")}</button>
+          <button type="button" className="mw-studio-toggle mw-away-btn" onClick={() => setUi({ overlay: { type: "away" } })} title={t("aw.openHint")}><Icon name="history" size={16} />{vp.xwide && t("aw.open")}</button>
           <button type="button" className="mw-studio-toggle mw-model-btn" onClick={() => setUi({ workbench: true, overlay: null })} title={t("md.openHint")}><Icon name="layout" size={16} />{!vp.compact && t("md.open")}</button>
           <StudioToggle compact={vp.compact} />
           <StudioArea screen="header" region="bar" className="mw-header-tools" items={{
@@ -137,6 +141,7 @@ function OverlaySwitch() {
     case "property": return <PropertySheet propertyId={o.propertyId} onClose={close} />;
     case "newService": return <NewServiceSheet onClose={close} />;
     case "inbox": return <InboxSheet onClose={close} notificationId={o.notificationId} />;
+    case "away": return <AwayCenter onClose={close} />;
     case "reservations": return <ReservationChangesSheet onClose={close} />;
     case "account": return <AccountSheet onClose={close} section={o.section} />;
     case "detail": return job ? <Overlay onClose={close} wide><JobDetail job={job} onClose={close} /></Overlay> : null;
@@ -194,6 +199,7 @@ function Shell() {
   useEffect(() => { window.scrollTo(0, 0); }, [ui.mode, ui.hybridScreen, ui.mobileTab]);
   const selected = data.jobs.find(j => j.id === ui.selectedJobId);
   const { studio } = useStudio();
+  if (ui.role === "cleaner") return <><CleanerHub onExit={() => setUi({ role: "manager", hubView: { type: "tab" } })} /><Toast /></>;
   return (
     <div className={`mw-app mode-${ui.mode}${vp.compact ? " is-compact" : ""}${studio.enabled ? " has-studio" : ""}${studio.enabled && studio.view === "original" ? " is-original" : ""}${ui.routeOpen && !studio.enabled ? " has-route" : ""}`}>
       <a className="mw-skip" href="#mw-main">{t("app.skip")}</a>

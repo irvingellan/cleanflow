@@ -14,10 +14,18 @@ export const CATEGORIES = [
   { id: "tomorrowPlanning", group: "planning", icon: "calendar", tone: "neutral", status: "proposed" },
   { id: "admin", group: "system", icon: "lock", tone: "neutral", status: "proposed" },
   { id: "deviceTest", group: "system", icon: "bell", tone: "neutral", status: "proposed" },
+  // Cleaner-audience events (Cleaner Hub, proposal)
+  { id: "cleanerAssigned", group: "schedule", icon: "calendar", tone: "success", status: "proposed", audience: "cleaner" },
+  { id: "cleanerOffer", group: "schedule", icon: "send", tone: "attention", status: "proposed", audience: "cleaner" },
+  { id: "cleanerReminder", group: "schedule", icon: "clock", tone: "neutral", status: "proposed", audience: "cleaner" },
+  { id: "cleanerMoved", group: "schedule", icon: "calendar", tone: "warning", status: "proposed", audience: "cleaner" },
+  { id: "cleanerRemoved", group: "schedule", icon: "userX", tone: "risk", status: "proposed", audience: "cleaner" },
 ];
 export const GROUPS = ["offers", "checklists", "issues", "planning", "system"];
+export const CLEANER_GROUPS = ["schedule"];
 export const FILTERS = ["all", "unread", ...GROUPS];
-export const categoryOf = n => CATEGORIES.find(c => c.id === n.category) || CATEGORIES[CATEGORIES.length - 1];
+export const categoryOf = n => CATEGORIES.find(c => c.id === n.category) || CATEGORIES.find(c => c.id === "deviceTest");
+export const managerCategories = () => CATEGORIES.filter(c => c.audience !== "cleaner");
 
 /**
  * Delivery steps, in order. Each step is "done", "failed", "unknown" or "notTracked".
@@ -53,4 +61,4 @@ export const PUSH_SAMPLES = [
   { category: "assignmentConfirmed", jobId: "j11", titleKey: "n.assignConfirmed", params: { name: "Lúcia" } },
 ];
 
-export const DEFAULT_PREFS = Object.fromEntries(CATEGORIES.map(c => [c.id, c.id !== "tomorrowPlanning"]));
+export const DEFAULT_PREFS = Object.fromEntries(CATEGORIES.filter(c => c.audience !== "cleaner").map(c => [c.id, c.id !== "tomorrowPlanning"]));

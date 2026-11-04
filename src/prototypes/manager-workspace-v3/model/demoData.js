@@ -210,6 +210,13 @@ export function buildDemoState(today) {
   // Synthetic notification history. Production keeps no history today; this is the proposed inbox.
   const yesterday = addDays(today, -1);
   const dl = (displayed, openedAt = null, extra = {}) => ({ targets: 2, accepted: true, displayed, openedAt, openTracked: true, ...extra });
+  // Cleaner Hub additions (same state): a completed job and an open offer for Renata.
+  jobs.push(job(today, "maple", -2, "10:00", { status: "COMPLETED", cleanerIds: ["renata"], ack: "confirmed", comp: fixed("maple"),
+    checklist: ck("maple", "reviewed", { done: 99, photos: 10, submittedAt: at(addDays(today, -2), 12 * 60 + 50), reviewedAt: at(addDays(today, -2), 15 * 60) }), completedAt: at(addDays(today, -2), 15 * 60 + 5) }));
+  const lindenOffer = jobs.find(j => j.propertyId === "linden" && j.status === "OFFERED");
+  if (lindenOffer) lindenOffer.offers.push(offer("renata", at(today, 8 * 60 + 5)));
+  const renataNext = jobs.filter(j => j.cleanerIds.includes("renata") && j.date > today).sort((a, b) => (a.date < b.date ? -1 : 1));
+
   const notifications = [
     { id: "n1", category: "cleanerInterested", jobId: "j15", at: at(today, 7 * 60 + 58), titleKey: "n.offerInterest", bodyKey: "nb.offerInterest", params: { name: "Nora", property: "Birch Cottage" }, source: "cleaner", read: false, delivery: dl("unknown") },
     { id: "n2", category: "issueReported", jobId: "j08", at: at(today, 9 * 60 + 47), titleKey: "n.issue", bodyKey: "nb.issue", params: { name: "Paula", property: "Alder Court 3" }, source: "cleaner", read: true, delivery: dl("confirmed", at(today, 9 * 60 + 49)) },
@@ -225,6 +232,12 @@ export function buildDemoState(today) {
     { id: "n12", category: "checklistReceived", jobId: "j02", at: at(yesterday, 14 * 60 + 5), titleKey: "n.checklist", bodyKey: "nb.checklist", params: { name: "Marta", property: "Harbor House" }, source: "cleaner", read: true, delivery: { targets: 2, accepted: false, displayed: "unknown", openedAt: null, openTracked: true } },
   ];
 
+  // Cleaner-audience events (never shown to the manager inbox, never to other cleaners).
+  const cleanerEvent = (id, cleanerId, category, jobId, when, titleKey, bodyKey, read, delivery) => ({ id, audience: { cleanerId }, category, jobId, at: when, titleKey, bodyKey, params: { property: byId[jobs.find(j => j.id === jobId)?.propertyId]?.name || "" }, source: "system", read, delivery });
+  if (renataNext[1]) notifications.push(cleanerEvent("cn1", "renata", "cleanerAssigned", renataNext[1].id, at(addDays(today, -1), 16 * 60 + 20), "cn.assigned", "cnb.assigned", true, dl("confirmed", at(addDays(today, -1), 16 * 60 + 31))));
+  if (lindenOffer) notifications.push(cleanerEvent("cn2", "renata", "cleanerOffer", lindenOffer.id, at(today, 8 * 60 + 5), "cn.offer", "cnb.offer", false, dl("unknown")));
+  if (renataNext[0]) notifications.push(cleanerEvent("cn3", "renata", "cleanerReminder", renataNext[0].id, at(addDays(today, -1), 19 * 60), "cn.reminder", "cnb.reminder", false, { targets: 1, accepted: true, displayed: "unknown", openedAt: null, openTracked: true }));
+
   return {
     version: 4, today, clock: { date: today, minutes: DEMO_CLOCK_MINUTES },
     properties, templates, jobs, notifications, devices: [
@@ -232,5 +245,22 @@ export function buildDemoState(today) {
       { id: "d2", labelKey: "dev.otherPhone", kindKey: "dev.kind.android", owner: "second", status: "silent", current: false, lastTest: at(addDays(today, -1), 17 * 60 + 40), enabledAt: at(addDays(today, -1), 17 * 60 + 36) },
     ],
     notificationSettings: { permission: "granted", prefs: { ...DEFAULT_PREFS } },
+    // Device EVIDENCE as the functional layer would report it (no tokens, no raw ids).
+    deviceHealth: [
+      { id: "m1", owner: "manager", labelKey: "dh.label.yourIphone", platform: "ios", browser: "safari", displayMode: "standalone", permission: "granted", registration: "stale", appVersion: "current", supported: true, lastActive: at(today, 6 * 60 + 40), lastTest: { result: "accepted", at: at(addDays(today, -2), 18 * 60) }, lastConfirmed: at(addDays(today, -3), 9 * 60 + 12), current: true },
+      { id: "m2", owner: "manager", labelKey: "dh.label.otherManagerIphone", platform: "ios", browser: "safari", displayMode: "standalone", permission: "granted", registration: "active", appVersion: "current", supported: true, lastActive: at(today, 7 * 60 + 55), lastTest: { result: "confirmed", at: at(today, 7 * 60 + 2) }, lastConfirmed: at(today, 7 * 60 + 2), other: true },
+      { id: "m3", owner: "manager", labelKey: "dh.label.mac", platform: "mac", browser: "chrome", displayMode: "browser", permission: "default", registration: "none", appVersion: "current", supported: true, lastActive: at(addDays(today, -1), 21 * 60), lastTest: null, lastConfirmed: null },
+      { id: "c1", owner: "renata", labelKey: "dh.label.thisIphone", platform: "ios", browser: "safari", displayMode: "standalone", permission: "granted", registration: "active", appVersion: "current", supported: true, lastActive: at(today, 6 * 60 + 50), lastTest: { result: "confirmed", at: at(addDays(today, -1), 16 * 60 + 31) }, lastConfirmed: at(addDays(today, -1), 16 * 60 + 31), current: true },
+    ],
+    hub: {
+      cleanerId: "renata",
+      coverage: { status: "verified", verifiedAt: at(today, 7 * 60 + 10), pending: 0 },
+      changes: [],
+      routine: { scheduleViews: 14, questionsAnswered: 9, since: at(addDays(today, -6), 8 * 60) }, // simulated counters
+    },
+    requests: [
+      { id: "r1", kind: "swap", from: "lucia", jobId: renataNext[1]?.id || null, at: at(today, 7 * 60 + 15), status: "open" },
+      { id: "r2", kind: "client", client: "c3", property: "sunset", day: 5, at: at(today, 8 * 60 + 40), status: "open" },
+    ],
   };
 }

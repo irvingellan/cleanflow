@@ -6,7 +6,7 @@ import { laDateKey, rangeFor } from "./time.js";
 // Switching layout only changes `ui.mode`; operational truth lives in `data`.
 
 const STORAGE_KEY = "cleanflow-manager-workspace-v3-demo";
-const SCHEMA = 4;
+const SCHEMA = 5;
 
 export function initialState(today = laDateKey()) {
   return {
@@ -43,6 +43,17 @@ function notify(data, notification) {
 }
 
 const bodyKeyFor = { cleanerInterested: "nb.offerInterest", checklistReceived: "nb.checklist", assignmentConfirmed: "nb.assignConfirmed" };
+
+// A cleaner-audience event. Delivery reflects that cleaner's device evidence; the
+// inbox entry exists whatever happens to the push.
+function notifyCleaner(data, cleanerId, n) {
+  const dev = (data.deviceHealth || []).find(x => x.owner === cleanerId && x.current);
+  const ready = dev && dev.permission === "granted" && ["active", "stale"].includes(dev.registration);
+  const delivery = !dev || !ready ? { targets: 0, accepted: null, displayed: "unknown", openedAt: null, openTracked: true }
+    : { targets: 1, accepted: true, displayed: "unknown", openedAt: null, openTracked: true };
+  return notify(data, { audience: { cleanerId }, source: "system", delivery, ...n });
+}
+const changeOf = (d, cleanerId, kind, job, extra = {}) => ({ id: `ch${Date.now()}${Math.random().toString(16).slice(2, 5)}`, cleanerId, kind, jobId: job.id, propertyId: job.propertyId, at: now(d), ...extra });
 
 export function domainReducer(data, action) {
   const d = tick(data);
@@ -123,6 +134,33 @@ export function domainReducer(data, action) {
       const next = { ...tpl, version: tpl.version + 1, sections: action.sections, history: [...tpl.history, { version: tpl.version + 1, note: "edited", at: now(d) }] };
       return { ...d, templates: { ...d.templates, [tpl.id]: next }, properties: d.properties.map(p => (p.checklistTemplateId === tpl.id ? { ...p, templateVersion: next.version } : p)) };
     }
+    case "HUB_DEVICE":
+      return { ...data, deviceHealth: data.deviceHealth.map(x => (x.id === action.id ? { ...x, ...action.patch } : x)) };
+    case "HUB_TEST": // result: "confirmed" only when the person/device confirmed display
+      return { ...d, deviceHealth: d.deviceHealth.map(x => (x.id === action.id ? { ...x, lastTest: { result: action.result, at: now(d) }, ...(action.result === "confirmed" ? { lastConfirmed: now(d) } : {}) } : x)) };
+    case "HUB_COVERAGE":
+      return { ...data, hub: { ...data.hub, coverage: { ...data.hub.coverage, status: action.status, pending: action.status === "pending" ? 3 : action.status === "partial" ? 5 : 0 } } };
+    case "HUB_MOVE_JOB": { // manager moves a job; each assigned cleaner gets a change + inbox event
+      const job = d.jobs.find(j => j.id === action.jobId);
+      if (!job) return data;
+      let next = updateJob(d, job.id, j => ({ ...j, date: action.date, start: action.start ?? j.start, activity: logged(j, d, "act.moved", { date: action.date }) }));
+      for (const c of job.cleanerIds) {
+        next = { ...next, hub: { ...next.hub, changes: [...next.hub.changes, changeOf(d, c, "moved", job, { from: { date: job.date, start: job.start }, to: { date: action.date, start: action.start ?? job.start } })] } };
+        next = notifyCleaner(next, c, { category: "cleanerMoved", jobId: job.id, titleKey: "cn.moved", bodyKey: "cnb.moved", params: { property: prop(job.id).name } });
+      }
+      return next;
+    }
+    case "HUB_REVOKE": { // assignment removed: leaves the cleaner's active schedule; she never sees who replaces her
+      const job = d.jobs.find(j => j.id === action.jobId);
+      if (!job || !job.cleanerIds.includes(action.cleanerId)) return data;
+      let next = updateJob(d, job.id, j => { const ids = j.cleanerIds.filter(c => c !== action.cleanerId); return { ...j, cleanerIds: ids, status: ids.length ? j.status : "UNASSIGNED", ack: ids.length ? j.ack : null, activity: logged(j, d, "act.revoked", {}) }; });
+      next = { ...next, hub: { ...next.hub, changes: [...next.hub.changes, changeOf(d, action.cleanerId, "removed", job, { from: { date: job.date, start: job.start } })] } };
+      return notifyCleaner(next, action.cleanerId, { category: "cleanerRemoved", jobId: null, titleKey: "cn.removed", bodyKey: "cnb.removed", params: { property: prop(job.id).name, date: job.date } });
+    }
+    case "HUB_EVENT": // a business event for a cleaner whose push may not arrive
+      return notifyCleaner(d, action.cleanerId, { category: action.category, jobId: action.jobId, titleKey: action.titleKey, bodyKey: action.bodyKey, params: { property: prop(action.jobId).name }, ...(action.delivery ? { delivery: action.delivery } : {}) });
+    case "REQUEST_DECIDE": // recorded only; nothing is committed to clients or cleaners automatically
+      return { ...data, requests: data.requests.map(r => (r.id === action.id ? { ...r, status: action.status, decidedAt: now(d) } : r)) };
     case "NOTIF_READ":
       return { ...data, notifications: data.notifications.map(n => (n.id === action.id ? { ...n, read: true } : n)) };
     case "NOTIF_READ_ALL":
