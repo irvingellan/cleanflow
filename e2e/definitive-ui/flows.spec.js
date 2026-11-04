@@ -75,12 +75,14 @@ test("desktop Services pane keeps the Job open when its worklist query changes o
   try {
     await goSection(page, "Serviços");
     await page.getByRole("button", { name: "Hoje", exact: true }).click();
-    await page.getByRole("button", { name: /Juniper Loft/ }).click();
+    const jobSelector = (key) => `[data-job-id="${fixture.jobId(key)}"]`;
+    await expect(page.locator(jobSelector("juniperNextMonth"))).toHaveCount(0);
+    await page.locator(jobSelector("juniperToday")).click();
     const pane = page.getByRole("complementary", { name: "Serviços" });
     const detail = page.getByRole("heading", { name: "Juniper Loft", level: 2 });
     const today = pane.getByRole("button", { name: "Hoje", exact: true });
     const completed = pane.getByRole("button", { name: "Concluídos", exact: true });
-    const job = (key) => pane.locator(`[data-job-id="${fixture.jobId(key)}"]`);
+    const job = (key) => pane.locator(jobSelector(key));
     await expect(job("harborToday")).toBeVisible();
 
     await completed.click();
