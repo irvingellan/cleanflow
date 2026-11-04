@@ -14,6 +14,20 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.active == true;
     }
 
+    function memberPath(orgId) {
+      return /databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid);
+    }
+
+    // Cleaner Hub: a CLEANER membership is server-provisioned by a single-use
+    // access code and links exactly one Cleaner record. It grants no manager data.
+    function activeCleaner(orgId) {
+      return signedInAccount()
+        && exists(memberPath(orgId))
+        && get(memberPath(orgId)).data.role == 'CLEANER'
+        && get(memberPath(orgId)).data.active == true
+        && get(memberPath(orgId)).data.cleanerId is string;
+    }
+
     function hasValidChecklistContextRevision(data) {
       return !('checklistContextRevision' in data)
         || (data.checklistContextRevision is int && data.checklistContextRevision >= 0);
@@ -186,6 +200,18 @@ service cloud.firestore {
       // Membership is provisioned by trusted administrators, never by browser clients.
       match /members/{uid} {
         allow get: if signedInAccount() && request.auth.uid == uid;
+      }
+
+      // Server-written, cleaner-safe agenda projection. Each cleaner reads only
+      // entries for her own linked Cleaner record; nobody writes from a browser.
+      match /cleanerAgenda/{entryId} {
+        allow read: if activeCleaner(orgId)
+          && resource.data.cleanerId == get(memberPath(orgId)).data.cleanerId;
+      }
+
+      // Server-written link status for the manager's Cleaner detail; never holds codes.
+      match /cleanerHubAccess/{cleanerId} {
+        allow read: if activeManager(orgId);
       }
 
       // Authorized managers may inspect bounded page-load diagnostics; only validated client events can be appended.

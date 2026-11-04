@@ -956,3 +956,23 @@ event types and the synthetic self-test. Normal successful registration attaches
 it once; only actual receipt may display a notification, with an authenticated
 root destination and stale-account suppression. Background worker behavior is
 unchanged. Neither local handler nor provider acceptance verifies OS display.
+
+## DEC-046 — Cleaner self-service schedule reads a server-written projection
+
+**Status:** Proposed (local candidate `feature/cleaner-hub-real-v1`, not deployed).
+
+**Context.** Cleaners must see their own current Jobs without asking the manager.
+Job documents carry client prices, payouts, notes and guest names, and Firestore
+rules cannot hide individual fields, so cleaners cannot read Jobs directly.
+
+**Decision.** Keep Jobs, Offers and Assignments as the only source of truth.
+Firestore triggers maintain `organizations/{org}/cleanerAgenda`, a minimal
+cleaner-safe projection recomputed transactionally per Job. Cleaners authenticate
+with a Firebase account linked once through a manager-issued, single-use, hashed
+access code; a revocable `CLEANER` membership, not token claims, authorizes reads.
+Checklist and Offer actions reuse the existing capability and public Offer services.
+
+**Consequences.** Realtime updates without per-field rules or a second scheduling
+system; eight more Functions and one IAM permission (custom-token signing) in
+Production; projection documents to clean up later (TTL). Phone/email sign-in and
+cleaner push notifications are deferred.

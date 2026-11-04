@@ -1,0 +1,168 @@
+// Cleaner Hub copy, [pt-BR, en, es]. Wording comes from the approved Cleaner Hub
+// V1 visual, rewritten only where the prototype described simulated behaviour.
+const M = {
+  "hb.appLabel": ["Minha agenda CleanFlow", "My CleanFlow schedule", "Mi agenda CleanFlow"],
+  "hb.brand": ["Minha agenda", "My schedule", "Mi agenda"],
+  "hb.tabs": ["Navegação do app", "App navigation", "Navegación"],
+  "hb.tab.agenda": ["Agenda", "Schedule", "Agenda"],
+  "hb.tab.offers": ["Ofertas", "Offers", "Ofertas"],
+  "hb.tab.account": ["Conta", "Account", "Cuenta"],
+  "hb.back": ["Voltar", "Back", "Volver"],
+  "hb.hello": ["Olá, {name}", "Hi, {name}", "Hola, {name}"],
+  "hb.helloNoName": ["Olá", "Hi", "Hola"],
+  "hb.helloSub": ["Você tem {count} limpeza(s) confirmada(s) pela frente.", "You have {count} confirmed cleaning(s) ahead.", "Tiene {count} limpieza(s) confirmada(s) por delante."],
+  "hb.view": ["Mostrar", "Show", "Mostrar"],
+  "hb.seg.today": ["Hoje", "Today", "Hoy"],
+  "hb.seg.upcoming": ["Próximas", "Upcoming", "Próximas"],
+  "hb.seg.completed": ["Concluídas", "Completed", "Completadas"],
+  "hb.st.confirmed": ["Confirmada para você", "Confirmed for you", "Confirmada para usted"],
+  "hb.st.progress": ["Em andamento", "In progress", "En curso"],
+  "hb.st.done": ["Concluída", "Completed", "Completada"],
+  "hb.st.offer": ["Oferta — ainda não é sua", "Offer — not yours yet", "Oferta — aún no es suya"],
+  "hb.timeNotSet": ["Horário a combinar", "Time to be agreed", "Hora por acordar"],
+  "hb.dateNotSet": ["Data a confirmar", "Date to be confirmed", "Fecha por confirmar"],
+  "hb.day.today": ["Hoje", "Today", "Hoy"],
+  "hb.day.tomorrow": ["Amanhã", "Tomorrow", "Mañana"],
+  "hb.day.yesterday": ["Ontem", "Yesterday", "Ayer"],
+  "hb.fresh.live": ["Agenda atualizada", "Schedule up to date", "Agenda actualizada"],
+  "hb.fresh.live.body": ["Conectada com a CleanFlow. Mudanças da gerente aparecem aqui sozinhas.", "Connected to CleanFlow. The manager's changes appear here on their own.", "Conectada con CleanFlow. Los cambios de la gerente aparecen solos."],
+  "hb.fresh.loading": ["Carregando sua agenda…", "Loading your schedule…", "Cargando su agenda…"],
+  "hb.fresh.stale": ["Sem confirmação agora", "Not confirmed right now", "Sin confirmación ahora"],
+  "hb.fresh.stale.offline": ["Você está sem internet. Mostrando a última versão confirmada ({time}). Pode haver mudanças.", "You're offline. Showing the last confirmed version ({time}). Things may have changed.", "Está sin internet. Mostrando la última versión confirmada ({time}). Puede haber cambios."],
+  "hb.fresh.stale.cache": ["Ainda conectando. Mostrando a última versão salva neste celular ({time}). Pode haver mudanças.", "Still connecting. Showing the last version saved on this phone ({time}). Things may have changed.", "Conectando. Mostrando la última versión guardada ({time}). Puede haber cambios."],
+  "hb.fresh.stale.error": ["Não conseguimos atualizar a agenda. Mostrando a última versão confirmada ({time}). Confirme com a gerente se algo for urgente.", "We couldn't update the schedule. Showing the last confirmed version ({time}). Check with the manager if anything is urgent.", "No pudimos actualizar. Mostrando la última versión confirmada ({time}). Confirme con la gerente si es urgente."],
+  "hb.fresh.never": ["ainda não confirmada", "not yet confirmed", "aún no confirmada"],
+  "hb.fresh.error": ["Não conseguimos abrir sua agenda agora. Tente de novo em alguns minutos.", "We couldn't open your schedule right now. Try again in a few minutes.", "No pudimos abrir su agenda ahora. Intente en unos minutos."],
+  "hb.fresh.chip.live": ["Atualizada", "Up to date", "Actualizada"],
+  "hb.fresh.chip.stale": ["Sem conexão", "Offline", "Sin conexión"],
+  "hb.fresh.chip.loading": ["Carregando", "Loading", "Cargando"],
+  "hb.empty.live": ["Nenhuma limpeza marcada para você neste período.", "No cleanings booked for you in this period.", "Ninguna limpieza para usted en este período."],
+  "hb.empty.notDefinitive": ["Nenhuma limpeza aparece aqui — mas a agenda não está confirmada agora. Isso não quer dizer que você está livre.", "No cleanings show here — but the schedule isn't confirmed right now. This doesn't mean you're free.", "No aparecen limpiezas — pero la agenda no está confirmada. No quiere decir que esté libre."],
+  "hb.empty.completed": ["Nenhuma limpeza concluída nos últimos 30 dias.", "No completed cleanings in the last 30 days.", "Ninguna limpieza completada en 30 días."],
+  "hb.changes": ["Mudanças recentes", "Recent changes", "Cambios recientes"],
+  "hb.ch.ASSIGNED": ["Novo serviço confirmado para você: {when}", "New job confirmed for you: {when}", "Nuevo servicio confirmado: {when}"],
+  "hb.ch.RESCHEDULED": ["Mudou de {from} para {to}", "Moved from {from} to {to}", "Cambió de {from} a {to}"],
+  "hb.ch.UNASSIGNED": ["Saiu da sua agenda ({when}). Não é mais seu serviço.", "Removed from your schedule ({when}). No longer yours.", "Salió de su agenda ({when}). Ya no es suyo."],
+  "hb.ch.CANCELLED": ["Cancelado ({when}). Não é mais seu serviço.", "Cancelled ({when}). No longer yours.", "Cancelado ({when}). Ya no es suyo."],
+  "hb.offersWaiting": ["{count} oferta(s) esperando sua resposta", "{count} offer(s) waiting for your reply", "{count} oferta(s) esperando respuesta"],
+  "hb.job.notYours": ["Este serviço não está mais na sua agenda.", "This job is no longer on your schedule.", "Este servicio ya no está en su agenda."],
+  "hb.job.when": ["Quando", "When", "Cuándo"],
+  "hb.job.where": ["Imóvel", "Property", "Propiedad"],
+  "hb.job.whereNote": ["Endereço e instruções de acesso continuam vindo da gerente.", "Address and access instructions still come from the manager.", "Dirección e instrucciones de acceso siguen viniendo de la gerente."],
+  "hb.job.status": ["Situação", "Status", "Estado"],
+  "hb.job.ack": ["Ciência", "Acknowledged", "Confirmación"],
+  "hb.job.ackYes": ["Você confirmou que viu este serviço.", "You confirmed you saw this job.", "Usted confirmó que vio este servicio."],
+  "hb.job.ackNo": ["Ainda sem confirmação sua pelo link da oferta.", "Not yet acknowledged through the offer link.", "Aún sin confirmación por el enlace."],
+  "hb.job.pay": ["Valor oferecido", "Offered amount", "Monto ofrecido"],
+  "hb.job.payNotSet": ["Valor a combinar", "Amount to be agreed", "Monto por acordar"],
+  "hb.job.checklist": ["Checklist", "Checklist", "Checklist"],
+  "hb.job.openChecklist": ["Abrir checklist", "Open checklist", "Abrir checklist"],
+  "hb.job.opening": ["Abrindo…", "Opening…", "Abriendo…"],
+  "hb.job.checklistHint": ["Abre o mesmo checklist do link da gerente.", "Opens the same checklist as the manager's link.", "Abre el mismo checklist del enlace de la gerente."],
+  "hb.job.checklistLater": ["O checklist abre quando o serviço estiver confirmado e liberado pela gerente.", "The checklist opens once the job is confirmed and released by the manager.", "El checklist abre cuando el servicio esté confirmado y liberado."],
+  "hb.job.checklistDone": ["Serviço concluído.", "Job completed.", "Servicio completado."],
+  "hb.cl.not-ready": ["A gerente ainda não liberou o checklist deste serviço.", "The manager hasn't released the checklist for this job yet.", "La gerente aún no liberó el checklist."],
+  "hb.cl.teammate": ["Outra pessoa da equipe está com o checklist deste serviço. Fale com a gerente.", "Another team member has this job's checklist. Talk to the manager.", "Otra persona del equipo tiene el checklist. Hable con la gerente."],
+  "hb.cl.submitted": ["Checklist já enviado para revisão.", "Checklist already sent for review.", "Checklist ya enviado para revisión."],
+  "hb.cl.done": ["Serviço concluído.", "Job completed.", "Servicio completado."],
+  "hb.cl.unavailable": ["O checklist não está disponível para você agora.", "The checklist isn't available to you right now.", "El checklist no está disponible ahora."],
+  "hb.cl.error": ["Não conseguimos abrir o checklist. Verifique a internet e tente de novo.", "We couldn't open the checklist. Check your connection and try again.", "No pudimos abrir el checklist. Revise la conexión."],
+  "hb.job.privacy": ["Você vê só os seus serviços. Valores do cliente e outras cleaners não aparecem.", "You see only your jobs. Client amounts and other cleaners never show.", "Solo ve sus servicios. Montos del cliente y otras cleaners no aparecen."],
+  "hb.offers.title": ["Ofertas", "Offers", "Ofertas"],
+  "hb.offers.sub": ["Convites da gerente. Uma oferta só vira sua quando ela confirma.", "Invitations from the manager. An offer is yours only when she confirms.", "Invitaciones de la gerente. Es suya solo cuando ella confirma."],
+  "hb.offers.empty": ["Nenhuma oferta aberta agora.", "No open offers right now.", "Ninguna oferta abierta."],
+  "hb.offers.note": ["Responder “Tenho interesse” não reserva o serviço.", "Answering “I'm interested” does not book the job.", "Responder “Me interesa” no reserva el servicio."],
+  "hb.offer.PENDING": ["Esperando sua resposta", "Waiting for your reply", "Esperando su respuesta"],
+  "hb.offer.INTERESTED": ["Você tem interesse · a gerente decide", "You're interested · the manager decides", "Le interesa · la gerente decide"],
+  "hb.offer.DECLINED": ["Você recusou", "You declined", "Usted rechazó"],
+  "hb.offer.interested": ["Tenho interesse", "I'm interested", "Me interesa"],
+  "hb.offer.decline": ["Não posso", "I can't", "No puedo"],
+  "hb.offer.sending": ["Enviando…", "Sending…", "Enviando…"],
+  "hb.offer.sent": ["Resposta enviada para a gerente.", "Reply sent to the manager.", "Respuesta enviada a la gerente."],
+  "hb.offer.unavailable": ["Esta oferta não está mais aberta.", "This offer is no longer open.", "Esta oferta ya no está abierta."],
+  "hb.offer.error": ["Não conseguimos enviar. Verifique a internet e tente de novo.", "We couldn't send it. Check your connection and try again.", "No pudimos enviar. Revise la conexión."],
+  "hb.acc.role": ["Cleaner", "Cleaner", "Cleaner"],
+  "hb.acc.install": ["Colocar na tela inicial", "Add to Home Screen", "Agregar a inicio"],
+  "hb.acc.language": ["Idioma", "Language", "Idioma"],
+  "hb.acc.signOut": ["Sair deste celular", "Sign out on this phone", "Salir en este celular"],
+  "hb.acc.signOutNote": ["Apaga a agenda guardada neste celular. Para entrar de novo, peça um código novo à gerente.", "Removes the schedule saved on this phone. To sign in again, ask the manager for a new code.", "Borra la agenda guardada. Para entrar de nuevo, pida un código nuevo."],
+  "hb.acc.signingOut": ["Saindo…", "Signing out…", "Saliendo…"],
+  "hb.acc.notifications": ["Avisos no celular", "Phone alerts", "Avisos en el celular"],
+  "hb.acc.notificationsNote": ["Ainda não ligados para cleaners. Sua agenda funciona sem eles: abra o app para ver o que mudou.", "Not turned on for cleaners yet. Your schedule works without them: open the app to see what changed.", "Aún no activos para cleaners. Su agenda funciona sin ellos."],
+  "hb.code.title": ["Entre na sua agenda", "Open your schedule", "Entre en su agenda"],
+  "hb.code.body": ["Digite o código que a gerente mandou para você. Ele vale uma vez e expira em 3 dias.", "Type the code the manager sent you. It works once and expires in 3 days.", "Escriba el código que le mandó la gerente. Vale una vez y vence en 3 días."],
+  "hb.code.label": ["Código de acesso (12 letras e números)", "Access code (12 letters and numbers)", "Código de acceso (12 letras y números)"],
+  "hb.code.submit": ["Entrar", "Sign in", "Entrar"],
+  "hb.code.checking": ["Conferindo…", "Checking…", "Verificando…"],
+  "hb.code.note": ["Depois disso você continua conectada neste celular. Ninguém mais vê sua agenda.", "After this you stay signed in on this phone. Nobody else sees your schedule.", "Luego queda conectada en este celular. Nadie más ve su agenda."],
+  "hb.code.invalid": ["Este código não vale mais ou foi digitado errado. Peça um código novo à gerente.", "This code isn't valid anymore or was mistyped. Ask the manager for a new code.", "Este código ya no vale o se escribió mal. Pida uno nuevo."],
+  "hb.code.network": ["Sem conexão com a CleanFlow. Verifique a internet e tente de novo.", "Can't reach CleanFlow. Check your connection and try again.", "Sin conexión con CleanFlow. Revise la internet."],
+  "hb.code.iosFirst": ["No iPhone, coloque o CleanFlow na tela inicial ANTES de digitar o código. O app da tela inicial guarda a entrada separado do Safari.", "On iPhone, add CleanFlow to your Home Screen BEFORE typing the code. The Home Screen app keeps its sign-in separate from Safari.", "En iPhone, agregue CleanFlow a inicio ANTES de escribir el código. La app de inicio guarda la sesión aparte de Safari."],
+  "hb.code.iosGuide": ["Ver como colocar na tela inicial", "See how to add to Home Screen", "Ver cómo agregar a inicio"],
+  "hb.code.iosAnyway": ["Entrar aqui no Safari mesmo assim", "Sign in here in Safari anyway", "Entrar aquí en Safari igual"],
+  "hb.revoked.title": ["Seu acesso foi encerrado", "Your access was ended", "Su acceso fue cerrado"],
+  "hb.revoked.body": ["A gerente encerrou o acesso deste celular. Sua agenda foi apagada daqui. Se foi engano, peça um código novo.", "The manager ended access on this phone. Your schedule was removed from here. If this was a mistake, ask for a new code.", "La gerente cerró el acceso. Su agenda se borró de aquí. Si fue un error, pida un código nuevo."],
+  "hb.notCleaner": ["Esta conta não é de cleaner. Use o código que a gerente mandou.", "This account isn't a cleaner account. Use the code the manager sent.", "Esta cuenta no es de cleaner. Use el código de la gerente."],
+  "hb.onb.progress": ["Passo {n} de {total}", "Step {n} of {total}", "Paso {n} de {total}"],
+  "hb.onb.continue": ["Continuar", "Continue", "Continuar"],
+  "hb.onb.finish": ["Ver minha agenda", "See my schedule", "Ver mi agenda"],
+  "hb.onb.schedule.title": ["Estas são as suas próximas limpezas", "These are your next cleanings", "Estas son sus próximas limpiezas"],
+  "hb.onb.schedule.body": ["Só as confirmadas para você. Ofertas ficam separadas.", "Only the ones confirmed for you. Offers are kept apart.", "Solo las confirmadas. Las ofertas van aparte."],
+  "hb.onb.schedule.empty": ["Nenhuma limpeza confirmada ainda. Quando a gerente confirmar, ela aparece aqui sozinha.", "No confirmed cleanings yet. When the manager confirms one, it appears here on its own.", "Aún no hay limpiezas confirmadas. Aparecen solas cuando la gerente confirma."],
+  "hb.onb.reopen.title": ["Para abrir de novo", "To open it again", "Para abrir de nuevo"],
+  "hb.onb.reopen.body": ["Procure o ícone CleanFlow na tela inicial do celular. Você continua conectada.", "Look for the CleanFlow icon on your Home Screen. You stay signed in.", "Busque el ícono CleanFlow en la pantalla de inicio. Sigue conectada."],
+  "ig.title": ["Colocar o CleanFlow na tela inicial", "Add CleanFlow to your Home Screen", "Agregar CleanFlow a la pantalla de inicio"],
+  "ig.platform": ["Celular", "Phone", "Celular"],
+  "ig.p.ios": ["iPhone", "iPhone", "iPhone"],
+  "ig.p.android": ["Android", "Android", "Android"],
+  "ig.ctx.browser": ["Você está numa aba do navegador. Não dá para saber daqui se o ícone já foi adicionado.", "You're in a browser tab. We can't tell from here if the icon was already added.", "Está en una pestaña; no sabemos si ya agregó el ícono."],
+  "ig.ctx.standalone": ["Você já está no app aberto pelo ícone da tela inicial.", "You're already in the app opened from the Home Screen icon.", "Ya está en la app desde el ícono."],
+  "ig.ctx.unknown": ["Não conseguimos saber como esta janela foi aberta.", "We can't tell how this window was opened.", "No sabemos cómo se abrió."],
+  "ig.ios.1": ["No Safari, toque no botão Compartilhar (quadrado com seta para cima), na barra de baixo ou de cima.", "In Safari, tap the Share button (square with an up arrow), in the bottom or top bar.", "En Safari, toque Compartir (cuadrado con flecha), abajo o arriba."],
+  "ig.ios.2": ["Toque em “Adicionar à Tela de Início”.", "Tap “Add to Home Screen”.", "Toque “Agregar a inicio”."],
+  "ig.ios.2b": ["Se não aparecer, role a lista ou toque em “Ver mais”/“Editar ações” para encontrar.", "If you don't see it, scroll the list or tap “View More”/“Edit Actions” to find it.", "Si no aparece, desplace o toque “Ver más”/“Editar acciones”."],
+  "ig.ios.3": ["Deixe “Abrir como app web” ligado (se aparecer) e toque em Adicionar.", "Keep “Open as Web App” on (if shown) and tap Add.", "Deje “Abrir como app web” y toque Agregar."],
+  "ig.ios.4": ["Feche o Safari e abra o CleanFlow pelo ícone novo. Entre com o código lá.", "Close Safari and open CleanFlow from the new icon. Sign in with the code there.", "Abra CleanFlow desde el ícono nuevo y entre con el código allí."],
+  "ig.ios.why": ["No iPhone, o app da tela inicial guarda a entrada separado do Safari. Por isso, entre pelo ícone.", "On iPhone, the Home Screen app keeps its sign-in separate from Safari. So sign in from the icon.", "En iPhone, la app de inicio guarda la sesión aparte de Safari. Entre desde el ícono."],
+  "ig.and.1": ["No Chrome, toque nos três pontos ⋮ no canto de cima.", "In Chrome, tap the three dots ⋮ at the top corner.", "En Chrome, toque los tres puntos ⋮."],
+  "ig.and.2": ["Toque em “Instalar app” ou “Adicionar à tela inicial”.", "Tap “Install app” or “Add to Home screen”.", "Toque “Instalar app” o “Agregar a inicio”."],
+  "ig.and.2b": ["No Samsung Internet: menu ☰ › “Adicionar página a” › “Tela inicial”.", "In Samsung Internet: menu ☰ › “Add page to” › “Home screen”.", "En Samsung Internet: menú › “Agregar página a” › “Pantalla de inicio”."],
+  "ig.and.3": ["Abra o CleanFlow pelo ícone novo.", "Open CleanFlow from the new icon.", "Abra CleanFlow desde el ícono."],
+  "ig.and.why": ["No Android a agenda também funciona no navegador, mas pelo ícone é mais fácil achar o app.", "On Android the schedule also works in the browser, but the icon makes the app easier to find.", "En Android la agenda también funciona en el navegador, pero el ícono facilita encontrarla."],
+  "ig.and.promptAvailable": ["Este navegador oferece instalação direta.", "This browser offers direct install.", "Este navegador ofrece instalación directa."],
+  "ig.and.installBtn": ["Instalar o CleanFlow", "Install CleanFlow", "Instalar CleanFlow"],
+  "ig.and.orManual": ["Se o botão não abrir nada, use os passos abaixo.", "If the button does nothing, use the steps below.", "Si no funciona, use los pasos."],
+  "ig.done": ["Já adicionei", "I've added it", "Ya lo agregué"],
+  "ig.later": ["Fazer depois (a agenda funciona no navegador)", "Later (the schedule works in the browser)", "Después (la agenda funciona en el navegador)"],
+};
+
+export const hubLanguages = ["pt", "en", "es"];
+const index = { pt: 0, en: 1, es: 2 };
+
+export function hubTranslate(lang, key, params = {}) {
+  const entry = M[key];
+  let text = entry ? (entry[index[lang]] ?? entry[1] ?? entry[0]) : key;
+  Object.entries(params).forEach(([name, value]) => { text = text.split(`{${name}}`).join(String(value)); });
+  return text;
+}
+
+export function hasHubMessage(key) {
+  return Boolean(M[key]);
+}
+
+export function hubMessageKeys() {
+  return Object.keys(M);
+}
+
+export function hubMoney(amount, lang) {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) return null;
+  return new Intl.NumberFormat({ pt: "pt-BR", en: "en-US", es: "es-US" }[lang] || "en-US", {
+    style: "currency", currency: "USD", maximumFractionDigits: amount % 1 ? 2 : 0,
+  }).format(amount);
+}
+
+export function detectHubLanguage(preferred) {
+  if (hubLanguages.includes(preferred)) return preferred;
+  const browser = typeof navigator === "undefined" ? "" : String(navigator.language || "").slice(0, 2).toLowerCase();
+  return hubLanguages.includes(browser) ? browser : "pt";
+}
