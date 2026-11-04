@@ -1,5 +1,32 @@
 # CleanFlow — Current State
 
+
+## 2026-11-04 — Integrated Release A published and verified (Issue #85)
+
+Production serves `12f432dd46a6c93e45bfb78ac1993568143c3840`
+from `codex/release-a-claude-ux-85`. Hosting version `2aa48a01a2244d34`
+(release `1793827781258000`) matches all 15 reviewed assets. Firestore
+Ruleset `c245509c-bf5f-465a-852a-1f184f35feb9` matches the approved source.
+The sealed release applied 4 Function creations and 18 updates in order.
+The 21 outside-scope revisions stayed at their baseline, and all 43 Functions
+are ACTIVE on Node 22. The release receipt is COMPLETE and the mutex is available.
+
+The release enables the durable Inbox alongside the manual Offer workflow and
+the integrated cleaner agenda. Cleaner push and automatic Offer creation
+remain disabled. The manager notification routes and FCM reminder settings
+match the reviewed plan. The prior Hosting release and hash-verified assets
+are preserved. The compatible Inbox-off rollback remains available.
+
+Both fresh preflights passed 21/21 and reproduced the authorized seal. The
+security and deployment guard rerun passed 154 checks. Production verification
+matched the SHA, asset hashes, Rules, Function revisions and Hosting routes.
+Chromium and WebKit reached the access gate for the agenda and Inbox deep link.
+The Inbox read endpoint returned 401 without a session. The authenticated Inbox,
+cleaner session, agenda navigation and manual Offer decision flows were covered
+by the sealed emulator tests. Acceptance with existing Production accounts
+and physical devices remains pending. Release B stays gated separately.
+
+
 ## 2026-11-04 — Release A + Claude UX (isolated local candidate)
 
 `codex/release-a-claude-ux-85` selectively integrates the visual source
