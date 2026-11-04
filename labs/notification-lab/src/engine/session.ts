@@ -88,3 +88,10 @@ export function fingerprint(w: World): string {
   }
   return (h >>> 0).toString(16).padStart(8, "0");
 }
+
+/** Apply one recorded operation (used to animate Replay step by step). */
+export function applyRecorded(s: Session, op: Op): Session {
+  const next = clone(s);
+  applyOp(next, op);
+  return next;
+}
