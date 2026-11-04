@@ -129,6 +129,7 @@ export function DevCenter({
       </section>
 
       <NotificationDiagnostics
+        userId={notificationUserId}
         diagnostics={diagnostics}
         isLoading={isLoadingDiagnostics}
         hasError={hasDiagnosticsError}

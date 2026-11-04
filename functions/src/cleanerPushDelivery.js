@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { cleanerAccountUid, cleanerSessionIds, eligibleCleaner, isActiveCleanerSession } from "./cleanerHubAccess.js";
 import {
   cleanerDeviceReference, eligibleCleanerRegistration, hasCurrentCleanerClaims, invalidateCleanerDevice,
@@ -150,8 +150,9 @@ export async function processCleanerNotification({ database, organizationId, cle
   if (!claim || claim.skipped) return { skipped: claim?.skipped || "already-claimed-or-invalid" };
   const { devices, stages } = claim;
 
-  const attemptedAt = FieldValue.serverTimestamp();
-  await recordOutcome(reference, { stages: [...stages, "PUSH_ATTEMPTED"], attemptedAt }, logger);
+  // The committed claim already records an unknown result. Start the attempt
+  // without waiting for another Firestore write after the authorization check.
+  const attemptedAt = Timestamp.now();
   let outcome;
   try {
     const response = await boundedManagerFcmSend(sendFcm, devices.map((device) => cleanerFcmMessage(device, eventId)));
@@ -170,6 +171,8 @@ export async function processCleanerNotification({ database, organizationId, cle
       stages: [...stages, "PUSH_ATTEMPTED", "UNKNOWN"],
     };
   }
-  await recordOutcome(reference, { ...outcome, pendingProviderResult: false, completedAt: FieldValue.serverTimestamp() }, logger);
+  await recordOutcome(reference, {
+    ...outcome, pendingProviderResult: false, attemptedAt, completedAt: FieldValue.serverTimestamp(),
+  }, logger);
   return { deliveryStatus: outcome.deliveryStatus };
 }

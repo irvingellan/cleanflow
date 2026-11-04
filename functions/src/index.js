@@ -49,7 +49,7 @@ import {
   respondToOfferForCleaner,
   revokeCleanerHubAccessForManager,
 } from "./cleanerHubAccess.js";
-import { loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
+import { eligibleManagerPushDevices, loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
 import { registerManagerDevice, deactivateManagerDevice } from "./managerDeviceRegistration.js";
 import { sendFcmManagerReminder, processClaimedManagerReminder } from "./managerReminderDelivery.js";
 import { processManagerOperationalNotification } from "./managerOperationalNotifications.js";
@@ -268,8 +268,12 @@ async function managerEmailsByUserId(userIds) {
   if (userIds.length === 0) return new Map();
 
   try {
-    const result = await getAuth().getUsers(userIds.map((uid) => ({ uid })));
-    return new Map(result.users.map((user) => [user.uid, user.email || null]));
+    const emails = new Map();
+    for (let start = 0; start < userIds.length; start += 100) {
+      const users = await getAuth().getUsers(userIds.slice(start, start + 100).map((uid) => ({ uid })));
+      users.users.forEach((user) => emails.set(user.uid, user.email || null));
+    }
+    return emails;
   } catch (error) {
     logger.warn("Manager notification diagnostics could not resolve account emails.", {
       failureCode: error?.code || "unknown",
@@ -283,8 +287,9 @@ export const getManagerNotificationDiagnostics = onCall(
   async (request) => {
     requireAuthorizedDeveloper(request, allowedDeveloperUids());
 
+    const deviceSampleLimit = 100;
     const [devicesSnapshot, deliveriesSnapshot] = await Promise.all([
-      db.collection("managerPushDevices").where("organizationId", "==", organizationId).get(),
+      db.collection("managerPushDevices").where("organizationId", "==", organizationId).limit(deviceSampleLimit).get(),
       organizationReference()
         .collection("managerReminderDeliveries")
         .orderBy("attemptedAt", "desc")
@@ -308,8 +313,18 @@ export const getManagerNotificationDiagnostics = onCall(
     ]);
     const devices = devicesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
     const healthReports = healthSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
-    const userIds = [...new Set([...devices, ...healthReports].map(({ data }) => data.userId).filter(Boolean))];
-    const emailsByUserId = await managerEmailsByUserId(userIds);
+    const viewerUserId = request.auth.uid;
+    const userIds = [...new Set([viewerUserId, ...[...devices, ...healthReports].map(({ data }) => data.userId)])]
+      .filter((uid) => typeof uid === "string" && uid.length > 0 && uid.length <= 128 && !uid.includes("/"));
+    const [emailsByUserId, eligibleRegistrationIds, latestInbox] = await Promise.all([
+      managerEmailsByUserId(userIds),
+      eligibleManagerPushDevices(db, organizationId, devicesSnapshot.docs)
+        .then((entries) => new Set(entries.map((entry) => entry.id))).catch(() => null),
+      listNotificationInboxForRequest(db, { organizationId, request: { auth: request.auth,
+        data: { role: "MANAGER", pageSize: 1 } } }).then(({ items }) => ({
+          state: items.length ? "available" : "empty", item: items[0],
+        })).catch(() => ({ state: "unavailable" })),
+    ]);
 
     return buildNotificationDiagnostics({
       devices,
@@ -324,7 +339,7 @@ export const getManagerNotificationDiagnostics = onCall(
       currentDeviceTests: currentDeviceTestsSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
       cleanerDeliveries: cleanerDeliveries.docs.map((snapshot) => ({ data: snapshot.data() })),
       readMetadata: {
-        devices: { readCount: devicesSnapshot.size, returnedCount: devices.length, readCap: null, ordering: "unordered" },
+        devices: { readCount: devicesSnapshot.size, returnedCount: devices.length, readCap: deviceSampleLimit, ordering: "unordered" },
         healthReports: { readCount: healthSnapshot.size, returnedCount: healthReports.length, readCap: 100, ordering: "unordered" },
         deliveries: { readCount: deliveriesSnapshot.size, returnedCount: deliveriesSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
         reviewDeliveries: { readCount: reviewSnapshot.size,
@@ -334,6 +349,9 @@ export const getManagerNotificationDiagnostics = onCall(
         currentDeviceTests: { readCount: currentDeviceTestsSnapshot.size, returnedCount: currentDeviceTestsSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
       },
       emailsByUserId,
+      eligibleRegistrationIds,
+      viewerUserId,
+      latestInbox,
     });
   },
 );
@@ -1678,17 +1696,22 @@ export const notifyCleanerInboxEvent = onDocumentCreated(
   },
 );
 
-function cleanerAgendaTrigger(document, recordInbox) {
+function cleanerAgendaTrigger(document, recordInbox, { deferInitialAutomaticOfferSync = false } = {}) {
   return onDocumentWritten(
     { document, region: "us-central1", retry: true, timeoutSeconds: 60 },
     async (event) => {
       try {
         const context = { organizationId: event.params.orgId, jobId: event.params.jobId };
+        const { before, after } = event.data || {};
+        // The automatic distribution transaction creates every Offer with a
+        // Job update. Its Job trigger reprojects the complete committed batch.
+        const jobTriggerOwnsAgenda = deferInitialAutomaticOfferSync
+          && before?.exists === false && isAutomaticOfferJob(after?.data());
         await Promise.all([
-          syncCleanerAgendaForJob(db, context),
+          jobTriggerOwnsAgenda ? null : syncCleanerAgendaForJob(db, context),
           recordInbox?.(db, {
             ...context, offerId: event.params.offerId, eventId: event.id,
-            before: event.data?.before, after: event.data?.after,
+            before, after,
           }),
         ]);
       } catch (error) {
@@ -1707,4 +1730,5 @@ export const syncCleanerAgendaOnAssignmentWrite = cleanerAgendaTrigger(
 );
 export const syncCleanerAgendaOnOfferWrite = cleanerAgendaTrigger(
   "organizations/{orgId}/jobs/{jobId}/offers/{offerId}", recordCleanerOfferInboxEvent,
+  { deferInitialAutomaticOfferSync: true },
 );

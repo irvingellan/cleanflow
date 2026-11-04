@@ -2,6 +2,11 @@ export const cleanerMessagingWorkerPath = "/cleaner-messaging-sw.js";
 export const cleanerMessagingWorkerScope = "/cleaner-messaging-push/";
 export const cleanerPushReceiptEvent = "cleanflow-cleaner-push-received";
 
+/** Public VAPID key encoding. The release preflight also verifies the P-256 point. */
+export function isCleanerVapidKey(value) {
+  return typeof value === "string" && /^B[A-P][A-Za-z0-9_-]{84}[AEIMQUYcgkosw048]$/.test(value);
+}
+
 export function cleanerMessagingConfig(firebaseConfig, appId) {
   const sender = firebaseConfig.messagingSenderId;
   if (!sender || !appId || appId === firebaseConfig.appId
@@ -35,7 +40,7 @@ export async function cleanerPushBinding(action, sessionId, bindingId, language,
         }
         if (action === "set" && current?.sessionId === sessionId
           && (registrationRevision > (current.registrationRevision || 0)
-            || (registrationRevision === current.registrationRevision && (!current.bindingId || current.bindingId === bindingId)))) {
+            || (registrationRevision === current.registrationRevision && current.bindingId === bindingId))) {
           result = current;
           store.put({ sessionId, bindingId, language, registrationRevision }, "active");
         }
@@ -43,6 +48,14 @@ export async function cleanerPushBinding(action, sessionId, bindingId, language,
           && (registrationRevision == null || current.registrationRevision === registrationRevision)) {
           result = current;
           store.put({ sessionId, registrationRevision: current.registrationRevision }, "active");
+        }
+        if (action === "revokePermission" && current?.sessionId === sessionId) {
+          result = current;
+          store.put({ sessionId, registrationRevision: current.registrationRevision, permissionRevocationPending: true }, "active");
+        }
+        if (action === "finishRevocation" && current?.sessionId === sessionId
+          && current.permissionRevocationPending && current.registrationRevision === registrationRevision) {
+          store.put({ sessionId, registrationRevision }, "active");
         }
         if (action === "clear" && current?.sessionId === sessionId) {
           store.put({ blockedSessionId: sessionId }, "active");

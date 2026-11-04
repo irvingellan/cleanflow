@@ -30,7 +30,7 @@ beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
   vi.stubEnv("MODE", "production");
-  vi.stubEnv("VITE_FIREBASE_VAPID_KEY", "synthetic-vapid");
+  vi.stubEnv("VITE_FIREBASE_VAPID_KEY", `B${"A".repeat(86)}`);
   vi.stubEnv("VITE_FIREBASE_CLEANER_MESSAGING_APP_ID", "1:1234:web:cleaner");
   state = undefined;
   window.localStorage.clear();
@@ -119,7 +119,7 @@ describe("Cleaner push lifecycle", () => {
   it("clears local display and deactivates only the exact stored revision after permission revocation", async () => {
     const { inspectCleanerPush } = await import("./cleanerPushService.js");
     const close = vi.fn();
-    registration.getNotifications.mockResolvedValueOnce([{ close }]);
+    registration.getNotifications.mockResolvedValueOnce([{ close, data: { cleanerBindingId: bindingId } }]);
     state = { sessionId: session.sessionId, bindingId, language: "pt", registrationRevision: 3 };
     window.localStorage.setItem(deviceStorageKey, "synthetic-installation");
     permission = "denied";
@@ -133,6 +133,28 @@ describe("Cleaner push lifecycle", () => {
     expect(requestPermission).not.toHaveBeenCalled();
   });
 
+  it("clears a revoked permission offline and reconciles the same revision on reconnect", async () => {
+    const { inspectCleanerPush } = await import("./cleanerPushService.js");
+    state = { sessionId: session.sessionId, bindingId, language: "pt", registrationRevision: 3 };
+    window.localStorage.setItem(deviceStorageKey, "synthetic-installation");
+    permission = "denied";
+    const online = vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      expect(await inspectCleanerPush(session, options)).toBe("permission-denied");
+      expect(state).toEqual({ sessionId: session.sessionId, registrationRevision: 3, permissionRevocationPending: true });
+      expect(sdk.invoke).not.toHaveBeenCalled();
+
+      online.mockReturnValue(true);
+      expect(await inspectCleanerPush(session, options)).toBe("permission-denied");
+      expect(state).toEqual({ sessionId: session.sessionId, registrationRevision: 3 });
+      expect(sdk.invoke).toHaveBeenCalledExactlyOnceWith("deactivateCleanerPushDevice", {
+        deviceId: "synthetic-installation", registrationRevision: 3, reason: "PERMISSION_REVOKED",
+      });
+      expect(await inspectCleanerPush(session, options)).toBe("permission-denied");
+      expect(sdk.invoke).toHaveBeenCalledTimes(1);
+    } finally { online.mockRestore(); }
+  });
+
   it("rotates a conclusively invalidated token once and preserves any distinct role's app", async () => {
     const { inspectCleanerPush, enableCleanerPush } = await import("./cleanerPushService.js");
     permission = "granted";
@@ -142,6 +164,30 @@ describe("Cleaner push lifecycle", () => {
     expect(sdk.deleteToken).toHaveBeenCalledOnce();
     expect(sdk.getToken).toHaveBeenCalledTimes(2);
     expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it("does not enroll an old session if another tab cleared its binding during token lookup", async () => {
+    const { inspectCleanerPush, enableCleanerPush } = await import("./cleanerPushService.js");
+    const { cleanerPushBinding } = await import("./cleanerPushBinding.js");
+    permission = "granted";
+    await inspectCleanerPush(session, options);
+    sdk.getToken.mockImplementationOnce(async () => {
+      await cleanerPushBinding("clear", session.sessionId);
+      return "old-session-token";
+    });
+
+    expect(await enableCleanerPush(session, options)).toBe("superseded");
+    expect(sdk.invoke).not.toHaveBeenCalled();
+  });
+
+  it("cannot restore an invalidated binding with an older enrollment result", async () => {
+    const { cleanerPushBinding } = await import("./cleanerPushBinding.js");
+    await cleanerPushBinding("claim", session.sessionId);
+    await cleanerPushBinding("set", session.sessionId, bindingId, "pt", 3);
+    await cleanerPushBinding("invalidate", session.sessionId, null, null, 3);
+    expect(await cleanerPushBinding("set", session.sessionId, bindingId, "pt", 3)).toBeNull();
+    expect(await cleanerPushBinding("read")).toEqual({ sessionId: session.sessionId, registrationRevision: 3 });
+    expect(await cleanerPushBinding("set", session.sessionId, bindingId, "pt", 4)).toBeTruthy();
   });
 
   it("rejects a late enrollment after sign-out and never revives the old worker binding", async () => {

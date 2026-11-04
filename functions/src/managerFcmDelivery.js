@@ -30,7 +30,12 @@ export function invalidManagerFcmToken(error) {
 export async function loadEligibleManagerPushDevices(database, organizationId) {
   const snapshots = await database.collection("managerPushDevices")
     .where("organizationId", "==", organizationId).get();
-  const active = snapshots.docs.filter((snapshot) => {
+  return eligibleManagerPushDevices(database, organizationId, snapshots.docs);
+}
+
+/** Same dispatch gate applied to a preloaded, bounded diagnostic sample. */
+export async function eligibleManagerPushDevices(database, organizationId, snapshots) {
+  const active = snapshots.filter((snapshot) => {
     const device = snapshot.data();
     return device.active === true && typeof device.token === "string"
       && device.token.length >= 32 && device.token.length <= 4096

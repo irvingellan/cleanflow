@@ -1,3 +1,4 @@
+import { createHash, webcrypto } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readLocalNotificationHealth } from "./notificationHealthService.js";
 
@@ -34,6 +35,18 @@ describe("readLocalNotificationHealth", () => {
     expect(browser.Notification.requestPermission).not.toHaveBeenCalled();
     expect(browser.localStorage.setItem).not.toHaveBeenCalled();
     expect(JSON.stringify(snapshot)).not.toMatch(/token|job|property|client|cleaner/i);
+  });
+
+  it("correlates only this account and installation, including an iPad in desktop mode", async () => {
+    const browser = environment({ crypto: webcrypto });
+    browser.navigator.userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Safari/605.1";
+    browser.navigator.platform = "MacIntel";
+    browser.navigator.maxTouchPoints = 5;
+    const health = await readLocalNotificationHealth(browser, { userId: "synthetic-manager" });
+    expect(health.platform).toBe("ios");
+    expect(health.registrationId).toBe(createHash("sha256").update("synthetic-manager:local-device-12345678").digest("hex"));
+    const other = await readLocalNotificationHealth(browser, { userId: "other-synthetic-manager" });
+    expect(other.registrationId).not.toBe(health.registrationId);
   });
 
   it("treats unknown cached FCM state as unverified rather than missing", async () => {

@@ -1,4 +1,4 @@
-import { cleanerInboxTypes } from "./notificationInboxEvents.js";
+import { cleanerInboxTypes, managerInboxTypes } from "./notificationInboxEvents.js";
 import { notificationHealthErrorStages, notificationHealthErrorCodes } from "./notificationLab.js";
 
 const deliveryStatuses = new Set([
@@ -97,8 +97,27 @@ export function buildNotificationDiagnostics({
   readMetadata = {},
   now = Date.now(),
   emailsByUserId = new Map(),
+  eligibleRegistrationIds = null,
+  viewerUserId = null,
+  latestInbox = null,
 }) {
+  const latestTestsByRegistration = new Map();
+  for (const test of [...developerTests, ...currentDeviceTests]) {
+    const registrationId = test.data.targetRegistrationId || test.data.registrationId;
+    if (typeof registrationId !== "string" || !/^[a-f0-9]{64}$/.test(registrationId)) continue;
+    const current = testProjection(test);
+    if (!current.attemptedAt) continue;
+    if (current.attemptedAt > (latestTestsByRegistration.get(registrationId)?.attemptedAt || "")) {
+      latestTestsByRegistration.set(registrationId, current);
+    }
+  }
+  const latestItem = latestInbox?.item;
   return {
+    viewerAccount: emailsByUserId.get(viewerUserId) || null,
+    latestInbox: latestInbox?.state === "available" && latestItem && Object.values(managerInboxTypes).includes(latestItem.type)
+      ? { state: "available", type: latestItem.type, createdAtMs: latestItem.createdAtMs,
+        openable: latestItem.openable === true, read: latestItem.read === true }
+      : { state: latestInbox?.state === "empty" ? "empty" : "unavailable" },
     generatedAt: new Date(now).toISOString(),
     cleanerDeliveries: cleanerDeliveries.slice(0, 20).map(cleanerDeliveryProjection),
     readMetadata: boundedReads(readMetadata),
@@ -113,6 +132,11 @@ export function buildNotificationDiagnostics({
       platform: safeText(data.platform, 40) || "web",
       language: ["en", "pt", "es"].includes(data.language) ? data.language : null,
       active: data.active === true,
+      eligible: eligibleRegistrationIds ? eligibleRegistrationIds.has(id) : null,
+      isCurrentAccount: Boolean(viewerUserId && data.userId === viewerUserId),
+      tokenState: ["active", "invalidated", "signed-out", "superseded"].includes(data.tokenState)
+        ? data.tokenState : data.active === true ? "legacy" : "unknown",
+      latestTest: latestTestsByRegistration.get(id) || null,
       createdAt: timestampToIso(data.createdAt),
       updatedAt: timestampToIso(data.updatedAt),
       lastSeenAt: timestampToIso(data.lastSeenAt),
@@ -121,6 +145,7 @@ export function buildNotificationDiagnostics({
       deviceId: id.slice(-8),
       registrationId: id,
       userEmail: emailsByUserId.get(data.userId) || null,
+      isCurrentAccount: Boolean(viewerUserId && data.userId === viewerUserId),
       notificationPermission: ["granted", "denied", "default", "unsupported"].includes(data.notificationPermission)
         ? data.notificationPermission : "unsupported",
       serviceWorker: ["ready", "unavailable", "error", "unsupported"].includes(data.serviceWorker)
@@ -180,7 +205,7 @@ export function buildNotificationDiagnostics({
       failedRecipients: safeNullableCount(data.failedRecipients),
       noActiveRecipients: safeNullableCount(data.noActiveRecipients),
       failureCode: safeText(data.failureCode, 80),
-      failureSummary: safeText(data.failureSummary),
+
     })),
   };
 }

@@ -4,7 +4,7 @@ import { deleteToken, getMessaging, getToken, isSupported } from "firebase/messa
 import { firebaseConfig, useFirebaseEmulators } from "../../services/firebase/client.js";
 import { cleanerHubFirebase } from "../cleaner-hub/cleanerHubFirebase.js";
 import {
-  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerMessagingWorkerScope, cleanerPushBinding,
+  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerMessagingWorkerScope, cleanerPushBinding, isCleanerVapidKey,
 } from "./cleanerPushBinding.js";
 import { messagingWorkerReadiness } from "./notificationReadiness.js";
 import { withProviderTimeout } from "./providerTimeout.js";
@@ -21,7 +21,7 @@ let endingSessionId;
 
 function registrationReason(options) {
   if (options.platform === "ios" && !options.standalone) return "ios-standalone-required";
-  if (!messagingConfig || !vapidKey) return "unconfigured";
+  if (!messagingConfig || !isCleanerVapidKey(vapidKey)) return "unconfigured";
   if (!window.isSecureContext || !window.Notification || !window.PushManager
     || !navigator.serviceWorker || !window.indexedDB) return "unsupported";
   if (navigator.onLine === false) return "offline";
@@ -67,27 +67,33 @@ async function invoke(name, data) {
 
 async function checkCleanerPush(session, options) {
   const reason = registrationReason(options);
+  if (reason && reason !== "offline") return reason;
+  if (!authorizedSession(session)) return "superseded";
+  if (Notification.permission !== "granted") {
+    const current = await cleanerPushBinding("read");
+    if (current?.sessionId === session.sessionId && (current.bindingId || current.permissionRevocationPending)) {
+      // Clear locally even offline. The browser already knows consent is gone.
+      await forgetCleanerPush(session, "PERMISSION_REVOKED", { localOnly: reason === "offline" }).catch(() => {});
+    }
+    if (Notification.permission === "denied") return "permission-denied";
+  }
   if (reason) return reason;
   const user = await confirmLocalOwner(session);
   if (!user) return "superseded";
   const binding = await cleanerPushBinding("claim", session.sessionId);
   if (!binding || authorizedSession(session) !== user) return "superseded";
-  if (Notification.permission === "denied") {
-    if (binding.bindingId) await forgetCleanerPush(session, "PERMISSION_REVOKED").catch(() => {});
-    return "permission-denied";
+  if (binding.permissionRevocationPending && Notification.permission === "granted") {
+    await forgetCleanerPush(session, "PERMISSION_REVOKED").catch(() => {});
   }
   if (!await withProviderTimeout(isSupported(), "Cleaner notification support")) return "unsupported";
-  if (Notification.permission !== "granted") {
-    if (binding.bindingId) await forgetCleanerPush(session, "PERMISSION_REVOKED").catch(() => {});
-    return "permission-default";
-  }
+  if (Notification.permission !== "granted") return Notification.permission === "denied" ? "permission-denied" : "permission-default";
   const installation = deviceId();
   if (!installation) return "missing";
   const status = await invoke("getCleanerPushDeviceStatus", { deviceId: installation });
   if (authorizedSession(session) !== user) return "superseded";
   if (status?.state !== "active" || status.registrationRevision !== binding.registrationRevision) {
     if (binding.bindingId && await cleanerPushBinding("invalidate", session.sessionId, null, null, binding.registrationRevision)) {
-      await closeLocalCleanerNotifications();
+      await closeLocalCleanerNotifications(binding.bindingId);
     }
     return status?.state === "invalidated" ? "invalidated" : "missing";
   }
@@ -145,7 +151,8 @@ async function enrollCleanerPush(session, options, permissionRequest) {
     // getToken can request permission on its own. Check immediately before calling it.
     if (Notification.permission !== "granted" || authorizedSession(session) !== user) return null;
     token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
-    if (!token || authorizedSession(session) !== user || Notification.permission !== "granted") return null;
+    if (!token || (await cleanerPushBinding("read"))?.sessionId !== session.sessionId
+      || authorizedSession(session) !== user || Notification.permission !== "granted") return null;
     return invoke("registerCleanerPushDevice", {
       deviceId: installation, token,
       platform: options.platform === "ios" ? "ios-pwa" : options.platform === "android" ? "android" : "desktop",
@@ -155,7 +162,9 @@ async function enrollCleanerPush(session, options, permissionRequest) {
   try {
     registrationResult = await register();
   } catch (error) {
-    if (error?.details?.reason !== "fcm-token-invalidated" || authorizedSession(session) !== user) throw error;
+    if (error?.details?.reason !== "fcm-token-invalidated"
+      || (await cleanerPushBinding("read"))?.sessionId !== session.sessionId
+      || authorizedSession(session) !== user) throw error;
     if (!await deleteToken(messaging)) return "invalidated";
     registrationResult = await register();
   }
@@ -174,7 +183,7 @@ async function enrollCleanerPush(session, options, permissionRequest) {
   registeredContext = context;
   const stored = await cleanerPushBinding("set", session.sessionId, bindingId, options.language, registrationRevision);
   if (!stored || authorizedSession(session) !== user) return "superseded";
-  if (before.bindingId !== bindingId) await closeLocalCleanerNotifications(bindingId).catch(() => {});
+  if (before.bindingId && before.bindingId !== bindingId) await closeLocalCleanerNotifications(before.bindingId).catch(() => {});
   return "registered";
 }
 
@@ -212,21 +221,22 @@ export async function refreshCleanerPush(session, options) {
   return beginEnrollment(session, options, Promise.resolve("granted"));
 }
 
-async function closeLocalCleanerNotifications(keepBindingId) {
+async function closeLocalCleanerNotifications(bindingId) {
   const worker = await navigator.serviceWorker?.getRegistration(cleanerMessagingWorkerScope);
   if (workerReadiness(worker) !== "ready") return;
   const notifications = await worker.getNotifications();
   for (const notification of notifications) {
-    if (!keepBindingId || notification.data?.cleanerBindingId !== keepBindingId) notification.close();
+    if (notification.data?.cleanerBindingId === bindingId) notification.close();
   }
 }
 
-async function forgetCleanerPush(session, reason) {
-  const cleared = await cleanerPushBinding(reason === "SIGNED_OUT" ? "clear" : "invalidate", session.sessionId);
-  if (cleared) await closeLocalCleanerNotifications().catch(() => {});
+async function forgetCleanerPush(session, reason, { localOnly = false } = {}) {
+  const cleared = await cleanerPushBinding(reason === "SIGNED_OUT" ? "clear" : "revokePermission", session.sessionId);
+  if (cleared?.bindingId) await closeLocalCleanerNotifications(cleared.bindingId).catch(() => {});
+  if (localOnly) return;
   const context = registeredContext?.sessionId === session.sessionId ? registeredContext : null;
   if (context) registeredContext = undefined;
-  const installation = context?.deviceId || (cleared?.bindingId ? deviceId() : null);
+  const installation = context?.deviceId || (cleared?.registrationRevision ? deviceId() : null);
   if (!installation) return;
   const { auth } = cleanerHubFirebase();
   const user = auth.currentUser;
@@ -236,6 +246,9 @@ async function forgetCleanerPush(session, reason) {
   const registrationRevision = Math.max(context?.registrationRevision || 0, cleared?.registrationRevision || 0);
   if (registrationRevision && auth.currentUser === user) {
     await invoke("deactivateCleanerPushDevice", { deviceId: installation, registrationRevision, reason });
+    if (reason === "PERMISSION_REVOKED") {
+      await cleanerPushBinding("finishRevocation", session.sessionId, null, null, registrationRevision);
+    }
   }
 }
 

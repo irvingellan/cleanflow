@@ -22,7 +22,7 @@ describe("Notification Inbox", () => {
     };
     render(<Example service={service} onOpen={vi.fn()} />);
     expect(await screen.findByRole("heading", { name: "Nova oferta" })).toBeInTheDocument();
-    expect(screen.getByText("Mostrando os 100 avisos mais recentes.")).toBeInTheDocument();
+    expect(screen.getByText("O contador considera os avisos carregados.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Lidos" }));
     expect(screen.queryByText("Synthetic Flat")).not.toBeInTheDocument();
     expect(screen.getByText("Este item não está mais disponível.")).toBeInTheDocument();
@@ -48,8 +48,34 @@ describe("Notification Inbox", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Abrir" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Este item não está mais disponível.");
     expect(onOpen).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Abrir" }));
+    expect(screen.queryByText("Synthetic Flat")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Atualizar avisos" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir" }));
     expect(onOpen).toHaveBeenCalledExactlyOnceWith({ kind: "OFFER", jobId: "fresh-job" });
+  });
+
+  it("loads older authorized pages once, deduplicates rows and rereads the first page on refresh", async () => {
+    const latest = { ...items[0], id: "latest" };
+    const older = { ...items[0], id: "older", serviceLabel: "Synthetic Older Flat" };
+    const service = {
+      list: vi.fn()
+        .mockResolvedValueOnce({ items: [latest], unreadCount: 1, hasOlder: true, nextCursor: "cursor-1" })
+        .mockResolvedValueOnce({ items: [latest, older], unreadCount: 2, hasOlder: false, nextCursor: null })
+        .mockResolvedValueOnce({ items: [], unreadCount: 0, hasOlder: false, nextCursor: null }),
+    };
+    render(<Example service={service} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Carregar avisos anteriores" }));
+    expect(await screen.findByText("Synthetic Older Flat")).toBeInTheDocument();
+    expect(screen.getAllByText("Synthetic Flat")).toHaveLength(1);
+    expect(screen.getByText("2 não lido(s)")).toBeInTheDocument();
+    expect(service.list.mock.calls).toEqual([
+      ["CLEANER", { pageSize: 25 }], ["CLEANER", { pageSize: 25, cursor: "cursor-1" }],
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Atualizar avisos" }));
+    expect(await screen.findByText("Nenhum aviso neste filtro.")).toBeInTheDocument();
+    expect(screen.queryByText("Synthetic Older Flat")).not.toBeInTheDocument();
+    expect(service.list).toHaveBeenLastCalledWith("CLEANER", { pageSize: 25 });
   });
 
   it("drops the old account and ignores its late list response on session replacement", async () => {

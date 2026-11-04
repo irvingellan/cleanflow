@@ -9,7 +9,7 @@ async function callInbox(name, role, fields) {
 }
 
 export const notificationInboxService = {
-  list: (role) => callInbox("listNotificationInbox", role),
+  list: (role, fields) => callInbox("listNotificationInbox", role, fields),
   mark: (role, id) => callInbox("markNotificationRead", role, { id }),
   open: (role, id) => callInbox("openNotificationInboxItem", role, { id }),
 };

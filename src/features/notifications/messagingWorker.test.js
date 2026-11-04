@@ -8,14 +8,33 @@ import { checklistReviewFcmMessages } from "../../../functions/src/checklistRevi
 function workerFixture() {
   let backgroundMessage;
   const showNotification = vi.fn();
+  const handlers = new Map();
+  const openWindow = vi.fn();
+  const unrelatedNavigate = vi.fn();
   vm.runInNewContext(messagingWorkerSource({ projectId: "demo-cleanflow" }), {
-    self: { addEventListener: vi.fn(), registration: { showNotification } },
+    URL,
+    self: {
+      addEventListener: (type, handler) => handlers.set(type, handler),
+      registration: { showNotification },
+      location: { origin: "https://app.test" },
+      clients: {
+        matchAll: async () => [
+          { url: "https://app.test.evil/", navigate: unrelatedNavigate },
+          { url: "https://app.test/agenda", navigate: unrelatedNavigate },
+          { url: "https://app.test/offer/private", navigate: unrelatedNavigate },
+        ],
+        openWindow,
+      },
+    },
     importScripts: vi.fn(),
     firebase: { initializeApp: vi.fn(), messaging: () => ({
       onBackgroundMessage: handler => { backgroundMessage = handler; },
     }) },
   });
-  return { showNotification, receive: payload => backgroundMessage(payload) };
+  const click = (link) => new Promise((resolve) => handlers.get("notificationclick")({
+    notification: { close: vi.fn(), data: { link } }, stopImmediatePropagation: vi.fn(), waitUntil: resolve,
+  }));
+  return { showNotification, openWindow, unrelatedNavigate, click, receive: payload => backgroundMessage(payload) };
 }
 
 describe("FCM worker display compatibility", () => {
@@ -39,6 +58,21 @@ describe("FCM worker display compatibility", () => {
   it("does not double-display notification payloads already shown by the SDK", () => {
     const fixture = workerFixture();
     fixture.receive({ notification: { title: "CleanFlow Test" }, data: { eventType: "CURRENT_DEVICE_TEST" } });
+    expect(fixture.showNotification).not.toHaveBeenCalled();
+  });
+
+  it("ignores provider deep links and does not hijack Hub or public-link tabs", async () => {
+    const fixture = workerFixture();
+    fixture.receive({ data: { title: "Safe update", body: "Safe text", link: "//app.test.evil" } });
+    expect(fixture.showNotification).toHaveBeenCalledWith("Safe update", expect.objectContaining({ data: { link: "/" } }));
+    await fixture.click("//app.test.evil");
+    expect(fixture.unrelatedNavigate).not.toHaveBeenCalled();
+    expect(fixture.openWindow).toHaveBeenCalledExactlyOnceWith("https://app.test/");
+  });
+
+  it("never renders a cleaner-scope payload in the manager worker", () => {
+    const fixture = workerFixture();
+    fixture.receive({ data: { cleanerBindingId: "a".repeat(32), eventId: "event" } });
     expect(fixture.showNotification).not.toHaveBeenCalled();
   });
 

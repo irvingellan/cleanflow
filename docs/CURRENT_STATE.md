@@ -1,5 +1,12 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — Notifications V1 Phase 2 (local candidate)
+
+The Issue #85 worktree adds paged Inbox reads, reduced automatic-offer agenda
+fanout, worker and installation race tests, diagnostic detail and a staged
+read-only release preflight. Production still runs the published Hub pilot.
+See [Phase 2](NOTIFICATIONS_V1_85_PHASE2.md).
+
 ## 2026-11-04 — Notifications V1 (Issue #85, local candidate)
 
 `codex/notification-reliability-v1-85` adds an authorized Inbox for managers

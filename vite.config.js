@@ -6,7 +6,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { assertBuildEnvironment } from './src/environment.js'
 import {
-  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerPushBinding, cleanerPushDisplay, cleanerPushReceiptEvent,
+  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerPushBinding, cleanerPushDisplay, cleanerPushReceiptEvent, isCleanerVapidKey,
 } from './src/features/notifications/cleanerPushBinding.js'
 
 const firebaseConfigKeys = [
@@ -21,23 +21,22 @@ const firebaseConfigKeys = [
 export function messagingWorkerSource(firebaseConfig) {
   return `// Firebase Messaging needs its own worker; the main PWA worker remains network-only.
 self.addEventListener("notificationclick", (event) => {
+  event.stopImmediatePropagation();
   event.notification.close();
-  const link = typeof event.notification.data?.link === "string" && event.notification.data.link.startsWith("/")
-    ? event.notification.data.link
-    : "/";
+  const home = new URL("/", self.location.origin);
 
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    const existingWindow = windows.find((client) => client.url.startsWith(self.location.origin));
-
-    if (existingWindow) {
-      await existingWindow.navigate(new URL(link, self.location.origin).href).catch(() => undefined);
-      await existingWindow.focus();
+    const managerWindow = windows.find((client) => {
+      const url = new URL(client.url);
+      return url.origin === home.origin && url.pathname === home.pathname;
+    });
+    if (managerWindow) {
+      await managerWindow.focus();
       return;
     }
-
-    await self.clients.openWindow(link);
-  })());
+    await self.clients.openWindow(home.href);
+  })().catch(() => {}));
 });
 
 importScripts("https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js");
@@ -50,13 +49,14 @@ firebase.messaging().onBackgroundMessage((payload) => {
   // data-only operational path, without displaying the current-device test twice.
   if (payload.notification) return;
   const data = payload.data || {};
+  if (data.cleanerBindingId != null) return;
 
   return self.registration.showNotification(data.title || "CleanFlow", {
     body: data.body || "Operational update",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
     tag: data.eventId || "cleanflow-operational-update",
-    data: { link: data.link || "/" },
+    data: { link: "/" },
   });
 });
 `
@@ -83,6 +83,7 @@ self.addEventListener("notificationclick", (event) => {
     const current = await binding("read");
     if (!current?.bindingId || event.notification.data?.cleanerBindingId !== current.bindingId) return;
     const [agenda] = await agendaClients();
+    if ((await binding("read"))?.bindingId !== current.bindingId) return;
     if (agenda) {
       await agenda.navigate(inboxUrl.href).catch(() => undefined);
       await agenda.focus();
@@ -196,7 +197,8 @@ function cleanflowServiceWorkers(buildInfo) {
 
       source = messagingWorkerSource(firebaseConfig)
       cleanerSource = cleanerMessagingWorkerSource(
-        config.mode === 'emulator' ? null : cleanerMessagingConfig(firebaseConfig, environment.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID),
+        config.mode !== 'emulator' && isCleanerVapidKey(environment.VITE_FIREBASE_VAPID_KEY)
+          ? cleanerMessagingConfig(firebaseConfig, environment.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID) : null,
       )
     },
     configureServer(server) {

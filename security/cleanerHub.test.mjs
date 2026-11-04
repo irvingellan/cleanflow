@@ -457,6 +457,48 @@ test("an additional device preserves both signed-in sessions until replacement o
   })), { code: "failed-precondition" });
 });
 
+test("eight Hub sessions remain authorized; concurrent final add and a ninth session cannot exceed the cap", async () => {
+  const jobId = "job-eight-devices";
+  await createJob(jobId);
+  await assignCleanerDirectly.run(managerRequest({ jobId, cleanerId: "cleaner-a" }));
+  await sync(jobId);
+
+  const issued = await link("cleaner-a");
+  const tokens = [issued.token];
+  const additional = () => issueCleanerAccessCode.run(managerRequest({ cleanerId: "cleaner-a", additionalDevice: true }));
+  const redeem = (code) => redeemCleanerAccessCode.run({ data: { code } });
+  for (let index = 1; index < 7; index += 1) {
+    tokens.push((await redeem((await additional()).code)).token);
+  }
+
+  // Concurrent issuance serializes on the Cleaner access record. Concurrent
+  // redemptions of both codes can claim only the eighth and final slot.
+  const [first, second] = await Promise.all([additional(), additional()]);
+  const attempts = await Promise.allSettled([first.code, second.code, second.code].map(redeem));
+  assert.deepEqual(attempts.map(({ status }) => status).sort(), ["fulfilled", "rejected", "rejected"]);
+  for (const failure of attempts.filter(({ status }) => status === "rejected")) {
+    assert.equal(failure.reason.code, "failed-precondition");
+  }
+  tokens.push(attempts.find(({ status }) => status === "fulfilled").value.token);
+  await assert.rejects(additional(), { code: "failed-precondition" });
+
+  const live = await Promise.all(tokens.map(signInWithCodeToken));
+  const sessionIds = live.map(({ idToken }) => decodeToken(idToken).cleanerHub.sessionId);
+  assert.equal(new Set(sessionIds).size, 8);
+  const membershipRef = admin.doc(`${root}/members/${uidA}`);
+  const membership = (await membershipRef.get()).data();
+  assert.deepEqual(new Set(membership.sessionIds), new Set(sessionIds));
+
+  const agendaEntry = `cleaner-a__${jobId}`;
+  assert.deepEqual(await Promise.all(live.map(({ idToken }) => readAgendaWithToken(idToken, agendaEntry))), Array(8).fill(200));
+  // A normal replacement still recovers a saturated account and invalidates
+  // every previously allowed device without mutating their Auth credentials.
+  const replacement = await signInWithCodeToken((await link("cleaner-a")).token);
+  assert.deepEqual(await Promise.all(live.map(({ idToken }) => readAgendaWithToken(idToken, agendaEntry))), Array(8).fill(403));
+  assert.equal(await readAgendaWithToken(replacement.idToken, agendaEntry), 200);
+  assert.deepEqual((await membershipRef.get()).data().sessionIds, [decodeToken(replacement.idToken).cleanerHub.sessionId]);
+});
+
 test("concurrent checklist opens protect the teammate's link, and device recovery retires the old bearer", async () => {
   await createJob("job-team");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-team", cleanerId: "cleaner-a" }));

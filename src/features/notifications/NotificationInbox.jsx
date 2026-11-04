@@ -3,30 +3,60 @@ import { cleanerMessagingWorkerPath, cleanerPushReceiptEvent } from "./cleanerPu
 import { inboxMessage } from "./notificationInboxMessages.js";
 import { notificationInboxService } from "./notificationInboxService.js";
 
-const empty = { items: [], unreadCount: 0, hasOlder: false };
+const pageSize = 25;
+const empty = { items: [], unreadCount: 0, hasOlder: false, nextCursor: null, loadingOlder: false };
+
+function unreadCount(items) {
+  return items.filter((item) => item.read === false).length;
+}
 
 export function useNotificationInbox({ role, sessionKey, service = notificationInboxService }) {
   const [snapshot, setSnapshot] = useState({ sessionKey: null, state: "loading", ...empty });
   const current = useRef(null);
-  const refresh = useCallback(async () => {
+  const load = useCallback(async (cursor = null) => {
     const request = current.current;
-    if (!request || request.sessionKey !== sessionKey || request.loading) return;
+    if (!request || request.sessionKey !== sessionKey) return;
+    if (request.loading) {
+      // A resume during pagination must still reread the current first page.
+      if (cursor === null && request.loadingOlder) request.refreshAfterPage = true;
+      return;
+    }
     request.loading = true;
+    request.loadingOlder = Boolean(cursor);
+    if (cursor) setSnapshot((previous) => ({ ...previous, loadingOlder: true }));
     const version = request.version;
     try {
-      const data = await service.list(role);
+      const data = await service.list(role, { pageSize, ...(cursor ? { cursor } : {}) });
       if (!Array.isArray(data?.items) || !Number.isSafeInteger(data.unreadCount)) throw new Error("Inbox response missing.");
       if (request === current.current && version === request.version) {
-        setSnapshot({ sessionKey, state: "ready", items: data.items, unreadCount: data.unreadCount, hasOlder: data.hasOlder === true });
+        setSnapshot((previous) => {
+          const prior = cursor && previous.sessionKey === sessionKey ? previous.items : [];
+          const loaded = new Map(prior.map((item) => [item.id, item]));
+          data.items.forEach((item) => loaded.set(item.id, item));
+          const items = [...loaded.values()];
+          return {
+            sessionKey, state: "ready", items, unreadCount: unreadCount(items),
+            hasOlder: data.hasOlder === true, nextCursor: typeof data.nextCursor === "string" ? data.nextCursor : null,
+            loadingOlder: false,
+          };
+        });
       }
     } catch {
-      // Drop stale details on a failed refresh, including permission changes.
+      // Drop stale details on a failed refresh or page request, including revoked access.
       if (request === current.current && version === request.version) setSnapshot({ sessionKey, state: "error", ...empty });
     } finally {
       request.loading = false;
-      if (request === current.current && version !== request.version) void refresh();
+      request.loadingOlder = false;
+      if (request === current.current) {
+        setSnapshot((previous) => previous.loadingOlder ? { ...previous, loadingOlder: false } : previous);
+        if (request.refreshAfterPage) {
+          request.refreshAfterPage = false;
+          void load();
+        }
+      }
     }
   }, [role, sessionKey, service]);
+  const refresh = useCallback(() => load(), [load]);
 
   useEffect(() => {
     if (!sessionKey) return undefined;
@@ -60,15 +90,34 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
   async function action(method, id) {
     const request = current.current;
     if (!request || request.sessionKey !== sessionKey) return { state: "superseded" };
-    const result = await service[method](role, id);
+    let result;
+    try {
+      result = await service[method](role, id);
+    } catch (error) {
+      if (request === current.current && ["functions/permission-denied", "functions/unauthenticated"].includes(error?.code)) {
+        request.version += 1;
+        setSnapshot({ sessionKey, state: "error", ...empty });
+      }
+      throw error;
+    }
     if (request !== current.current) return { state: "superseded" };
-    request.version += 1;
-    void refresh();
+    if (["read", "opened", "unavailable"].includes(result?.state)) {
+      request.version += 1;
+      setSnapshot((previous) => {
+        const items = previous.items.map((item) => item.id !== id ? item : result.state === "unavailable"
+          ? { ...item, serviceLabel: null, openable: false } : { ...item, read: true });
+        return { ...previous, items, unreadCount: unreadCount(items) };
+      });
+    }
     return result;
   }
 
   const data = snapshot.sessionKey === sessionKey ? snapshot : { state: "loading", ...empty };
-  return { ...data, refresh, mark: (id) => action("mark", id), open: (id) => action("open", id) };
+  return {
+    ...data, refresh,
+    loadOlder: () => data.nextCursor && load(data.nextCursor),
+    mark: (id) => action("mark", id), open: (id) => action("open", id),
+  };
 }
 
 export function NotificationInbox({ inbox, language, onOpen, onBack }) {
@@ -133,6 +182,8 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
           ))}
         </ul>
       )}
+      {inbox.nextCursor && <button type="button" className="button button--small" disabled={inbox.loadingOlder}
+        onClick={inbox.loadOlder}>{t(inbox.loadingOlder ? "inbox.loading" : "inbox.loadOlder")}</button>}
     </section>
   );
 }

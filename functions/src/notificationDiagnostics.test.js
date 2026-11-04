@@ -4,6 +4,31 @@ import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 const timestamp = (iso) => ({ toDate: () => new Date(iso) });
 
 describe("notification diagnostics projection", () => {
+  it("separates active from eligible, joins attempts by full installation and omits Inbox details", () => {
+    const first = "a".repeat(56) + "11111111";
+    const second = "b".repeat(56) + "11111111";
+    const result = buildNotificationDiagnostics({
+      viewerUserId: "manager",
+      emailsByUserId: new Map([["manager", "synthetic@example.test"]]),
+      devices: [first, second].map((id) => ({ id, data: { userId: "manager", active: true, token: "private-token" } })),
+      eligibleRegistrationIds: new Set([first]),
+      deliveries: [],
+      currentDeviceTests: [
+        { data: { registrationId: first, status: "UNKNOWN", attemptedAt: timestamp("2026-11-03T10:00:00Z") } },
+        { data: { registrationId: second, status: "FCM_ACCEPTED", attemptedAt: timestamp("2026-11-03T09:00:00Z") } },
+      ],
+      latestInbox: { state: "available", item: { type: "TODAY_07", createdAtMs: 10, read: false, openable: true,
+        serviceLabel: "private-property", id: "private-event" } },
+    });
+    expect(result.viewerAccount).toBe("synthetic@example.test");
+    expect(result.devices).toEqual([
+      expect.objectContaining({ active: true, eligible: true, isCurrentAccount: true, latestTest: expect.objectContaining({ status: "UNKNOWN" }) }),
+      expect.objectContaining({ active: true, eligible: false, isCurrentAccount: true, latestTest: expect.objectContaining({ status: "FCM_ACCEPTED" }) }),
+    ]);
+    expect(result.latestInbox).toEqual({ state: "available", type: "TODAY_07", createdAtMs: 10, read: false, openable: true });
+    expect(JSON.stringify(result)).not.toMatch(/private-token|private-property|private-event/);
+  });
+
   it("shows bounded cleaner delivery evidence without identity, token, or display claims", () => {
     const { cleanerDeliveries } = buildNotificationDiagnostics({
       devices: [], deliveries: [],

@@ -6,9 +6,9 @@ const pushDeviceStorageKey = "cleanflow-push-device-id";
 const messagingWorkerScope = "/firebase-messaging-push/";
 const serviceWorkerCheckMs = 2_000;
 
-function coarsePlatform(userAgent = "", platform = "") {
+function coarsePlatform(userAgent = "", platform = "", touchPoints = 0) {
   const source = `${userAgent} ${platform}`;
-  if (/iphone|ipad|ipod/i.test(source)) return "ios";
+  if (/iphone|ipad|ipod/i.test(source) || (/Macintosh/i.test(userAgent) && touchPoints > 1)) return "ios";
   if (/android/i.test(source)) return "android";
   if (/mac/i.test(source)) return "macos";
   if (/win/i.test(source)) return "windows";
@@ -50,7 +50,7 @@ async function serviceWorkerState(environment) {
 }
 
 /** Read-only, coarse snapshot. Never registers a worker or asks for permission. */
-export async function readLocalNotificationHealth(environment = globalThis) {
+export async function readLocalNotificationHealth(environment = globalThis, { userId } = {}) {
   const userAgent = environment.navigator?.userAgent || "";
   let displayModeStandalone = false;
   try {
@@ -65,16 +65,25 @@ export async function readLocalNotificationHealth(environment = globalThis) {
     // A browser may block local storage. The snapshot remains useful locally.
   }
 
+  let registrationId = null;
+  if (userId && deviceId && environment.crypto?.subtle) {
+    try {
+      const digest = await environment.crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${userId}:${deviceId}`));
+      registrationId = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    } catch { /* Local device still has an uncorrelated health snapshot. */ }
+  }
+
   const diagnostic = getCachedFcmRegistrationDiagnostic();
   const cachedFcmState = diagnostic.state;
   const notificationPermission = permissionState(environment);
   const worker = await serviceWorkerState(environment);
   const fcmRegistration = notificationPermission === "granted" && ["registered", "error"].includes(cachedFcmState)
     ? cachedFcmState : "unknown";
-  const platform = coarsePlatform(userAgent, environment.navigator?.platform);
+  const platform = coarsePlatform(userAgent, environment.navigator?.platform, environment.navigator?.maxTouchPoints);
   const standalone = environment.navigator?.standalone === true || displayModeStandalone;
   return {
     deviceId,
+    registrationId,
     notificationPermission,
     serviceWorker: ["missing", "mismatch", "unsupported"].includes(worker) ? "unavailable" : worker,
     // Cached registration is not current readiness when permission was revoked.

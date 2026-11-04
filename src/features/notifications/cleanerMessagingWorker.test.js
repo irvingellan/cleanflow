@@ -2,7 +2,7 @@
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { cleanerMessagingWorkerSource } from "../../../vite.config.js";
-import { cleanerMessagingConfig, cleanerPushDisplay } from "./cleanerPushBinding.js";
+import { cleanerMessagingConfig, cleanerPushDisplay, isCleanerVapidKey } from "./cleanerPushBinding.js";
 
 const base = { projectId: "demo-cleanflow", messagingSenderId: "1234", appId: "1:1234:web:manager" };
 const cleanerAppId = "1:1234:web:cleaner";
@@ -73,6 +73,17 @@ function workerFixture() {
 }
 
 describe("Isolated Cleaner Hub push worker", () => {
+  it("accepts only canonical uncompressed public VAPID key encoding", () => {
+    const publicPoint = Buffer.alloc(65);
+    publicPoint[0] = 4;
+    const fixtureKey = publicPoint.toString("base64url");
+    expect(isCleanerVapidKey(fixtureKey)).toBe(true);
+    expect(isCleanerVapidKey(fixtureKey + "=")).toBe(false);
+    expect(isCleanerVapidKey(fixtureKey.slice(0, -1) + "B")).toBe(false);
+    publicPoint[0] = 3;
+    expect(isCleanerVapidKey(publicPoint.toString("base64url"))).toBe(false);
+  });
+
   it("requires a separate app ID from the same Firebase sender", () => {
     expect(cleanerMessagingConfig(base, base.appId)).toBeNull();
     expect(cleanerMessagingConfig(base, "1:6543:web:cleaner")).toBeNull();

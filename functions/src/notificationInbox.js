@@ -1,4 +1,4 @@
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertSessionForMutation } from "./cleanerHubAccess.js";
 import { notificationRevision, notificationRoster } from "./cleanerNotificationEvents.js";
@@ -63,16 +63,23 @@ function safeServiceLabel(job) {
     : null;
 }
 
-async function authorizedTarget(transaction, organization, event, identity, { forPush = false, now = new Date() } = {}) {
-  const normalized = { ...identity, role: forPush ? cleanerRole : identity.role };
-  if (!validInboxEvent(event, event?.eventId, normalized) || organization.id !== identity.organizationId) return null;
+function targetJobReference(organization, event, forPush) {
+  if (!validInboxSegment(event.jobId) || event.type === managerTypes.today || event.type === managerTypes.tomorrow) return null;
+  if (!forPush && (event.type === cleanerTypes.cancelled || event.type === cleanerTypes.unassigned)) return null;
+  if (event.type === cleanerTypes.offer && !validInboxSegment(event.offerId)) return null;
+  return organization.collection("jobs").doc(event.jobId);
+}
 
+function targetOfferReference(jobRef, job, event, organizationId) {
+  return event.type === cleanerTypes.offer && jobRef && job && !job.archivedAt
+    && (job.organizationId == null || job.organizationId === organizationId)
+    ? jobRef.collection("offers").doc(event.offerId) : null;
+}
+
+function projectAuthorizedTarget(organization, event, identity, job, offer, { forPush = false, now = new Date() } = {}) {
   if (event.type === managerTypes.today || event.type === managerTypes.tomorrow) {
     return { destination: { kind: "DASHBOARD" }, serviceLabel: null };
   }
-  if (!validInboxSegment(event.jobId)) return null;
-  const jobRef = organization.collection("jobs").doc(event.jobId);
-  const job = (await transaction.get(jobRef)).data();
   if (job?.organizationId != null && job.organizationId !== organization.id) return null;
   const rosterIncludesCleaner = notificationRoster(job).includes(identity.cleanerId);
 
@@ -84,12 +91,10 @@ async function authorizedTarget(transaction, organization, event, identity, { fo
     return { destination: { kind: "INBOX" }, serviceLabel: null };
   }
   if (!job || job.archivedAt) return null;
-  if (normalized.role === managerRole) {
+  if (identity.role === managerRole) {
     return { destination: { kind: "JOB", jobId: event.jobId }, serviceLabel: safeServiceLabel(job) };
   }
   if (event.type === cleanerTypes.offer) {
-    if (!validInboxSegment(event.offerId)) return null;
-    const offer = (await transaction.get(jobRef.collection("offers").doc(event.offerId))).data();
     const visibleStatuses = forPush ? ["PENDING"] : ["PENDING", "INTERESTED"];
     if (!offer || offer.cleanerId !== identity.cleanerId || !visibleStatuses.includes(offer.status)
       || (offer.organizationId != null && offer.organizationId !== organization.id)
@@ -107,38 +112,100 @@ async function authorizedTarget(transaction, organization, event, identity, { fo
   return { destination: { kind: "JOB", jobId: event.jobId }, serviceLabel: safeServiceLabel(job) };
 }
 
+async function authorizedTarget(transaction, organization, event, identity, options = {}) {
+  const normalized = { ...identity, role: options.forPush ? cleanerRole : identity.role };
+  if (!validInboxEvent(event, event?.eventId, normalized) || organization.id !== identity.organizationId) return null;
+
+  const jobRef = targetJobReference(organization, event, options.forPush);
+  // A deleted Job has no reference data, but may still have a valid cancellation.
+  if (options.forPush && !jobRef) return null;
+  const job = jobRef ? (await transaction.get(jobRef)).data() : null;
+  const offerRef = targetOfferReference(jobRef, job, event, organization.id);
+  const offer = offerRef ? (await transaction.get(offerRef)).data() : null;
+  return projectAuthorizedTarget(organization, event, normalized, job, offer, options);
+}
+
 /** Rechecks the current source before a device attempt. Device authorization is separate. */
 export async function notificationDestination(transaction, organization, event, identity, options) {
   return (await authorizedTarget(transaction, organization, event, identity, options))?.destination ?? null;
 }
 
+function readInboxPageRequest(data) {
+  const pageSize = data?.pageSize === undefined ? inboxWindow : data.pageSize;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > inboxWindow) {
+    throw new HttpsError("invalid-argument", "Inbox page size is invalid.");
+  }
+  if (data?.cursor == null) return { pageSize, cursor: null };
+  try {
+    if (typeof data.cursor !== "string" || data.cursor.length > 480 || !/^[A-Za-z0-9_-]+$/.test(data.cursor)) throw new Error();
+    const decoded = Buffer.from(data.cursor, "base64url");
+    if (decoded.toString("base64url") !== data.cursor) throw new Error();
+    const parts = JSON.parse(decoded.toString("utf8"));
+    if (!Array.isArray(parts) || parts.length !== 3) throw new Error();
+    const [seconds, nanoseconds, id] = parts;
+    if (!Number.isSafeInteger(seconds) || seconds < 0 || !Number.isInteger(nanoseconds) || !validInboxSegment(id)) throw new Error();
+    return { pageSize, cursor: [new Timestamp(seconds, nanoseconds), id] };
+  } catch {
+    throw new HttpsError("invalid-argument", "Inbox cursor is invalid.");
+  }
+}
+
+function encodeInboxCursor(document) {
+  const timestamp = document.data().createdAt;
+  return Buffer.from(JSON.stringify([timestamp.seconds, timestamp.nanoseconds, document.id])).toString("base64url");
+}
+
+async function readInboxDocuments(transaction, references) {
+  const unique = new Map();
+  for (const reference of references) {
+    if (reference) unique.set(reference.path, reference);
+  }
+  if (unique.size === 0) return new Map();
+  const snapshots = await transaction.getAll(...unique.values());
+  return new Map(snapshots.map((snapshot) => [snapshot.ref.path, snapshot.data()]));
+}
+
 export async function listNotificationInboxForRequest(database, { organizationId, request }) {
   const identity = requestIdentity(request, organizationId);
+  const { pageSize, cursor } = readInboxPageRequest(request.data);
   const organization = database.collection("organizations").doc(organizationId);
   return database.runTransaction(async (transaction) => {
     await assertInboxAccess(transaction, database, organization, identity);
-    const snapshot = await transaction.get(inboxCollection(organization, identity)
-      .orderBy("createdAt", "desc").limit(inboxWindow + 1));
-    const entries = snapshot.docs.slice(0, inboxWindow)
-      .filter((document) => validInboxEvent(document.data(), document.id, identity)
-        && typeof document.data().createdAt?.toMillis === "function");
-    if (entries.length === 0) return { items: [], unreadCount: 0, hasOlder: snapshot.size > inboxWindow };
+    const feed = inboxCollection(organization, identity);
+    let query = feed.where("createdAt", ">=", Timestamp.fromMillis(0))
+      .orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc").limit(pageSize + 1);
+    if (cursor) query = query.startAfter(...cursor);
+    const snapshot = await transaction.get(query);
+    const page = snapshot.docs.slice(0, pageSize);
+    const hasOlder = snapshot.size > pageSize;
+    const nextCursor = hasOlder ? encodeInboxCursor(page.at(-1)) : null;
+    const entries = page.map((document) => ({ id: document.id, event: document.data() }))
+      .filter(({ id, event }) => validInboxEvent(event, id, identity)
+        && typeof event.createdAt?.toMillis === "function");
 
-    const receipts = await transaction.getAll(...entries.map((entry) => inboxReceipt(organization, identity.uid, entry.id)));
-    const items = await Promise.all(entries.map(async (entry, index) => {
-      const event = entry.data();
-      const target = await authorizedTarget(transaction, organization, event, identity);
+    const receiptRefs = entries.map(({ id }) => inboxReceipt(organization, identity.uid, id));
+    const jobRefs = entries.map(({ event }) => targetJobReference(organization, event, false));
+    const records = await readInboxDocuments(transaction, [...receiptRefs, ...jobRefs]);
+    const jobs = jobRefs.map((reference) => records.get(reference?.path));
+    const offerRefs = entries.map(({ event }, index) => (
+      targetOfferReference(jobRefs[index], jobs[index], event, organizationId)
+    ));
+    const offers = await readInboxDocuments(transaction, offerRefs);
+    const now = new Date();
+    const items = entries.map(({ id, event }, index) => {
+      const target = projectAuthorizedTarget(organization, event, identity, jobs[index],
+        offers.get(offerRefs[index]?.path), { now });
       return {
-        id: entry.id,
+        id,
         type: event.type,
         createdAtMs: event.createdAt.toMillis(),
         priority: event.priority,
-        read: Boolean(receipts[index].data()?.readAt),
+        read: Boolean(records.get(receiptRefs[index].path)?.readAt),
         openable: Boolean(target),
         serviceLabel: target?.serviceLabel ?? null,
       };
-    }));
-    return { items, unreadCount: items.filter((item) => !item.read).length, hasOlder: snapshot.size > inboxWindow };
+    });
+    return { items, unreadCount: items.filter((item) => !item.read).length, hasOlder, nextCursor };
   }, { readOnly: true });
 }
 

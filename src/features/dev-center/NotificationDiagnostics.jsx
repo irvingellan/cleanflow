@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n/translations.js";
 import { readLocalNotificationHealth } from "../notifications/notificationHealthService.js";
+import { inboxMessage } from "../notifications/notificationInboxMessages.js";
+import { diagnosticCopy } from "./devCenterNotificationCopy.js";
 import { sendDeveloperTestNotification } from "./devCenterService.js";
 
 const localeByLanguage = { en: "en-US", pt: "pt-BR", es: "es-ES" };
@@ -23,22 +25,25 @@ function countOrUnknown(value, translate) {
   return Number.isFinite(value) ? value : translate("common.notProvided");
 }
 
-export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRefresh }) {
+export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRefresh, userId }) {
   const { language, translate } = useTranslation();
+  const copy = (key) => diagnosticCopy(language, key);
+  const displayMode = (standalone) => standalone === true ? copy("standalone")
+    : standalone === false ? copy("tab") : copy("unknown");
   const [localHealth, setLocalHealth] = useState(null);
   const [targetRegistrationId, setTargetRegistrationId] = useState("");
   const [isConfirmingTest, setIsConfirmingTest] = useState(false);
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [testError, setTestError] = useState(null);
-  const activeDevices = (diagnostics?.devices || []).filter((device) => device.active && device.registrationId);
+  const activeDevices = (diagnostics?.devices || []).filter((device) => device.active && device.eligible !== false && device.registrationId);
   const selectedDevice = activeDevices.find((device) => device.registrationId === targetRegistrationId);
   const healthOnlyReports = (diagnostics?.healthReports || []).filter((report) =>
     !(diagnostics?.devices || []).some((device) => device.registrationId === report.registrationId));
 
   async function refreshLocalHealth() {
     try {
-      setLocalHealth(await readLocalNotificationHealth());
+      setLocalHealth(await readLocalNotificationHealth(globalThis, { userId }));
     } catch {
       setLocalHealth({ error: true });
     }
@@ -46,11 +51,11 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
 
   useEffect(() => {
     let current = true;
-    readLocalNotificationHealth()
+    readLocalNotificationHealth(globalThis, { userId })
       .then((health) => current && setLocalHealth(health))
       .catch(() => current && setLocalHealth({ error: true }));
     return () => { current = false; };
-  }, []);
+  }, [userId]);
 
   async function sendTest() {
     if (!isConfirmingTest || !selectedDevice || isSendingTest) return;
@@ -103,14 +108,34 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
           <ul className="dev-center__diagnostics-list">
             <li>
               <span>{translate("devCenter.browserPermission")}: {translate(`devCenter.healthPermission${localHealth.notificationPermission}`)}</span>
-              <span>{translate("devCenter.healthServiceWorker")}: {translate(`devCenter.healthWorker${localHealth.serviceWorker}`)}</span>
+              <span>{translate("devCenter.healthServiceWorker")}: {localHealth.readiness?.worker === "mismatch"
+                ? copy("workerMismatch") : localHealth.readiness?.worker === "missing"
+                  ? copy("workerMissing") : translate(`devCenter.healthWorker${localHealth.serviceWorker}`)}</span>
               <span>{translate("devCenter.fcmRegistration")}: {translate(`devCenter.healthFcm${localHealth.fcmRegistration}`)}</span>
-              <span>{translate("devCenter.deviceId")}: {localHealth.deviceId?.slice(-8) || translate("devCenter.localDeviceNotCreated")}</span>
+              <span>{translate("devCenter.deviceId")}: {localHealth.registrationId?.slice(-8) || translate("devCenter.localDeviceNotCreated")}</span>
+              <span>{copy("displayMode")}: {displayMode(localHealth.standalone)}</span>
+              <span>{copy("browser")}: {localHealth.platform || copy("unknown")} · {localHealth.browserClass || copy("unknown")}</span>
+              {localHealth.fcmErrorStage && <span>{translate("devCenter.failure")}: {localHealth.fcmErrorStage} · {localHealth.fcmErrorCode}</span>}
               <span>{translate("devCenter.healthLastChecked")}: {formatTimestamp(localHealth.checkedAt, language, translate)}</span>
             </li>
           </ul>
         )}
       </section>
+
+      {!isLoading && diagnostics && (
+        <>
+          {diagnostics.viewerAccount && <p>{copy("viewer")}: {diagnostics.viewerAccount}</p>}
+          {diagnostics.readMetadata && <p>{copy("boundedHistory")}</p>}
+          {diagnostics.latestInbox && (
+            <section aria-label={copy("latestInbox")}>
+              <h4>{copy("latestInbox")}</h4>
+              {diagnostics.latestInbox.state === "available" ? (
+                <p>{inboxMessage(language, `inbox.event.${diagnostics.latestInbox.type}`)} · {formatTimestamp(diagnostics.latestInbox.createdAtMs, language, translate)}</p>
+              ) : <p>{copy(diagnostics.latestInbox.state === "empty" ? "inboxEmpty" : "inboxUnavailable")}</p>}
+            </section>
+          )}
+        </>
+      )}
 
       {!isLoading && diagnostics && (
         <div className="dev-center__diagnostics-grid">
@@ -128,6 +153,12 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
                     <span>{translate("devCenter.platform")}: {device.platform}</span>
                     <span>{translate("devCenter.language")}: {device.language || translate("common.notProvided")}</span>
                     <span>{device.active ? translate("devCenter.deviceActive") : translate("devCenter.deviceInactive")}</span>
+                    {device.registrationId && device.registrationId === localHealth?.registrationId && <span>{copy("current")}</span>}
+                    {"eligible" in device && <span>{copy(device.eligible === true ? "eligible" : device.eligible === false ? "ineligible" : "eligibilityUnknown")}</span>}
+                    {device.tokenState && <span>{copy("registrationState")}: {copy(device.tokenState)}</span>}
+                    {"latestTest" in device && (device.latestTest ? (
+                      <span>{copy("lastTest")}: {formatTimestamp(device.latestTest.attemptedAt, language, translate)} · {translate(`devCenter.testStatus${device.latestTest.status}`)}</span>
+                    ) : <span>{copy("noTest")}</span>)}
                     <span>{translate("devCenter.created")}: {formatTimestamp(device.createdAt, language, translate)}</span>
                     <span>{translate("devCenter.lastSeen")}: {formatTimestamp(device.lastSeenAt, language, translate)}</span>
                     <span>{translate("devCenter.updated")}: {formatTimestamp(device.updatedAt, language, translate)}</span>
@@ -136,6 +167,9 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
                         <span>{translate("devCenter.browserPermission")}: {translate(`devCenter.healthPermission${health.notificationPermission}`)}</span>
                         <span>{translate("devCenter.healthServiceWorker")}: {translate(`devCenter.healthWorker${health.serviceWorker}`)}</span>
                         <span>{translate("devCenter.fcmRegistration")}: {translate(`devCenter.healthFcm${health.fcmRegistration}`)}</span>
+                        <span>{copy("displayMode")}: {displayMode(health.standalone)}</span>
+                        <span>{copy("browser")}: {health.platform || copy("unknown")} · {health.browserClass || copy("unknown")}</span>
+                        {health.fcmErrorStage && <span>{translate("devCenter.failure")}: {health.fcmErrorStage} · {health.fcmErrorCode}</span>}
                         <span>{translate("devCenter.healthLastReported")}: {formatTimestamp(health.checkedAt, language, translate)}</span>
                       </>
                     ) : <span>{translate("devCenter.noDeviceHealth")}</span>}
@@ -190,7 +224,7 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
                     {delivery.sentAt && <span>{translate("devCenter.sentAt")}: {formatTimestamp(delivery.sentAt, language, translate)}</span>}
                     {delivery.failedAt && <span>{translate("devCenter.failedAt")}: {formatTimestamp(delivery.failedAt, language, translate)}</span>}
                     {delivery.failureCode && <span>{translate("devCenter.failure")}: {delivery.failureCode}</span>}
-                    {delivery.failureSummary && <span>{delivery.failureSummary}</span>}
+                    {delivery.unknownDevices != null && <span>{copy("unknownOutcomes")}: {delivery.unknownDevices}</span>}
                   </li>
                 ))}
               </ul>
@@ -207,6 +241,7 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
                     <strong>{translate(`devCenter.reviewStatus${delivery.deliveryStatus}`)}</strong>
                     <span>{translate("devCenter.created")}: {formatTimestamp(delivery.createdAt, language, translate)}</span>
                     <span>{translate("devCenter.attempted")}: {countOrUnknown(delivery.targetDeviceCount, translate)} · {translate("devCenter.fcmAccepted")}: {countOrUnknown(delivery.acceptedByFcmDevices, translate)} · {translate("devCenter.providerFailed")}: {countOrUnknown(delivery.failedDevices, translate)}</span>
+                    {delivery.unknownDevices != null && <span>{copy("unknownOutcomes")}: {delivery.unknownDevices}</span>}
                     {delivery.failureCode && <span>{translate("devCenter.failure")}: {delivery.failureCode}</span>}
                   </li>
                 ))}

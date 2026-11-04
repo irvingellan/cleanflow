@@ -50,6 +50,36 @@ describe("NotificationDiagnostics", () => {
     expect(lab.sendDeveloperTestNotification).not.toHaveBeenCalled();
   });
 
+  it("distinguishes two devices for one signed-in account and keeps provider evidence bounded", () => {
+    const registrationId = "a".repeat(64);
+    lab.readLocalNotificationHealth.mockResolvedValueOnce({
+      registrationId, notificationPermission: "denied", serviceWorker: "unavailable", fcmRegistration: "unknown",
+      readiness: { worker: "mismatch" }, standalone: false, platform: "ios", browserClass: "safari",
+    });
+    renderDiagnostics({ diagnostics: {
+      viewerAccount: "synthetic@example.test", readMetadata: { devices: { capReached: true } },
+      latestInbox: { state: "available", type: "TODAY_07", createdAtMs: 1793700000000 },
+      devices: [
+        { registrationId, deviceId: "aaaaaaaa", active: true, eligible: true, tokenState: "active",
+          latestTest: { status: "UNKNOWN", attemptedAt: "2026-11-03T09:00:00Z" } },
+        { registrationId: "b".repeat(64), deviceId: "bbbbbbbb", active: true, eligible: false, tokenState: "legacy", latestTest: null },
+      ],
+      healthReports: [
+        { registrationId, standalone: false, platform: "ios", browserClass: "safari", notificationPermission: "denied", serviceWorker: "unavailable", fcmRegistration: "unknown" },
+        { registrationId: "b".repeat(64), standalone: true, platform: "ios", browserClass: "safari", notificationPermission: "granted", serviceWorker: "ready", fcmRegistration: "registered" },
+      ],
+      deliveries: [],
+    } });
+    expect(screen.getByText("Signed-in account: synthetic@example.test")).toBeVisible();
+    expect(screen.getByText("Server eligible")).toBeVisible();
+    expect(screen.getByText("Server ineligible")).toBeVisible();
+    expect(screen.getByText(/Latest recorded test for this installation:.*Unknown/)).toBeVisible();
+    expect(screen.getByText("Launch mode: Installed app")).toBeVisible();
+    expect(screen.getByText(/Bounded sample/)).toBeVisible();
+    expect(screen.getByText(/Reminder for today's jobs/)).toBeVisible();
+    return screen.findByText("This installation");
+  });
+
   it("renders active and inactive device metadata and aggregate reminder outcomes", () => {
     renderDiagnostics({
       diagnostics: {

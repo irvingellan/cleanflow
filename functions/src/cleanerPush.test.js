@@ -40,7 +40,7 @@ function addCleaner(records, id, sessions) {
   records.set(`${orgPath}/cleaners/${id}`, { active: true, organizationId });
 }
 
-function fixture() {
+function fixture({ beforeReceiptUpdate } = {}) {
   const records = new Map([
     [`${orgPath}/jobs/${jobId}`, {
       organizationId, operationalStatus: "ASSIGNED", schemaVersion: 2, assignedCleanerIds: [cleanerId],
@@ -62,7 +62,10 @@ function fixture() {
       doc: (id) => reference(`${path}/${id}`),
       collection: (name) => reference(`${path}/${name}`),
       get: async () => snapshot(path),
-      update: async (patch) => records.set(path, { ...records.get(path), ...patch }),
+      update: async (patch) => {
+        if (path === deliveryPath) await beforeReceiptUpdate?.();
+        records.set(path, { ...records.get(path), ...patch });
+      },
       where: (key, _, expected) => ({ path, predicate: (record) => record[key] === expected }),
     };
   }
@@ -173,6 +176,24 @@ describe("cleaner device lifecycle", () => {
 });
 
 describe("cleaner FCM dispatch", () => {
+  it("invokes the transport immediately after the durable authorization claim", async () => {
+    const order = [];
+    const f = fixture({ beforeReceiptUpdate: () => { order.push("receipt-update"); } });
+    await register(f);
+    await deliver(f, async () => {
+      order.push("provider");
+      expect(f.records.get(deliveryPath)).toMatchObject({
+        deliveryStatus: "UNKNOWN", pendingProviderResult: true,
+      });
+      return batch(accepted);
+    });
+    expect(order).toEqual(["provider", "receipt-update"]);
+    expect(f.records.get(deliveryPath)).toMatchObject({
+      deliveryStatus: "FCM_ACCEPTED", pendingProviderResult: false,
+      attemptedAt: expect.any(Timestamp), completedAt: expect.anything(),
+    });
+  });
+
   it("claims once, selects only the authorized recipient's installations and persists a private outcome per install", async () => {
     const f = fixture();
     const first = await register(f);
