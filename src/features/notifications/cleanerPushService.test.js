@@ -82,8 +82,179 @@ beforeEach(() => {
 
 afterEach(() => {
   delete window.navigator.serviceWorker;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+describe("Cleaner push pilot precheck", () => {
+  beforeEach(() => vi.stubEnv("VITE_CLEANFLOW_CLEANER_PUSH_PILOT", "enabled"));
+
+  function status(state) {
+    sdk.invoke.mockImplementation(async (name) => ({ data: name === "getCleanerPushDeviceStatus"
+      ? { state }
+      : { registered: true, registrationRevision: 1, bindingId } }));
+  }
+
+  it("creates only a local installation reference before an ineligible result and never prompts or touches FCM", async () => {
+    status("pilot-ineligible");
+    const push = await import("./cleanerPushService.js");
+    expect(await push.inspectCleanerPush(session, options)).toBe("pilot-ineligible");
+    const installation = window.localStorage.getItem(deviceStorageKey);
+    expect(installation).toMatch(/^[a-f0-9-]{36}$/);
+    expect(sdk.invoke).toHaveBeenCalledExactlyOnceWith("getCleanerPushDeviceStatus", { deviceId: installation });
+    expect(push.cleanerPushPairingReference(session)).toBe(`${session.sessionId}.${installation}`);
+    expect(push.cleanerPushCanEnable(session)).toBe(false);
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-ineligible");
+    expect(await push.refreshCleanerPush(session, options)).toBe("pilot-ineligible");
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(sdk.supported).not.toHaveBeenCalled();
+    expect(sdk.initializeApp).not.toHaveBeenCalled();
+    expect(sdk.getToken).not.toHaveBeenCalled();
+    expect(registerWorker).not.toHaveBeenCalled();
+    expect(state).toBeUndefined();
+    expect(push.cleanerPushPairingReference({ ...session, sessionId: "another-session" })).toBeNull();
+    expect(push.cleanerPushPairingReference({ ...session, organizationId: "another-org" })).toBeNull();
+    sdk.auth.currentUser = { uid: "another-cleaner" };
+    expect(push.cleanerPushPairingReference(session)).toBeNull();
+  });
+
+  it("requires an approved precheck and preserves the explicit permission gesture once approved", async () => {
+    status("missing");
+    const push = await import("./cleanerPushService.js");
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-check-required");
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(await push.inspectCleanerPush(session, options)).toBe("missing");
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(push.cleanerPushPairingReference(session)).toBeNull();
+    expect(push.cleanerPushCanEnable(session)).toBe(true);
+    const enabling = push.enableCleanerPush(session, options);
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(await enabling).toBe("registered");
+    expect(sdk.invoke.mock.calls.map(([name]) => name)).toEqual([
+      "getCleanerPushDeviceStatus", "getCleanerPushDeviceStatus", "registerCleanerPushDevice",
+    ]);
+    expect(sdk.getToken).toHaveBeenCalledOnce();
+  });
+
+  it("does not prompt with an expired cached approval", async () => {
+    status("missing");
+    const push = await import("./cleanerPushService.js");
+    const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
+    expect(await push.inspectCleanerPush(session, options)).toBe("missing");
+    now.mockReturnValue(160_000);
+    expect(push.cleanerPushCanEnable(session)).toBe(false);
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-check-required");
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(sdk.getToken).not.toHaveBeenCalled();
+  });
+
+  it.each(["unavailable", "unknown-server-state"])("fails closed for %s", async (serverState) => {
+    status(serverState);
+    const push = await import("./cleanerPushService.js");
+    expect(await push.inspectCleanerPush(session, options)).toBe(serverState === "unavailable" ? "unavailable" : "error");
+    expect(push.cleanerPushCanEnable(session)).toBe(false);
+    expect(push.cleanerPushPairingReference(session)).toBeNull();
+    await push.enableCleanerPush(session, options);
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(sdk.getToken).not.toHaveBeenCalled();
+  });
+
+  it("invalidates readiness after a failed recheck without prompting", async () => {
+    status("missing");
+    const push = await import("./cleanerPushService.js");
+    expect(await push.inspectCleanerPush(session, options)).toBe("missing");
+    sdk.invoke.mockRejectedValueOnce(new Error("synthetic offline provider"));
+    expect(await push.inspectCleanerPush(session, options)).toBe("error");
+    expect(push.cleanerPushCanEnable(session)).toBe(false);
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-check-required");
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it("rechecks approval before FCM after consent and stops when the grant was revoked", async () => {
+    status("missing");
+    const push = await import("./cleanerPushService.js");
+    await push.inspectCleanerPush(session, options);
+    status("pilot-ineligible");
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-ineligible");
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(sdk.getToken).not.toHaveBeenCalled();
+    expect(registerWorker).not.toHaveBeenCalled();
+    expect(push.cleanerPushPairingReference(session)).toBe(`${session.sessionId}.${window.localStorage.getItem(deviceStorageKey)}`);
+  });
+
+  it("handles the authoritative registration denial without token rotation or a retry", async () => {
+    status("missing");
+    const push = await import("./cleanerPushService.js");
+    await push.inspectCleanerPush(session, options);
+    sdk.invoke.mockImplementation(async (name) => {
+      if (name === "registerCleanerPushDevice") throw { details: { reason: "cleaner-push-pilot-ineligible" } };
+      return { data: { state: "missing" } };
+    });
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-ineligible");
+    expect(push.cleanerPushCanEnable(session)).toBe(false);
+    expect(sdk.getToken).toHaveBeenCalledOnce();
+    expect(sdk.deleteToken).not.toHaveBeenCalled();
+    expect(state.bindingId).toBeUndefined();
+  });
+
+  it("rechecks the grant before rotating a conclusively invalidated FCM token", async () => {
+    status("missing");
+    const push = await import("./cleanerPushService.js");
+    await push.inspectCleanerPush(session, options);
+    let denied = false;
+    sdk.invoke.mockImplementation(async (name) => {
+      if (name === "registerCleanerPushDevice") {
+        denied = true;
+        throw { details: { reason: "fcm-token-invalidated" } };
+      }
+      return { data: { state: denied ? "pilot-ineligible" : "missing" } };
+    });
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-ineligible");
+    expect(sdk.getToken).toHaveBeenCalledOnce();
+    expect(sdk.deleteToken).not.toHaveBeenCalled();
+  });
+
+  it("hides pairing and invalidates a pending status on an account switch even without a worker binding", async () => {
+    status("pilot-ineligible");
+    const push = await import("./cleanerPushService.js");
+    await push.inspectCleanerPush(session, options);
+    expect(push.cleanerPushPairingReference(session)).not.toBeNull();
+    expect(state).toBeUndefined();
+    await push.prepareCleanerPushAccountSwitch();
+    expect(push.cleanerPushPairingReference(session)).toBeNull();
+    let resolveStatus;
+    let started;
+    const requested = new Promise((resolve) => { started = resolve; });
+    sdk.invoke.mockImplementationOnce(() => new Promise((resolve) => { resolveStatus = resolve; started(); }));
+    const checking = push.inspectCleanerPush(session, options);
+    await requested;
+    await push.prepareCleanerPushAccountSwitch();
+    resolveStatus({ data: { state: "missing" } });
+    expect(await checking).toBe("superseded");
+    expect(push.cleanerPushCanEnable(session)).toBe(false);
+    expect(await push.enableCleanerPush(session, options)).toBe("pilot-check-required");
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it("clears an existing display binding when the pilot grant expires and keeps sign-out cleanup available", async () => {
+    status("pilot-ineligible");
+    permission = "granted";
+    state = { sessionId: session.sessionId, bindingId, language: "pt", registrationRevision: 3 };
+    window.localStorage.setItem(deviceStorageKey, "synthetic-installation");
+    const close = vi.fn();
+    registration.getNotifications.mockResolvedValue([{ close, data: { cleanerBindingId: bindingId } }]);
+    const push = await import("./cleanerPushService.js");
+    expect(await push.inspectCleanerPush(session, options)).toBe("pilot-ineligible");
+    expect(state.bindingId).toBeUndefined();
+    expect(close).toHaveBeenCalledOnce();
+    await push.prepareCleanerPushSignOut(session);
+    expect(push.cleanerPushPairingReference(session)).toBeNull();
+    expect(sdk.invoke).toHaveBeenLastCalledWith("deactivateCleanerPushDevice", {
+      deviceId: "synthetic-installation", registrationRevision: 3, reason: "SIGNED_OUT",
+    });
+    expect(await push.enableCleanerPush(session, options)).toBe("superseded");
+  });
 });
 
 describe("Cleaner push lifecycle", () => {

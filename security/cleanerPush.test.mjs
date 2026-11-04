@@ -13,6 +13,7 @@ for (const [name, expected] of Object.entries({
   FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:19180",
 })) assert.equal(process.env[name], expected, `Cleaner push security tests require local ${name}`);
 process.env.AUTOMATIC_OFFERS_MODE = "enabled";
+process.env.CLEANER_PUSH_MODE = "enabled";
 
 const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow" });
@@ -22,8 +23,10 @@ const {
   registerCleanerPushDevice, rescheduleJob, respondToMyOffer, revokeCleanerHubAccess,
 } = await import("../functions/src/index.js");
 const { processCleanerNotification } = await import("../functions/src/cleanerPushDelivery.js");
+const { cleanerPushPilotApprovalReference } = await import("../functions/src/cleanerPushPilot.js");
 const { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } = await import("../functions/src/cleanerNotificationEvents.js");
-const functionDatabase = createRequire(new URL("../functions/src/index.js", import.meta.url))("firebase-admin/firestore").getFirestore();
+const { getFirestore, Timestamp } = createRequire(new URL("../functions/src/index.js", import.meta.url))("firebase-admin/firestore");
+const functionDatabase = getFirestore();
 
 const organizationId = "cleanflow-demo";
 const root = `organizations/${organizationId}`;
@@ -63,8 +66,8 @@ const inboxReference = (cleanerId) => functionDatabase.collection(`${root}/clean
 const receiptReference = (eventId) => functionDatabase.doc(`${root}/cleanerNotificationDeliveries/${eventId}`);
 const open = (auth, id) => openNotificationInboxItem.run(cleaner(auth, { role: "CLEANER", id }));
 const list = (auth) => listNotificationInbox.run(cleaner(auth, { role: "CLEANER" }));
-const dispatch = (cleanerId, eventId, sendFcm, org = organizationId) => processCleanerNotification({
-  database: functionDatabase, organizationId: org, cleanerId, eventId, sendFcm,
+const dispatch = (cleanerId, eventId, sendFcm, org = organizationId, mode = "enabled") => processCleanerNotification({
+  database: functionDatabase, organizationId: org, cleanerId, eventId, sendFcm, mode,
 });
 
 async function createJob(jobId) {
@@ -192,7 +195,7 @@ test("a real Inbox event fans out only to authorized current sessions through an
     };
   };
   const dispatch = () => processCleanerNotification({
-    database: functionDatabase, organizationId, cleanerId: cleanerA, eventId: event.id, sendFcm,
+    database: functionDatabase, organizationId, cleanerId: cleanerA, eventId: event.id, sendFcm, mode: "enabled",
   });
   await Promise.all([dispatch(), dispatch()]);
   await dispatch();
@@ -229,7 +232,7 @@ test("a real Inbox event fans out only to authorized current sessions through an
   await revokeCleanerHubAccess.run(manager({ cleanerId: cleanerA }));
   const afterRevoke = await assignAndRecord("synthetic-job-after-access-ended", cleanerA);
   assert.deepEqual(await processCleanerNotification({
-    database: functionDatabase, organizationId, cleanerId: cleanerA, eventId: afterRevoke.id, sendFcm,
+    database: functionDatabase, organizationId, cleanerId: cleanerA, eventId: afterRevoke.id, sendFcm, mode: "enabled",
   }), { skipped: "RECIPIENT_INELIGIBLE" });
   assert.equal(calls.length, 1);
   assert.equal((await afterRevoke.ref.get()).data().processingState, "STORED");
@@ -424,4 +427,78 @@ test("only the latest reschedule attempts delivery and cancellation can notify w
     assert.deepEqual([row.serviceLabel, row.openable], [null, false]);
   }
   assert.equal((await inboxReference(cleanerB).get()).size, 0);
+});
+
+test("pilot approval gates enrollment and delivery to one exact installation and does not send old queued events", async () => {
+  const approvedAuth = await link(cleanerA);
+  const otherAuth = await link(cleanerA, true);
+  // Model a pre-existing active registration from qualification. It must never
+  // become eligible merely because another device for this cleaner is approved.
+  await register(otherAuth, installationB);
+  const queued = await assignAndRecord("synthetic-pre-approval", cleanerA);
+  await queued.ref.update({ createdAt: Timestamp.fromMillis(Date.now() - 60_000) });
+  const identity = {
+    organizationId, cleanerId: cleanerA, uid: approvedAuth.uid,
+    sessionId: approvedAuth.token.cleanerHub.sessionId, deviceId: installationA.deviceId,
+  };
+  const grant = cleanerPushPilotApprovalReference(functionDatabase, identity);
+  const previousMode = process.env.CLEANER_PUSH_MODE;
+  const previousRelease = process.env.CLEANER_PUSH_PILOT_RELEASE;
+  const releaseSha = "b".repeat(40);
+  const sends = [];
+  const sendFcm = async (messages) => {
+    sends.push(messages);
+    return { responses: [{ success: true }], successCount: 1, failureCount: 0 };
+  };
+  try {
+    delete process.env.CLEANER_PUSH_MODE;
+    assert.deepEqual(await status(approvedAuth, installationA), { state: "unavailable" });
+    await assert.rejects(register(approvedAuth, installationA), { code: "failed-precondition" });
+    assert.deepEqual(await dispatch(cleanerA, queued.id, sendFcm, organizationId, "disabled"), { skipped: "transport-disabled" });
+    assert.equal((await receiptReference(queued.id).get()).exists, false);
+
+    process.env.CLEANER_PUSH_MODE = "pilot";
+    process.env.CLEANER_PUSH_PILOT_RELEASE = releaseSha;
+    const notEligible = { code: "permission-denied", details: { reason: "cleaner-push-pilot-ineligible" } };
+    await assert.rejects(register(approvedAuth, installationA), notEligible);
+    const approval = {
+      ...identity, active: true, releaseSha, approvedAt: Timestamp.now(), expiresAt: Timestamp.fromMillis(Date.now() + 60_000),
+    };
+    await grant.set({ ...approval, organizationId: "other-organization" });
+    await assert.rejects(register(approvedAuth, installationA), notEligible);
+    await grant.set({ ...approval, releaseSha: "a".repeat(40) });
+    await assert.rejects(register(approvedAuth, installationA), notEligible);
+    await grant.set(approval);
+
+    for (const [uid, token] of [[approvedAuth.uid, approvedAuth.token], ["synthetic-manager", manager({}).auth.token]]) {
+      const client = environment.authenticatedContext(uid, token).firestore();
+      await assertFails(client.doc(grant.path).get());
+      await assertFails(client.doc(grant.path).set({ active: true }));
+    }
+    assert.deepEqual(await status(approvedAuth, installationA), { state: "missing" });
+    await assert.rejects(register(approvedAuth, installationB), notEligible);
+    await assert.rejects(register(otherAuth, installationB), notEligible);
+    assert.deepEqual(await status(otherAuth, installationB), { state: "pilot-ineligible" });
+    const enrollment = await register(approvedAuth, installationA);
+    assert.deepEqual(await status(approvedAuth, installationA), { state: "active", registrationRevision: enrollment.registrationRevision });
+
+    assert.deepEqual(await dispatch(cleanerA, queued.id, sendFcm, organizationId, "pilot"), { skipped: "NO_ACTIVE_DEVICES" });
+    const current = await assignAndRecord("synthetic-after-approval", cleanerA);
+    await dispatch(cleanerA, current.id, sendFcm, organizationId, "pilot");
+    assert.equal(sends.length, 1);
+    assert.deepEqual(sends[0].map(({ token }) => token), [installationA.token]);
+
+    const afterExpiry = await assignAndRecord("synthetic-after-expiry", cleanerA);
+    await grant.update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+    assert.deepEqual(await dispatch(cleanerA, afterExpiry.id, sendFcm, organizationId, "pilot"), { skipped: "NO_ACTIVE_DEVICES" });
+    assert.deepEqual(await status(approvedAuth, installationA), { state: "pilot-ineligible" });
+    await assert.rejects(register(approvedAuth, installationA), notEligible);
+    assert.deepEqual(await deactivate(approvedAuth, installationA, enrollment), { deactivated: true });
+    assert.equal(sends.length, 1);
+    assert.ok((await list(approvedAuth)).items.some(({ id }) => id === afterExpiry.id));
+  } finally {
+    process.env.CLEANER_PUSH_MODE = previousMode;
+    if (previousRelease === undefined) delete process.env.CLEANER_PUSH_PILOT_RELEASE;
+    else process.env.CLEANER_PUSH_PILOT_RELEASE = previousRelease;
+  }
 });

@@ -86,97 +86,101 @@ additional devices. This command preserves the array-aware client. An
 incident in the session, checklist or agenda code needs a compatible forward
 fix or separately reviewed server recovery.
 
-## Release B preparation and qualification
+## Release B pilot
 
-Work in `codex/notification-release-b-85` at its clean full SHA, with Node 22.
-Keep the original Release A assets, manifest, seal and COMPLETE publish receipt
-together in the A review directory. Release B uses the published A SHA
-`12f432dd46a6c93e45bfb78ac1993568143c3840` as its live baseline. The B source SHA
-can differ. The preflight is read-only in Production and can build locally.
+The pilot uses the existing Production project, manager public VAPID key and
+a dedicated cleaner Messaging Web App. The app split is needed because the
+pinned SDK keys its Messaging registration cache by Firebase app ID. Scope
+and Firebase app instance name do not partition that cache. The manager and
+cleaner both retain the existing token APIs. Migrating to FID is separate.
+See [Firebase Web Messaging](https://firebase.google.com/docs/cloud-messaging/web/get-started)
+and the [pinned SDK storage code](https://github.com/firebase/firebase-js-sdk/blob/firebase%4012.18.0/packages/messaging/src/internals/idb-manager.ts).
 
-1. Obtain separate authorization to configure the dedicated Production Web app
-   named `CleanFlow Cleaner Hub Messaging`, only if absent. Its project,
-   sender and public API binding must match the deployed manager configuration.
-   Confirm the existing public Production VAPID fingerprint in Firebase
-   Console. Compare fingerprints and keep private key material out of the run.
-2. Run the B preflight to prepare Production assets. Expect the physical
-   gate to block until the pilot exists. Retain the output manifest and copy
-   the exact assets. A missing app or a mismatched live A receipt blocks build.
-3. With separate authorization, use the configured `sandbox` Firebase project
-   and its own manager app, dedicated cleaner app, VAPID and opted-in test
-   accounts. The same candidate source can build its enabled worker with
-   `VITE_CLEANFLOW_SANDBOX_PUSH_PILOT=enabled`,
-   `VITE_FIREBASE_SANDBOX_VAPID_KEY`, the Sandbox cleaner app ID,
-   `VITE_NOTIFICATION_INBOX_MODE=enabled` and
-   `VITE_AUTOMATIC_OFFERS_MODE=disabled`. Use
-   `npm run hosting:prepare -- "$candidate_sha" sandbox` to preserve its manifest.
-   Normal Sandbox builds keep push disabled. The standard Production VAPID
-   variable remains forbidden in Sandbox. Review the isolated backend and
-   recipient set before authorizing any Sandbox deploy or test send.
-4. Test the actual manager and cleaner roles on iPhone and Android. On
-   iPhone, use the Home Screen app and tap the in-app opt-in. On Android,
-   allow notifications for the browser and the site when prompted. Enroll
-   by the normal login/access-code flow with consenting test accounts.
-   Record permission, registration, provider acceptance, device display,
-   open and Inbox availability independently. Confirm Inbox access after
-   denying or disabling push. Do not record tokens, access codes or user IDs.
+### Configure and seal locally
+
+Use the clean `codex/notification-release-b-85` checkout and Node 22. Supply
+the actual COMPLETE A review directory, which contains the original seal,
+publish receipt, manifest and assets. A has published SHA
+`12f432dd46a6c93e45bfb78ac1993568143c3840`. B has its own candidate SHA.
+
+The configuration command is read-only without `--approve create-cleaner-web-app`.
+With that specific approval, it may register exactly the named Web App when
+absent. It compares Production with the A receipt and refuses ambiguous
+inventory. Repeated configuration reuses the same app. It uses the approved
+Production environment directory and prints only public identifiers and hashes.
 
 ```sh
-npm run release:notifications -- --stage B --sha "$candidate_sha" \
-  --env-dir "$approved_production_env_dir" --previous-manifest "$a_dir/hosting-manifest-A.json" \
-  --a-plan "$a_dir/release-plan.json" --a-receipt "$a_dir/publish-receipt.json" \
-  --verification "$b_dir/verification.json" --vapid-console-sha256 "$prod_public_vapid_fingerprint" \
-  --report "$b_dir/preflight-B.json" --build
+node scripts/configureCleanerMessaging.mjs --a-dir "$a_dir" \
+  --env-dir "$approved_production_env_dir" --report "$config_receipt"
+node scripts/prepareReleaseBPilot.mjs --a-dir "$a_dir" \
+  --env-dir "$approved_production_env_dir" --dir "$b_dir" \
+  --verification "$test_receipt" --vapid-console-sha256 "$prod_public_vapid_fingerprint"
 ```
 
-After a separately authorized physical pilot, rerun with
-`--pilot-manifest "$sandbox_manifest" --physical-verification "$physical_receipt"`.
-The physical receipt carries the exact candidate `sha`, Production cleaner
-`appId`, Production `vapidFingerprint` and `hostingManifestSha256`, plus
-`environment: "isolated-pilot"`, `pilotProject`, `pilotManifestSha256`, a
-distinct `pilotVapidFingerprint` and `releaseAuthorized: true`. Its
-`observations` contain one row per `role` (manager or cleaner) and
-`platform` (ios-home-screen or android), a non-identifying `evidenceId` and
-true values for `permissionGranted`, `registered`, `providerAccepted`,
-`displayed`, `opened` and `inboxAvailable`. This qualifies the same source
-in Sandbox. Production device acceptance still requires its own observation
-after a separately authorized publication.
+The second command compares live A, builds B, checks the manager worker bytes,
+scoped cleaner worker and agenda manifest, and seals the pilot. It performs
+no deployment. Sandbox is optional for local qualification. A Sandbox
+inventory permission error does not govern this Production pilot.
 
-See [Firebase Web Messaging](https://firebase.google.com/docs/cloud-messaging/web/get-started),
-[WebKit Home Screen Web Push](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/)
-and [Chrome Android notification prompts](https://developer.chrome.com/blog/notification-prompts-android).
+### Activate only after the separate authorization
 
-### Seal, activate and roll back B
-
-After the final preflight passes, copy the exact `dist` to `$b_dir/assets-B`
-and the prepared manifest to `$b_dir/hosting-manifest-B.json`. Seal locally.
-
-```sh
-node scripts/releaseNotificationB.mjs seal --sha "$candidate_sha" --dir "$b_dir" --a-dir "$a_dir"
-```
-
-Execute only after authorization of the printed plan hash and an exclusive
-Production window covering all operators and CI.
+With the exact plan hash authorized and an exclusive release window, the B
+executor stages the two status and deactivation Functions, verifies Hosting,
+then installs the enrollment Function and sender. Each pilot Function is
+bound to the exact B SHA. Push remains closed until an individual approval
+exists. Rules, the manager sender and its schedules, the Inbox and manual
+offers remain on their reviewed contracts. #86 remains disabled.
 
 ```sh
 node scripts/releaseNotificationB.mjs publish --sha "$candidate_sha" --dir "$b_dir" --a-dir "$a_dir" \
   --approve "publish:$plan_sha256" --exclusive-window
 ```
 
-The scope is the two status and deactivation callables, verified Hosting,
-the enrollment callable, then the sender trigger. Inbox and manager FCM
-stay enabled. Automatic Offers stay disabled. The sender claims an event
-before FCM and does not retry an uncertain provider result. Matching
-completed receipts are verified no-ops on repeat. A failed partial deploy
-retains the mutex and journal and needs reconciliation.
+A consenting cleaner uses their normal authorized session. Account settings
+show a pairing reference for that installation. The operator records that
+reference with the approved cleaner, organization and expiry in a private
+local request under `.tmp/` with mode 0600. Fields are `organizationId`,
+`cleanerId`, `pairingCode` and `expiresAt` (UTC ISO 8601 with milliseconds).
+Use an absolute path. Inspect and approve the exact request hash using the
+approval script. No receipt should contain pairing
+references, account identifiers or registration tokens.
+
+```sh
+node scripts/approveCleanerPushPilot.mjs --dir "$b_dir" --request "$private_request"
+node scripts/approveCleanerPushPilot.mjs --dir "$b_dir" --request "$private_request" \
+  --approve "grant:$request_sha256"
+```
+
+Approvals bind account, organization, cleaner, session, installation and SHA,
+expire within 24 hours and apply only to later events. The cleaner rechecks
+status before opting in. A permission denial leaves the Inbox available.
+A repeat of the same grant does not extend expiry. New devices require their
+own authorization. A completed release can be verified again without deploy.
+A partial deploy retains the mutex and requires reconciliation.
+
+### Test on authorized physical devices
+
+On iPhone, add the agenda to the Home Screen, open it by its icon and tap
+the in-app opt-in after approval. On Android, open the Chrome/PWA agenda
+and allow site and browser notifications. Use only approved devices, test
+accounts and events. Record device permission, registration, provider
+acceptance, actual OS display and opening separately. Test foreground and
+background, denied permission, account switch, device revocation, app return
+after restart and Inbox without delivery. Repeat for iPhone and Android.
+Check manager interest, confirmation and checklist-ready using the existing
+authorized manager flow. See [WebKit Home Screen push](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/)
+and [Chrome Android permissions](https://developer.chrome.com/blog/notification-prompts-android).
+A passing emulator or provider acceptance does not complete physical validation.
+
+### Rollback
+
+With separate authorization and the matching COMPLETE B receipt, rollback
+disables sender then enrollment before restoring exact Inbox-enabled A
+Hosting. It preserves Inbox entries, receipts, device and session records.
+Status and deactivation stay available. Previously accepted messages may
+still arrive. Use the live snapshot and mutex gates for every step.
 
 ```sh
 node scripts/releaseNotificationB.mjs rollback --sha "$candidate_sha" --dir "$b_dir" --a-dir "$a_dir" \
   --approve "rollback:$plan_sha256" --exclusive-window
 ```
-
-With separate rollback authorization and a matching COMPLETE B receipt, the
-script disables the sender, disables enrollment, then restores exact
-Inbox-enabled A Hosting. Status and deactivation remain available. The
-procedure preserves Inbox events, receipts and device/session records.
-Provider messages already accepted before the switch can still arrive.

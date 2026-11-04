@@ -257,7 +257,10 @@ async function preflight(options) {
   const buildGates = ["worktree", "runtime", "previousManifest", "managerFirebaseBinding", "managerVapid"];
   if (stage === "B") buildGates.push("previousManifest", "releaseALive", "releaseADrift", "dedicatedCleanerApp", "consoleVapidAttestation");
   if (build && buildGates.every((name) => checks[name])) {
-    if (stage === "B") env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID = cleaner.appId;
+    if (stage === "B") {
+      env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID = cleaner.appId;
+      env.VITE_CLEANFLOW_CLEANER_PUSH_PILOT = "enabled";
+    }
     execFileSync("npm", ["run", "hosting:prepare", "--", sha, "production"], {
       cwd: root, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"],
     });
@@ -267,6 +270,18 @@ async function preflight(options) {
     const preparedBytes = readFileSync(resolve(root, ".firebase/hosting-prepared-manifest.json"));
     const worker = readFileSync(resolve(dist, "cleaner-messaging-sw.js"), "utf8");
     const managerWorker = readFileSync(resolve(dist, "firebase-messaging-sw.js"), "utf8");
+    if (stage === "B") {
+      check("managerWorkerUnchanged", previousWorker?.toString() === managerWorker,
+        "Release B must preserve the deployed manager worker bytes.");
+      const agenda = JSON.parse(readFileSync(resolve(dist, "agenda.webmanifest"), "utf8"));
+      const hosting = JSON.parse(readFileSync(resolve(root, "firebase.json"), "utf8")).hosting;
+      const headers = hosting.headers.find((row) => row.source === "/cleaner-messaging-sw.js")?.headers;
+      check("cleanerPilotHosting", agenda.id === "/agenda" && agenda.start_url === "/agenda"
+        && agenda.scope === "/" && agenda.display === "standalone"
+        && headers?.some((row) => row.key === "Service-Worker-Allowed" && row.value === "/cleaner-messaging-push/")
+        && headers.some((row) => row.key === "Cache-Control" && row.value.includes("no-store")),
+      "Cleaner manifest or scoped worker Hosting headers differ.");
+    }
     check("managerWorker", managerWorker.includes(`firebasejs/${sdkVersion}/`)
       && Object.values(manager).every((value) => managerWorker.includes(JSON.stringify(value))),
     "The built manager worker has a different Firebase binding or SDK.");
@@ -284,7 +299,7 @@ async function preflight(options) {
   }
   if (!manifest) check("manifest", false, "A stage-specific build manifest is required.");
   let physicalEvidence = null;
-  if (stage === "B") {
+  if (stage === "B" && (options["physical-verification"] || options["pilot-manifest"])) {
     const physicalBytes = options["physical-verification"] && readFileSync(resolve(options["physical-verification"]));
     const pilotBytes = options["pilot-manifest"] && readFileSync(resolve(options["pilot-manifest"]));
     const pilot = pilotBytes && JSON.parse(pilotBytes);
@@ -312,12 +327,14 @@ async function preflight(options) {
         ? { appIdHash: sha256(cleaner.appId), apiKeyHash: sha256(cleaner.apiKey), vapidFingerprint } : null,
       managerVapidFingerprint: vapidFingerprint,
       physicalEvidence,
+      pilotPolicy: "explicit-device-approval",
+      physicalAcceptance: physicalEvidence ? "SANDBOX_OBSERVED" : "PENDING",
     } : {}),
     production: cloud || null, publicHostingFiles: { matched: staticMatches, total: staticAssets.length },
     targets: stage === "A" ? { rules: ["firestore.rules"], hosting: true, functions: { create: deployGroups.create, update: deployGroups.update } }
       : { rules: [], hosting: true, createBeforeHosting: deployGroups.prepareB, createAfterHosting: deployGroups.enable },
     automaticOffersMode: "disabled",
-    cleanerPushMode: stage === "A" ? "disabled" : "enabled",
+    cleanerPushMode: stage === "A" ? "disabled" : "pilot",
     relevantSourceFiles: git("diff", "--name-only", `${deployedSha}..HEAD`, "--",
       "firebase.json", "firestore.rules", "functions/src", "vite.config.js").split("\n").filter(Boolean),
     setupAction: cloud?.dedicatedAppState === "MISSING" ? ["firebase", "apps:create", "WEB", dedicatedCleanerAppName,

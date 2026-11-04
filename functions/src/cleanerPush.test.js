@@ -5,6 +5,7 @@ import {
   deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice,
 } from "./cleanerPushDevices.js";
 import { processCleanerNotification } from "./cleanerPushDelivery.js";
+import { isCleanerPushPilotApproval, resolveCleanerPushMode } from "./cleanerPushPilot.js";
 import { managerFcmTimeoutMs } from "./managerFcmDelivery.js";
 
 const organizationId = "synthetic-org";
@@ -102,13 +103,13 @@ function fixture({ beforeReceiptUpdate } = {}) {
   return { database, records };
 }
 
-const register = (f, data = registration, who = identity()) => registerCleanerDevice(f.database, who, data);
-const status = (f, deviceId = registration.deviceId, who = identity()) => getCleanerDeviceStatus(f.database, who, { deviceId });
+const register = (f, data = registration, who = identity()) => registerCleanerDevice(f.database, who, data, "enabled");
+const status = (f, deviceId = registration.deviceId, who = identity()) => getCleanerDeviceStatus(f.database, who, { deviceId }, "enabled");
 const deactivate = (f, result, data = registration, who = identity(), reason = "SIGNED_OUT") =>
   deactivateCleanerDevice(f.database, who, {
     deviceId: data.deviceId, token: data.token, registrationRevision: result.registrationRevision, reason,
   });
-const deliver = (f, sendFcm) => processCleanerNotification({ database: f.database, organizationId, cleanerId, eventId, sendFcm });
+const deliver = (f, sendFcm) => processCleanerNotification({ database: f.database, organizationId, cleanerId, eventId, sendFcm, mode: "enabled" });
 const accepted = { success: true, messageId: "synthetic-provider-accepted" };
 const invalid = { success: false, error: { code: "messaging/registration-token-not-registered" } };
 const batch = (...responses) => ({
@@ -256,5 +257,38 @@ describe("cleaner FCM dispatch", () => {
     await deliver(f, sendFcm);
     expect(sendFcm).not.toHaveBeenCalled();
     expect(f.records.get(eventPath)).toMatchObject({ processingState: "STORED" });
+  });
+});
+
+describe("cleaner push pilot eligibility", () => {
+  it("keeps missing, mistyped, and broad Production modes disabled", () => {
+    for (const configured of [undefined, "", "disabled", "enabled", "typo"]) {
+      expect(resolveCleanerPushMode(configured, "production")).toBe("disabled");
+    }
+    expect(resolveCleanerPushMode("pilot", "production")).toBe("disabled");
+    expect(resolveCleanerPushMode("pilot", "production", "b".repeat(40))).toBe("pilot");
+    expect(resolveCleanerPushMode("enabled", "sandbox")).toBe("enabled");
+    expect(resolveCleanerPushMode("pilot", "unknown")).toBe("disabled");
+  });
+
+  it("requires an exact current grant and rejects events predating approval", () => {
+    const identity = {
+      organizationId: "demo", cleanerId: "example", uid: "example-uid", sessionId: "example-session",
+      deviceId: "example-installation-id",
+    };
+    const releaseSha = "b".repeat(40);
+    const options = { releaseSha, nowMs: 2000, eventAtMs: 1500 };
+    const approval = { ...identity, active: true, releaseSha, approvedAt: { toMillis: () => 1000 }, expiresAt: { toMillis: () => 2500 } };
+    expect(isCleanerPushPilotApproval(approval, identity, options)).toBe(true);
+    expect(isCleanerPushPilotApproval(approval, identity, { ...options, releaseSha: "a".repeat(40) })).toBe(false);
+    for (const key of Object.keys(identity)) {
+      expect(isCleanerPushPilotApproval({ ...approval, [key]: "other" }, identity, options)).toBe(false);
+    }
+    expect(isCleanerPushPilotApproval(approval, identity, { ...options, nowMs: 2500 })).toBe(false);
+    expect(isCleanerPushPilotApproval(approval, identity, { ...options, eventAtMs: 999 })).toBe(false);
+    expect(isCleanerPushPilotApproval({ ...approval, active: false }, identity, options)).toBe(false);
+    expect(isCleanerPushPilotApproval({ ...approval, expiresAt: 2500 }, identity, options)).toBe(false);
+    expect(isCleanerPushPilotApproval({ ...approval, approvedAt: { toMillis: "invalid" } }, identity, options)).toBe(false);
+    expect(isCleanerPushPilotApproval({ ...approval, deviceId: undefined }, { ...identity, deviceId: undefined }, options)).toBe(false);
   });
 });

@@ -78,7 +78,8 @@ const defaultEnv = {
 
 function compatibleRuntime({ environmentVariables = {}, secretEnvironmentVariables = [], secretVolumes = [] }, secretVersion, allowCleanerPush = false) {
   return Object.entries(environmentVariables).every(([key, value]) =>
-    managedEnv.has(key) || (allowCleanerPush && key === "CLEANER_PUSH_MODE" && value === "enabled")
+    managedEnv.has(key) || (allowCleanerPush && ((key === "CLEANER_PUSH_MODE" && value === "pilot")
+      || (key === "CLEANER_PUSH_PILOT_RELEASE" && /^[a-f0-9]{40}$/.test(value))))
     || Object.hasOwn(defaultEnv, key) && defaultEnv[key].includes(value))
     && secretVolumes.length === 0
     && secretEnvironmentVariables.every((ref) => ref.key === developerSecret && ref.secret === developerSecret
@@ -197,9 +198,10 @@ export async function readNotificationProduction(stage, managerAppId) {
     revision: entry.serviceConfig?.revision || null,
     configurationHash: functionConfigurationHash(entry),
     runtimeCompatible: compatibleRuntime(entry.serviceConfig || {}, secretVersion,
-      stage === "B" && /\/(registerCleanerPushDevice|notifyCleanerInboxEvent)$/.test(entry.name)),
+      stage === "B" && /\/(getCleanerPushDeviceStatus|deactivateCleanerPushDevice|registerCleanerPushDevice|notifyCleanerInboxEvent)$/.test(entry.name)),
     cleanerPushMode: entry.serviceConfig?.environmentVariables?.CLEANER_PUSH_MODE ?? "disabled",
     automaticOffersMode: entry.serviceConfig?.environmentVariables?.AUTOMATIC_OFFERS_MODE ?? "disabled",
+    cleanerPushPilotRelease: entry.serviceConfig?.environmentVariables?.CLEANER_PUSH_PILOT_RELEASE ?? null,
     secretBindingHash: sha256(JSON.stringify(unorderedRows(entry.serviceConfig?.secretEnvironmentVariables || []))),
     maxInstances: entry.serviceConfig?.maxInstanceCount,
     ...(/\/(listNotificationInbox|markNotificationRead|openNotificationInboxItem)$/.test(entry.name)

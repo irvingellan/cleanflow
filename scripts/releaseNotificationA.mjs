@@ -177,11 +177,12 @@ export function stageReleaseInputs(sha, artifact, { inboxMode, cleanerPushMode }
   }
 }
 
-export function writeReleaseModes(workspace, { inboxMode, cleanerPushMode }, flag) {
-  requireCondition(["enabled", "disabled"].includes(inboxMode) && ["enabled", "disabled"].includes(cleanerPushMode),
+export function writeReleaseModes(workspace, { inboxMode, cleanerPushMode, pilotRelease }, flag) {
+  requireCondition(["enabled", "disabled"].includes(inboxMode) && ["pilot", "disabled"].includes(cleanerPushMode)
+    && (cleanerPushMode === "pilot" ? shaFormat.test(pilotRelease || "") : !pilotRelease),
     "Invalid release runtime mode.");
   writeFileSync(join(workspace, "functions", `.env.${notificationProject}`),
-    `DEV_CENTER_SANDBOX_PROJECT_ID=\nMANAGER_REMINDER_PROVIDER=fcm\nAUTOMATIC_OFFERS_MODE=disabled\nCLEANER_PUSH_MODE=${cleanerPushMode}\nNOTIFICATION_INBOX_MODE=${inboxMode}\n`,
+    `DEV_CENTER_SANDBOX_PROJECT_ID=\nMANAGER_REMINDER_PROVIDER=fcm\nAUTOMATIC_OFFERS_MODE=disabled\nCLEANER_PUSH_MODE=${cleanerPushMode}\n${pilotRelease ? `CLEANER_PUSH_PILOT_RELEASE=${pilotRelease}\n` : ""}NOTIFICATION_INBOX_MODE=${inboxMode}\n`,
     { flag, mode: 0o600 });
 }
 

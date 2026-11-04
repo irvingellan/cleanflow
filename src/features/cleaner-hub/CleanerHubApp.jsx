@@ -551,7 +551,7 @@ function Offers({ t, hub, go, today }) {
   );
 }
 
-function CleanerPushSettings({ t, push, go }) {
+export function CleanerPushSettings({ t, push, go }) {
   const { state } = push;
   const recoverable = ["permission-default", "missing", "invalidated", "worker-missing", "worker-mismatch", "error"].includes(state);
   return (
@@ -561,9 +561,14 @@ function CleanerPushSettings({ t, push, go }) {
         <strong>{t("hb.acc.notifications")}</strong>
         <p className="mw-hint" role="status">{t(`hb.push.${state}`)}</p>
         {notificationInboxEnabled() && <p className="mw-hint">{t("hb.push.inboxAlways")}</p>}
-        {recoverable && <button type="button" className="cfv2-button cfv2-button-primary mw-btn" onClick={push.enable}>{t("hb.push.enable")}</button>}
+        {state === "pilot-ineligible" && push.pairingReference && <label className="mw-hint">
+          {t("hb.push.pairingReference")}
+          <input type="text" readOnly value={push.pairingReference} aria-label={t("hb.push.pairingReference")} />
+          <span>{t("hb.push.pairingHelp")}</span>
+        </label>}
+        {recoverable && push.canEnable !== false && <button type="button" className="cfv2-button cfv2-button-primary mw-btn" onClick={push.enable}>{t("hb.push.enable")}</button>}
         {state === "ios-standalone-required" && <button type="button" className="mw-linkbtn" onClick={() => go({ type: "install" })}>{t("hb.acc.install")}</button>}
-        {["permission-denied", "offline", "superseded", "error"].includes(state) && <button type="button" className="mw-linkbtn" onClick={push.recheck}>{t("hb.push.recheck")}</button>}
+        {(["permission-denied", "offline", "superseded", "error", "pilot-ineligible", "pilot-check-required", "unavailable"].includes(state) || (recoverable && push.canEnable === false)) && <button type="button" className="mw-linkbtn" onClick={push.recheck}>{t("hb.push.recheck")}</button>}
       </div>
     </div>
   );

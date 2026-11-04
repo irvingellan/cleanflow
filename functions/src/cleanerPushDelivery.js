@@ -9,6 +9,7 @@ import {
   managerFcmFailureCode, normalizeManagerFcmResult,
 } from "./managerFcmDelivery.js";
 import { notificationDestination } from "./notificationInbox.js";
+import { approvedCleanerPushPilotDevice } from "./cleanerPushPilot.js";
 import { cleanerInbox, cleanerInboxTypes, inboxEventVersion, isInboxId, validInboxSegment } from "./notificationInboxEvents.js";
 
 const eventTypes = new Set(Object.values(cleanerInboxTypes));
@@ -40,11 +41,16 @@ function cleanerFcmMessage(snapshot, eventId) {
   };
 }
 
-async function chooseDevices(transaction, database, identity, sessionIds) {
+async function chooseDevices(transaction, database, identity, sessionIds, mode, eventAtMs) {
   const candidates = await Promise.all(sessionIds.map(async (sessionId) => {
     const session = { ...identity, sessionId };
     const snapshot = await transaction.get(cleanerDeviceReference(database, session));
-    return eligibleCleanerRegistration(snapshot.data(), session) ? snapshot : null;
+    const record = snapshot.data();
+    if (!eligibleCleanerRegistration(record, session)) return null;
+    if (mode === "pilot" && !await approvedCleanerPushPilotDevice(
+      transaction, database, { ...session, deviceId: record.deviceId }, eventAtMs,
+    )) return null;
+    return snapshot;
   }));
   const bindings = await Promise.all(candidates.filter(Boolean).map(async (snapshot) => {
     return await hasCurrentCleanerClaims(transaction, database, snapshot.data()) ? snapshot : null;
@@ -52,7 +58,7 @@ async function chooseDevices(transaction, database, identity, sessionIds) {
   return bindings.filter(Boolean);
 }
 
-async function claimDelivery(database, { organization, cleanerId, eventId, deliveryReference }) {
+async function claimDelivery(database, { organization, cleanerId, eventId, deliveryReference, mode }) {
   const organizationId = organization.id;
   const uid = cleanerAccountUid(organizationId, cleanerId);
   const identity = { organizationId, cleanerId, uid };
@@ -79,7 +85,8 @@ async function claimDelivery(database, { organization, cleanerId, eventId, deliv
     const activeRecipient = sessions.length > 0 && eligibleCleaner(profile)
       && (profile.organizationId == null || profile.organizationId === organizationId);
     const destination = activeRecipient && await notificationDestination(transaction, organization, event, identity, { forPush: true });
-    const devices = destination ? await chooseDevices(transaction, database, identity, sessions) : [];
+    const devices = destination
+      ? await chooseDevices(transaction, database, identity, sessions, mode, event.createdAt.toMillis()) : [];
     const skipped = !activeRecipient ? "RECIPIENT_INELIGIBLE"
       : !destination ? "STALE_EVENT" : devices.length === 0 ? "NO_ACTIVE_DEVICES" : null;
     const stages = ["EVENT_CREATED", "RECIPIENT_SELECTED", "INBOX_STORED"];
@@ -140,13 +147,14 @@ async function recordOutcome(reference, patch, logger) {
 }
 
 /** One claimed FCM attempt for an already committed Inbox event. */
-export async function processCleanerNotification({ database, organizationId, cleanerId, eventId, sendFcm, logger }) {
+export async function processCleanerNotification({ database, organizationId, cleanerId, eventId, sendFcm, logger, mode }) {
+  if (mode !== "pilot" && mode !== "enabled") return { skipped: "transport-disabled" };
   if (!validInboxSegment(organizationId) || !validInboxSegment(cleanerId) || !isInboxId(eventId)) {
     return { skipped: "invalid-event" };
   }
   const organization = database.collection("organizations").doc(organizationId);
   const reference = organization.collection("cleanerNotificationDeliveries").doc(eventId);
-  const claim = await claimDelivery(database, { organization, cleanerId, eventId, deliveryReference: reference });
+  const claim = await claimDelivery(database, { organization, cleanerId, eventId, deliveryReference: reference, mode });
   if (!claim || claim.skipped) return { skipped: claim?.skipped || "already-claimed-or-invalid" };
   const { devices, stages } = claim;
 

@@ -22,6 +22,7 @@ const report = {
   ],
 };
 const baseline = releaseBSnapshot(report);
+const pilotSha = "c".repeat(40);
 
 test("publishes four exact transport Functions and keeps the sender last", () => {
   assert.deepEqual(releaseBSteps.publish.map((step) => step.only), [
@@ -35,6 +36,7 @@ test("publishes four exact transport Functions and keeps the sender last", () =>
     "functions:registerCleanerPushDevice",
     "hosting",
   ]);
+  assert.ok(releaseBSteps.publish.filter((step) => step.functions).every((step) => step.cleanerPushMode === "pilot"));
   assert.ok(releaseBSteps.rollback.filter((step) => step.functions).every((step) => step.cleanerPushMode === "disabled"));
   assert.deepEqual(releaseBDeploymentArgs("rollback", releaseBSteps.rollback.at(-1), baseline).slice(-3),
     ["--config", "firebase-rollback.json", "--non-interactive"]);
@@ -58,9 +60,10 @@ test("rejects A rollback state, #86 drift and unrelated cleaner-push enablement"
     const drift = { ...report, functions: [row(inboxNames[0], { inboxMode: "enabled", ...fields }), ...report.functions.slice(1)] };
     assert.throws(() => releaseBSnapshot(drift), /Inbox-enabled|unexpected/);
   }
-  const newSender = row("notifyCleanerInboxEvent", { cleanerPushMode: "enabled" });
+  const newSender = row("notifyCleanerInboxEvent", { cleanerPushMode: "pilot", cleanerPushPilotRelease: pilotSha });
   assert.equal(releaseBSnapshot({ ...report, functions: [...report.functions, newSender] })
-    .functions.notifyCleanerInboxEvent.cleanerPushMode, "enabled");
+    .functions.notifyCleanerInboxEvent.cleanerPushMode, "pilot");
+  assert.throws(() => releaseBSnapshot({ ...report, functions: [...report.functions, { ...newSender, cleanerPushPilotRelease: null }] }), /unexpected/);
   assert.throws(() => releaseBSnapshot({ ...report, functions: [...report.functions, row("createAutomaticJobOffers")] }),
     /manual-offer/);
 });
@@ -91,13 +94,13 @@ test("release sequence stops before enrollment on unverified Hosting or target m
         const functions = { ...state.functions };
         for (const name of step.functions) {
           functions[name] = { runtimeCompatible: true, revision: "new", hash: "reviewed",
-            cleanerPushMode: driftMode ? "enabled" : step.cleanerPushMode };
+            cleanerPushMode: driftMode ? "enabled" : step.cleanerPushMode, cleanerPushPilotRelease: pilotSha };
         }
         state = { ...state, functions };
       },
       verifyAssets: async () => { if (!hosted) throw new Error("Unverified Hosting bytes"); },
       journal(phase, id, snapshot) {
-        if (phase === "VERIFIED") verifyBStep(snapshot, releaseBSteps.publish.find((step) => step.id === id));
+        if (phase === "VERIFIED") verifyBStep(snapshot, releaseBSteps.publish.find((step) => step.id === id), pilotSha);
       },
     });
   };
@@ -112,14 +115,13 @@ test("release sequence stops before enrollment on unverified Hosting or target m
 
 test("rollback disables both transport Functions and retains Inbox and all four Functions", async () => {
   const transport = releaseBSteps.publish.flatMap((step) => step.functions || []);
-  const enabled = new Set(["registerCleanerPushDevice", "notifyCleanerInboxEvent"]);
   const initial = {
     ...baseline,
     hosting: { version: "B", release: "live-B" },
     functions: {
       ...baseline.functions,
       ...Object.fromEntries(transport.map((name) => [name, { revision: "B", hash: "enabled",
-        secretBindingHash: "none", runtimeCompatible: true, cleanerPushMode: enabled.has(name) ? "enabled" : "disabled" }])),
+        secretBindingHash: "none", runtimeCompatible: true, cleanerPushMode: "pilot", cleanerPushPilotRelease: pilotSha }])),
     },
   };
   let state = initial;
@@ -129,7 +131,7 @@ test("rollback disables both transport Functions and retains Inbox and all four 
     inspect: async () => state, verifyLock: async () => {},
     deploy: async (step) => {
       if (step.id === "hosting") {
-        assert.ok(transport.every((name) => state.functions[name].cleanerPushMode === "disabled"));
+        assert.ok(["registerCleanerPushDevice", "notifyCleanerInboxEvent"].every((name) => state.functions[name].cleanerPushMode === "disabled"));
         state = { ...state, hosting: { version: "A-restored", release: "live-A-restored" } };
         return;
       }

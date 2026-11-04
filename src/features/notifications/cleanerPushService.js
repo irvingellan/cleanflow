@@ -16,6 +16,11 @@ const vapidKey = webPushVapidKey(import.meta.env.MODE, import.meta.env);
 const messagingConfig = useFirebaseEmulators || ["test", "emulator", "e2e"].includes(import.meta.env.MODE)
   ? null : cleanerMessagingConfig(firebaseConfig, import.meta.env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID);
 const workerIdentity = { scope: cleanerMessagingWorkerScope, script: cleanerMessagingWorkerPath };
+const pilotEnabled = import.meta.env.VITE_CLEANFLOW_CLEANER_PUSH_PILOT === "enabled";
+const pilotReadinessLifetimeMs = 60_000;
+const eligiblePilotStates = new Set(["active", "missing", "invalidated", "signed-out", "permission-revoked", "superseded"]);
+let pilotReadiness;
+let pilotReadVersion = 0;
 let pendingEnrollment;
 let registeredContext;
 let endingSessionId;
@@ -66,6 +71,56 @@ async function invoke(name, data) {
   return response.data;
 }
 
+function currentPilotReadiness(session) {
+  if (!pilotReadiness || !session?.sessionId) return null;
+  try {
+    return pilotReadiness.sessionId === session.sessionId && pilotReadiness.uid === session.uid
+      && pilotReadiness.organizationId === session.organizationId
+      && pilotReadiness.user === authorizedSession(session) && pilotReadiness.deviceId === deviceId()
+      ? pilotReadiness : null;
+  } catch { return null; }
+}
+
+/** Display only to the current authenticated cleaner; this is never a credential or telemetry. */
+export function cleanerPushPairingReference(session) {
+  if (!pilotEnabled) return null;
+  const readiness = currentPilotReadiness(session);
+  return readiness?.state === "pilot-ineligible" ? `${readiness.sessionId}.${readiness.deviceId}` : null;
+}
+
+export function cleanerPushCanEnable(session) {
+  if (!pilotEnabled) return true;
+  const readiness = currentPilotReadiness(session);
+  return Boolean(readiness && eligiblePilotStates.has(readiness.state)
+    && Date.now() - readiness.checkedAt < pilotReadinessLifetimeMs);
+}
+
+async function readPilotStatus(session, user) {
+  const version = ++pilotReadVersion;
+  pilotReadiness = undefined;
+  const installation = deviceId(true);
+  const result = await invoke("getCleanerPushDeviceStatus", { deviceId: installation });
+  if (version !== pilotReadVersion || authorizedSession(session) !== user || deviceId() !== installation) return { state: "superseded", stale: true };
+  const state = eligiblePilotStates.has(result?.state) || ["pilot-ineligible", "unavailable"].includes(result?.state)
+    ? result.state : "error";
+  pilotReadiness = { ...session, user, deviceId: installation, checkedAt: Date.now(), state };
+  return { ...result, state };
+}
+
+async function suppressPilotBinding(session) {
+  const binding = await cleanerPushBinding("read");
+  if (binding?.sessionId === session.sessionId && binding.bindingId
+    && await cleanerPushBinding("invalidate", session.sessionId, null, null, binding.registrationRevision)) {
+    await closeLocalCleanerNotifications(binding.bindingId);
+  }
+}
+
+async function verifyPilotStatus(session, user) {
+  const status = await readPilotStatus(session, user);
+  if (["pilot-ineligible", "unavailable"].includes(status.state)) await suppressPilotBinding(session);
+  return status;
+}
+
 async function checkCleanerPush(session, options) {
   const reason = registrationReason(options);
   if (reason && reason !== "offline") return reason;
@@ -76,21 +131,24 @@ async function checkCleanerPush(session, options) {
       // Clear locally even offline. The browser already knows consent is gone.
       await forgetCleanerPush(session, "PERMISSION_REVOKED", { localOnly: reason === "offline" }).catch(() => {});
     }
-    if (Notification.permission === "denied") return "permission-denied";
+    if (Notification.permission === "denied" && !pilotEnabled) return "permission-denied";
   }
   if (reason) return reason;
   const user = await confirmLocalOwner(session);
   if (!user) return "superseded";
+  const pilotStatus = pilotEnabled ? await verifyPilotStatus(session, user) : null;
+  if (pilotStatus && (pilotStatus.stale || !eligiblePilotStates.has(pilotStatus.state))) return pilotStatus.state;
+  if (Notification.permission === "denied") return "permission-denied";
   const binding = await cleanerPushBinding("claim", session.sessionId);
   if (!binding || authorizedSession(session) !== user) return "superseded";
   if (binding.permissionRevocationPending && Notification.permission === "granted") {
     await forgetCleanerPush(session, "PERMISSION_REVOKED").catch(() => {});
   }
   if (!await withProviderTimeout(isSupported(), "Cleaner notification support")) return "unsupported";
-  if (Notification.permission !== "granted") return Notification.permission === "denied" ? "permission-denied" : "permission-default";
+  if (Notification.permission !== "granted") return pilotStatus?.state === "missing" ? "missing" : "permission-default";
   const installation = deviceId();
   if (!installation) return "missing";
-  const status = await invoke("getCleanerPushDeviceStatus", { deviceId: installation });
+  const status = pilotStatus || await invoke("getCleanerPushDeviceStatus", { deviceId: installation });
   if (authorizedSession(session) !== user) return "superseded";
   if (status?.state !== "active" || status.registrationRevision !== binding.registrationRevision) {
     if (binding.bindingId && await cleanerPushBinding("invalidate", session.sessionId, null, null, binding.registrationRevision)) {
@@ -136,6 +194,12 @@ async function enrollCleanerPush(session, options, permissionRequest) {
   }
   const user = await confirmLocalOwner(session);
   if (!user) return "superseded";
+  // Consent uses the cached precheck to retain the browser gesture. Recheck the
+  // grant before touching FCM, and let registration enforce it transactionally.
+  if (pilotEnabled) {
+    const status = await verifyPilotStatus(session, user);
+    if (status.stale || !eligiblePilotStates.has(status.state)) return status.state;
+  }
   if (!await withProviderTimeout(isSupported(), "Cleaner notification support")) return "unsupported";
 
   const before = await cleanerPushBinding("read");
@@ -161,13 +225,26 @@ async function enrollCleanerPush(session, options, permissionRequest) {
     });
   };
   try {
-    registrationResult = await register();
+    try {
+      registrationResult = await register();
+    } catch (error) {
+      if (error?.details?.reason !== "fcm-token-invalidated"
+        || (await cleanerPushBinding("read"))?.sessionId !== session.sessionId
+        || authorizedSession(session) !== user) throw error;
+      if (pilotEnabled) {
+        const status = await verifyPilotStatus(session, user);
+        if (status.stale || !eligiblePilotStates.has(status.state)) return status.state;
+      }
+      if (!await deleteToken(messaging)) return "invalidated";
+      registrationResult = await register();
+    }
   } catch (error) {
-    if (error?.details?.reason !== "fcm-token-invalidated"
-      || (await cleanerPushBinding("read"))?.sessionId !== session.sessionId
-      || authorizedSession(session) !== user) throw error;
-    if (!await deleteToken(messaging)) return "invalidated";
-    registrationResult = await register();
+    if (pilotEnabled && error?.details?.reason === "cleaner-push-pilot-ineligible") {
+      if (currentPilotReadiness(session)) pilotReadiness.state = "pilot-ineligible";
+      await suppressPilotBinding(session);
+      return "pilot-ineligible";
+    }
+    throw error;
   }
   if (!registrationResult) return "superseded";
   const { registered, registrationRevision, bindingId } = registrationResult;
@@ -205,6 +282,10 @@ export function enableCleanerPush(session, options) {
   if (reason) return Promise.resolve(reason);
   if (pendingEnrollment) return pendingEnrollment.sessionId === session.sessionId ? pendingEnrollment.waiting : Promise.resolve("superseded");
   if (!authorizedSession(session)) return Promise.resolve("superseded");
+  if (pilotEnabled && !cleanerPushCanEnable(session)) {
+    const readiness = currentPilotReadiness(session);
+    return Promise.resolve(["pilot-ineligible", "unavailable"].includes(readiness?.state) ? readiness.state : "pilot-check-required");
+  }
   try {
     const permissionRequest = Notification.permission === "default"
       ? Notification.requestPermission() : Promise.resolve(Notification.permission);
@@ -257,12 +338,16 @@ async function forgetCleanerPush(session, reason, { localOnly = false } = {}) {
 export async function prepareCleanerPushSignOut(session) {
   if (!session?.sessionId || !window.indexedDB) return;
   endingSessionId = session.sessionId;
+  if (pilotReadiness?.sessionId === session.sessionId) pilotReadiness = undefined;
+  pilotReadVersion += 1;
   await withProviderTimeout(forgetCleanerPush(session, "SIGNED_OUT"), "Cleaner push sign-out")
     .catch(() => undefined);
 }
 
 /** Account replacement also clears a stale binding from an earlier browser session. */
 export async function prepareCleanerPushAccountSwitch() {
+  pilotReadiness = undefined;
+  pilotReadVersion += 1;
   if (!window.indexedDB) return;
   await withProviderTimeout((async () => {
     const previous = await cleanerPushBinding("read");
