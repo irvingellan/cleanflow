@@ -1,5 +1,42 @@
 # CleanFlow — Current State
 
+## 2026-11-03 — Cleaner Hub V1 Production pilot (Issues #84 / #85)
+
+**Published for controlled pilot; physical iPhone and Android acceptance pending.**
+[Minha agenda](https://clean-flow-prototipo.web.app/agenda) serves verified build
+`a593daf636024d6830bf89c75bd7f6353b4b759f` from `codex/cleaner-hub-pilot-release`, Hosting version
+`53fd5625bddc1d95` (2026-11-04T04:34:01.785Z). The 14 application files match prepared manifest SHA-256
+`ddbc29c2e86ff71e5539acb6551c4679724d323efbad502b457cfdb558c173e5`.
+
+The release is a selective Hub port onto actual Production source
+`b7b0eeac5374a8ffb072972c671f8803b680a1a0`. The original visual and functional
+branches, remote main, prior backups and STOP history are preserved.
+Unreleased Notification Reliability remains out of this release. Exactly eight
+Hub Functions were added; all 31 previous Function revisions are unchanged.
+All 39 are ACTIVE Node 22 in `us-central1`, configured max 20. The three new
+Firestore triggers are ready in `nam5`. Hub Rules ruleset: `03de7532-ddb1-4f6e-b6d7-137d0717572d`.
+
+The one signing binding grants `roles/iam.serviceAccountTokenCreator` to
+`serviceAccount:470414797064-compute@developer.gserviceaccount.com` on
+`projects/clean-flow-prototipo/serviceAccounts/470414797064-compute@developer.gserviceaccount.com`
+only. Previous policy: no bindings, etag `ACAB`. Project IAM is unchanged.
+No SMS, billing, secrets, Storage Rules, indexes or customer-data test writes.
+
+Validation: 124 unit files / 1,384 tests; 10 Hub security; 82 manager security;
+1 Hub E2E each on WebKit and Chromium; 42 guards with the three runtime guards
+rerun after final trigger configuration; Production build and diff check.
+Public smoke verified the landing, hashes, manifest, and empty/unauthorized
+callable responses. No real activation code, session, or checklist was used.
+
+The operations manager picks one cleaner and one legitimate Job, privately gives
+the single-use code for immediate redemption, and observes the assigned work.
+On iPhone, install from Safari first, then redeem inside the Home Screen icon.
+Verify closing/reopening retains the session and an eligible checklist opens.
+The code establishes possession, not independent identity. A server-confirmed
+projection can still lag a source change. End access before offboarding to
+revoke Hub-issued checklist links; a manager-issued link remains independent.
+See [Cleaner Hub V1](CLEANER_HUB_V1.md) for recovery and rollback.
+
 ## Issues #81/#82 — integrated Multi-Photo + Node22 candidate (2026-10-21)
 
 Local-only `codex/multi-photo-node22-release-candidate` selectively composes

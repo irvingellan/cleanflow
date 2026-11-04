@@ -1,10 +1,10 @@
-# Cleaner Hub V1 — cleaner self-service schedule (local candidate)
+# Cleaner Hub V1 — cleaner self-service schedule
 
-Status: **LOCAL CANDIDATE, NOT DEPLOYED.** Branch `feature/cleaner-hub-real-v1`,
-based on `codex/development` @ `19d7faa` (Production-compatible `b7b0eea` plus the
-local notification-reliability work). No Production, Sandbox, billing, IAM or
-real-data change was made. Everything below was validated on isolated local
-emulators with fictitious records.
+Status: **PUBLISHED FOR CONTROLLED PILOT** at
+[Minha agenda](https://clean-flow-prototipo.web.app/agenda). The release is
+`a593daf636024d6830bf89c75bd7f6353b4b759f`, selectively ported onto deployed `b7b0eea`. Hosting version
+`53fd5625bddc1d95` (2026-11-04T04:34:01.785Z). Physical iPhone/Android acceptance and
+real Production code redemption have not yet been performed.
 
 ## Problem
 
@@ -46,8 +46,10 @@ existing **Cleaner detail** page gains one explicit panel, "Acesso à Minha agen
   cleaner's language. Sending is manual (for example WhatsApp); nothing is sent.
 - **Gerar código novo** replaces any unused earlier code (new phone, lost session).
 - **Encerrar acesso** — deactivates the cleaner membership (rules deny at once),
-  revokes refresh tokens and unused codes. The open app shows "Seu acesso foi
-  encerrado" and clears its data.
+  invalidates the current session, unused codes and still-current Hub-issued
+  checklist links. The open app shows "Seu acesso foi encerrado" and clears its
+  data. Redeeming a replacement code also invalidates the old session; issuing
+  the code alone only replaces unused codes.
 
 ## Architecture
 
@@ -75,19 +77,19 @@ Firestore source of truth ──triggers──► syncCleanerAgendaForJob (one t
 - Triggers: `syncCleanerAgendaOnJobWrite`, `…OnAssignmentWrite`, `…OnOfferWrite`.
   Callables: `issueCleanerAccessCode` and `revokeCleanerHubAccess` (manager),
   `redeemCleanerAccessCode` (public, code only), `openMyChecklist` and
-  `respondToMyOffer` (active cleaner). 8 new Functions; 40 declared in total.
+  `respondToMyOffer` (active cleaner). 8 new Functions; 39 declared in this release tree.
 
 ### Identity
 
 | Record | Path | Who writes | Notes |
 |---|---|---|---|
 | Access code | `cleanerAccessCodes/{sha256}` | server only | hash only; ACTIVE → USED/REPLACED/REVOKED; 72 h |
-| Membership | `organizations/{org}/members/{uid}` | server only | `role: "CLEANER"`, `cleanerId`, `active`, first name, language |
+| Membership | `organizations/{org}/members/{uid}` | server only | `role: "CLEANER"`, `cleanerId`, `active`, first name, language, current session ID |
 | Link status | `organizations/{org}/cleanerHubAccess/{cleanerId}` | server only | manager-readable; no code, no hash |
-| Auth user | Firebase Auth `cleaner-<sha256(org/cleanerId)[0..28]>` | server only | custom token claims `{cleanerHub: {organizationId, cleanerId}}` |
+| Auth user | Firebase Auth `cleaner-<sha256(org/cleanerId)[0..28]>` | server only | custom token claims `{cleanerHub: {organizationId, cleanerId, sessionId}}` |
 
-Authorization always comes from the membership document (revocable), never from the
-token claims alone. Existing manager checks require `role == "MANAGER"`, so a cleaner
+Authorization requires an active, unarchived Cleaner and the latest active
+membership session to match the organization, cleaner and session claims. Existing manager checks require `role == "MANAGER"`, so a cleaner
 account gets no manager data. No public Offer or checklist bearer token is used as a
 cleaner account.
 
@@ -95,16 +97,17 @@ cleaner account.
 
 - `cleanerAgenda/{entryId}`: read only when the caller is an active CLEANER of that
   organization and `resource.data.cleanerId` equals her membership's `cleanerId`.
-  No browser writes.
+  No browser writes. Cleaner access to the own membership document requires
+  the same current session.
 - `cleanerHubAccess/{cleanerId}`: read for active managers. No browser writes.
-- Every other path is unchanged; codes stay under the global deny.
+- Codes and Hub checklist grant tracking stay under the global deny.
 
 ### Client choices found by the tests
 
 - Separate named Firebase app (`cleanflow-cleaner-hub`): manager and cleaner sessions
   on one device never replace each other.
 - Memory-only Firestore cache: nothing private stays on the phone after closing or
-  signing out (the network-only service worker cannot open the app offline anyway).
+  signing out (the service worker does not make offline cold launches available).
 - `experimentalForceLongPolling`: with transport auto-detection, WebKit kept a stalled
   stream that delivered nothing (and stale one-shot reads); forced long polling fixed it.
 - Reconnect on `online` and on returning to the foreground, a 10 s reconnect watchdog
@@ -119,7 +122,7 @@ keeps Home Screen app storage separate from Safari, so the sign-in screen asks t
 install first and then type the code inside the installed app (with an explicit
 "sign in here in Safari anyway" path).
 
-## Validation (local, 2026-11-03)
+## Earlier validation (original functional branch, 2026-11-03)
 
 | Suite | Result |
 |---|---|
@@ -148,28 +151,45 @@ npm run test:cleaner-hub:e2e
 Not validated: a physical iPhone/Android, Home Screen install on a device, real
 Production Auth custom-token signing, Production Firestore listener behaviour.
 
-## Production release requires explicit approval (not done)
+## Production pilot activation
 
-The feature cannot be shared from Sandbox: Sandbox Functions are billing-gated, and
-enabling billing is out of scope. A real pilot needs these Production changes on
-`clean-flow-prototipo`, in this order:
+1. The manager chooses one eligible cleaner and one legitimate assigned service,
+   opens the cleaner record, and uses **Acesso à Minha agenda → Gerar código**.
+   The code is private, single-use and expires after 72 hours. Deliver it
+   privately and have the cleaner redeem immediately. Do not record it in QA.
+2. On iPhone, open [Minha agenda](https://clean-flow-prototipo.web.app/agenda) in
+   Safari, use Share → Add to Home Screen, then open the installed icon and
+   redeem there. Android can use its browser install action where available.
+3. Confirm the cleaner sees only her own services. Close and reopen the icon,
+   open the assigned service and confirm an eligible checklist opens. No
+   submission, photo upload, fake assignment, or lifecycle transition is needed.
+4. For a lost device, the manager may end access immediately and issue a
+   replacement. Redeeming the new code invalidates the prior session. Use
+   **Encerrar acesso** before offboarding to revoke Hub-issued checklist links.
 
-1. **IAM (one binding):** the Functions runtime service account must be able to sign
-   custom tokens (`iam.serviceAccounts.signBlob`, i.e. Service Account Token Creator
-   on itself). Without it `redeemCleanerAccessCode` fails and no cleaner can sign in.
-2. **Firestore rules** from this branch (adds the two read rules above only).
-3. **Functions — only the 8 new names:**
-   `firebase deploy --only functions:issueCleanerAccessCode,functions:redeemCleanerAccessCode,functions:revokeCleanerHubAccess,functions:openMyChecklist,functions:respondToMyOffer,functions:syncCleanerAgendaOnJobWrite,functions:syncCleanerAgendaOnAssignmentWrite,functions:syncCleanerAgendaOnOfferWrite`
-   (Node 22, us-central1, max 20 instances). Existing Functions are not redeployed.
-4. **Hosting** from an exact SHA via `npm run hosting:prepare -- <sha> prod`.
-   Caution: this branch contains the unreleased notification-reliability client work
-   from `codex/development`; either release that first (Codex) or build Hosting from
-   a selective port of the Cleaner Hub commits onto the deployed source.
-5. Pilot gate: one manager-chosen cleaner, one real Job, observe for a few days.
+The production release verification is recorded in [Current State](CURRENT_STATE.md).
+The Hub does not require push. Existing Offer interest and checklist submission
+can still generate their normal manager notifications during legitimate use.
 
-Rollback: revoke cleaner access in the panel (immediate), redeploy previous rules,
-delete the 8 Functions, restore the previous Hosting version. Projection and code
-documents are inert without the Functions and rules.
+## Rollback
+
+For a frontend regression, stop pilot activation and restore Hosting version
+`ca43c4b8d74b4712` from the Firebase Hosting release history. Equivalent command
+after confirming the live channel still points at the affected release:
+
+```sh
+firebase hosting:clone clean-flow-prototipo@ca43c4b8d74b4712 clean-flow-prototipo:live --project clean-flow-prototipo --non-interactive
+```
+
+Verify `/version.json` returns `b7b0eeac5374a8ffb072972c671f8803b680a1a0`.
+If access isolation is affected, restore the exact prior Firestore ruleset
+`229a642c-39e6-49fa-9666-62197de8db37` on `cloud.firestore`. Hosting rollback alone
+does not disable callable URLs. A full Hub rollback disables/removes only the
+eight new Hub Functions listed above, after exact inventory verification; the
+31 existing Functions stay untouched. Remove only the added signer self-binding
+after verifying the current policy and that no remaining workload depends on
+it. Preserve all existing users and documents. Code rollback does not undo
+legitimate operational actions.
 
 ## Known limits
 
