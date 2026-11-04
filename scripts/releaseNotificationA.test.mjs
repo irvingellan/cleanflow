@@ -12,7 +12,7 @@ const rulesStep = releaseSteps.publish[0];
 const functionsStep = { id: "listNotificationInbox", functions: ["listNotificationInbox"] };
 const rulesApplied = { ...baseline, rules: { id: "r1", hash: "reviewed", updated: "after" } };
 const inboxApplied = { ...rulesApplied, functions: {
-  ...baseline.functions, listNotificationInbox: { revision: "deployed", hash: "b", inboxMode: "enabled" },
+  ...baseline.functions, listNotificationInbox: { revision: "deployed", hash: "b", inboxMode: "enabled", runtimeCompatible: true },
 } };
 
 test("Release A uses exact named targets and changes reader compatibility before enrollment", () => {

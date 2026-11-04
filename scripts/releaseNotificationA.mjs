@@ -56,6 +56,7 @@ export function productionSnapshot(report) {
     rules: { id: report.ruleset, hash: report.firestoreRulesSha256, updated: report.rulesUpdated },
     functions: Object.fromEntries(report.functions.map((row) => [row.id, {
       revision: row.revision, hash: row.configurationHash,
+      secretBindingHash: row.secretBindingHash, runtimeCompatible: row.runtimeCompatible,
       ...(row.inboxMode ? { inboxMode: row.inboxMode } : {}),
     }]).sort(([a], [b]) => a.localeCompare(b))),
   };
@@ -78,6 +79,9 @@ export function verifyTransition(before, after, step, { rulesHash, inboxMode }) 
     const result = after.functions[name];
     requireCondition(result && result.revision !== before.functions[name]?.revision,
       "A reviewed Function is absent or did not advance its revision.");
+    requireCondition(result.runtimeCompatible && (!before.functions[name]
+      || result.secretBindingHash === before.functions[name].secretBindingHash),
+    "A targeted Function changed its reviewed runtime configuration or secret bindings.");
     requireCondition(!recoveryEndpoints.includes(name) || result.inboxMode === inboxMode,
       "An Inbox endpoint has an unexpected effective mode.");
   }
@@ -146,6 +150,8 @@ function seal(directory, sha) {
   requireCondition(validReleaseVerification(json(join(directory, "verification.json")), sha), "Exact-SHA test gate is missing.");
   const baseline = productionSnapshot(preflight.production);
   requireCondition(equal(baseline, productionSnapshot(recovery.production)), "Production changed between preflights.");
+  requireCondition(deployGroups.update.every((name) => baseline.functions[name]?.runtimeCompatible),
+    "Unreviewed runtime configuration is present on a targeted Function.");
   const plan = {
     schema: 1, project: notificationProject, sha, branch: expectedBranch, baseline,
     toolchain: releaseToolchain(),
@@ -178,7 +184,7 @@ function stageInputs(sha, artifact, action, workspace) {
   symlinkSync(localDeps, join(workspace, "functions/node_modules"), "dir");
   const inboxMode = action === "publish" ? "enabled" : "disabled";
   writeFileSync(join(workspace, "functions", `.env.${notificationProject}`),
-    `MANAGER_REMINDER_PROVIDER=fcm\nAUTOMATIC_OFFERS_MODE=disabled\nCLEANER_PUSH_MODE=disabled\nNOTIFICATION_INBOX_MODE=${inboxMode}\n`,
+    `DEV_CENTER_SANDBOX_PROJECT_ID=\nMANAGER_REMINDER_PROVIDER=fcm\nAUTOMATIC_OFFERS_MODE=disabled\nCLEANER_PUSH_MODE=disabled\nNOTIFICATION_INBOX_MODE=${inboxMode}\n`,
     { flag: "wx", mode: 0o600 });
   for (const { file, sha256: hash } of artifact.manifest.files) {
     const dest = join(workspace, "dist", file);

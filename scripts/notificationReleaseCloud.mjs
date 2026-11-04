@@ -23,6 +23,7 @@ const hosts = {
   resources: "https://cloudresourcemanager.googleapis.com",
   services: "https://serviceusage.googleapis.com",
   firestore: "https://firestore.googleapis.com",
+  secrets: "https://secretmanager.googleapis.com",
 };
 
 async function query(host, path, body) {
@@ -45,6 +46,24 @@ const permissionsB = basePermissions;
 const database = `${projectPath}/databases/(default)`;
 const releaseLockName = `${database}/documents/cleanflowReleaseControl/production`;
 const lockPermissions = ["datastore.entities.get", "datastore.entities.create", "datastore.entities.delete"];
+const managedEnv = new Set(["FIREBASE_CONFIG", "GCLOUD_PROJECT", "EVENTARC_CLOUD_EVENT_SOURCE", "FUNCTION_TARGET",
+  "FUNCTION_SIGNATURE_TYPE", "FUNCTION_REGION", "LOG_EXECUTION_ID"]);
+const developerSecret = "DEV_CENTER_DEVELOPER_UIDS";
+const defaultEnv = {
+  DEV_CENTER_SANDBOX_PROJECT_ID: [""],
+  MANAGER_REMINDER_PROVIDER: ["fcm"],
+  AUTOMATIC_OFFERS_MODE: ["disabled"],
+  CLEANER_PUSH_MODE: ["disabled"],
+  NOTIFICATION_INBOX_MODE: ["enabled", "disabled"],
+};
+
+function compatibleRuntime({ environmentVariables = {}, secretEnvironmentVariables = [], secretVolumes = [] }, secretVersion) {
+  return Object.entries(environmentVariables).every(([key, value]) =>
+    managedEnv.has(key) || Object.hasOwn(defaultEnv, key) && defaultEnv[key].includes(value))
+    && secretVolumes.length === 0
+    && secretEnvironmentVariables.every((ref) => ref.key === developerSecret && ref.secret === developerSecret
+      && secretVersion.state === "ENABLED" && ref.version === secretVersion.name?.split("/").at(-1));
+}
 const lockDocument = () => query("firestore", `/v1/${releaseLockName}`);
 const commitLock = (write) => query("firestore", `/v1/${database}/documents:commit`, { writes: [write] });
 
@@ -98,7 +117,7 @@ async function inspectIam(stage, functions) {
 export async function readNotificationProduction(stage, managerAppId) {
   const account = getGlobalDefaultAccount();
   await requireAuth({ project: notificationProject, ...account });
-  const [apps, hosting, rules, functions, registrationApi, deliveryApi, operations, lock] = await Promise.all([
+  const [apps, hosting, rules, functions, registrationApi, deliveryApi, operations, lock, secretVersion] = await Promise.all([
     attempt(() => query("firebase", `/v1beta1/${projectPath}/webApps?pageSize=100`)),
     attempt(() => query("hosting", `/v1beta1/sites/${notificationProject}/releases?pageSize=1`)),
     attempt(() => query("rules", `/v1/${projectPath}/releases/cloud.firestore`)),
@@ -107,6 +126,7 @@ export async function readNotificationProduction(stage, managerAppId) {
     attempt(() => query("services", `/v1/${projectPath}/services/fcm.googleapis.com`)),
     attempt(() => query("functions", `/v2/${projectPath}/locations/us-central1/operations?filter=done%3Dfalse&pageSize=100`)),
     attempt(lockDocument),
+    attempt(() => query("secrets", `/v1/${projectPath}/secrets/${developerSecret}/versions/latest`)),
   ]);
   const webApps = apps.apps || [];
   const dedicated = webApps.filter((entry) => entry.displayName === dedicatedCleanerAppName && entry.state !== "DELETED");
@@ -123,6 +143,8 @@ export async function readNotificationProduction(stage, managerAppId) {
     runtime: entry.buildConfig?.runtime,
     revision: entry.serviceConfig?.revision || null,
     configurationHash: sha256(JSON.stringify(sortKeys(entry))),
+    runtimeCompatible: compatibleRuntime(entry.serviceConfig || {}, secretVersion),
+    secretBindingHash: sha256(JSON.stringify(sortKeys(entry.serviceConfig?.secretEnvironmentVariables || []))),
     maxInstances: entry.serviceConfig?.maxInstanceCount,
     ...(/\/(listNotificationInbox|markNotificationRead|openNotificationInboxItem)$/.test(entry.name)
       ? { inboxMode: entry.serviceConfig?.environmentVariables?.NOTIFICATION_INBOX_MODE || "default" } : {}),

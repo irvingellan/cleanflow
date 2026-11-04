@@ -185,6 +185,8 @@ async function preflight(options) {
     && (stage === "B" || cloud.ruleset === oldRuleset), "Live Firestore Rules differ or could not be verified.");
   check("productionFunctions", cloud && verifyFunctions(stage, cloud, declarations), "Live Functions inventory, runtime, or cleaner mode differs.");
   check("iam", cloud?.iam.ok, "The caller's scoped deployment permissions could not be verified.");
+  check("runtimeConfiguration", cloud?.functions.filter(({ id }) => deployGroups.update.includes(id))
+    .every(({ runtimeCompatible }) => runtimeCompatible), "A targeted Function has unreviewed environment or secret version drift.");
   check("releaseLock", cloud?.releaseLock.state === "AVAILABLE",
     "The Production release mutex is held or unavailable.");
   check("managerVapid", vapidFingerprint && staticAssets.some((row) => row.matched && row.file.endsWith(".js") && row.bytes.includes(localVapid)),
