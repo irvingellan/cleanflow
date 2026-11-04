@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deployGroups } from "./preflightNotificationRelease.mjs";
+import { functionConfigurationHash } from "./notificationReleaseCloud.mjs";
 import { releaseSteps, runReleaseSequence, verifyTransition } from "./releaseNotificationA.mjs";
 
 const baseline = {
@@ -14,6 +15,18 @@ const rulesApplied = { ...baseline, rules: { id: "r1", hash: "reviewed", updated
 const inboxApplied = { ...rulesApplied, functions: {
   ...baseline.functions, listNotificationInbox: { revision: "deployed", hash: "b", inboxMode: "enabled", runtimeCompatible: true },
 } };
+
+test("Eventarc can reorder equal trigger filters without masking configuration drift", () => {
+  const document = { attribute: "document", operator: "match-path-pattern", value: "example/{id}" };
+  const database = { attribute: "database", value: "(default)" };
+  const first = { eventTrigger: { eventFilters: [document, database] }, serviceConfig: { revision: "one" } };
+  const reordered = { ...first, eventTrigger: { eventFilters: [database, document] } };
+  assert.equal(functionConfigurationHash(first), functionConfigurationHash(reordered));
+  reordered.eventTrigger.eventFilters[1] = { ...document, value: "different/{id}" };
+  assert.notEqual(functionConfigurationHash(first), functionConfigurationHash(reordered));
+  assert.notEqual(functionConfigurationHash(first),
+    functionConfigurationHash({ ...first, serviceConfig: { revision: "two" } }));
+});
 
 test("Release A uses exact named targets and changes reader compatibility before enrollment", () => {
   const [rules, main, manager, redeem, issue, hosting] = releaseSteps.publish;

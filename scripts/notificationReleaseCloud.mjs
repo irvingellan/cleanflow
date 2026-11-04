@@ -13,6 +13,19 @@ const sortKeys = (value) => Array.isArray(value) ? value.map(sortKeys)
   : value && typeof value === "object"
     ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys(value[key])]))
     : value;
+const unorderedRows = (rows) => rows.map(sortKeys)
+  .sort((first, second) => JSON.stringify(first).localeCompare(JSON.stringify(second)));
+
+export function functionConfigurationHash(entry) {
+  const normalized = sortKeys(entry);
+  if (normalized.eventTrigger?.eventFilters) {
+    normalized.eventTrigger.eventFilters = unorderedRows(normalized.eventTrigger.eventFilters);
+  }
+  if (normalized.serviceConfig?.secretEnvironmentVariables) {
+    normalized.serviceConfig.secretEnvironmentVariables = unorderedRows(normalized.serviceConfig.secretEnvironmentVariables);
+  }
+  return sha256(JSON.stringify(normalized));
+}
 const projectPath = `projects/${notificationProject}`;
 export const releaseApis = ["cloudfunctions", "cloudbuild", "artifactregistry", "run", "eventarc", "pubsub",
   "storage", "secretmanager", "cloudscheduler", "firestore", "firebasehosting"].map((name) => `${name}.googleapis.com`);
@@ -181,9 +194,9 @@ export async function readNotificationProduction(stage, managerAppId) {
     state: entry.state,
     runtime: entry.buildConfig?.runtime,
     revision: entry.serviceConfig?.revision || null,
-    configurationHash: sha256(JSON.stringify(sortKeys(entry))),
+    configurationHash: functionConfigurationHash(entry),
     runtimeCompatible: compatibleRuntime(entry.serviceConfig || {}, secretVersion),
-    secretBindingHash: sha256(JSON.stringify(sortKeys(entry.serviceConfig?.secretEnvironmentVariables || []))),
+    secretBindingHash: sha256(JSON.stringify(unorderedRows(entry.serviceConfig?.secretEnvironmentVariables || []))),
     maxInstances: entry.serviceConfig?.maxInstanceCount,
     ...(/\/(listNotificationInbox|markNotificationRead|openNotificationInboxItem)$/.test(entry.name)
       ? { inboxMode: entry.serviceConfig?.environmentVariables?.NOTIFICATION_INBOX_MODE || "default" } : {}),
