@@ -12,7 +12,7 @@ export const useFirebaseEmulators =
 const approvedPrivateEmulatorOrigin = typeof __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__ === "string"
   ? __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__ : "";
 const binding = assertBuildEnvironment(import.meta.env.MODE, import.meta.env, { approvedPrivateEmulatorOrigin });
-const firebaseConfig = createFirebaseConfig({
+export const firebaseConfig = createFirebaseConfig({
   ...import.meta.env,
   ...(["test", "emulator", "e2e"].includes(import.meta.env.MODE) ? { VITE_FIREBASE_PROJECT_ID: "demo-cleanflow" } : {}),
 });
@@ -37,8 +37,22 @@ export const db = getFirestore(firebaseApp);
 export const functions = getFunctions(firebaseApp, "us-central1");
 export const storage = getStorage(firebaseApp);
 
+function emulatorPort(name, fallback) {
+  const port = Number(import.meta.env[`VITE_CLEANFLOW_EMULATOR_${name}_PORT`]);
+  return Number.isInteger(port) && port > 1024 && port < 65536 ? port : fallback;
+}
+
+// Local emulator ports only; isolated suites may move them so they never touch
+// another running emulator. Production and Sandbox never read these values.
+export const emulatorPorts = Object.freeze({
+  auth: emulatorPort("AUTH", 9099),
+  firestore: emulatorPort("FIRESTORE", 8080),
+  functions: emulatorPort("FUNCTIONS", 5001),
+  storage: emulatorPort("STORAGE", 9199),
+});
+
 if (useFirebaseEmulators) {
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-  connectStorageEmulator(storage, "127.0.0.1", 9199);
+  connectFirestoreEmulator(db, "127.0.0.1", emulatorPorts.firestore);
+  connectFunctionsEmulator(functions, "127.0.0.1", emulatorPorts.functions);
+  connectStorageEmulator(storage, "127.0.0.1", emulatorPorts.storage);
 }

@@ -68,6 +68,19 @@
         ]
       },
       {
+        "source": "/agenda",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, private" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
+        ]
+      },
+      {
+        "source": "/agenda.webmanifest",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache" }
+        ]
+      },
+      {
         "source": "/checklist",
         "headers": [
           { "key": "Cache-Control", "value": "no-store, private" },

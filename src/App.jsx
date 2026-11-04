@@ -33,6 +33,7 @@ import { useClientsController } from "./features/clients/useClientsController.js
 import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningChecklistPreview.jsx";
 import { ChecklistRunDetail } from "./features/checklists/ChecklistRunDetail.jsx";
 import { PublicChecklistPage } from "./features/checklists/PublicChecklistPage.jsx";
+import { CleanerHubApp } from "./features/cleaner-hub/CleanerHubApp.jsx";
 import { PublicClientReportPage } from "./features/checklists/PublicClientReportPage.jsx";
 import { PublicOfferAssignmentAcknowledgment } from "./features/public-offers/PublicOfferAssignmentAcknowledgment.jsx";
 import { PublicOfferCompensation } from "./features/public-offers/PublicOfferCompensation.jsx";
@@ -111,6 +112,10 @@ function isChecklistPreviewPath(pathname = window.location.pathname) {
   return pathname.replace(/\/+$/, "") === "/checklist-preview";
 }
 
+export function isCleanerHubPath(pathname = window.location.pathname) {
+  return pathname.replace(/\/+$/, "") === "/agenda";
+}
+
 function isWeeklyClosePreviewPath(pathname = window.location.pathname) {
   return pathname.replace(/\/+$/, "") === "/weekly-close-preview";
 }
@@ -143,17 +148,23 @@ function App() {
   const publicClientReportToken = publicClientReportTokenFromSearch();
   const isPublicClientReportRoute = publicClientReportToken !== null;
   const isChecklistPreviewRoute = isChecklistPreviewPath();
+  // Cleaner Hub has its own Firebase app/session; the manager session is never read there.
+  const isCleanerHubRoute = isCleanerHubPath();
   const [authUser, setAuthUser] = useState(undefined);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
   useEffect(() => {
-    if (isPublicOfferRoute || isPublicChecklistRoute || isPublicClientReportRoute || isChecklistPreviewRoute) {
+    if (isPublicOfferRoute || isPublicChecklistRoute || isPublicClientReportRoute || isChecklistPreviewRoute || isCleanerHubRoute) {
       return undefined;
     }
 
     return subscribeToAuthState(setAuthUser);
-  }, [isChecklistPreviewRoute, isPublicChecklistRoute, isPublicClientReportRoute, isPublicOfferRoute]);
+  }, [isChecklistPreviewRoute, isCleanerHubRoute, isPublicChecklistRoute, isPublicClientReportRoute, isPublicOfferRoute]);
+
+  if (isCleanerHubRoute) {
+    return <CleanerHubApp />;
+  }
 
   if (isPublicOfferRoute) {
     return <PublicOfferPage token={publicOfferToken} />;

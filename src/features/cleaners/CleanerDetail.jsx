@@ -15,6 +15,7 @@ import {
   paymentMethodLabel,
   preferredLanguageLabel,
 } from "./cleanerPresentation.js";
+import { CleanerHubAccessPanel } from "./CleanerHubAccessPanel.jsx";
 
 export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataProvenance, onArchive, onRestore, canRestore }) {
   const { translate } = useTranslation();
@@ -111,6 +112,8 @@ export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataPr
           {translate("cleaners.edit", { cleaner: cleanerName })}
         </button>
       </div>
+
+      <CleanerHubAccessPanel cleaner={cleaner} />
 
       <CleanerOperationalHistory
         history={history}

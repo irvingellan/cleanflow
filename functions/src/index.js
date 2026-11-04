@@ -6,7 +6,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { defineSecret, defineString, projectID } from "firebase-functions/params";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
@@ -35,6 +35,15 @@ import {
 } from "./publicChecklistDiagnostics.js";
 import { processChecklistReviewNotification } from "./checklistReviewNotifications.js";
 import { requireOrganizationManager } from "./managerAuthorization.js";
+import { syncCleanerAgendaForJob } from "./cleanerAgenda.js";
+import {
+  issueCleanerAccessCodeForManager,
+  openChecklistForCleaner,
+  redeemCleanerAccessCode as redeemCleanerAccessCodeService,
+  requireActiveCleaner,
+  respondToOfferForCleaner,
+  revokeCleanerHubAccessForManager,
+} from "./cleanerHubAccess.js";
 import { loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
 import { registerManagerDevice, deactivateManagerDevice } from "./managerDeviceRegistration.js";
 import { sendFcmManagerReminder, processClaimedManagerReminder } from "./managerReminderDelivery.js";
@@ -1495,3 +1504,75 @@ export const publicClientReport = onRequest(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Cleaner Hub V1: cleaner identity and the cleaner-safe agenda projection.
+// ---------------------------------------------------------------------------
+
+export const issueCleanerAccessCode = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return issueCleanerAccessCodeForManager(db, {
+      organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid,
+    });
+  },
+);
+
+export const revokeCleanerHubAccess = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return revokeCleanerHubAccessForManager(db, {
+      organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid, auth: getAuth(),
+    });
+  },
+);
+
+/** Unauthenticated by design: the single-use code is the only credential. */
+export const redeemCleanerAccessCode = onCall(
+  { region: "us-central1" },
+  async (request) => redeemCleanerAccessCodeService(db, { input: request.data?.code, auth: getAuth(), logger }),
+);
+
+export const openMyChecklist = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const { uid, cleanerId } = await requireActiveCleaner(db, request, organizationId);
+    return openChecklistForCleaner(db, {
+      organizationId, cleanerId, uid, jobId: request.data?.jobId, runId: initialChecklistRunId,
+      newToken: newChecklistCapabilityToken, hashToken,
+    });
+  },
+);
+
+export const respondToMyOffer = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const { cleanerId } = await requireActiveCleaner(db, request, organizationId);
+    const result = await respondToOfferForCleaner(db, {
+      organizationId, cleanerId, jobId: request.data?.jobId, status: request.data?.status,
+    });
+    return { state: result.state, status: result.status || null };
+  },
+);
+
+function cleanerAgendaTrigger(document) {
+  return onDocumentWritten(
+    { document, region: "us-central1", retry: false, timeoutSeconds: 60 },
+    async (event) => {
+      try {
+        await syncCleanerAgendaForJob(db, { organizationId: event.params.orgId, jobId: event.params.jobId });
+      } catch (error) {
+        logger.error("Cleaner agenda sync failed.", { code: error?.code || "unknown" });
+        throw error;
+      }
+    },
+  );
+}
+
+export const syncCleanerAgendaOnJobWrite = cleanerAgendaTrigger("organizations/{orgId}/jobs/{jobId}");
+export const syncCleanerAgendaOnAssignmentWrite = cleanerAgendaTrigger(
+  "organizations/{orgId}/jobs/{jobId}/assignments/{assignmentId}",
+);
+export const syncCleanerAgendaOnOfferWrite = cleanerAgendaTrigger("organizations/{orgId}/jobs/{jobId}/offers/{offerId}");
