@@ -1177,3 +1177,17 @@ button.cx-row:hover { background: var(--v2-color-surface-internal); }
 .hb-root .mw-seg-control button { flex: 1 1 0; min-width: 0; padding: 0 6px; font-size: 13.5px; white-space: normal; line-height: 16px; min-height: 40px; }
 .hb-root .mw-nsearch { width: 100%; }
 .hb-root .mw-inbox-tools { gap: 6px; }
+.hb-main { overflow-x: hidden; }
+.ig-art { contain: paint; }
+@media (max-width: 1279px) {
+  .hb-root { display: flex; flex-direction: column; }
+  .hb-exit { position: sticky; top: 0; order: -1; justify-content: flex-end; padding: 6px 10px; background: var(--v2-color-surface-internal); border-bottom: 1px dashed var(--v2-color-border-input); z-index: 54; }
+  .hb-exit .cfv2-button { box-shadow: none; }
+  .hb-stage { padding-top: 12px; }
+  .hb-app { height: min(880px, calc(100dvh - 72px)); }
+}
+@media (max-width: 719px) {
+  .hb-exit { bottom: auto; right: auto; }
+  .hb-stage { padding-top: 0; }
+  .hb-app { height: calc(100dvh - 47px); }
+}
