@@ -1,5 +1,5 @@
 import { onAuthStateChanged, signInWithCustomToken, signOut } from "firebase/auth";
-import { clearIndexedDbPersistence, collection, doc, onSnapshot, query, terminate, where } from "firebase/firestore";
+import { clearIndexedDbPersistence, collection, disableNetwork, doc, enableNetwork, getDocFromServer, getDocsFromServer, onSnapshot, query, terminate, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { cleanerHubFirebase } from "./cleanerHubFirebase.js";
 
@@ -54,7 +54,10 @@ export function subscribeMembership({ organizationId, uid, cleanerId }, onMember
         ? { state: "active", displayName: data.displayName || null, preferredLanguage: data.preferredLanguage || null }
         : { state: "revoked" });
     },
-    (error) => onMembership({ state: error?.code === "permission-denied" ? "revoked" : "error" }),
+    (error) => {
+      console.warn("cleaner-hub-membership-listener", error?.code || "unknown");
+      onMembership({ state: error?.code === "permission-denied" ? "revoked" : "error" });
+    },
   );
 }
 
@@ -67,8 +70,39 @@ export function subscribeAgenda({ organizationId, cleanerId }, onAgenda, onError
       entries: snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id })),
       fromCache: snapshot.metadata.fromCache,
     }),
-    (error) => onError(error?.code || "unknown"),
+    (error) => {
+      // Code only; no identifiers. A failed listener stops, so the hook retries.
+      console.warn("cleaner-hub-agenda-listener", error?.code || "unknown");
+      onError(error?.code || "unknown");
+    },
   );
+}
+
+/**
+ * Server check that does not depend on the live stream: confirms the membership
+ * is still active and returns the current agenda. Used while the app is open,
+ * so a silently stalled connection can never keep stale data labelled current.
+ */
+export async function verifyFromServer({ organizationId, uid, cleanerId }) {
+  const { db } = cleanerHubFirebase();
+  const member = await getDocFromServer(doc(db, "organizations", organizationId, "members", uid));
+  const data = member.data();
+  if (!(data?.role === "CLEANER" && data?.active === true && data?.cleanerId === cleanerId)) return { active: false };
+  const agenda = await getDocsFromServer(query(collection(db, "organizations", organizationId, "cleanerAgenda"), where("cleanerId", "==", cleanerId)));
+  return { active: true, entries: agenda.docs.map((entry) => ({ ...entry.data(), id: entry.id })) };
+}
+
+/**
+ * Reopens Firestore's connection after the phone regains network or the
+ * Home Screen app returns to the foreground; long-lived streams often die there.
+ */
+export async function reconnectAgenda() {
+  const { db } = cleanerHubFirebase();
+  try {
+    await disableNetwork(db);
+  } finally {
+    await enableNetwork(db);
+  }
 }
 
 export async function openMyChecklist(jobId) {

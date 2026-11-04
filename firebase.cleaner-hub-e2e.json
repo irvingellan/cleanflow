@@ -1,0 +1,27 @@
+{
+  "functions": { "source": "functions" },
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "storage": { "rules": "storage.rules" },
+  "hosting": {
+    "public": "dist",
+    "rewrites": [
+      { "source": "/api/public-offer", "function": { "functionId": "publicOffer", "region": "us-central1" } },
+      { "source": "/api/public-checklist", "function": { "functionId": "publicChecklist", "region": "us-central1" } },
+      { "source": "/api/client-report", "function": { "functionId": "publicClientReport", "region": "us-central1" } },
+      { "source": "**", "destination": "/index.html" }
+    ]
+  },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 19280 },
+    "firestore": { "host": "127.0.0.1", "port": 18280, "websocketPort": 19282 },
+    "functions": { "host": "127.0.0.1", "port": 15280 },
+    "storage": { "host": "127.0.0.1", "port": 19290 },
+    "hosting": { "host": "127.0.0.1", "port": 15281 },
+    "hub": { "host": "127.0.0.1", "port": 14490 },
+    "logging": { "host": "127.0.0.1", "port": 14491 },
+    "eventarc": { "host": "127.0.0.1", "port": 14492 },
+    "tasks": { "host": "127.0.0.1", "port": 14493 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}
