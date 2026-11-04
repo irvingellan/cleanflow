@@ -93,7 +93,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await loginManager(page, fixture);
     mapleRef = await createService(page, fixture, { propertyId: fixture.mapleId, propertyName: fixture.mapleName, scheduledDate: firstDate, scheduledStart: "10:30" });
     await page.locator(".job-intents__secondary > summary").click();
-    await page.locator(".job-intents__actions").getByRole("button", { name: "Assign cleaner" }).click();
+    await page.locator(".job-intents__actions").getByRole("button", { name: /Assign \/ change cleaner/ }).click();
     await page.getByLabel(fixture.cleanerAName).check();
     await page.getByRole("button", { name: "Confirm assignment" }).click();
     await expect(page.getByText("1 cleaner assigned")).toBeVisible();
