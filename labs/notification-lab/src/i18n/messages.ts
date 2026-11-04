@@ -232,6 +232,7 @@ const pt = {
   replayIdentical: "Repetição idêntica · impressão {print}",
   replayDiffers: "Repetição diferente da original — inconsistência",
   replaying: "Repetindo",
+  moreControls: "Mais",
 };
 
 const en: Record<keyof typeof pt, string> = {
@@ -463,6 +464,7 @@ const en: Record<keyof typeof pt, string> = {
   replayIdentical: "Identical replay · fingerprint {print}",
   replayDiffers: "Replay differs from the original — inconsistency",
   replaying: "Replaying",
+  moreControls: "More",
 };
 
 const es: Record<keyof typeof pt, string> = {
@@ -694,6 +696,7 @@ const es: Record<keyof typeof pt, string> = {
   replayIdentical: "Repetición idéntica · huella {print}",
   replayDiffers: "La repetición difiere del original — inconsistencia",
   replaying: "Repitiendo",
+  moreControls: "Más",
 };
 
 export type MessageKey = keyof typeof pt;

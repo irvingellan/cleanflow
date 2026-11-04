@@ -510,9 +510,10 @@ export function ControlBar({ lab, locale, setLocale, channel, onEvidence }: { la
   const { session } = lab;
   const terminal = isTerminal(session);
   const w = session.world;
+  const [more, setMore] = useState(false);
   const status = lab.replaying ? t("replaying") : lab.playing ? t("running") : terminal ? t("terminal") : session.ops.length ? t("paused") : t("ready");
   return (
-    <footer className="controlbar" aria-label="Controles">
+    <footer className="controlbar" aria-label="Controles" data-more={more}>
       <div className="group">
         {lab.playing ? (
           <button className="btn btn-primary" onClick={lab.pause} data-control="pause"><Icon name="pause" /> {t("pause")}</button>
@@ -522,13 +523,16 @@ export function ControlBar({ lab, locale, setLocale, channel, onEvidence }: { la
         <button className="btn" onClick={lab.step} disabled={terminal} data-control="step"><Icon name="step" /> {t("step")}</button>
         <button className="btn" onClick={lab.replay} disabled={session.ops.length === 0} data-control="replay"><Icon name="replay" /> {t("replay")}</button>
         <button className="btn" onClick={() => lab.reset()} data-control="reset"><Icon name="reset" /> {t("reset")}</button>
+        <button className="btn btn-ghost mobile-only" onClick={() => setMore(!more)} aria-expanded={more} data-control="more">⋯ {t("moreControls")}</button>
+      </div>
+      <div className="group cb-extra">
         <button className="btn btn-ghost" onClick={lab.next} data-control="next"><Icon name="next" /> {t("next")}</button>
         {onEvidence && (
           <button className="btn" onClick={onEvidence} data-control="generate-evidence"><Icon name="doc" /> {t("generateEvidence")}</button>
         )}
       </div>
       <span className="divider" />
-      <div className="group">
+      <div className="group cb-extra">
         <label className="sr-only" htmlFor="speed">{t("speed")}</label>
         <select id="speed" value={lab.speed} onChange={(e) => lab.setSpeed(e.target.value as Speed)} aria-label={t("speed")} data-control="speed">
           <option value="slow">{t("speed")}: {t("speedSlow")}</option>
@@ -547,7 +551,7 @@ export function ControlBar({ lab, locale, setLocale, channel, onEvidence }: { la
         </select>
       </div>
       <span className="divider" />
-      <div className="clock">
+      <div className="clock cb-extra">
         <span className="micro">{t("clock")} · {w.settings.timeZone.replace("America/", "")}</span>
         <b data-testid="sim-clock">{formatClock(locale, w.clock, w.settings.timeZone, true)}</b>
       </div>

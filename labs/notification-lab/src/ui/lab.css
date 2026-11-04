@@ -261,9 +261,10 @@ table.grid th { font-size: 11px; letter-spacing: 0.06em; text-transform: upperca
 
 /* ---------- mobile tabs ---------- */
 .mtabs { display: none; }
+.mobile-only { display: none; }
 
 @media (max-width: 1099px) {
-  .topbar { padding: 10px 16px; }
+  .topbar { position: static; padding: 10px 16px; }
   .brand p { display: none; }
   .workspace, .gabi { grid-template-columns: minmax(0, 1fr); }
   .col-left, .col-right { position: static; max-height: none; border: 0; }
@@ -277,6 +278,12 @@ table.grid th { font-size: 11px; letter-spacing: 0.06em; text-transform: upperca
   .controlbar { padding: 8px 12px; gap: 8px; }
   .controlbar .divider { display: none; }
   .controlbar .hide-mobile { display: none; }
+  .controlbar .mobile-only { display: inline-flex; }
+  .controlbar .cb-extra { display: none; }
+  .controlbar[data-more="true"] .cb-extra { display: flex; }
+  .controlbar[data-more="true"] .clock.cb-extra { display: grid; }
+  .controlbar > .group:first-child { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: 6px; }
+  .controlbar > .group:first-child .btn { min-width: 0; padding: 6px 8px; font-size: 13.5px; white-space: normal; line-height: 16px; }
   .gabi-list { border: 0; padding: 16px; }
   .gabi-main { padding: 16px; }
 }
@@ -292,3 +299,16 @@ table.grid th { font-size: 11px; letter-spacing: 0.06em; text-transform: upperca
 }
 
 .job-card .chip, .inbox-item .chip, .note .chip { white-space: normal; text-align: left; }
+
+/* WebKit ignores min-height on native selects: give every select a real 44px target. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  padding-right: 34px !important;
+  background-color: var(--c-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2352645b' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.controlbar select { height: 44px; min-height: 44px; }

@@ -11,9 +11,9 @@
     "preview": "vite preview --host 127.0.0.1 --port 5318 --strictPort",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:all": "npm run typecheck && npm test && npm run build && npm run test:e2e",
-    "evidence": "playwright test e2e/evidence.spec.ts"
+    "test:e2e": "vite build && playwright test",
+    "test:all": "npm run typecheck && npm test && npm run test:e2e",
+    "evidence": "vite build && playwright test e2e/evidence.spec.ts"
   },
   "dependencies": {
     "react": "19.2.8",
@@ -25,6 +25,7 @@
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.6",
+    "@types/node": "22.19.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.0",
