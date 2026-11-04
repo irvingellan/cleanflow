@@ -32,7 +32,7 @@ describe("Job Detail lifecycle integration", () => {
     expect(mutation).not.toHaveBeenCalled();
   });
   it.each([
-    ["unassigned", "Assign cleaner"], ["assigned", "Prepare reminder"],
+    ["unassigned", "Offer cleaning to cleaners"], ["assigned", "Prepare reminder"],
     ["assigned-draft", "Open existing checklist"], ["ready", "Review checklist"],
     ["completed", "View saved service"],
   ])("preserves primaryIntent for %s", (id, action) => {

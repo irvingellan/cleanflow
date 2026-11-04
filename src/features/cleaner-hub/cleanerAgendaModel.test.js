@@ -96,3 +96,33 @@ describe("access code input", () => {
     expect(normalizeAccessCodeInput("abcd-efgh-jk23-zzzz")).toBe("ABCDEFGHJK23");
   });
 });
+
+import { agendaMonths, checklistSituation, entriesInMonth, normalizeJobAccess } from "./cleanerAgendaModel.js";
+
+describe("Gabi feedback model rules", () => {
+  it("months cover every entry exactly once, undated last", () => {
+    const list = [{ scheduledDate: "2027-01-03" }, { scheduledDate: null }, { scheduledDate: "2026-12-30" }, { scheduledDate: "2026-12-01" }];
+    const months = agendaMonths(list);
+    expect(months).toEqual(["2026-12", "2027-01", ""]);
+    expect(months.flatMap((month) => entriesInMonth(list, month))).toHaveLength(list.length);
+  });
+
+  it("checklist situation follows only states the model has", () => {
+    const open = { jobStatus: "ASSIGNED" };
+    expect(checklistSituation(open)).toEqual({ state: "unknown", pending: false });
+    expect(checklistSituation({ ...open, checklist: { status: "APPROVED" } }).state).toBe("unknown");
+    expect(checklistSituation({ ...open, checklist: { status: "NONE" } })).toEqual({ state: "none", pending: false });
+    expect(checklistSituation({ ...open, checklist: { status: "DRAFT" } })).toEqual({ state: "available", pending: true });
+    expect(checklistSituation({ ...open, checklist: { status: "DRAFT", started: true } })).toEqual({ state: "started", pending: true });
+    expect(checklistSituation({ ...open, checklist: { status: "READY_FOR_REVIEW" } })).toEqual({ state: "submitted", pending: false });
+    expect(checklistSituation({ jobStatus: "COMPLETED", checklist: { status: "DRAFT" } }).pending).toBe(false);
+  });
+
+  it("access normalisation never invents data", () => {
+    expect(normalizeJobAccess(undefined)).toEqual({ state: "unsupported" });
+    expect(normalizeJobAccess({ state: "weird" })).toEqual({ state: "unsupported" });
+    expect(normalizeJobAccess({ state: "available", items: [{ value: " " }] })).toEqual({ state: "not-provided" });
+    expect(normalizeJobAccess({ state: "revoked", items: [{ value: "x" }] })).toEqual({ state: "revoked", availableFromMs: null });
+    expect(normalizeJobAccess({ state: "available", items: [{ kind: "door", value: "1" }] }).items).toEqual([{ kind: "door", label: null, value: "1" }]);
+  });
+});

@@ -14,7 +14,37 @@ export function checklistGalleryError(error, translate) {
 }
 
 /** Saved images load only after explicit selection; no retained source preview. */
-export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targetRef, translate }) {
+/**
+ * FB06 — explicit photo requirements. Rendered only when a requirements list is
+ * provided (proposed server contract: frozen per Run/template). It never adds a
+ * minimum or changes what the server validates; counts use the saved photos'
+ * optional `photoRequirementId`. `example` marks a non-published sample list.
+ */
+export function PhotoRequirementList({ requirements, saved = [], example = false, translate }) {
+  if (!Array.isArray(requirements) || !requirements.length) return null;
+  const counts = new Map();
+  saved.forEach((item) => { if (item.photoRequirementId) counts.set(item.photoRequirementId, (counts.get(item.photoRequirementId) || 0) + 1); });
+  const done = requirements.filter((requirement) => counts.get(requirement.id) > 0).length;
+  return <section className="photo-requirements" aria-labelledby="photo-requirements-title" data-testid="photo-requirements">
+    <div className="photo-requirements__head">
+      <h4 id="photo-requirements-title">{translate("checklists.photoRequirementsTitle")}</h4>
+      <span>{translate("checklists.photoRequirementsProgress", { done, total: requirements.length })}</span>
+    </div>
+    {example && <p className="photo-requirements__example">{translate("checklists.photoRequirementsExample")}</p>}
+    <ul>
+      {requirements.map((requirement) => {
+        const count = counts.get(requirement.id) || 0;
+        return <li key={requirement.id} className={count ? "is-done" : "is-missing"} data-requirement={requirement.id}>
+          <span aria-hidden="true" className="photo-requirements__mark">{count ? "✓" : ""}</span>
+          <span className="photo-requirements__label">{requirement.label}{requirement.hint && <small>{requirement.hint}</small>}</span>
+          <strong>{count ? translate("checklists.photoRequirementDone", { count }) : translate("checklists.photoRequirementMissing")}</strong>
+        </li>;
+      })}
+    </ul>
+  </section>;
+}
+
+export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targetRef, translate, photoRequirements = null, requirementsAreExample = false }) {
   const id = useId(); const [viewed, setViewed] = useState(null);
   const select = (event) => { gallery.append(event.target.files || []); event.target.value = ""; };
   const saved = gallery.saved;
@@ -22,7 +52,8 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
   return <div className={`checklist-photo-gallery public-checklist__photo${missing ? " public-checklist__photo--missing" : ""}`} ref={targetRef} tabIndex={-1} aria-live="polite">
     <p className="public-checklist__photo-required">{translate("checklists.photoRequired")}</p>
     <p>{translate("checklists.galleryGuidance")}</p>
-    <p>{translate("checklists.photoCount", { count: saved.length })}</p>
+    <PhotoRequirementList requirements={photoRequirements} saved={saved} example={requirementsAreExample} translate={translate} />
+    <p className="checklist-photo-gallery__count">{translate("checklists.photoCount", { count: saved.length })}</p>
     {!disabled && <>
       <div className="checklist-photo-gallery__actions">
         <label className="button" htmlFor={`${id}-camera`}>{translate("checklists.takePhoto")}</label>
@@ -30,6 +61,7 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
         <label className="button button--secondary" htmlFor={`${id}-library`}>{translate("checklists.choosePhotos")}</label>
         <input id={`${id}-library`} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={select} />
       </div>
+      <p className="checklist-photo-gallery__formats">{translate("checklists.galleryFormats")}</p>
       <p>{translate("checklists.photoReplacementHelp")}</p>
       <button className="button button--secondary" type="button" disabled={gallery.refreshing} onClick={() => gallery.refreshSaved()}>{translate("checklists.refreshPhotos")}</button>
     </>}

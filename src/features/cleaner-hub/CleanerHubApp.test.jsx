@@ -64,7 +64,7 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.getByRole("heading", { name: "Olá, Ana" })).toBeInTheDocument();
     expect(screen.getByText("Agenda atualizada")).toBeInTheDocument();
     expect(screen.getByText(/Saiu da sua agenda/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /^Próximas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
     const card = document.querySelector('[data-job-id="j1"]');
     expect(card).toHaveTextContent("Maple Example House");
     expect(card).toHaveTextContent("Confirmada para você");
@@ -158,9 +158,9 @@ describe("CleanerHubApp (live data boundary)", () => {
     const { service, handlers } = fakeService();
     render(<CleanerHubApp hubOptions={{ service }} />);
     act(() => handlers.agenda({ entries, fromCache: false }));
-    await userEvent.click(screen.getByRole("button", { name: /^Próximas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
     await userEvent.click(document.querySelector('[data-job-id="j1"]'));
-    expect(screen.getByText("Endereço e instruções de acesso continuam vindo da gerente.")).toBeInTheDocument();
+    expect(screen.getByText("Endereço, códigos e instruções da casa continuam vindo da gerente por enquanto.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
     expect(service.openMyChecklist).toHaveBeenCalledWith("j1");
     expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();

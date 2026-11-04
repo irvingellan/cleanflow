@@ -8,3 +8,18 @@
 .checklist-photo-gallery:focus-within { outline-offset: 3px; }
 .checklist-photo-gallery .visually-hidden:focus { position: static; width: auto; height: 44px; clip-path: none; }
 .checklist-photo-gallery img { max-width: 100%; height: auto; }
+/* FB06 — photo requirement list (shown only when the Run provides one). */
+.photo-requirements { margin: .75rem 0; padding: .75rem; border: 1px solid var(--color-border, #d5dce0); border-radius: .6rem; background: var(--color-surface-subtle, #f8faf9); }
+.photo-requirements__head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: .25rem .75rem; }
+.photo-requirements__head h4 { margin: 0; font-size: 1rem; }
+.photo-requirements__head span { color: var(--color-text-secondary, #52645b); font-size: .875rem; }
+.photo-requirements__example { display: inline-block; margin: .5rem 0 0; padding: .15rem .5rem; border-radius: 999px; border: 1px dashed var(--color-warning-label, #7c5620); color: var(--color-warning-text, #6f501d); background: var(--color-status-warning-bg, #fff6e6); font-size: .8rem; font-weight: 700; }
+.photo-requirements ul { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.photo-requirements li { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; align-items: center; gap: .5rem; min-height: 44px; padding: .35rem .5rem; border-radius: .5rem; background: var(--color-surface, #fff); border: 1px solid var(--color-divider, #e3eae6); }
+.photo-requirements__mark { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 2px solid var(--color-border-strong, #b8c9c1); font-weight: 800; color: var(--color-on-brand, #fff); }
+.photo-requirements li.is-done .photo-requirements__mark { background: var(--color-success, #3f705b); border-color: var(--color-success, #3f705b); }
+.photo-requirements__label { display: grid; overflow-wrap: anywhere; }
+.photo-requirements__label small { color: var(--color-text-secondary, #52645b); }
+.photo-requirements li.is-missing strong { color: var(--color-warning-text, #6f501d); }
+.photo-requirements li.is-done strong { color: var(--color-success, #3f705b); }
+.checklist-photo-gallery__formats { font-size: .875rem; color: var(--color-text-secondary, #52645b); }

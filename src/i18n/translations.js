@@ -19,6 +19,8 @@ const messages = {
   en: {
     "compact.previewSurface": "Synthetic preview screen",
     "jobs.moreActions": "More actions",
+    "jobs.intentConfirmInterested": "Confirm interested cleaner", "jobs.intentReviewInterested": "Review interested cleaners", "jobs.intentAwaitingResponses": "See offers awaiting replies", "jobs.intentSeeOffers": "See offers",
+    "interest.eyebrow": "Decision needed", "interest.title": "{count} cleaner(s) interested", "interest.body": "Interest does not assign the service. Choose who takes it.", "interest.responded": "Replied {time}", "interest.confirm": "Confirm {name}", "interest.seeAll": "See all replies", "interest.manual": "Assign someone else manually", "interest.manualNote": "Exception: only when the cleaner was arranged outside the offer.",
     "jobs.section.details": "Service details", "jobs.section.cleaner": "Cleaner & assignment",
     "jobs.section.checklist": "Checklist", "jobs.section.offers": "Offers", "jobs.section.issues": "Issues",
     "jobs.section.financial": "Financial", "jobs.section.history": "History & administration",
@@ -71,6 +73,8 @@ const messages = {
   pt: {
     "compact.previewSurface": "Tela da prévia sintética",
     "jobs.moreActions": "Mais ações",
+    "jobs.intentConfirmInterested": "Confirmar cleaner interessada", "jobs.intentReviewInterested": "Revisar interessadas", "jobs.intentAwaitingResponses": "Ver ofertas aguardando resposta", "jobs.intentSeeOffers": "Ver ofertas",
+    "interest.eyebrow": "Decisão pendente", "interest.title": "{count} cleaner(s) com interesse", "interest.body": "Interesse não atribui o serviço. Escolha quem fica com ele.", "interest.responded": "Respondeu {time}", "interest.confirm": "Confirmar {name}", "interest.seeAll": "Ver todas as respostas", "interest.manual": "Atribuir outra pessoa manualmente", "interest.manualNote": "Exceção: só quando a cleaner foi combinada fora da oferta.",
     "jobs.section.details": "Detalhes do serviço", "jobs.section.cleaner": "Cleaner e atribuição",
     "jobs.section.checklist": "Checklist", "jobs.section.offers": "Ofertas", "jobs.section.issues": "Problemas",
     "jobs.section.financial": "Financeiro", "jobs.section.history": "Histórico e administração",
@@ -124,6 +128,8 @@ const messages = {
   es: {
     "compact.previewSurface": "Pantalla de vista previa sintética",
     "jobs.moreActions": "Más acciones",
+    "jobs.intentConfirmInterested": "Confirmar cleaner interesada", "jobs.intentReviewInterested": "Revisar interesadas", "jobs.intentAwaitingResponses": "Ver ofertas esperando respuesta", "jobs.intentSeeOffers": "Ver ofertas",
+    "interest.eyebrow": "Decisión pendiente", "interest.title": "{count} cleaner(s) con interés", "interest.body": "El interés no asigna el servicio. Elija quién lo toma.", "interest.responded": "Respondió {time}", "interest.confirm": "Confirmar {name}", "interest.seeAll": "Ver todas las respuestas", "interest.manual": "Asignar a otra persona manualmente", "interest.manualNote": "Excepción: solo si la cleaner se acordó fuera de la oferta.",
     "jobs.section.details": "Detalles del servicio", "jobs.section.cleaner": "Cleaner y asignación",
     "jobs.section.checklist": "Checklist", "jobs.section.offers": "Ofertas", "jobs.section.issues": "Problemas",
     "jobs.section.financial": "Finanzas", "jobs.section.history": "Historial y administración",
@@ -177,7 +183,9 @@ const messages = {
 };
 
 Object.assign(messages.en, {
-  "checklists.galleryGuidance": "Save one required photo of belongings, then add other photos. JPEG, PNG or WebP; up to 20 MB and 16 MP per input.",
+  "checklists.galleryGuidance": "Add every photo this checklist asks for. The under-bed and furniture check needs a photo, and you can add as many photos as the work needs.",
+  "checklists.galleryFormats": "JPEG, PNG or WebP; up to 20 MB and 16 MP per image.",
+  "checklists.photoRequirementsTitle": "Photos to take", "checklists.photoRequirementsExample": "Example — list not published", "checklists.photoRequirementMissing": "Missing", "checklists.photoRequirementDone": "{count} photo(s)", "checklists.photoRequirementsProgress": "{done} of {total} done",
   "checklists.choosePhotos": "Choose photos",
   "checklists.photoCount": "{count} photos saved",
   "checklists.photoNumber": "Photo {count}",
@@ -234,7 +242,9 @@ Object.assign(messages.en, {
 });
 
 Object.assign(messages.pt, {
-  "checklists.galleryGuidance": "Salve uma foto obrigatória de pertences e adicione outras fotos. JPEG, PNG ou WebP; até 20 MB e 16 MP por imagem.",
+  "checklists.galleryGuidance": "Adicione todas as fotos que este checklist pede. A verificação sob camas e móveis precisa de foto, e você pode enviar quantas fotos o trabalho precisar.",
+  "checklists.galleryFormats": "JPEG, PNG ou WebP; até 20 MB e 16 MP por imagem.",
+  "checklists.photoRequirementsTitle": "Fotos a tirar", "checklists.photoRequirementsExample": "Exemplo — lista não publicada", "checklists.photoRequirementMissing": "Faltando", "checklists.photoRequirementDone": "{count} foto(s)", "checklists.photoRequirementsProgress": "{done} de {total} feitas",
   "checklists.choosePhotos": "Escolher fotos",
   "checklists.photoCount": "{count} fotos salvas",
   "checklists.photoNumber": "Foto {count}",
@@ -291,7 +301,9 @@ Object.assign(messages.pt, {
 });
 
 Object.assign(messages.es, {
-  "checklists.galleryGuidance": "Guarda una foto obligatoria de pertenencias y añade otras fotos. JPEG, PNG o WebP; hasta 20 MB y 16 MP por imagen.",
+  "checklists.galleryGuidance": "Añada todas las fotos que pide este checklist. La revisión bajo camas y muebles necesita foto, y puede enviar todas las fotos que el trabajo necesite.",
+  "checklists.galleryFormats": "JPEG, PNG o WebP; hasta 20 MB y 16 MP por imagen.",
+  "checklists.photoRequirementsTitle": "Fotos a tomar", "checklists.photoRequirementsExample": "Ejemplo — lista no publicada", "checklists.photoRequirementMissing": "Falta", "checklists.photoRequirementDone": "{count} foto(s)", "checklists.photoRequirementsProgress": "{done} de {total} hechas",
   "checklists.choosePhotos": "Elegir fotos",
   "checklists.photoCount": "{count} fotos guardadas",
   "checklists.photoNumber": "Foto {count}",

@@ -92,3 +92,73 @@ export function formatAccessCodeInput(value) {
   const code = normalizeAccessCodeInput(value);
   return code.match(/.{1,4}/g)?.join("-") || "";
 }
+
+/* ---------- Gabi feedback 2026-11-04 (FB02, FB04, FB01) ---------- */
+
+/** "YYYY-MM" for a dated entry, "" when the date is not set yet. */
+export function monthKeyOf(entry) {
+  return entry?.scheduledDate ? entry.scheduledDate.slice(0, 7) : "";
+}
+
+/**
+ * Months that hold at least one of the given entries, in date order; undated
+ * entries ("") come last. Every entry belongs to exactly one month, so
+ * navigating month by month can never skip or duplicate a Job.
+ */
+export function agendaMonths(entries = []) {
+  const keys = [...new Set(entries.map(monthKeyOf))];
+  return keys.filter(Boolean).sort().concat(keys.includes("") ? [""] : []);
+}
+
+export function entriesInMonth(entries = [], month) {
+  return entries.filter((entry) => monthKeyOf(entry) === month);
+}
+
+const runStatuses = ["NONE", "DRAFT", "READY_FOR_REVIEW", "ABANDONED"];
+
+/**
+ * Cleaner-facing checklist situation for an assigned agenda entry.
+ *
+ * Reads the optional server-written `entry.checklist` summary proposed in
+ * docs/GABI_FEEDBACK_UX_V1.md ({status, started}). The current projection does
+ * not write it yet, so the honest answer is "unknown": the screen then offers
+ * the existing "Abrir checklist" path, where the server decides. Nothing here
+ * creates, starts or submits a Run, and saving answers is never "sent".
+ *
+ * @returns {{state: "unknown"|"none"|"available"|"started"|"submitted"|"closed", pending: boolean}}
+ */
+export function checklistSituation(entry) {
+  const summary = entry?.checklist;
+  const open = openStatuses.includes(entry?.jobStatus);
+  if (!summary || typeof summary !== "object" || !runStatuses.includes(summary.status)) {
+    return { state: "unknown", pending: false };
+  }
+  if (summary.status === "READY_FOR_REVIEW") return { state: "submitted", pending: false };
+  if (summary.status === "ABANDONED") return { state: "closed", pending: false };
+  if (summary.status === "NONE") return { state: "none", pending: false };
+  // DRAFT: the cleaner still owes it while the Job is open. Not "late": a Run
+  // created for a Job that has not started is simply available.
+  const state = summary.started === true ? "started" : "available";
+  return { state, pending: open };
+}
+
+const accessStates = ["available", "not-provided", "not-yet", "revoked", "denied"];
+
+/**
+ * Normalises what the proposed `getMyJobAccess` read returns (see contract).
+ * Anything unexpected becomes "unsupported", which shows a neutral note and
+ * never a fabricated code or instruction.
+ */
+export function normalizeJobAccess(result) {
+  if (!result || !accessStates.includes(result.state)) return { state: "unsupported" };
+  if (result.state !== "available") return { state: result.state, availableFromMs: Number.isFinite(result.availableFromMs) ? result.availableFromMs : null };
+  const clean = (value, max) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+  const items = (Array.isArray(result.items) ? result.items : [])
+    .map((item) => ({ kind: clean(item?.kind, 32) || "note", label: clean(item?.label, 80), value: clean(item?.value, 400) }))
+    .filter((item) => item.value)
+    .slice(0, 12);
+  const address = clean(result.address, 240);
+  const instructions = clean(result.houseInstructions, 4000);
+  if (!items.length && !address && !instructions) return { state: "not-provided" };
+  return { state: "available", address, items, instructions };
+}

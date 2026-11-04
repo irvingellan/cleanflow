@@ -419,3 +419,46 @@
 @media (max-width: 719px) {
   .hb-root .hb-app { border: 0; border-radius: 0; height: 100dvh; }
 }
+
+/* ---------- Gabi feedback 2026-11-04: schedule, checklist situation, access ---------- */
+.hb-seg .hb-count { display: inline-grid; place-items: center; min-width: 22px; height: 20px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--v2-color-surface-sunken); color: var(--v2-color-text-secondary); font-size: 12px; font-weight: 800; }
+.hb-seg button[aria-pressed="true"] .hb-count { background: var(--v2-color-brand); color: var(--v2-color-on-brand); }
+.hb-sched { display: grid; gap: 10px; }
+.hb-sched-sum { margin: 0; font-size: 14px; color: var(--v2-color-text-secondary); }
+.hb-sched-partial { color: var(--v2-color-warning-text); font-weight: 700; }
+.hb-sched-modes { display: flex; gap: 8px; flex-wrap: wrap; }
+.hb-root .hb-chipbtn { min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--v2-color-border-strong); background: var(--v2-color-surface); color: var(--v2-color-text-primary); font-weight: 700; font-size: 14px; }
+.hb-root .hb-chipbtn[aria-pressed="true"] { background: var(--v2-color-surface-selected); border-color: var(--v2-color-border-selected); color: var(--v2-color-brand-text); }
+.hb-month { display: grid; gap: 8px; }
+.hb-month-title { margin: 6px 0 0; font-size: 15px; font-weight: 800; text-transform: capitalize; }
+.hb-month-title .mw-sec { text-transform: none; font-weight: 600; }
+.hb-monthnav { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px; border-radius: 14px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); }
+.hb-monthnav strong { text-align: center; text-transform: capitalize; font-size: 15px; }
+.hb-monthnav strong .mw-sec { text-transform: none; }
+.hb-root .hb-iconbtn { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--v2-color-border); background: var(--v2-color-surface-subtle); color: var(--v2-color-text-primary); }
+.hb-root .hb-iconbtn:disabled { color: var(--v2-color-text-disabled); background: transparent; }
+.hb-clchip { display: inline-flex; align-items: center; gap: 4px; justify-self: start; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
+.hb-clchip.is-available { background: var(--v2-color-attention-bg); color: var(--v2-color-attention-text); border-color: var(--v2-color-attention-border); }
+.hb-clchip.is-started { background: var(--v2-color-warning-bg); color: var(--v2-color-warning-text); border-color: var(--v2-color-warning-border); }
+.hb-clchip.is-submitted { background: var(--v2-color-success-bg); color: var(--v2-color-success-text); border-color: var(--v2-color-success-border); }
+.hb-clchip.is-none, .hb-clchip.is-closed { background: var(--v2-color-surface-sunken); color: var(--v2-color-text-secondary); }
+.hb-clnotice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--v2-color-attention-bg); border: 1px solid var(--v2-color-attention-border); color: var(--v2-color-attention-text); }
+.hb-clnotice ul { display: grid; gap: 0; margin: 2px 0 0; padding: 0; list-style: none; }
+.hb-clnotice .mw-linkbtn { color: var(--v2-color-attention-text); text-align: left; font-weight: 600; min-height: 40px; }
+.hb-checkhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.hb-checkcard.is-available, .hb-checkcard.is-started { border-color: var(--v2-color-attention-border); box-shadow: inset 4px 0 0 var(--v2-color-attention-border); }
+.hb-access { display: grid; gap: 10px; padding: 14px; border-radius: 16px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); }
+.hb-access h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; }
+.hb-access-address { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 15px; }
+.hb-access-items { display: grid; gap: 8px; margin: 0; }
+.hb-access-items > div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--v2-color-surface-subtle); border: 1px solid var(--v2-color-divider); }
+.hb-access-items dt { display: flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--v2-color-text-secondary); }
+.hb-access-items dd { margin: 0; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.hb-access-note { padding: 10px 12px; border-radius: 12px; background: var(--v2-color-info-bg); border: 1px solid var(--v2-color-info-border); color: var(--v2-color-info-text); font-size: 14px; }
+.hb-access-note.is-blocked { background: var(--v2-color-risk-bg); border-color: var(--v2-color-risk-border); color: var(--v2-color-risk-text); }
+.hb-access-note p { margin: 0; }
+.hb-house, .hb-record { border-radius: 12px; border: 1px solid var(--v2-color-border); background: var(--v2-color-surface); }
+.hb-house > summary, .hb-record > summary { min-height: 44px; display: flex; align-items: center; padding: 0 12px; font-weight: 700; cursor: pointer; }
+.hb-house > p { margin: 0; padding: 0 12px 12px; white-space: pre-line; font-size: 15px; line-height: 1.5; }
+.hb-record > .hb-facts { padding: 0 10px 10px; }
+.hb-record > summary { color: var(--v2-color-text-secondary); font-size: 14px; }

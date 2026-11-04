@@ -228,5 +228,7 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     signOut,
     openChecklist: service.openMyChecklist,
     respondToOffer: service.respondToMyOffer,
+    // Optional server read (proposed contract). Absent today: the screen says so.
+    loadJobAccess: service.getMyJobAccess || null,
   };
 }
