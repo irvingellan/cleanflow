@@ -29,7 +29,6 @@ export function InterestDecisionPanel({
   const { translate } = useTranslation();
   const single = offers.length === 1;
   return <section ref={ref} tabIndex={-1} className="interest-decision" aria-labelledby="interest-decision-title" data-testid="interest-decision">
-    <p className="eyebrow">{translate("interest.eyebrow")}</p>
     <h3 id="interest-decision-title">{translate("interest.title", { count: offers.length })}</h3>
     <p className="interest-decision__body">{translate("interest.body")}</p>
     <ul className="interest-decision__list">
@@ -37,6 +36,7 @@ export function InterestDecisionPanel({
         const name = cleanerName(offer);
         const time = respondedAt(offer);
         return <li key={offer.id} data-offer-id={offer.id}>
+          <span className="interest-decision__avatar" aria-hidden="true">{initials(name)}</span>
           <div>
             <strong>{name}</strong>
             <span className="status-badge">{translate("status.interested")}</span>
@@ -58,4 +58,9 @@ export function InterestDecisionPanel({
       </span>}
     </div>
   </section>;
+}
+
+function initials(name) {
+  const words = String(name || "").split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] || "?") + (words[1]?.[0] || "")).toUpperCase();
 }

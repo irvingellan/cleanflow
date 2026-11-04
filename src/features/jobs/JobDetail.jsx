@@ -1039,7 +1039,8 @@ export function JobDetail({
   }
 
   return (
-    <section className="panel job-detail" aria-labelledby="job-detail-title">
+    <section className="panel job-detail cf-job" aria-labelledby="job-detail-title">
+      <div className="cf-job__head">
       <BackButton onClick={onBack} />
 
       <h2 id="job-detail-title" className="panel__title">
@@ -1076,6 +1077,9 @@ export function JobDetail({
               : job.assignedCleanerName || translate("dashboard.notAssigned")}</strong>
       </div>
       <ChecklistProgressSummary checklist={lifecyclePresentation.checklist} />
+      </div>
+      <div className="cf-job__layout">
+      <aside className="cf-job__rail" aria-label={translate("jobs.intentTitle")}>
       <JobIntentLayer
         key={job.id}
         primary={primaryIntent}
@@ -1100,6 +1104,8 @@ export function JobDetail({
         onSeeAllOffers={() => focusIntentSection(offersSectionRef)}
         onAssignManually={canDirectAssign ? () => chooseJobIntent("assignment") : null}
       />}
+      </aside>
+      <div className="cf-job__sections">
       <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (
@@ -2325,6 +2331,8 @@ export function JobDetail({
       <RecordArchiveControl record={job} canRestore={canRestore} onArchive={onArchive} onRestore={onRestore} />
       </JobDetailSection>
 
+      </div>
+      </div>
       <ScrollToTopButton />
     </section>
   );

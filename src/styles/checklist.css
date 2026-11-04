@@ -1,0 +1,185 @@
+/* Cleaner checklist (public link): the same system as the Hub, light and dark. */
+
+.checklist-public-page {
+  min-height: 100dvh;
+  padding: 0 0 calc(40px + env(safe-area-inset-bottom));
+  background: var(--cf-canvas);
+}
+
+.checklist-public-page > .panel {
+  width: min(100%, 720px);
+  margin-top: 20px;
+}
+
+.public-checklist {
+  gap: 18px;
+}
+
+.public-checklist__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.public-checklist__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--cf-text);
+  font-weight: 760;
+  letter-spacing: -0.015em;
+}
+
+.public-checklist__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--cf-shell);
+}
+
+:root[data-theme="dark"] .public-checklist__mark {
+  color: var(--cf-shell);
+  background: linear-gradient(160deg, #c9e8d5, #8fc6a6);
+}
+
+.public-checklist__header .panel__title {
+  margin-bottom: 4px;
+}
+
+.public-checklist__context {
+  margin: 0;
+  color: var(--cf-text-secondary);
+}
+
+.public-checklist__context:first-of-type {
+  color: var(--cf-text);
+  font-weight: 650;
+}
+
+.public-checklist__language {
+  display: grid;
+  gap: 4px;
+  color: var(--cf-text-muted);
+  font-size: var(--cf-text-sm);
+  font-weight: 600;
+}
+
+/* Where am I / what is next: the completion card leads */
+.public-checklist__completion {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border: 1px solid var(--cf-border-selected);
+  border-radius: var(--cf-radius-xl);
+  padding: 16px;
+  background: var(--cf-surface-selected);
+}
+
+.public-checklist__completion h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.public-checklist__completion p {
+  margin: 0;
+  color: var(--cf-text-secondary);
+}
+
+.public-checklist__completion .button {
+  justify-self: start;
+}
+
+.public-checklist__instructions,
+.public-checklist__validation-summary {
+  border: 1px solid var(--cf-info-border);
+  border-radius: var(--cf-radius-lg);
+  padding: 14px 16px;
+  color: var(--cf-info-text);
+  background: var(--cf-info-bg);
+}
+
+.public-checklist__instructions h2,
+.public-checklist__validation-summary h2 {
+  margin: 0 0 6px;
+  color: inherit;
+  font-size: 1rem;
+}
+
+.public-checklist__instructions p {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.public-checklist__section {
+  gap: 12px;
+  border-top: 1px solid var(--cf-divider);
+  padding-top: 18px;
+}
+
+.public-checklist__section h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.public-checklist__answer-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.public-checklist__answer-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 1px solid var(--cf-border-input);
+  border-radius: 12px;
+  padding: 0 14px;
+  background: var(--cf-surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.public-checklist__answer-options label:has(input:checked) {
+  border-color: var(--cf-brand);
+  color: var(--cf-brand-text);
+  background: var(--cf-surface-selected);
+}
+
+.public-checklist__missing-marker {
+  color: var(--cf-warning-text);
+  font-weight: 700;
+}
+
+.public-checklist__review-handoff {
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-xl);
+  padding: 16px;
+  background: var(--cf-surface-subtle);
+}
+
+.public-checklist__review-actions,
+.public-checklist__save-actions,
+.public-checklist__photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button--secondary {
+  border-color: var(--cf-border-strong);
+}
+
+@media (max-width: 719px) {
+  .checklist-public-page > .panel {
+    margin-top: 0;
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+}

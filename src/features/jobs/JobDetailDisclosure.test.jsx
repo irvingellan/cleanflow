@@ -106,7 +106,7 @@ describe("Job Detail progressive disclosure", () => {
     const notice = screen.getByRole("status");
     expect(notice).toBeVisible();
     expect(notice).toHaveTextContent(/do not delete and recreate/i);
-    fireEvent.click(within(notice).getByRole("button", { name: "Open existing checklist →" }));
+    fireEvent.click(within(notice).getByRole("button", { name: "Open existing checklist" }));
     expect(open).toHaveBeenCalledOnce();
     expect(mutation).not.toHaveBeenCalled();
   });

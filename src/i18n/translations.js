@@ -2883,3 +2883,29 @@ export function useTranslation() {
   if (!translation) throw new Error("useTranslation must be used within TranslationProvider");
   return translation;
 }
+
+// Definitive UI shell and workspace copy.
+Object.assign(messages.en, {
+  "shell.more": "More", "shell.close": "Close", "shell.inboxShort": "Inbox", "shell.accountMenu": "Account: {name}",
+  "shell.appearance": "Appearance", "shell.notifications": "Notifications on this device", "shell.themeLight": "Light", "shell.themeDark": "Dark",
+});
+Object.assign(messages.pt, {
+  "shell.more": "Mais", "shell.close": "Fechar", "shell.inboxShort": "Avisos", "shell.accountMenu": "Conta: {name}",
+  "shell.appearance": "Aparência", "shell.notifications": "Notificações neste aparelho", "shell.themeLight": "Claro", "shell.themeDark": "Escuro",
+});
+Object.assign(messages.es, {
+  "shell.more": "Más", "shell.close": "Cerrar", "shell.inboxShort": "Avisos", "shell.accountMenu": "Cuenta: {name}",
+  "shell.appearance": "Apariencia", "shell.notifications": "Notificaciones en este dispositivo", "shell.themeLight": "Claro", "shell.themeDark": "Oscuro",
+});
+Object.assign(messages.en, {
+  "home.noticesTitle": "Ready for your review", "home.noticesSubtitle": "From the latest notifications loaded on this device.",
+  "home.openInbox": "Open inbox", "home.notice.checklist": "Checklist submitted",
+});
+Object.assign(messages.pt, {
+  "home.noticesTitle": "Prontos para você revisar", "home.noticesSubtitle": "Dos avisos mais recentes carregados neste aparelho.",
+  "home.openInbox": "Abrir avisos", "home.notice.checklist": "Checklist enviado",
+});
+Object.assign(messages.es, {
+  "home.noticesTitle": "Listos para tu revisión", "home.noticesSubtitle": "De los avisos más recientes cargados en este dispositivo.",
+  "home.openInbox": "Abrir avisos", "home.notice.checklist": "Checklist enviado",
+});

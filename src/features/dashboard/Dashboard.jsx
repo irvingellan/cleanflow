@@ -1,3 +1,4 @@
+import { Icon } from "../../components/Icon.jsx";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
@@ -25,6 +26,9 @@ export function Dashboard({
   onOpenJob,
   onShowJobs,
   onShowJobsWithFilter,
+  notices,
+  onOpenNotice,
+  onShowInbox,
 }) {
   const { language } = useTranslation();
 
@@ -120,7 +124,7 @@ export function Dashboard({
         label: translate("dashboard.cleanerInterested"),
         detail: interestedNames || translate("dashboard.cleanerInterestedDescription"),
         status: formatOperationalStatus(job.operationalStatus, translate),
-        action: translate("dashboard.reviewAndAssign"),
+        action: translate("jobs.intentReviewInterested"),
       };
     }),
     sortIssuesByJobScheduledDate(openIssues).map((issue) => ({
@@ -153,22 +157,35 @@ export function Dashboard({
     visibleAttentionItems.length === 5;
   const next48HourGroups = groupNext48HourJobs(next48HoursJobs, translate);
 
+  const todayLabel = new Intl.DateTimeFormat(localeFor(language), {
+    weekday: "long", day: "numeric", month: "long",
+  }).format(new Date());
+  const reviewNotices = (notices || []).filter((notice) => !notice.read && notice.openable
+    && reviewNoticeTypes.includes(notice.type));
+  const toneFor = (item) => item.type === "issue" ? "risk"
+    : item.type === "interested" ? "attention"
+      : item.type === "awaiting" ? "info"
+        : item.isUrgent ? "warning" : "neutral";
+
   return (
-    <section className="dashboard" aria-labelledby="dashboard-title">
-      <div className="dashboard__intro">
-        <div>
-          <p className="eyebrow">{translate("dashboard.managerWorkspace")}</p>
-          <h2 id="dashboard-title" className="dashboard__title">
+    <section className="dashboard cf-home" aria-labelledby="dashboard-title">
+      <header className="cf-page-header">
+        <div className="cf-page-header__text">
+          <h2 id="dashboard-title" className="cf-page-title">
             {translate("dashboard.title")}
           </h2>
-          <p>{translate("dashboard.subtitle")}</p>
+          <p className="cf-page-context">
+            <span className="cf-page-context__date">{capitalize(todayLabel)}</span>
+            <span>{translate("dashboard.subtitle")}</span>
+          </p>
         </div>
-        <button className="button" type="button" onClick={onRefresh}>
+        <button className="button button--small" type="button" onClick={onRefresh}>
+          <Icon name="refresh" size={16} />
           {translate("dashboard.refresh")}
         </button>
-      </div>
+      </header>
 
-      <div className="dashboard-summary" aria-label={translate("dashboard.operation")}>
+      <div className="dashboard-summary cf-pulse" aria-label={translate("dashboard.operation")}>
         <SummaryCard
           label={translate("dashboard.today")}
           count={counts.today || 0}
@@ -179,6 +196,7 @@ export function Dashboard({
           label={translate("dashboard.needsAssignment")}
           count={counts.needsAssignment || 0}
           icon="assignment"
+          tone={counts.needsAssignment ? "warning" : undefined}
           onClick={() => onShowJobsWithFilter("needs-assignment")}
         />
         <SummaryCard
@@ -197,138 +215,180 @@ export function Dashboard({
           label={translate("dashboard.openIssues")}
           count={counts.openIssues || 0}
           icon="alert"
-          tone="attention"
+          tone={counts.openIssues ? "risk" : undefined}
         />
       </div>
 
-      <div className="dashboard-grid">
-        <section className="dashboard-panel" aria-labelledby="attention-title">
-          <div className="dashboard-panel__header dashboard-panel__header--action">
-            <div>
-              <p className="eyebrow">{translate("dashboard.priorities")}</p>
-              <h3 id="attention-title">{translate("dashboard.needsAttention")}</h3>
-              <p className="dashboard-panel__subtitle">
-                {translate("dashboard.needsAttentionDescription")}
-              </p>
+      <div className="dashboard-grid cf-home__grid">
+        <div className="cf-home__primary">
+          <section className="dashboard-panel cf-block" aria-labelledby="attention-title">
+            <div className="cf-block__header">
+              <div>
+                <h3 id="attention-title">{translate("dashboard.needsAttention")}</h3>
+                <p className="cf-block__subtitle">{translate("dashboard.needsAttentionDescription")}</p>
+              </div>
+              {hasMoreAttention && (
+                <button className="button button--small" type="button" onClick={onShowJobs}>
+                  {translate("dashboard.viewAll")}
+                </button>
+              )}
             </div>
-            {hasMoreAttention && (
+
+            {visibleAttentionItems.length === 0 ? (
+              <p className="dashboard-empty cf-empty">
+                <Icon name="checkCircle" size={20} />
+                {translate("dashboard.noAttention")}
+              </p>
+            ) : (
+              <div className="attention-list cf-queue">
+                {visibleAttentionItems.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`attention-item attention-item--${item.type}${
+                      item.isUrgent ? " attention-item--urgent" : ""
+                    } cf-queue-row cf-tone--${toneFor(item)}`}
+                    type="button"
+                    onClick={() => onOpenJob(item.job, item.type === "interested" ? "interest" : null)}
+                  >
+                    <span className="attention-item__label cf-state">
+                      <OperationalIcon name={item.icon || "assignment"} size={16} />
+                      {item.label}
+                    </span>
+                    <strong className="cf-queue-row__title">{item.job.propertyName || translate("properties.unnamed")}</strong>
+                    <span className="cf-queue-row__detail">{item.detail}</span>
+                    <small className="cf-queue-row__when">
+                      {[formatDate(item.job.scheduledDate, translate, language), item.job.scheduledStart, item.status]
+                        .filter(Boolean).join(" · ")}
+                    </small>
+                    <span className="attention-item__action cf-queue-row__action">
+                      {item.action} <Icon name="arrowR" size={16} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {reviewNotices.length > 0 && (
+            <section className="cf-block" aria-labelledby="home-notices-title">
+              <div className="cf-block__header">
+                <div>
+                  <h3 id="home-notices-title">{translate("home.noticesTitle")}</h3>
+                  <p className="cf-block__subtitle">{translate("home.noticesSubtitle")}</p>
+                </div>
+                {onShowInbox && (
+                  <button className="button button--small" type="button" onClick={onShowInbox}>
+                    {translate("home.openInbox")}
+                  </button>
+                )}
+              </div>
+              <div className="cf-queue">
+                {reviewNotices.slice(0, 4).map((notice) => (
+                  <button key={notice.id} className="cf-queue-row cf-tone--attention" type="button"
+                    onClick={() => onOpenNotice?.(notice)}>
+                    <span className="cf-state"><Icon name="clipCheck" size={16} />{translate("home.notice.checklist")}</span>
+                    <strong className="cf-queue-row__title">{notice.serviceLabel || translate("properties.unnamed")}</strong>
+                    <small className="cf-queue-row__when">{formatNoticeTime(notice.createdAtMs, language)}</small>
+                    <span className="cf-queue-row__action">{translate("jobs.intentReview")} <Icon name="arrowR" size={16} /></span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <div className="cf-home__secondary">
+          <section className="dashboard-panel cf-block" aria-labelledby="next-48-hours-title">
+            <div className="cf-block__header">
+              <h3 id="next-48-hours-title">{translate("dashboard.next48Hours")}</h3>
               <button className="button button--small" type="button" onClick={onShowJobs}>
                 {translate("dashboard.viewAll")}
               </button>
-            )}
-          </div>
-
-          {visibleAttentionItems.length === 0 ? (
-            <p className="dashboard-empty">{translate("dashboard.noAttention")}</p>
-          ) : (
-            <div className="attention-list">
-              {visibleAttentionItems.map((item) => (
-                <button
-                  key={item.id}
-                  className={`attention-item attention-item--${item.type}${
-                    item.isUrgent ? " attention-item--urgent" : ""
-                  }`}
-                  type="button"
-                  onClick={() => onOpenJob(item.job)}
-                >
-                  <span className="attention-item__label">
-                    <OperationalIcon name={item.icon || "assignment"} />
-                    {item.label}
-                  </span>
-                  <strong>{item.job.propertyName || translate("properties.unnamed")}</strong>
-                  <span>{item.detail}</span>
-                  <small>
-                    {item.status} · {formatDate(item.job.scheduledDate, translate, language)}
-                  </small>
-                  <span className="attention-item__action">
-                    {item.action} <span aria-hidden="true">→</span>
-                  </span>
-                </button>
-              ))}
             </div>
-          )}
-        </section>
 
-        <section className="dashboard-panel" aria-labelledby="completed-title">
-          <div className="dashboard-panel__header dashboard-panel__header--action">
-            <div>
-              <p className="eyebrow">{translate("dashboard.history")}</p>
-              <h3 id="completed-title">{translate("dashboard.recentlyCompleted")}</h3>
-            </div>
-            <button className="button button--small" type="button" onClick={onShowJobs}>
-              {translate("dashboard.viewAll")}
-            </button>
-          </div>
-
-          {recentlyCompletedJobs.length === 0 ? (
-            <p className="dashboard-empty">{translate("dashboard.noCompleted")}</p>
-          ) : (
-            <div className="recent-list">
-              {recentlyCompletedJobs.map((job) => (
-                <button
-                  key={job.id}
-                  className="recent-item"
-                  type="button"
-                  onClick={() => onOpenJob(job)}
-                >
-                  <strong>{job.propertyName || translate("properties.unnamed")}</strong>
-                  <span>{formatDate(job.scheduledDate, translate, language)}</span>
-                  <span>
-                    {assignedCleanerSummary(
-                      job,
-                      cleanerNamesById,
-                      translate,
-                      translate("common.notProvided"),
-                    )}
-                  </span>
-                  <small>
-                    {formatCreatedAt(job.completedAt, language) ||
-                      translate("dashboard.completionUnavailable")}
-                  </small>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      <section className="dashboard-panel" aria-labelledby="next-48-hours-title">
-        <div className="dashboard-panel__header dashboard-panel__header--action">
-          <div>
-            <p className="eyebrow">{translate("dashboard.schedule")}</p>
-            <h3 id="next-48-hours-title">{translate("dashboard.next48Hours")}</h3>
-          </div>
-          <button className="button button--small" type="button" onClick={onShowJobs}>
-            {translate("dashboard.viewAll")}
-          </button>
-        </div>
-
-        {next48HourGroups.length === 0 ? (
-          <p className="dashboard-empty">{translate("dashboard.noNext48Hours")}</p>
-        ) : (
-          <div className="dashboard-next-list">
-            {next48HourGroups.map(({ day, jobs }) => (
-              <section key={day} className="dashboard-next-group" aria-label={day}>
-                <h4>{day}</h4>
-                {jobs.map((job) => (
-                  <DashboardNextJob
-                    key={job.id}
-                    job={job}
-                    cleanerNamesById={cleanerNamesById}
-                    offers={offersByJob[job.id]}
-                    onOpen={onOpenJob}
-                  />
+            {next48HourGroups.length === 0 ? (
+              <p className="dashboard-empty cf-empty">{translate("dashboard.noNext48Hours")}</p>
+            ) : (
+              <div className="dashboard-next-list cf-timeline">
+                {next48HourGroups.map(({ day, jobs }) => (
+                  <section key={day} className="dashboard-next-group cf-timeline__day" aria-label={day}>
+                    <h4>{day} <span>{jobs.length}</span></h4>
+                    {jobs.map((job) => (
+                      <DashboardNextJob
+                        key={job.id}
+                        job={job}
+                        cleanerNamesById={cleanerNamesById}
+                        offers={offersByJob[job.id]}
+                        onOpen={onOpenJob}
+                      />
+                    ))}
+                  </section>
                 ))}
-              </section>
-            ))}
-          </div>
-        )}
-      </section>
+              </div>
+            )}
+          </section>
+
+          <section className="dashboard-panel cf-block" aria-labelledby="completed-title">
+            <div className="cf-block__header">
+              <h3 id="completed-title">{translate("dashboard.recentlyCompleted")}</h3>
+              <button className="button button--small" type="button" onClick={onShowJobs}>
+                {translate("dashboard.viewAll")}
+              </button>
+            </div>
+
+            {recentlyCompletedJobs.length === 0 ? (
+              <p className="dashboard-empty cf-empty">{translate("dashboard.noCompleted")}</p>
+            ) : (
+              <div className="recent-list cf-compact-list">
+                {recentlyCompletedJobs.map((job) => (
+                  <button
+                    key={job.id}
+                    className="recent-item cf-compact-row"
+                    type="button"
+                    onClick={() => onOpenJob(job)}
+                  >
+                    <Icon name="checkCircle" size={16} className="cf-compact-row__icon" />
+                    <strong>{job.propertyName || translate("properties.unnamed")}</strong>
+                    <span>{formatDate(job.scheduledDate, translate, language)}</span>
+                    <span>
+                      {assignedCleanerSummary(
+                        job,
+                        cleanerNamesById,
+                        translate,
+                        translate("common.notProvided"),
+                      )}
+                    </span>
+                    <small>
+                      {formatCreatedAt(job.completedAt, language) ||
+                        translate("dashboard.completionUnavailable")}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
 
       <DashboardWeekSummary summary={weeklySummary} />
       <ScrollToTopButton />
     </section>
   );
+}
+
+const reviewNoticeTypes = ["CHECKLIST_READY_FOR_REVIEW"];
+
+function localeFor(language) {
+  return { pt: "pt-BR", es: "es-US" }[language] || "en-US";
+}
+
+function capitalize(text) {
+  return text ? text.charAt(0).toLocaleUpperCase() + text.slice(1) : text;
+}
+
+function formatNoticeTime(ms, language) {
+  if (!Number.isFinite(ms)) return null;
+  return new Intl.DateTimeFormat(localeFor(language), { dateStyle: "medium", timeStyle: "short" }).format(ms);
 }
 
 function DashboardNextJob({ job, cleanerNamesById, offers, onOpen }) {
@@ -341,20 +401,23 @@ function DashboardNextJob({ job, cleanerNamesById, offers, onOpen }) {
     .join(" · ");
 
   return (
-    <button className="dashboard-next-item dashboard-next-item--lifecycle" type="button"
+    <button className="dashboard-next-item dashboard-next-item--lifecycle cf-timeline__row" type="button"
       aria-describedby={`dashboard-lifecycle-${job.id}`} onClick={() => onOpen(job)}>
-      <span>{schedule}</span>
-      <strong>{job.propertyName || translate("properties.unnamed")}</strong>
-      <span className="dashboard-next-item__cleaner">
-        {assignedCleanerSummary(
-          job,
-          cleanerNamesById,
-          translate,
-          translate("dashboard.needsAssignment"),
-        )}
+      <span className="cf-timeline__time" data-numeric>{job.scheduledStart || "—"}</span>
+      <span className="cf-timeline__body">
+        <strong>{job.propertyName || translate("properties.unnamed")}</strong>
+        <span className="dashboard-next-item__cleaner">
+          {assignedCleanerSummary(
+            job,
+            cleanerNamesById,
+            translate,
+            translate("dashboard.needsAssignment"),
+          )}
+        </span>
+        <span className="visually-hidden">{schedule}</span>
+        {/* Dashboard Offers are filtered: empty cannot prove no Offer history. */}
+        <CompactServiceLifecycle job={job} offers={offers?.length ? offers : undefined} descriptionId={`dashboard-lifecycle-${job.id}`} />
       </span>
-      {/* Dashboard Offers are filtered: empty cannot prove no Offer history. */}
-      <CompactServiceLifecycle job={job} offers={offers?.length ? offers : undefined} descriptionId={`dashboard-lifecycle-${job.id}`} />
     </button>
   );
 }

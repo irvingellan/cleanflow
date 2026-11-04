@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { appVersion } from "./appVersion.js";
+import { AppShell } from "./components/shell/AppShell.jsx";
+import { useMediaQuery } from "./components/shell/useMediaQuery.js";
+import { Icon } from "./components/Icon.jsx";
 import { ManagerAccessBoundary } from "./features/auth/ManagerAccessBoundary.jsx";
 import {
   DetailItem,
@@ -172,15 +175,15 @@ function App() {
   }
 
   if (isPublicOfferRoute) {
-    return <PublicOfferPage token={publicOfferToken} />;
+    return <ThemeProvider><PublicOfferPage token={publicOfferToken} /></ThemeProvider>;
   }
 
   if (isPublicChecklistRoute) {
-    return <PublicChecklistPage token={publicChecklistToken} />;
+    return <ThemeProvider><PublicChecklistPage token={publicChecklistToken} /></ThemeProvider>;
   }
 
   if (isPublicClientReportRoute) {
-    return <PublicClientReportPage token={publicClientReportToken} />;
+    return <ThemeProvider><PublicClientReportPage token={publicClientReportToken} /></ThemeProvider>;
   }
 
   if (isChecklistPreviewRoute) {
@@ -205,11 +208,11 @@ function App() {
   }
 
   if (authUser === undefined) {
-    return <AuthenticationLoading />;
+    return <ThemeProvider><AuthenticationLoading /></ThemeProvider>;
   }
 
   if (!authUser) {
-    return <ManagerLogin />;
+    return <ThemeProvider><ManagerLogin /></ThemeProvider>;
   }
 
   return (
@@ -444,6 +447,7 @@ function PublicOfferPage({ token }) {
 
 function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
+  const isWideWorkspace = useMediaQuery("(min-width: 1280px)");
   useOneSignalIdentity(authUser?.uid);
   const inbox = useNotificationInbox({ role: "MANAGER", sessionKey: authUser.uid });
   const [activeSection, setActiveSection] = useState(() => (
@@ -922,6 +926,20 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     return false;
   }
 
+  async function openInboxItemFromHome(item) {
+    try {
+      const result = await inbox.open(item.id);
+      if (result?.state === "opened") {
+        const opened = await openInboxTarget(result.destination,
+          item.type === "CLEANER_INTERESTED" ? { initialFocus: "interest" } : undefined);
+        if (opened !== false) return;
+      }
+    } catch {
+      // Fall through to the Inbox, which explains unavailable items.
+    }
+    setView("notification-inbox");
+  }
+
   function openDashboardJob(job, initialFocus = null) {
     setJobDetailInitialFocus(initialFocus === "interest" ? "interest" : null);
     setActiveSection("dashboard");
@@ -958,68 +976,98 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("checklist-run");
   }
 
-  return (
-    <main className="app-shell">
-      <section
-        className={`foundation${view === "dashboard" ? " foundation--dashboard" : ""}${view === "load-time-diagnostics" ? " foundation--diagnostics" : ""}${view === "weekly-close-preview" ? " foundation--weekly-close" : ""}`}
-        aria-labelledby="page-title"
-      >
-        <header className="foundation__header">
-          <div className="brand-block">
-            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
-            <h1 id="page-title">{content.productName}</h1>
-            <MainNavigation
-              activeSection={activeSection}
-              translate={translate}
-              onShowDashboard={showDashboard}
-              onShowProperties={showProperties}
-              onShowJobs={showJobs}
-              onShowCleaners={showCleaners}
-              onShowPayouts={showPayouts}
-              onShowClients={showClients}
-              canAccessDevCenter={devCenterController.access.authorized}
-              onShowDevCenter={showDevCenter}
-            />
-          </div>
-          <div className="header-actions">
-            <div className="manager-account">
-              <ManagerIdentity user={authUser} />
-              <div className="manager-account__controls">
-                <LanguageSelector language={language} onChange={setLanguage} />
-                <ThemeToggle />
-                <NotificationControl userId={authUser.uid} />
-                {notificationInboxEnabled() && (
-                  <button className="button button--small" type="button" onClick={() => setView("notification-inbox")}>
-                    {inboxMessage(language, "inbox.title")}
-                    <NotificationInboxBadge inbox={inbox} language={language} className="badge" />
-                  </button>
-                )}
-                <FeedbackPanel screen={view} />
-                <WhatsNewPanel />
-                <DeveloperEnvironmentControls user={authUser} />
-                {canPreviewLifecycle && <button className="button button--small" type="button"
-                  onClick={() => setView("sandbox-lifecycle-preview")}>
-                  {translate("lifecycle.previewEntry")}
-                </button>}
-                <button
-                  className="header-sign-out"
-                  type="button"
-                  disabled={isSigningOut}
-                  onClick={onSignOut}
-                >
-                  {isSigningOut ? translate("auth.signingOut") : translate("auth.signOut")}
-                </button>
-                <span className="badge">{appVersion}</span>
-              </div>
-            </div>
-            {hasSignOutError && (
-              <p className="header-auth-error" role="alert">
-                {translate("auth.signOutError")}
-              </p>
-            )}
-          </div>
-        </header>
+  const shellWidth = view === "dashboard" ? "dashboard"
+    : view === "job-detail" && jobDetailOrigin === "jobs" ? "workspace"
+      : ["job-list", "property-list", "cleaner-list", "client-list", "payout-list", "notification-inbox", "dev-center",
+        "load-time-diagnostics", "weekly-close-preview", "payout-review", "job-detail", "checklist-run"].includes(view) ? "wide"
+        : "standard";
+  const isInboxView = view === "notification-inbox";
+  // Wide screens keep the Services list beside the open Job, so search, filters
+  // and position survive switching between services.
+  const showServicesPane = isWideWorkspace && jobDetailOrigin === "jobs" && jobs.length > 0;
+  const navigationItems = [
+    { key: "dashboard", icon: "home", label: translate("navigation.dashboard"), active: activeSection === "dashboard" && !isInboxView, onSelect: showDashboard },
+    { key: "jobs", icon: "calendar", label: translate("navigation.jobs"), active: activeSection === "jobs" && !isInboxView, onSelect: showJobs },
+    { key: "properties", icon: "building", label: translate("navigation.properties"), active: activeSection === "properties" && !isInboxView, onSelect: showProperties },
+    { key: "cleaners", icon: "users", label: translate("navigation.cleaners"), active: activeSection === "cleaners" && !isInboxView, onSelect: showCleaners },
+    { key: "clients", icon: "briefcase", label: translate("navigation.clients"), active: activeSection === "clients" && !isInboxView, onSelect: showClients },
+    { key: "payouts", icon: "wallet", label: translate("navigation.payouts"), active: activeSection === "payouts" && !isInboxView, onSelect: showPayouts },
+    ...(devCenterController.access.authorized ? [{
+      key: "dev-center", icon: "code", subtle: true, label: translate("navigation.devCenter"),
+      active: activeSection === "dev-center" && !isInboxView, onSelect: showDevCenter,
+    }] : []),
+  ];
+  const identityName = authUser.displayName?.trim() || authUser.email || translate("auth.managerAccess");
+  const identityDetail = authUser.displayName?.trim() && authUser.email ? authUser.email : translate("auth.managerAccess");
 
+  return (
+    <AppShell
+      brandName={content.productName}
+      navigationLabel={translate("common.mainNavigation")}
+      items={navigationItems}
+      mobileTabKeys={["dashboard", "jobs"]}
+      moreLabel={translate("shell.more")}
+      closeLabel={translate("shell.close")}
+      width={shellWidth}
+      primaryAction={{ label: translate("jobs.newService"), onSelect: showNewJob }}
+      inbox={notificationInboxEnabled() ? {
+        label: inboxMessage(language, "inbox.title"),
+        shortLabel: translate("shell.inboxShort"),
+        active: isInboxView,
+        onSelect: () => setView("notification-inbox"),
+        badge: <NotificationInboxBadge inbox={inbox} language={language} className="cf-count" />,
+      } : null}
+      account={{
+        label: translate("shell.accountMenu", { name: identityName }),
+        name: identityName,
+        detail: identityDetail === identityName ? null : identityDetail,
+        initials: initialsFor(identityName),
+      }}
+      accountPanel={(
+        <>
+          <div className="cf-account-panel__group">
+            <label className="cf-field-row">
+              <span><Icon name="globe" /> {translate("common.language")}</span>
+              <LanguageSelector language={language} onChange={setLanguage} />
+            </label>
+            <div className="cf-field-row">
+              <span><Icon name="moon" /> {translate("shell.appearance")}</span>
+              <ThemeToggle />
+            </div>
+          </div>
+          <div className="cf-account-panel__group">
+            <p className="cf-account-panel__label">{translate("shell.notifications")}</p>
+            <NotificationControl userId={authUser.uid} />
+          </div>
+          <div className="cf-account-panel__group cf-account-panel__tools">
+            <FeedbackPanel screen={view} />
+            <WhatsNewPanel />
+            {canPreviewLifecycle && <button className="button button--small" type="button"
+              onClick={() => setView("sandbox-lifecycle-preview")}>
+              {translate("lifecycle.previewEntry")}
+            </button>}
+          </div>
+          <div className="cf-account-panel__group cf-account-panel__meta">
+            <DeveloperEnvironmentControls user={authUser} />
+            <span className="badge">{appVersion}</span>
+          </div>
+          <button
+            className="header-sign-out"
+            type="button"
+            disabled={isSigningOut}
+            onClick={onSignOut}
+          >
+            <Icon name="logout" />
+            {isSigningOut ? translate("auth.signingOut") : translate("auth.signOut")}
+          </button>
+        </>
+      )}
+    >
+        {hasSignOutError && (
+          <p className="header-auth-error" role="alert">
+            {translate("auth.signOutError")}
+          </p>
+        )}
         <PwaUpdatePrompt />
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
           && <SandboxLifecyclePreview onBack={showDashboard} />}
@@ -1038,6 +1086,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onOpenJob={openDashboardJob}
             onShowJobs={showJobs}
             onShowJobsWithFilter={showJobsWithFilter}
+            notices={notificationInboxEnabled() && inbox.state === "ready" ? inbox.items : []}
+            onOpenNotice={openInboxItemFromHome}
+            onShowInbox={notificationInboxEnabled() ? () => setView("notification-inbox") : null}
           />
         )}
 
@@ -1335,6 +1386,34 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         )}
 
         {view === "job-detail" && selectedJob && (
+          <div className={`cf-split${showServicesPane ? " cf-split--with-list" : ""}`}>
+            {showServicesPane && (
+              <aside className="cf-split__list" aria-label={translate("navigation.jobs")}>
+              <JobsPage
+                variant="pane"
+                selectedJobId={selectedJob.id}
+                jobs={jobs}
+                isLoading={isLoadingJobs}
+                hasError={hasJobError}
+                onSelect={openJob}
+                onCreate={showNewJob}
+                filters={jobListFilters}
+                cleaners={jobFilterCleaners}
+                properties={properties}
+                onFiltersChange={(updates) =>
+                  setJobListFilters((currentFilters) => ({ ...currentFilters, ...updates }))
+                }
+                onClearFilters={() => setJobListFilters(createJobListFilters())}
+                hasMore={hasMoreJobs}
+                isLoadingMore={isLoadingMoreJobs}
+                onLoadMore={loadMoreJobs}
+                canManageExcluded={canManageExcludedRecords}
+                showExcluded={showExcludedRecords}
+                onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
+              />
+              </aside>
+            )}
+            <div className="cf-split__detail">
           <JobDetail
             job={selectedJob}
             initialFocus={jobDetailInitialFocus}
@@ -1404,6 +1483,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onArchive={async () => { await archiveJobRecord(); removeJobFromWorklist(selectedJob.id); returnToJobs(); }}
             onRestore={restoreJobRecord}
           />
+                    </div>
+          </div>
         )}
 
         {view === "checklist-run" && selectedJob && checklistRun && (
@@ -1457,9 +1538,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {view === "issue-success" && selectedJob && (
           <IssueSuccess onBackToCleaning={() => setView("cleaner-job")} />
         )}
-      </section>
-    </main>
+    </AppShell>
   );
+}
+
+function initialsFor(name) {
+  const words = String(name || "").replace(/@.*$/, "").split(/[\s._-]+/).filter(Boolean);
+  return ((words[0]?.[0] || "C") + (words[1]?.[0] || "")).toUpperCase();
 }
 
 function AuthenticationLoading() {
@@ -1501,7 +1586,6 @@ function ManagerLogin() {
   return (
     <AuthenticationLayout language={language} onLanguageChange={setLanguage}>
       <section className="panel auth-panel" aria-labelledby="login-title">
-        <p className="eyebrow">{translate("auth.managerAccess")}</p>
         <h2 id="login-title" className="panel__title">
           {translate("auth.signIn")}
         </h2>
@@ -1552,19 +1636,18 @@ function AuthenticationLayout({ children, language, onLanguageChange }) {
   const { translate } = useTranslation();
 
   return (
-    <main className="app-shell">
-      <section className="foundation auth-foundation" aria-labelledby="page-title">
-        <header className="foundation__header">
-          <div className="brand-block">
-            <p className="eyebrow">{translate("brand.operationsPlatform")}</p>
-            <h1 id="page-title">{content.productName}</h1>
+    <main className="cf-auth">
+      <section className="cf-auth__card" aria-labelledby="page-title">
+        <header className="cf-auth__header">
+          <div className="cf-brand cf-brand--on-surface">
+            <span className="cf-brand__mark" aria-hidden="true"><Icon name="broom" size={18} /></span>
+            <h1 id="page-title" className="cf-brand__name">{content.productName}</h1>
           </div>
-          <div className="header-actions">
-            <LanguageSelector language={language} onChange={onLanguageChange} />
-            <span className="badge">{appVersion}</span>
-          </div>
+          <LanguageSelector language={language} onChange={onLanguageChange} />
         </header>
+        <p className="cf-auth__tagline">{translate("brand.operationsPlatform")}</p>
         {children}
+        <p className="cf-auth__version"><span className="badge">{appVersion}</span></p>
       </section>
     </main>
   );
@@ -1605,97 +1688,9 @@ function ThemeToggle() {
       title={label}
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
-      <span aria-hidden="true">{isDark ? "☀" : "☾"}</span>
+      <span className="theme-toggle__track" aria-hidden="true"><span className="theme-toggle__thumb"><Icon name={isDark ? "moon" : "sun"} size={13} /></span></span>
+      <span className="theme-toggle__text" aria-hidden="true">{translate(isDark ? "shell.themeDark" : "shell.themeLight")}</span>
     </button>
-  );
-}
-
-function ManagerIdentity({ user }) {
-  const { translate } = useTranslation();
-  const displayName = user.displayName?.trim();
-  const email = user.email || "";
-
-  return (
-    <div className="manager-identity">
-      <strong>{displayName || email || translate("auth.managerAccess")}</strong>
-      {displayName && email && <span>{email}</span>}
-    </div>
-  );
-}
-
-function MainNavigation({
-  activeSection,
-  translate,
-  onShowDashboard,
-  onShowProperties,
-  onShowJobs,
-  onShowCleaners,
-  onShowPayouts,
-  onShowClients,
-  canAccessDevCenter,
-  onShowDevCenter,
-}) {
-  return (
-    <nav className="main-navigation" aria-label={translate("common.mainNavigation")}>
-      <button
-        className="navigation-button"
-        type="button"
-        aria-current={activeSection === "dashboard" ? "page" : undefined}
-        onClick={onShowDashboard}
-      >
-        {translate("navigation.dashboard")}
-      </button>
-      <button
-        className="navigation-button"
-        type="button"
-        aria-current={activeSection === "properties" ? "page" : undefined}
-        onClick={onShowProperties}
-      >
-        {translate("navigation.properties")}
-      </button>
-      <button
-        className="navigation-button"
-        type="button"
-        aria-current={activeSection === "jobs" ? "page" : undefined}
-        onClick={onShowJobs}
-      >
-        {translate("navigation.jobs")}
-      </button>
-      <button
-        className="navigation-button"
-        type="button"
-        aria-current={activeSection === "cleaners" ? "page" : undefined}
-        onClick={onShowCleaners}
-      >
-        {translate("navigation.cleaners")}
-      </button>
-      <button
-        className="navigation-button"
-        type="button"
-        aria-current={activeSection === "payouts" ? "page" : undefined}
-        onClick={onShowPayouts}
-      >
-        {translate("navigation.payouts")}
-      </button>
-      <button
-        className="navigation-button"
-        type="button"
-        aria-current={activeSection === "clients" ? "page" : undefined}
-        onClick={onShowClients}
-      >
-        {translate("navigation.clients")}
-      </button>
-      {canAccessDevCenter && (
-        <button
-          className="navigation-button navigation-button--dev"
-          type="button"
-          aria-current={activeSection === "dev-center" ? "page" : undefined}
-          onClick={onShowDevCenter}
-        >
-          {translate("navigation.devCenter")}
-        </button>
-      )}
-    </nav>
   );
 }
 

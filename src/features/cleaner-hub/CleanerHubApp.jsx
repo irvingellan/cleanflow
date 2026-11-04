@@ -282,7 +282,7 @@ function Agenda({ t, hub, name, segment, setSegment, go, today }) {
           <ul>
             {schedule.changes.slice(0, 4).map((change) => (
               <li key={change.id} className={`hb-change is-${change.change === "RESCHEDULED" ? "moved" : change.change === "ASSIGNED" ? "added" : "removed"}`}>
-                <HubIcon name={change.change === "RESCHEDULED" || change.change === "ASSIGNED" ? "calendar" : "userX"} size={16} />
+                <span className="hb-change__icon" aria-hidden="true"><HubIcon name={change.change === "RESCHEDULED" ? "clock" : change.change === "ASSIGNED" ? "calendar" : "userX"} size={16} /></span>
                 <span className="mw-grow">
                   <strong>{change.propertyName || "—"}</strong>
                   <span>{t(`hb.ch.${change.change}`, {
@@ -704,7 +704,7 @@ function Shell({ t, theme, children, bar, tabs }) {
 }
 
 function Brand({ t }) {
-  return <span className="hb-brand"><span className="hb-logo">CF</span>{t("hb.brand")}</span>;
+  return <span className="hb-brand"><span className="hb-logo" aria-hidden="true"><HubIcon name="broom" size={16} /></span>{t("hb.brand")}</span>;
 }
 
 export function CleanerHubApp({ hubOptions, initialCode = "" }) {
@@ -805,7 +805,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
           : <Brand t={t} />}
         {notificationInboxEnabled() && onboardingDone && view.type !== "inbox" && (
           <button type="button" className="mw-linkbtn hb-inbox-trigger" onClick={() => go({ type: "inbox" })}>
-            <HubIcon name="bell" size={16} />{inboxMessage(t.lang, "inbox.title")}
+            <HubIcon name="inbox" size={18} /><span className="hb-inbox-trigger__label">{inboxMessage(t.lang, "inbox.title")}</span>
             <NotificationInboxBadge inbox={inbox} language={t.lang} className="mw-badge" />
           </button>
         )}

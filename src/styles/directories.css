@@ -1,0 +1,83 @@
+/* Directories (Properties, Cleaners, Clients): the same row vocabulary as Services. */
+
+.directory-heading .eyebrow {
+  display: none;
+}
+
+.cleaner-name-search,
+.cleaner-name-search input {
+  width: 100%;
+}
+
+.property-list,
+.cleaner-directory,
+.client-directory {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-xl);
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-raise);
+  overflow: hidden;
+}
+
+.property-card,
+.cleaner-directory-card,
+.client-card {
+  width: 100%;
+  min-height: 64px;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--cf-divider);
+  border-radius: 0;
+  padding: 14px 18px;
+  color: var(--cf-text);
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  transition: background-color 140ms var(--cf-ease);
+}
+
+.property-card:first-child,
+.cleaner-directory-card:first-child,
+.client-card:first-child {
+  border-top: 0;
+}
+
+.property-card:hover,
+.cleaner-directory-card:hover,
+.client-card:hover {
+  background: var(--cf-surface-subtle);
+  transform: none;
+  box-shadow: none;
+}
+
+.property-card__title,
+.cleaner-directory-card__identity strong,
+.client-card strong {
+  font-weight: 700;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 9px;
+  color: var(--cf-text-secondary);
+  background: var(--cf-surface-sunken);
+  font-size: var(--cf-text-xs);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.record-archive-badge {
+  border: 1px dashed var(--cf-border-strong);
+  border-radius: 6px;
+  padding: 1px 7px;
+  color: var(--cf-text-muted);
+  font-size: var(--cf-text-xs);
+  font-weight: 700;
+}

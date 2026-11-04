@@ -1,0 +1,311 @@
+/* CleanFlow system layer: the shared primitives every screen uses, restated in the
+ * definitive Design System. Loaded after index.css so these win at equal specificity. */
+
+body {
+  font-family: var(--cf-font);
+  font-size: var(--cf-text-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  color: var(--cf-text);
+  text-wrap: balance;
+}
+
+h2 { letter-spacing: -0.022em; }
+h3 { letter-spacing: -0.012em; }
+
+strong { font-weight: 650; }
+
+/* Tabular figures for times, counts and money */
+time,
+.badge,
+.cf-count,
+.summary-card strong,
+[data-numeric] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Page and panel titles: one fixed scale, no fluid display type in product UI */
+.panel__title,
+.list-title {
+  margin-bottom: 20px;
+  color: var(--cf-text);
+  font-size: 1.75rem;
+  font-weight: 780;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+@media (max-width: 719px) {
+  .panel__title,
+  .list-title {
+    font-size: 1.5rem;
+  }
+}
+
+/* Legacy eyebrow: a quiet metadata line, never a shouted kicker */
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--cf-text-muted);
+  font-size: var(--cf-text-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Surfaces: borders, not shadows */
+.panel {
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-xl);
+  padding: 24px;
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-raise);
+}
+
+@media (max-width: 719px) {
+  .panel {
+    border-radius: var(--cf-radius-lg);
+    padding: 18px 16px;
+  }
+}
+
+/* Buttons */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--cf-control);
+  border: 1px solid var(--cf-border-strong);
+  border-radius: 12px;
+  padding: 0 16px;
+  color: var(--cf-brand-text);
+  background: var(--cf-surface);
+  font-size: var(--cf-text-md);
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 140ms var(--cf-ease), border-color 140ms var(--cf-ease), color 140ms var(--cf-ease);
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--cf-border-selected);
+  background: var(--cf-surface-selected);
+}
+
+.button:active:not(:disabled) {
+  background: var(--cf-surface-sunken);
+}
+
+.button:disabled {
+  border-color: var(--cf-border);
+  color: var(--cf-text-disabled);
+  background: var(--cf-surface-subtle);
+  cursor: not-allowed;
+}
+
+.button--primary {
+  border-color: var(--cf-brand);
+  color: var(--cf-on-brand);
+  background: var(--cf-brand);
+}
+
+.button--primary:hover:not(:disabled) {
+  border-color: var(--cf-brand-hover);
+  color: var(--cf-on-brand);
+  background: var(--cf-brand-hover);
+}
+
+.button--primary:disabled {
+  border-color: transparent;
+  color: var(--cf-text-disabled);
+  background: var(--cf-surface-sunken);
+}
+
+.button--small {
+  min-height: var(--cf-control-sm);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: var(--cf-text-sm);
+}
+
+.button--danger,
+.button.button--destructive {
+  border-color: var(--cf-risk-border);
+  color: var(--cf-risk-text);
+  background: var(--cf-surface);
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Back link */
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin: 0 0 14px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 10px 0 6px;
+  color: var(--cf-text-secondary);
+  background: transparent;
+  font-size: var(--cf-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  color: var(--cf-brand-text);
+  background: var(--cf-surface-sunken);
+}
+
+/* Form controls */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), select, textarea) {
+  min-height: var(--cf-control);
+  border: 1px solid var(--cf-border-input);
+  border-radius: var(--cf-radius-md);
+  padding: 9px 12px;
+  color: var(--cf-text);
+  background: var(--cf-surface);
+  font-size: var(--cf-text-md);
+  transition: border-color 140ms var(--cf-ease), box-shadow 140ms var(--cf-ease);
+}
+
+textarea {
+  min-height: 96px;
+  line-height: 1.45;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--cf-text-muted);
+  opacity: 1;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus {
+  border-color: var(--cf-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring-strong);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cf-brand);
+}
+
+.cleaning-form label {
+  color: var(--cf-text);
+  font-weight: 600;
+}
+
+.language-selector {
+  min-height: 40px;
+  border: 1px solid var(--cf-border-input);
+  border-radius: 10px;
+  padding: 0 30px 0 12px;
+  color: var(--cf-text);
+  background-color: var(--cf-surface);
+  font-size: var(--cf-text-sm);
+  font-weight: 600;
+}
+
+/* Badges, states */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--cf-border);
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--cf-text-secondary);
+  background: var(--cf-surface-sunken);
+  font-size: var(--cf-text-xs);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.state-card {
+  margin: 0;
+  border: 1px dashed var(--cf-border-strong);
+  border-radius: var(--cf-radius-lg);
+  padding: 16px 18px;
+  color: var(--cf-text-secondary);
+  background: var(--cf-surface-subtle);
+}
+
+.state-card--error {
+  border-style: solid;
+  border-color: var(--cf-risk-border);
+  color: var(--cf-risk-text);
+  background: var(--cf-risk-bg);
+}
+
+.form-error,
+.header-auth-error {
+  border: 1px solid var(--cf-risk-border);
+  border-radius: var(--cf-radius-md);
+  padding: 10px 12px;
+  color: var(--cf-risk-text);
+  background: var(--cf-risk-bg);
+  font-weight: 600;
+}
+
+.header-auth-error {
+  margin: 0 0 16px;
+}
+
+/* Definition lists */
+.detail-list {
+  gap: 14px 20px;
+}
+
+.detail-list dt {
+  color: var(--cf-text-muted);
+  font-size: var(--cf-text-sm);
+  font-weight: 600;
+}
+
+.detail-list dd {
+  margin: 2px 0 0;
+  color: var(--cf-text);
+  font-weight: 560;
+  overflow-wrap: anywhere;
+}
+
+/* Directory headings (Properties, Cleaners, Clients, Payments, Services) */
+.directory-heading {
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.directory-heading .list-title {
+  margin-bottom: 0;
+}
+
+/* Native disclosures */
+details > summary {
+  cursor: pointer;
+}
+
+/* Scrollbars follow the palette */
+* {
+  scrollbar-color: var(--cf-border-strong) transparent;
+}
+
+/* Panels from older flows that still sit inside the legacy centred column */
+.app-shell {
+  background: var(--cf-canvas);
+}

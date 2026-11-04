@@ -29,7 +29,7 @@ describe("Notification Inbox", () => {
     await userEvent.click(screen.getByRole("button", { name: "Lidos" }));
     expect(screen.queryByText("Synthetic Flat")).not.toBeInTheDocument();
     expect(screen.getByText("Este item não está mais disponível.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Abrir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ver oferta" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Não lidos" }));
     expect(screen.getByRole("status")).toHaveTextContent("1 não lido(s) nos avisos carregados");
@@ -48,12 +48,12 @@ describe("Notification Inbox", () => {
     };
     const onOpen = vi.fn(() => true);
     render(<Example service={service} onOpen={onOpen} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Abrir" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Ver oferta" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Este item não está mais disponível.");
     expect(onOpen).not.toHaveBeenCalled();
     expect(screen.queryByText("Synthetic Flat")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Atualizar avisos" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Abrir" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Ver oferta" }));
     expect(onOpen).toHaveBeenCalledExactlyOnceWith({ kind: "OFFER", jobId: "fresh-job" });
   });
 
@@ -87,7 +87,7 @@ describe("Notification Inbox", () => {
     const inbox = { state: "ready", items: [item], loadedUnreadCount: 1, refresh: vi.fn(),
       open: vi.fn().mockResolvedValue({ state: "opened", destination: { kind: "JOB", jobId: "fresh-job" } }) };
     render(<NotificationInbox inbox={inbox} language="en" onOpen={onOpen} />);
-    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    await userEvent.click(screen.getByRole("button", { name: "Review interested cleaners" }));
     expect(onOpen).toHaveBeenCalledExactlyOnceWith({ kind: "JOB", jobId: "fresh-job" }, { initialFocus: "interest" });
   });
 
@@ -96,7 +96,7 @@ describe("Notification Inbox", () => {
     const inbox = { state: "ready", items: [{ ...items[0], type: "CLEANER_INTERESTED" }], loadedUnreadCount: 1, refresh: vi.fn(),
       open: vi.fn().mockResolvedValue({ state: "unavailable", destination: null }) };
     render(<NotificationInbox inbox={inbox} language="en" onOpen={onOpen} />);
-    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    await userEvent.click(screen.getByRole("button", { name: "Review interested cleaners" }));
     expect(onOpen).not.toHaveBeenCalled();
     expect(await screen.findByRole("alert")).toHaveTextContent("This item is no longer available.");
   });

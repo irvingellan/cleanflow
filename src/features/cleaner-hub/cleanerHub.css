@@ -310,7 +310,7 @@
 .hb-coverage.is-partial, .hb-coverage.is-pending { background: var(--v2-color-attention-bg); border: 1px solid var(--v2-color-attention-border); color: var(--v2-color-attention-text); }
 .hb-coverage.is-unknown { background: var(--v2-color-warning-bg); border: 1px solid var(--v2-color-warning-border); color: var(--v2-color-warning-text); }
 .hb-changes ul { display: grid; gap: 6px; margin-top: 6px; }
-.hb-change { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); border-left: 4px solid var(--v2-color-warning-text); font-size: 13.5px; }
+.hb-change { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); font-size: 13.5px; }
 .hb-change.is-removed { border-left-color: var(--v2-color-risk-text); }
 .hb-change > .mw-grow { display: grid; gap: 2px; }
 .hb-seg { width: 100%; }
@@ -465,3 +465,149 @@
 .hb-root .hb-seg button { white-space: nowrap; padding-inline: 4px; }
 .hb-root .hb-seg .hb-count { margin-left: 3px; min-width: 20px; padding: 0 5px; }
 .hb-clchip { width: fit-content; max-width: 100%; }
+
+/* ---------- Definitive system alignment ----------
+ * The Hub keeps its approved layout and hierarchy; its role tokens now resolve to
+ * the product-wide --cf-* roles, so cleaner and manager share one palette in both themes. */
+.hb-root.hb-root,
+.hb-root.hb-root[data-theme="dark"] {
+  --v2-color-canvas: var(--cf-canvas);
+  --v2-color-surface: var(--cf-surface);
+  --v2-color-surface-subtle: var(--cf-surface-subtle);
+  --v2-color-surface-elevated: var(--cf-surface-elevated);
+  --v2-color-surface-selected: var(--cf-surface-selected);
+  --v2-color-surface-sunken: var(--cf-surface-sunken);
+  --v2-color-surface-internal: var(--cf-surface-internal);
+  --v2-color-text-primary: var(--cf-text);
+  --v2-color-text-secondary: var(--cf-text-secondary);
+  --v2-color-text-muted: var(--cf-text-muted);
+  --v2-color-text-disabled: var(--cf-text-disabled);
+  --v2-color-border: var(--cf-border);
+  --v2-color-border-strong: var(--cf-border-strong);
+  --v2-color-border-input: var(--cf-border-input);
+  --v2-color-border-selected: var(--cf-border-selected);
+  --v2-color-divider: var(--cf-divider);
+  --v2-color-brand: var(--cf-brand);
+  --v2-color-brand-hover: var(--cf-brand-hover);
+  --v2-color-brand-text: var(--cf-brand-text);
+  --v2-color-on-brand: var(--cf-on-brand);
+  --v2-color-focus: var(--cf-focus);
+  --v2-color-info-bg: var(--cf-info-bg);
+  --v2-color-info-border: var(--cf-info-border);
+  --v2-color-info-text: var(--cf-info-text);
+  --v2-color-attention-bg: var(--cf-attention-bg);
+  --v2-color-attention-border: var(--cf-attention-border);
+  --v2-color-attention-text: var(--cf-attention-text);
+  --v2-color-warning-bg: var(--cf-warning-bg);
+  --v2-color-warning-border: var(--cf-warning-border);
+  --v2-color-warning-text: var(--cf-warning-text);
+  --v2-color-risk-bg: var(--cf-risk-bg);
+  --v2-color-risk-border: var(--cf-risk-border);
+  --v2-color-risk-text: var(--cf-risk-text);
+  --v2-color-success-bg: var(--cf-success-bg);
+  --v2-color-success-border: var(--cf-success-border);
+  --v2-color-success-text: var(--cf-success-text);
+  --v2-color-scrim: var(--cf-scrim);
+  --v2-type-font-family: var(--cf-font);
+  font-family: var(--cf-font);
+}
+
+/* Forest bar: the same identity the manager sees on a phone */
+.hb-root .hb-bar {
+  min-height: 56px;
+  border-bottom: 0;
+  padding: 8px 10px 8px 14px;
+  color: var(--cf-shell-text);
+  background: var(--cf-shell);
+}
+
+.hb-root .hb-bar .mw-linkbtn {
+  color: var(--cf-shell-text);
+}
+
+.hb-root .hb-brand {
+  min-width: 0;
+  color: var(--cf-shell-title);
+  font-size: 1rem;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+}
+
+.hb-root .hb-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--cf-shell);
+  background: linear-gradient(160deg, #c9e8d5, #8fc6a6);
+}
+
+.hb-root .hb-inbox-trigger {
+  position: relative;
+  margin-left: auto;
+  border-radius: 12px;
+  padding: 0 10px;
+}
+
+.hb-root .hb-inbox-trigger:hover {
+  background: var(--cf-shell-raised);
+}
+
+.hb-root .hb-inbox-trigger .mw-badge {
+  color: #fff;
+  background: #c4553b;
+}
+
+.hb-root .hb-bar .hb-fresh.is-live {
+  border-color: transparent;
+  color: var(--cf-shell-title);
+  background: var(--cf-shell-raised);
+}
+
+@media (max-width: 479px) {
+  .hb-root .hb-inbox-trigger__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+/* Schedule changes: an icon tile carries the kind, not a coloured side stripe */
+.hb-root .hb-change,
+.hb-root .hb-change.is-removed,
+.hb-root .hb-change.is-added {
+  align-items: center;
+  border-left: 1px solid var(--v2-color-border);
+  border-left-color: var(--v2-color-border);
+}
+
+.hb-change__icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--v2-color-warning-text);
+  background: var(--v2-color-warning-bg);
+}
+
+.hb-change.is-added .hb-change__icon {
+  color: var(--v2-color-success-text);
+  background: var(--v2-color-success-bg);
+}
+
+.hb-change.is-removed .hb-change__icon {
+  color: var(--v2-color-risk-text);
+  background: var(--v2-color-risk-bg);
+}
+
+/* Inbox inside the Hub uses the shared notice cards */
+.hb-root .cf-inbox.panel {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}

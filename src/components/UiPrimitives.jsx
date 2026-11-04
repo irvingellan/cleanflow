@@ -1,4 +1,5 @@
 import { useTranslation } from "../i18n/translations.js";
+import { Icon } from "./Icon.jsx";
 
 export function StateCard({ message, status, isError = false }) {
   return (
@@ -13,7 +14,8 @@ export function BackButton({ onClick }) {
 
   return (
     <button className="back-button" type="button" onClick={onClick}>
-      ← {translate("common.back")}
+      <Icon name="arrowL" size={16} />
+      {translate("common.back")}
     </button>
   );
 }

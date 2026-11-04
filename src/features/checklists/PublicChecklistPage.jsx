@@ -1,3 +1,4 @@
+import { Icon } from "../../components/Icon.jsx";
 import { useEffect, useRef, useState } from "react";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
@@ -445,7 +446,7 @@ export function PublicChecklistPage({ token }) {
       <section className="panel public-checklist" aria-labelledby="public-checklist-title">
         <header className="public-checklist__header">
           <div>
-            <p className="eyebrow">CleanFlow</p>
+            <p className="public-checklist__brand"><span className="public-checklist__mark" aria-hidden="true"><Icon name="broom" size={14} /></span>CleanFlow</p>
             <h1 id="public-checklist-title" className="panel__title">{translate("checklists.publicTitle")}</h1>
             {checklist.propertyName && <p className="public-checklist__context">{checklist.propertyName}</p>}
             {checklist.scheduledDate && <p className="public-checklist__context">{formatDate(checklist.scheduledDate, translate, language)}{checklist.scheduledStart ? ` · ${checklist.scheduledStart}` : ""}</p>}

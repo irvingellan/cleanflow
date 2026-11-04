@@ -1,21 +1,24 @@
-export function OperationalIcon({ name }) {
-  const symbols = {
-    calendar: "📅",
-    assignment: "⏰",
-    clock: "🧹",
-    "check-circle": "✅",
-    alert: "⚠️",
-    "user-check": "👤",
-    mail: "📩",
-    key: "🚪",
-    package: "📦",
-    wrench: "🛠️",
-    sparkle: "🧹",
-  };
+import { Icon } from "./Icon.jsx";
 
+// Operational state glyphs, drawn from the shared stroke family (no emoji).
+const operationalIcons = {
+  calendar: "calendar",
+  assignment: "userX",
+  clock: "clock",
+  "check-circle": "checkCircle",
+  alert: "alert",
+  "user-check": "userCheck",
+  mail: "send",
+  key: "key",
+  package: "package",
+  wrench: "wrench",
+  sparkle: "broom",
+};
+
+export function OperationalIcon({ name, size = 18 }) {
   return (
     <span className="operational-icon" aria-hidden="true">
-      {symbols[name] || symbols.alert}
+      <Icon name={operationalIcons[name] || "alert"} size={size} />
     </span>
   );
 }

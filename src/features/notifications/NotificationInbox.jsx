@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanerMessagingWorkerPath, cleanerPushReceiptEvent } from "./cleanerPushBinding.js";
+import { Icon } from "../../components/Icon.jsx";
 import { inboxMessage } from "./notificationInboxMessages.js";
 import { notificationInboxEnabled } from "./notificationInboxMode.js";
 import { notificationInboxService } from "./notificationInboxService.js";
@@ -179,37 +180,90 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
     }
   }
 
+  const counts = {
+    all: inbox.items.length,
+    unread: inbox.items.filter(({ read }) => !read).length,
+    read: inbox.items.filter(({ read }) => read).length,
+  };
+
   return (
-    <section className="panel" aria-labelledby="notification-inbox-title">
-      <h2 className="panel__title" id="notification-inbox-title">{t("inbox.title")}</h2>
-      {onBack && <button type="button" className="button" onClick={onBack}>{t("inbox.back")}</button>}
-      {inbox.state === "ready" && <p role="status">{unreadLabel(language, inbox)}</p>}
-      <div className="cfv2-segmented" role="group" aria-label={t("inbox.filter")}>
-        {["all", "unread", "read"].map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{t(`inbox.filter.${key}`)}</button>)}
+    <section className="panel cf-inbox" aria-labelledby="notification-inbox-title">
+      {onBack && <button type="button" className="back-button" onClick={onBack}><Icon name="arrowL" size={16} />{t("inbox.back")}</button>}
+      <header className="cf-page-header cf-inbox__header">
+        <div className="cf-page-header__text">
+          <h2 className="panel__title" id="notification-inbox-title">{t("inbox.title")}</h2>
+          {inbox.state === "ready" && <p className="cf-page-context" role="status">{unreadLabel(language, inbox)}</p>}
+        </div>
+        <button type="button" className="button button--small" onClick={inbox.refresh}>
+          <Icon name="refresh" size={16} />{t("inbox.refresh")}
+        </button>
+      </header>
+      <div className="cf-segmented" role="group" aria-label={t("inbox.filter")}>
+        {["all", "unread", "read"].map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>
+          <span>{t(`inbox.filter.${key}`)}</span>
+          {inbox.state === "ready" && <span className="cf-segmented__count" aria-hidden="true">{counts[key]}</span>}
+        </button>)}
       </div>
-      {inbox.hasOlder && <p>{t("inbox.window")}</p>}
-      {inbox.state === "loading" && <p role="status">{t("inbox.loading")}</p>}
-      {inbox.state === "error" && <p role="alert">{t("inbox.loadError")}</p>}
-      {error && <p role="alert">{t(error)}</p>}
-      <button type="button" className="button button--small" onClick={inbox.refresh}>{t("inbox.refresh")}</button>
-      {inbox.state === "ready" && !items.length && <p>{t("inbox.empty")}</p>}
+      {inbox.hasOlder && <p className="cf-inbox__note"><Icon name="info" size={16} />{t("inbox.window")}</p>}
+      {inbox.state === "loading" && <div className="cf-inbox__loading" role="status">
+        <span className="visually-hidden">{t("inbox.loading")}</span>
+        {[0, 1, 2].map((key) => <span key={key} className="cf-skeleton-row" aria-hidden="true"><span /><span /></span>)}
+        <p aria-hidden="true">{t("inbox.loading")}</p>
+      </div>}
+      {inbox.state === "error" && <div className="cf-banner cf-banner--risk" role="alert">
+        <Icon name="alert" size={18} /><p>{t("inbox.loadError")}</p>
+      </div>}
+      {error && <div className="cf-banner cf-banner--risk" role="alert"><Icon name="alert" size={18} /><p>{t(error)}</p></div>}
+      {inbox.state === "ready" && !items.length && <p className="cf-empty cf-inbox__empty"><Icon name="inbox" size={20} />{t("inbox.empty")}</p>}
       {items.length > 0 && (
-        <ul>
-          {items.map((item) => (
-            <li key={item.id}>
-              <h3>{t(`inbox.event.${item.type}`)}</h3>
-              {item.serviceLabel && <p>{item.serviceLabel}</p>}
-              {Number.isFinite(item.createdAtMs) && <time dateTime={new Date(item.createdAtMs).toISOString()}>{time.format(item.createdAtMs)}</time>}
-              <p>{t(item.read ? "inbox.read" : "inbox.unread")}</p>
-              {!item.openable && <p>{t("inbox.targetUnavailable")}</p>}
-              {item.openable && <button type="button" className="button button--small" disabled={busyId !== null} onClick={() => act("open", item.id)}>{t("inbox.open")}</button>}
-              {!item.read && <button type="button" className="button button--small" disabled={busyId !== null} onClick={() => act("mark", item.id)}>{t("inbox.markRead")}</button>}
-            </li>
-          ))}
+        <ul className="cf-inbox__list">
+          {items.map((item) => {
+            const look = noticeLook(item.type);
+            return (
+              <li key={item.id} className={`cf-notice cf-tone--${look.tone}${item.read ? "" : " is-unread"}`}>
+                <span className="cf-notice__icon" aria-hidden="true"><Icon name={look.icon} size={20} /></span>
+                <div className="cf-notice__body">
+                  <div className="cf-notice__meta">
+                    {!item.read && <span className="cf-notice__dot" aria-hidden="true" />}
+                    <span className="cf-notice__state">{t(item.read ? "inbox.read" : "inbox.unread")}</span>
+                    {Number.isFinite(item.createdAtMs) && <time dateTime={new Date(item.createdAtMs).toISOString()}>{time.format(item.createdAtMs)}</time>}
+                  </div>
+                  <h3>{t(`inbox.event.${item.type}`)}</h3>
+                  {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
+                  {!item.openable && <p className="cf-notice__unavailable">{t("inbox.targetUnavailable")}</p>}
+                </div>
+                <div className="cf-notice__actions">
+                  {item.openable && <button type="button" className={`button${item.read ? "" : " button--primary"}`} disabled={busyId !== null} onClick={() => act("open", item.id)}>
+                    {t(look.action)}
+                  </button>}
+                  {!item.read && <button type="button" className="button button--text" disabled={busyId !== null} onClick={() => act("mark", item.id)}>{t("inbox.markRead")}</button>}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
-      {inbox.nextCursor && <button type="button" className="button button--small" disabled={inbox.loadingOlder}
+      {inbox.nextCursor && <button type="button" className="button cf-inbox__older" disabled={inbox.loadingOlder}
         onClick={inbox.loadOlder}>{t(inbox.loadingOlder ? "inbox.loading" : "inbox.loadOlder")}</button>}
     </section>
   );
+}
+
+const noticeLooks = {
+  CLEANER_INTERESTED: { icon: "userCheck", tone: "attention", action: "inbox.action.reviewInterested" },
+  CHECKLIST_READY_FOR_REVIEW: { icon: "clipCheck", tone: "attention", action: "inbox.action.reviewChecklist" },
+  ASSIGNMENT_CONFIRMED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
+  AUTO_ASSIGNMENT_CONFIRMED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
+  TOMORROW_19: { icon: "calendar", tone: "info", action: "inbox.action.openDashboard" },
+  TODAY_07: { icon: "calendar", tone: "info", action: "inbox.action.openDashboard" },
+  NEW_OFFER: { icon: "send", tone: "attention", action: "inbox.action.openOffer" },
+  AUTO_ASSIGNED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
+  ASSIGNED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
+  RESCHEDULED: { icon: "clock", tone: "warning", action: "inbox.action.openJob" },
+  CANCELLED: { icon: "x", tone: "risk", action: "inbox.open" },
+  UNASSIGNED: { icon: "userX", tone: "risk", action: "inbox.open" },
+};
+
+function noticeLook(type) {
+  return noticeLooks[type] || { icon: "bell", tone: "neutral", action: "inbox.open" };
 }

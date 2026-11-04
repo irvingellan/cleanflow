@@ -1,5 +1,16 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — Definitive UI V1 (Claude, local, not published)
+
+`feature/definitive-ui-v1` replaces the legacy manager header/centred column with
+one design system across manager, Inbox, Cleaner Hub and checklist: forest sidebar /
+rail / phone tabs, decision-first Home, Services list beside the open Job (≥1280),
+Job detail with a next-step rail, Inbox cards, shared icons and light/dark roles.
+Frontend only, built on Production `12f432d`; no Functions, Rules, data or
+transport change. Visual direction chosen by Claude; not yet reviewed by the
+operations manager. See [DESIGN.md](../DESIGN.md) and
+[the Codex mission](definitive-ui/CODEX_NEXT_ACTION.md).
+
 ## 2026-11-04 — Release A + Claude UX (isolated local candidate)
 
 `codex/release-a-claude-ux-85` selectively integrates the visual source

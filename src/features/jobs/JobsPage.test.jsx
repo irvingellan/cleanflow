@@ -164,7 +164,7 @@ describe("JobsPage filters", () => {
       </TranslationProvider>,
     );
 
-    expect(screen.getByText("Scheduled time: 11:00")).toBeVisible();
+    expect(screen.getByText("11:00")).toBeVisible();
     expect(screen.getByText("Ana")).toBeVisible();
     expect(screen.getByText("Assigned")).toBeVisible();
     expect(screen.queryByText(/Client price|Cleaner payout|Gross margin|\$200\.00|\$100\.00/)).not.toBeInTheDocument();
@@ -325,7 +325,7 @@ describe("JobsPage filters", () => {
       name: /needs assignment/i,
     });
     const inProgress = screen.getByRole("button", { name: /in progress/i });
-    const completed = screen.getByRole("button", { name: /^✅ completed$/i });
+    const completed = screen.getByRole("button", { name: /^completed$/i });
 
     await user.click(today);
     await user.click(needsAssignment);

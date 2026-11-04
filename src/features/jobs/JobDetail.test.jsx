@@ -195,7 +195,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByRole("button", { name: "Next step: Open existing checklist" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
     expect(within(screen.getByRole("region", { name: "What do you want to do?" })).getByRole("status")).toHaveTextContent(/Do not delete and recreate the service/);
-    fireEvent.click(screen.getByRole("button", { name: "Open existing checklist →" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open existing checklist" }));
     expect(open).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
   });
@@ -206,7 +206,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(open).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
     expect(within(screen.getByRole("region", { name: "What do you want to do?" }))
-      .getByRole("button", { name: "Review checklist →" })).toBeVisible();
+      .getByRole("button", { name: "Review checklist" })).toBeVisible();
   });
   it("unknown Run state directs to existing retry/loading controls without creating", () => {
     const create = vi.fn();

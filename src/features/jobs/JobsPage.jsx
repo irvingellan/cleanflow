@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
+import { Icon } from "../../components/Icon.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { formatDate } from "../../lib/presentation.js";
@@ -53,8 +54,11 @@ export function JobsPage({
   canManageExcluded,
   showExcluded,
   onToggleExcluded,
+  variant = "page",
+  selectedJobId = null,
 }) {
   const { language, translate } = useTranslation();
+  const isPane = variant === "pane";
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const jobCardElements = useRef(new Map());
   const propertiesById = useMemo(
@@ -158,22 +162,35 @@ export function JobsPage({
   }
 
   return (
-    <section aria-labelledby="jobs-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.jobs")}</p>
-          <h2 id="jobs-title" className="list-title">
-            {translate("jobs.title")}
-          </h2>
+    <section className={`cf-services${isPane ? " cf-services--pane" : ""}`} aria-labelledby={isPane ? "jobs-pane-title" : "jobs-title"}>
+      {isPane ? (
+        <div className="cf-services__pane-header">
+          <h2 id="jobs-pane-title">{translate("navigation.jobs")}</h2>
+          {!isLoading && !hasError && <span className="cf-services__count" data-numeric>{sortedJobs.length}</span>}
         </div>
-        <button className="button button--primary" type="button" onClick={onCreate}>
-          {translate("jobs.newService")}
-        </button>
-        {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
-      </div>
+      ) : (
+        <header className="cf-page-header directory-heading">
+          <div className="cf-page-header__text">
+            <h2 id="jobs-title" className="list-title">
+              {translate("jobs.title")}
+            </h2>
+            {!isLoading && !hasError && (
+              <p className="cf-page-context">{translate("jobs.results", { count: sortedJobs.length })}</p>
+            )}
+          </div>
+          <div className="cf-page-header__actions">
+            {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
+            <button className="button button--primary" type="button" onClick={onCreate}>
+              <Icon name="plus" size={18} />
+              {translate("jobs.newService")}
+            </button>
+          </div>
+        </header>
+      )}
 
       <div className="job-filters" aria-label={translate("jobs.filters")}>
         <label className="job-filters__search">
+          <Icon name="search" size={18} className="job-filters__search-icon" />
           <input
             type="search"
             aria-label={translate("jobs.search")}
@@ -195,7 +212,7 @@ export function JobsPage({
               aria-pressed={filters.datePreset === "today"}
               onClick={toggleToday}
             >
-              📅 {translate("jobs.quickToday")}
+              <Icon name="calendar" size={16} />{translate("jobs.quickToday")}
             </button>
             <button
               className={`job-filter-chip${
@@ -207,7 +224,7 @@ export function JobsPage({
               aria-pressed={filters.status === "needs-assignment"}
               onClick={() => toggleQuickStatus("needs-assignment")}
             >
-              ⏰ {translate("jobs.filterNeedsAssignment")}
+              <Icon name="userX" size={16} />{translate("jobs.filterNeedsAssignment")}
             </button>
             <button
               className={`job-filter-chip${
@@ -217,7 +234,7 @@ export function JobsPage({
               aria-pressed={filters.status === "in-progress"}
               onClick={() => toggleQuickStatus("in-progress")}
             >
-              🧹 {translate("jobs.filterInProgress")}
+              <Icon name="broom" size={16} />{translate("jobs.filterInProgress")}
             </button>
             <button
               className={`job-filter-chip${
@@ -227,7 +244,7 @@ export function JobsPage({
               aria-pressed={filters.status === "completed"}
               onClick={() => toggleQuickStatus("completed")}
             >
-              ✅ {translate("jobs.filterCompleted")}
+              <Icon name="checkCircle" size={16} />{translate("jobs.filterCompleted")}
             </button>
           </div>
           <div className="job-filters__utility-actions">
@@ -378,15 +395,16 @@ export function JobsPage({
       )}
       {!isLoading && !hasError && sortedJobs.length > 0 && (
         <>
-          <p className="job-list__context">
+          {!isPane && <p className="job-list__context visually-hidden">
             {translate("jobs.results", { count: sortedJobs.length })}
-          </p>
-          <div className="job-list">
+          </p>}
+          <div className="job-list cf-job-list">
             {sortedJobs.map((job) => (
               <button
                 key={job.id}
-                className="job-card job-card--lifecycle"
+                className={`job-card job-card--lifecycle cf-job-row${job.id === selectedJobId ? " is-selected" : ""}`}
                 type="button"
+                aria-current={job.id === selectedJobId ? "true" : undefined}
                 aria-label={translate("properties.view", {
                   property:
                     job.propertyName || translate("properties.unnamed"),
@@ -407,10 +425,11 @@ export function JobsPage({
                   })
                 }
               >
-                <span className="job-card__schedule">
+                <span className="job-card__schedule cf-job-row__when">
                   <strong>{formatDate(job.scheduledDate, translate, language)}</strong>
-                  <span>
-                    {translate("jobs.scheduledTime")}: {job.scheduledStart || translate("jobs.notSet")}
+                  <span data-numeric>
+                    <span className="visually-hidden">{translate("jobs.scheduledTime")}: </span>
+                    {job.scheduledStart || translate("jobs.notSet")}
                   </span>
                 </span>
                 <span className="job-card__summary">
@@ -451,7 +470,7 @@ export function JobsPage({
           )}
         </>
       )}
-      <ScrollToTopButton />
+      {!isPane && <ScrollToTopButton />}
     </section>
   );
 }

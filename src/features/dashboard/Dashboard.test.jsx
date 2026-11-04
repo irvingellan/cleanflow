@@ -136,8 +136,8 @@ describe("Dashboard near-term cleaner attention", () => {
       (label) => label.textContent,
     );
     expect(attentionLabels.slice(0, 2)).toEqual([
-      "⏰Today — no cleaner assigned",
-      "⏰Tomorrow — no cleaner assigned",
+      "Today — no cleaner assigned",
+      "Tomorrow — no cleaner assigned",
     ]);
   });
 

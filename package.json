@@ -31,6 +31,7 @@
     "seed:public-offer-emulator": "npm --prefix functions run seed:public-offer-emulator"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
     "firebase": "^12.18.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
