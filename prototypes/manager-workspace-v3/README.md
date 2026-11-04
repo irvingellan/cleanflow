@@ -6,7 +6,7 @@ no network calls. All data is invented; nothing is sent.
 
 ```sh
 npm run prototype:v3          # dev server, opens /prototypes/manager-workspace-v3/index.html
-npm run prototype:v3:test     # 64 model and interaction tests
+npm run prototype:v3:test     # 86 model and interaction tests
 npm run prototype:v3:build    # static build in dist-prototypes/manager-workspace-v3 (git-ignored)
 ```
 
@@ -24,6 +24,7 @@ What you can do:
 - Property sheet: checklist items required/optional, photo guidance, N/A, notes, preview as the cleaner, versions.
 - **Modelar telas** (phase 2): editable copies of the exact original A/B/C artboards and of real CleanFlow V2 screens (synthetic data). Proposal, Original or side by side; select, move, rename, hide, emphasis; decisions; download a decision record and a session file.
 - **Lista compacta** layout, **Testar tarefas** (counts navigation per task and strategy) and **Roteiro da gerente** (14-step guided journey).
+- **Cleaner Hub** (header): the cleaner app — schedule, offers, alerts inbox, account, first-use onboarding, Add-to-Home-Screen guides and "alerts on this phone" readiness/recovery. The side panel runs scenarios A–O. **Ao voltar**: manager decisions since 06:00. Simulated throughout.
 Demo state is kept in this browser only.
 
 Specs: `docs/manager-workspace-v3/` (Codex handoff for this round: `VISUAL_STUDIO_CODEX_HANDOFF.md`; Figma plan: `FIGMA_HANDOFF.md`).

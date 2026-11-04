@@ -651,6 +651,16 @@ guided manager route and a Figma import spec (`docs/manager-workspace-v3/figma/`
 No Production or backend change; nothing is operator-approved. See
 `CODEX_FUNCTIONAL_HANDOFF_PHASE2.md` and `MASSINHA_COMPONENT_CONTRACT.md`.
 
+## Cleaner Hub V1 visual prototype (2026-11-03, prototype only)
+
+Branch `feature/cleaner-hub-v1-visual` (local, from `feature/gabi-visual-studio`
+@ `b17474c`) adds a mobile-first cleaner "Minha agenda", first-use onboarding,
+iPhone/Android install guides, evidence-based notification readiness and
+recovery, a role-aware inbox and a manager "while you were away" center, all
+on the synthetic prototype state (scenarios A–O). Issues #84/#85. No
+Production, Firebase, rules, push or registration change. Contracts:
+`docs/manager-workspace-v3/cleaner-hub/` and `contracts/*_UI_PROPS.ts`.
+
 ## Fresh-session resume
 
 Issue #64 Job Detail Intent Layer V0 is implemented only on
