@@ -1,4 +1,4 @@
-import { onAuthStateChanged, signInWithCustomToken, signOut } from "firebase/auth";
+import { onIdTokenChanged, signInWithCustomToken, signOut } from "firebase/auth";
 import { clearIndexedDbPersistence, collection, disableNetwork, doc, enableNetwork, getDocFromServer, getDocsFromServer, onSnapshot, query, terminate, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { cleanerHubFirebase } from "./cleanerHubFirebase.js";
@@ -11,26 +11,34 @@ import { cleanerHubFirebase } from "./cleanerHubFirebase.js";
 
 function claimsFrom(result) {
   const hub = result?.claims?.cleanerHub;
-  return hub && typeof hub.organizationId === "string" && typeof hub.cleanerId === "string" ? hub : null;
+  return hub && typeof hub.organizationId === "string" && typeof hub.cleanerId === "string"
+    && typeof hub.sessionId === "string" && hub.sessionId.length > 0 ? hub : null;
 }
 
 export function subscribeCleanerSession(onSession) {
   const { auth } = cleanerHubFirebase();
-  return onAuthStateChanged(auth, async (user) => {
+  let version = 0;
+  const unsubscribe = onIdTokenChanged(auth, async (user) => {
+    const current = ++version;
     if (!user) {
       onSession({ status: "signed-out" });
       return;
     }
     try {
       const claims = claimsFrom(await user.getIdTokenResult());
+      if (current !== version) return;
       onSession(claims
-        ? { status: "signed-in", uid: user.uid, organizationId: claims.organizationId, cleanerId: claims.cleanerId }
+        ? { status: "signed-in", uid: user.uid, organizationId: claims.organizationId, cleanerId: claims.cleanerId, sessionId: claims.sessionId }
         : { status: "not-cleaner" });
     } catch {
       // Offline reopen: the stored session exists but claims could not refresh.
-      onSession({ status: "unverified" });
+      if (current === version) onSession({ status: "unverified" });
     }
   });
+  return () => {
+    version += 1;
+    unsubscribe();
+  };
 }
 
 export async function redeemAccessCode(code) {
@@ -40,8 +48,14 @@ export async function redeemAccessCode(code) {
   await signInWithCustomToken(auth, data.token);
 }
 
+function activeMembership(data, { cleanerId, sessionId }) {
+  return data?.role === "CLEANER" && data.active === true
+    && data.cleanerId === cleanerId && data.sessionId === sessionId;
+}
+
 /** Live CLEANER membership. Revocation or removal ends the session here. */
-export function subscribeMembership({ organizationId, uid, cleanerId }, onMembership) {
+export function subscribeMembership(scope, onMembership) {
+  const { organizationId, uid } = scope;
   const { db } = cleanerHubFirebase();
   return onSnapshot(
     doc(db, "organizations", organizationId, "members", uid),
@@ -49,8 +63,7 @@ export function subscribeMembership({ organizationId, uid, cleanerId }, onMember
     (snapshot) => {
       if (snapshot.metadata.fromCache) return;
       const data = snapshot.data();
-      const active = data?.role === "CLEANER" && data?.active === true && data?.cleanerId === cleanerId;
-      onMembership(active
+      onMembership(activeMembership(data, scope)
         ? { state: "active", displayName: data.displayName || null, preferredLanguage: data.preferredLanguage || null }
         : { state: "revoked" });
     },
@@ -83,11 +96,17 @@ export function subscribeAgenda({ organizationId, cleanerId }, onAgenda, onError
  * is still active and returns the current agenda. Used while the app is open,
  * so a silently stalled connection can never keep stale data labelled current.
  */
-export async function verifyFromServer({ organizationId, uid, cleanerId }) {
+export async function verifyFromServer(scope) {
+  const { organizationId, uid, cleanerId } = scope;
   const { db } = cleanerHubFirebase();
-  const member = await getDocFromServer(doc(db, "organizations", organizationId, "members", uid));
-  const data = member.data();
-  if (!(data?.role === "CLEANER" && data?.active === true && data?.cleanerId === cleanerId)) return { active: false };
+  let member;
+  try {
+    member = await getDocFromServer(doc(db, "organizations", organizationId, "members", uid));
+  } catch (error) {
+    if (error?.code === "permission-denied") return { active: false };
+    throw error;
+  }
+  if (!activeMembership(member.data(), scope)) return { active: false };
   const agenda = await getDocsFromServer(query(collection(db, "organizations", organizationId, "cleanerAgenda"), where("cleanerId", "==", cleanerId)));
   return { active: true, entries: agenda.docs.map((entry) => ({ ...entry.data(), id: entry.id })) };
 }

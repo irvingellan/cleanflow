@@ -18,14 +18,27 @@ service cloud.firestore {
       return /databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid);
     }
 
+    function eligibleCleaner(orgId, cleanerId) {
+      let cleaner = get(/databases/$(database)/documents/organizations/$(orgId)/cleaners/$(cleanerId)).data;
+      return cleaner.active == true && cleaner.get('archivedAt', null) == null;
+    }
+
     // Cleaner Hub: a CLEANER membership is server-provisioned by a single-use
-    // access code and links exactly one Cleaner record. It grants no manager data.
+    // access code and authorizes only the latest redeemed session.
     function activeCleaner(orgId) {
       return signedInAccount()
+        && request.auth.token.cleanerHub is map
         && exists(memberPath(orgId))
         && get(memberPath(orgId)).data.role == 'CLEANER'
         && get(memberPath(orgId)).data.active == true
-        && get(memberPath(orgId)).data.cleanerId is string;
+        && get(memberPath(orgId)).data.organizationId == orgId
+        && request.auth.token.cleanerHub.organizationId == orgId
+        && get(memberPath(orgId)).data.cleanerId is string
+        && request.auth.token.cleanerHub.cleanerId == get(memberPath(orgId)).data.cleanerId
+        && request.auth.token.cleanerHub.sessionId is string
+        && request.auth.token.cleanerHub.sessionId.size() > 0
+        && request.auth.token.cleanerHub.sessionId == get(memberPath(orgId)).data.sessionId
+        && eligibleCleaner(orgId, get(memberPath(orgId)).data.cleanerId);
     }
 
     function hasValidChecklistContextRevision(data) {
@@ -199,7 +212,8 @@ service cloud.firestore {
     match /organizations/{orgId} {
       // Membership is provisioned by trusted administrators, never by browser clients.
       match /members/{uid} {
-        allow get: if signedInAccount() && request.auth.uid == uid;
+        allow get: if signedInAccount() && request.auth.uid == uid
+          && (!exists(memberPath(orgId)) || resource.data.get('role', null) != 'CLEANER' || activeCleaner(orgId));
       }
 
       // Server-written, cleaner-safe agenda projection. Each cleaner reads only

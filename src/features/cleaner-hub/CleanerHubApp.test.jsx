@@ -1,13 +1,14 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CleanerHubApp } from "./CleanerHubApp.jsx";
 import { localDateKey, addDaysToKey } from "./cleanerAgendaModel.js";
+import { serverVerifyIntervalMs, useCleanerHub } from "./useCleanerHub.js";
 
 const today = localDateKey(new Date());
 const tomorrow = addDaysToKey(today, 1);
 
-function fakeService({ session = { status: "signed-in", uid: "u1", organizationId: "org", cleanerId: "ana" } } = {}) {
+function fakeService({ session = { status: "signed-in", uid: "u1", organizationId: "org", cleanerId: "ana", sessionId: "session-a" } } = {}) {
   const handlers = {};
   const service = {
     subscribeCleanerSession: vi.fn((callback) => { handlers.session = callback; callback(session); return () => {}; }),
@@ -24,7 +25,7 @@ function fakeService({ session = { status: "signed-in", uid: "u1", organizationI
 
 const entries = [
   { id: "ana__j1", kind: "ASSIGNED", jobId: "j1", cleanerId: "ana", jobStatus: "ASSIGNED", propertyName: "Maple Example House", scheduledDate: tomorrow, scheduledStart: "10:30", acknowledged: false },
-  { id: "ana__j2", kind: "OFFER", jobId: "j2", cleanerId: "ana", jobStatus: "OFFERED", offerStatus: "INTERESTED", propertyName: "Birch Example Flat", scheduledDate: tomorrow, scheduledStart: "09:00", offeredCompensation: 140 },
+  { id: "ana__j2", kind: "OFFER", jobId: "j2", cleanerId: "ana", jobStatus: "OFFERED", offerStatus: "INTERESTED", propertyName: "Birch Example Flat", scheduledDate: tomorrow, scheduledStart: "09:00", offeredCompensation: 140, offerExpiresAtMs: Date.now() + 86_400_000 },
   { id: "chg1", kind: "CHANGE", cleanerId: "ana", change: "UNASSIGNED", propertyName: "Cedar Example Loft", from: { date: today, start: "08:00" }, to: null, atMs: Date.now() - 1000 },
 ];
 
@@ -33,7 +34,7 @@ beforeEach(() => {
   window.localStorage.setItem("cleanflow.cleanerHub.onboarded", "u1");
   window.localStorage.setItem("cleanflow.cleanerHub.language", "pt");
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("CleanerHubApp (live data boundary)", () => {
   it("signs in once with a pasted access code, normalised", async () => {
@@ -83,6 +84,63 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.getByText("Sem confirmação agora")).toBeInTheDocument();
     expect(screen.getByText(/Não conseguimos atualizar a agenda/)).toBeInTheDocument();
     expect(within(document.querySelector(".hb-bar")).getByText("Sem conexão")).toBeInTheDocument();
+  });
+
+  it("retains only the server-confirmed list and last verification time during a reconnect", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    const { result } = renderHook(() => useCleanerHub({ service }));
+    const at = new Date();
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    act(() => vi.advanceTimersByTime(10_000));
+    act(() => handlers.agenda({ entries: [], fromCache: true }));
+    expect(result.current.entries.map((entry) => entry.jobId)).toContain("j1");
+    expect(result.current.freshness).toEqual({ state: "stale", lastVerifiedAt: at, reason: "cache" });
+  });
+
+  it("expires a visible offer and marks a stalled stream stale without a new snapshot", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    const { result } = renderHook(() => useCleanerHub({ service }));
+    const at = new Date();
+    const offer = { ...entries[1], offerExpiresAtMs: at.getTime() + 500 };
+    act(() => handlers.agenda({ entries: [offer], fromCache: false }));
+    expect(result.current.schedule.offers).toEqual([offer]);
+    act(() => vi.advanceTimersByTime(500));
+    expect(result.current.schedule.offers).toEqual([]);
+    expect(result.current.entries).toEqual([]);
+    act(() => vi.advanceTimersByTime(serverVerifyIntervalMs + 10_000));
+    expect(result.current.freshness).toEqual({ state: "stale", lastVerifiedAt: at, reason: "error" });
+  });
+
+  it("acknowledges the root worker without interrupting the current screen", async () => {
+    const worker = new EventTarget();
+    const postMessage = vi.fn();
+    worker.ready = Promise.resolve({ active: { postMessage } });
+    Object.defineProperty(window.navigator, "serviceWorker", { configurable: true, value: worker });
+    try {
+      const { service } = fakeService({ session: { status: "signed-out" } });
+      const { unmount } = render(<CleanerHubApp hubOptions={{ service }} />);
+      await act(() => worker.ready);
+      expect(postMessage).toHaveBeenCalledWith({ type: "CLEANFLOW_UPDATE_CLIENT_READY" });
+      const nextWorker = { postMessage: vi.fn() };
+      const send = (type) => {
+        const event = new Event("message");
+        Object.assign(event, { data: { type }, source: nextWorker });
+        worker.dispatchEvent(event);
+      };
+      send("UNRELATED");
+      expect(nextWorker.postMessage).not.toHaveBeenCalled();
+      send("CLEANFLOW_UPDATE_AVAILABLE");
+      expect(nextWorker.postMessage).toHaveBeenCalledOnce();
+      expect(nextWorker.postMessage).toHaveBeenCalledWith({ type: "CLEANFLOW_UPDATE_CLIENT_READY" });
+      expect(screen.getByRole("heading", { name: "Entre na sua agenda" })).toBeInTheDocument();
+      unmount();
+      send("CLEANFLOW_UPDATE_AVAILABLE");
+      expect(nextWorker.postMessage).toHaveBeenCalledOnce();
+    } finally {
+      delete window.navigator.serviceWorker;
+    }
   });
 
   it("drops private data and signs out when access is revoked", () => {

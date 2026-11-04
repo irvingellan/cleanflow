@@ -59,6 +59,7 @@ describe("cleaner agenda projection", () => {
       { cleanerId: "dani", status: "DECLINED", publicOfferExpiresAt: future },
       { cleanerId: "eva", status: "PENDING", publicOfferExpiresAt: past },
       { cleanerId: "fia", status: "PENDING" },
+      { cleanerId: "gia", status: "PENDING", publicOfferExpiresAt: { toMillis: () => NaN } },
       { cleanerId: "ana", status: "INTERESTED", publicOfferExpiresAt: future },
     ];
     const entries = computeAgendaEntries({ organizationId: "o", jobId: "j", job: job({ operationalStatus: "OFFERED", assignedCleanerIds: ["ana"] }), offers, now });
@@ -67,6 +68,8 @@ describe("cleaner agenda projection", () => {
       ["bia", "OFFER", "PENDING", 140],
       ["cris", "OFFER", "INTERESTED", null],
     ]);
+    expect(entries.get("bia").offerExpiresAtMs).toBe(future.toMillis());
+    expect(sameEntry(entries.get("bia"), { ...entries.get("bia"), offerExpiresAtMs: future.toMillis() + 1 })).toBe(false);
   });
 
   it("never treats a v2 Job-level payout as one cleaner's offered amount", () => {

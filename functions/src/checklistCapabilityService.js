@@ -112,6 +112,7 @@ export async function issueChecklistCapabilityForManager(database, {
   token,
   tokenHash,
   now = new Date(),
+  beforeIssue,
 }) {
   if (!validChecklistCleanerId(cleanerId) || typeof tokenHash !== "string" || !tokenHash) {
     throw new HttpsError("invalid-argument", "Checklist capability request is invalid.");
@@ -128,6 +129,7 @@ export async function issueChecklistCapabilityForManager(database, {
     const job = jobSnapshot.exists ? jobSnapshot.data() : null;
     const run = runSnapshot.exists ? runSnapshot.data() : null;
     assertEligible(job, run, cleanerId);
+    await beforeIssue?.({ transaction, job, run, capability: capabilitySnapshot.data(), expiresAt });
     const previousRotation = Number.isInteger(capabilitySnapshot.data()?.rotation)
       ? capabilitySnapshot.data().rotation
       : 0;

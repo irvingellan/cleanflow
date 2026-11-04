@@ -3,6 +3,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { rebuildCleanerAgenda } from "./cleanerAgenda.js";
 import { checklistCapabilityState, issueChecklistCapabilityForManager } from "./checklistCapabilityService.js";
+import { readHubChecklistGrants, recordHubChecklistGrant, revokeHubChecklistGrants } from "./cleanerHubChecklistAccess.js";
+import { isActiveManagerMembership } from "./managerAuthorization.js";
 import { respondToPublicOffer } from "./publicOfferResponseService.js";
 
 /**
@@ -12,7 +14,7 @@ import { respondToPublicOffer } from "./publicOfferResponseService.js";
  * record. Redeeming it links one Firebase Auth account (a server-chosen UID) to
  * that Cleaner through a CLEANER membership. The code is never stored, only its
  * hash; it is not a session and cannot be reused. Revocation deactivates the
- * membership (rules deny immediately) and revokes refresh tokens.
+ * membership, and only the latest session is authorized after reactivation.
  */
 
 export const cleanerAccessCodeCollection = "cleanerAccessCodes";
@@ -54,7 +56,15 @@ export function cleanerAccountUid(organizationId, cleanerId) {
 
 export function isActiveCleanerMembership(data) {
   return data?.role === "CLEANER" && data?.active === true
-    && typeof data.cleanerId === "string" && data.cleanerId.length > 0;
+    && validCleanerId(data.cleanerId);
+}
+
+export function isActiveCleanerSession(data, claims) {
+  return isActiveCleanerMembership(data)
+    && validCleanerId(claims?.organizationId) && data.organizationId === claims.organizationId
+    && data.cleanerId === claims.cleanerId
+    && typeof claims.sessionId === "string" && claims.sessionId.length > 0
+    && data.sessionId === claims.sessionId;
 }
 
 function validCleanerId(cleanerId) {
@@ -66,19 +76,38 @@ function firstName(value) {
   return value.trim().split(/\s+/)[0]?.slice(0, 40) || null;
 }
 
-function eligibleCleaner(data) {
-  return Boolean(data) && data.active === true && !data.archivedAt;
+export function eligibleCleaner(data) {
+  return data?.active === true && data.archivedAt == null;
+}
+
+function usableCode(data, now) {
+  if (data?.status !== "ACTIVE" || typeof data.expiresAt?.toMillis !== "function") return false;
+  const expiry = data.expiresAt.toMillis();
+  const current = typeof now === "function" ? now() : now;
+  return Number.isFinite(expiry) && expiry > current.getTime();
+}
+
+function assertActiveManager(snapshot) {
+  if (!isActiveManagerMembership(snapshot.data())) {
+    throw new HttpsError("permission-denied", "Active organization manager access is required.");
+  }
 }
 
 export async function requireActiveCleaner(database, request, organizationId) {
   if (!request.auth?.uid || request.auth.token?.firebase?.sign_in_provider === "anonymous") {
     throw new HttpsError("unauthenticated", "A signed-in cleaner account is required.");
   }
+  const claims = request.auth.token?.cleanerHub;
   const membership = await database.doc(`organizations/${organizationId}/members/${request.auth.uid}`).get();
-  if (!isActiveCleanerMembership(membership.data())) {
+  if (claims?.organizationId !== organizationId || !isActiveCleanerSession(membership.data(), claims)) {
     throw new HttpsError("permission-denied", "Active cleaner access is required.");
   }
-  return { uid: request.auth.uid, cleanerId: membership.data().cleanerId };
+  const { cleanerId, sessionId } = claims;
+  const cleaner = await database.doc(`organizations/${organizationId}/cleaners/${cleanerId}`).get();
+  if (!eligibleCleaner(cleaner.data())) {
+    throw new HttpsError("permission-denied", "Active cleaner access is required.");
+  }
+  return { uid: request.auth.uid, cleanerId, sessionId };
 }
 
 export async function issueCleanerAccessCodeForManager(database, {
@@ -90,21 +119,26 @@ export async function issueCleanerAccessCodeForManager(database, {
   const expiresAt = Timestamp.fromMillis(now.getTime() + cleanerAccessCodeLifetimeMilliseconds);
   const cleanerRef = database.doc(`organizations/${organizationId}/cleaners/${cleanerId}`);
   const accessRef = database.doc(`organizations/${organizationId}/${cleanerHubAccessCollection}/${cleanerId}`);
+  const actorRef = database.doc(`organizations/${organizationId}/members/${actorUid}`);
   const codes = database.collection(cleanerAccessCodeCollection);
 
   await database.runTransaction(async (transaction) => {
-    const [cleaner, previousCodes] = await Promise.all([
+    // All changes for this cleaner serialize on their access record.
+    await transaction.get(accessRef);
+    const [manager, cleaner, previousCodes] = await Promise.all([
+      transaction.get(actorRef),
       transaction.get(cleanerRef),
       transaction.get(codes.where("organizationId", "==", organizationId)
         .where("cleanerId", "==", cleanerId).where("status", "==", "ACTIVE")),
     ]);
-    if (!eligibleCleaner(cleaner.exists ? cleaner.data() : null)) {
+    assertActiveManager(manager);
+    if (!eligibleCleaner(cleaner.data())) {
       throw new HttpsError("failed-precondition", "Only an active, unarchived cleaner can receive access.");
     }
     for (const previous of previousCodes.docs) {
       transaction.update(previous.ref, { status: "REPLACED", replacedAt: FieldValue.serverTimestamp() });
     }
-    transaction.set(codes.doc(codeHash), {
+    transaction.create(codes.doc(codeHash), {
       organizationId,
       cleanerId,
       status: "ACTIVE",
@@ -130,41 +164,47 @@ export async function issueCleanerAccessCodeForManager(database, {
  * organization or Cleaner ID is trusted. Failures share one generic answer.
  */
 export async function redeemCleanerAccessCode(database, {
-  input, auth, now = new Date(), rebuild = rebuildCleanerAgenda, logger = console,
+  input, auth, now = () => new Date(), rebuild = rebuildCleanerAgenda, logger = console,
 }) {
   const code = normalizeCleanerAccessCode(input);
   const unavailable = () => new HttpsError("failed-precondition", "This code is not valid anymore.");
   if (!code) throw unavailable();
   const codeRef = database.collection(cleanerAccessCodeCollection).doc(hashCleanerAccessCode(code));
   const preview = await codeRef.get();
-  const previewData = preview.exists ? preview.data() : null;
-  if (!previewData || previewData.status !== "ACTIVE" || previewData.expiresAt?.toMillis?.() <= now.getTime()) throw unavailable();
+  const previewData = preview.data();
+  if (!usableCode(previewData, now)) throw unavailable();
   const { organizationId, cleanerId } = previewData;
-  if (!validCleanerId(cleanerId) || typeof organizationId !== "string") throw unavailable();
+  if (!validCleanerId(cleanerId) || !validCleanerId(organizationId)) throw unavailable();
   const uid = cleanerAccountUid(organizationId, cleanerId);
-
-  // Prepare identity before consuming the code, so a failure leaves it usable.
-  try {
-    await auth.getUser(uid);
-  } catch (error) {
-    if (error?.code !== "auth/user-not-found") throw error;
-    await auth.createUser({ uid });
-  }
-  const token = await auth.createCustomToken(uid, { cleanerHub: { organizationId, cleanerId } });
-
   const memberRef = database.doc(`organizations/${organizationId}/members/${uid}`);
   const cleanerRef = database.doc(`organizations/${organizationId}/cleaners/${cleanerId}`);
   const accessRef = database.doc(`organizations/${organizationId}/${cleanerHubAccessCollection}/${cleanerId}`);
+  if (!eligibleCleaner((await cleanerRef.get()).data())) throw unavailable();
+
+  // Sign-in creates the Auth user if needed. Prepare signing and backfill
+  // before consuming the code so a retry can recover either failure.
+  const sessionId = randomBytes(16).toString("hex");
+  const token = await auth.createCustomToken(uid, { cleanerHub: { organizationId, cleanerId, sessionId } });
+  try {
+    await rebuild(database, { organizationId, cleanerId });
+  } catch (error) {
+    logger.warn?.("Cleaner agenda rebuild before linking failed.", { code: error?.code || "unknown" });
+    throw new HttpsError("unavailable", "The cleaner agenda is temporarily unavailable.");
+  }
+
   await database.runTransaction(async (transaction) => {
-    const [codeSnapshot, cleaner, member] = await Promise.all([
+    await transaction.get(accessRef);
+    const [codeSnapshot, cleaner, member, grants] = await Promise.all([
       transaction.get(codeRef), transaction.get(cleanerRef), transaction.get(memberRef),
+      readHubChecklistGrants(transaction, accessRef),
     ]);
-    const current = codeSnapshot.exists ? codeSnapshot.data() : null;
-    if (!current || current.status !== "ACTIVE" || current.expiresAt?.toMillis?.() <= now.getTime()
+    const current = codeSnapshot.data();
+    if (!usableCode(current, now)
       || current.organizationId !== organizationId || current.cleanerId !== cleanerId) throw unavailable();
-    if (!eligibleCleaner(cleaner.exists ? cleaner.data() : null)) throw unavailable();
-    if (member.exists && member.data().role && member.data().role !== "CLEANER") throw unavailable();
+    if (!eligibleCleaner(cleaner.data())) throw unavailable();
+    if (member.exists && (member.data().role !== "CLEANER" || member.data().cleanerId !== cleanerId)) throw unavailable();
     const cleanerData = cleaner.data();
+    revokeHubChecklistGrants(transaction, accessRef, grants);
     transaction.update(codeRef, { status: "USED", usedAt: FieldValue.serverTimestamp(), usedByUid: uid });
     // Only what the cleaner's own screen needs: her first name and language.
     transaction.set(memberRef, {
@@ -172,6 +212,7 @@ export async function redeemCleanerAccessCode(database, {
       role: "CLEANER",
       active: true,
       cleanerId,
+      sessionId,
       displayName: firstName(cleanerData.name),
       preferredLanguage: ["pt", "en", "es"].includes(cleanerData.preferredLanguage) ? cleanerData.preferredLanguage : null,
       linkedVia: "ACCESS_CODE",
@@ -188,27 +229,27 @@ export async function redeemCleanerAccessCode(database, {
     }, { merge: true });
   });
 
-  try {
-    await rebuild(database, { organizationId, cleanerId });
-  } catch (error) {
-    // The live triggers still keep the agenda current; log without identifiers.
-    logger.warn?.("Cleaner agenda rebuild after linking failed.", { code: error?.code || "unknown" });
-  }
   return { token };
 }
 
-export async function revokeCleanerHubAccessForManager(database, { organizationId, cleanerId, actorUid, auth }) {
+export async function revokeCleanerHubAccessForManager(database, { organizationId, cleanerId, actorUid }) {
   if (!validCleanerId(cleanerId)) throw new HttpsError("invalid-argument", "Cleaner is invalid.");
   const uid = cleanerAccountUid(organizationId, cleanerId);
   const memberRef = database.doc(`organizations/${organizationId}/members/${uid}`);
   const accessRef = database.doc(`organizations/${organizationId}/${cleanerHubAccessCollection}/${cleanerId}`);
+  const actorRef = database.doc(`organizations/${organizationId}/members/${actorUid}`);
   const codes = database.collection(cleanerAccessCodeCollection);
   await database.runTransaction(async (transaction) => {
-    const [member, activeCodes] = await Promise.all([
+    await transaction.get(accessRef);
+    const [manager, member, activeCodes, grants] = await Promise.all([
+      transaction.get(actorRef),
       transaction.get(memberRef),
       transaction.get(codes.where("organizationId", "==", organizationId)
         .where("cleanerId", "==", cleanerId).where("status", "==", "ACTIVE")),
+      readHubChecklistGrants(transaction, accessRef),
     ]);
+    assertActiveManager(manager);
+    revokeHubChecklistGrants(transaction, accessRef, grants);
     if (member.exists && member.data().role === "CLEANER") {
       transaction.update(memberRef, { active: false, revokedAt: FieldValue.serverTimestamp(), revokedByUid: actorUid });
     }
@@ -225,11 +266,6 @@ export async function revokeCleanerHubAccessForManager(database, { organizationI
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   });
-  try {
-    await auth.revokeRefreshTokens(uid);
-  } catch (error) {
-    if (error?.code !== "auth/user-not-found") throw error;
-  }
   return { active: false };
 }
 
@@ -239,13 +275,23 @@ function rosterIncludes(job, cleanerId) {
   return ids.includes(cleanerId);
 }
 
+async function assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId }) {
+  const [member, cleaner] = await Promise.all([
+    transaction.get(database.doc(`organizations/${organizationId}/members/${uid}`)),
+    transaction.get(database.doc(`organizations/${organizationId}/cleaners/${cleanerId}`)),
+  ]);
+  if (!isActiveCleanerSession(member.data(), { organizationId, cleanerId, sessionId }) || !eligibleCleaner(cleaner.data())) {
+    throw new HttpsError("permission-denied", "Active cleaner access is required.");
+  }
+}
+
 /**
  * Opens the existing public checklist flow for the signed-in, assigned cleaner.
  * Reuses the manager-equivalent capability issuance and its eligibility rules;
  * it never takes over a link that a teammate currently holds.
  */
 export async function openChecklistForCleaner(database, {
-  organizationId, cleanerId, uid, jobId, runId, newToken, hashToken, now = new Date(),
+  organizationId, cleanerId, uid, sessionId, jobId, runId, newToken, hashToken, now = new Date(),
 }) {
   if (!validCleanerId(jobId)) throw new HttpsError("invalid-argument", "Job is invalid.");
   const jobRef = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
@@ -267,19 +313,31 @@ export async function openChecklistForCleaner(database, {
     return { state: "teammate" };
   }
   const token = newToken();
+  const tokenHash = hashToken(token);
+  const accessRef = database.doc(`organizations/${organizationId}/${cleanerHubAccessCollection}/${cleanerId}`);
   try {
     const result = await issueChecklistCapabilityForManager(database, {
-      organizationId, jobId, runId, cleanerId, actorUid: uid, token, tokenHash: hashToken(token), now,
+      organizationId, jobId, runId, cleanerId, actorUid: uid, token, tokenHash, now,
+      beforeIssue: async ({ transaction, job, run, capability, expiresAt }) => {
+        await assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId });
+        if (capability && capability.cleanerId !== cleanerId
+          && checklistCapabilityState(capability, job, run, now) === "ACTIVE") {
+          throw new HttpsError("failed-precondition", "A teammate already has the checklist link.", { reason: "hub-teammate" });
+        }
+        await recordHubChecklistGrant(transaction, accessRef, { jobId, runId, tokenHash, expiresAtMs: expiresAt.toMillis() }, now);
+      },
     });
     return { state: "ready", token: result.token };
   } catch (error) {
-    if (error instanceof HttpsError && error.code === "failed-precondition") return { state: "unavailable" };
+    if (error instanceof HttpsError && error.code === "failed-precondition") {
+      return { state: error.details?.reason === "hub-teammate" ? "teammate" : "unavailable" };
+    }
     throw error;
   }
 }
 
 /** Answers the cleaner's own Offer through the existing public Offer service. */
-export async function respondToOfferForCleaner(database, { organizationId, cleanerId, jobId, status }) {
+export async function respondToOfferForCleaner(database, { organizationId, cleanerId, uid, sessionId, jobId, status }) {
   if (!validCleanerId(jobId) || !["INTERESTED", "DECLINED"].includes(status)) {
     throw new HttpsError("invalid-argument", "Offer response is invalid.");
   }
@@ -292,5 +350,9 @@ export async function respondToOfferForCleaner(database, { organizationId, clean
   }
   return respondToPublicOffer(database, {
     organizationId, jobReference, offerReference, tokenHash: data.publicOfferTokenHash, status,
+    authorizeResponse: async ({ transaction, offer }) => {
+      await assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId });
+      if (offer.cleanerId !== cleanerId) throw new HttpsError("permission-denied", "Offer is unavailable.");
+    },
   });
 }

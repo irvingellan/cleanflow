@@ -105,12 +105,15 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
     if (!validId(cleanerId) || entries.has(cleanerId)) continue;
     // Only Offers the cleaner was actually sent (a live public link) and has not declined.
     if (!visibleOfferStatuses.includes(offer.status)) continue;
-    if (publicOfferState(offer, job, now) !== "available") continue;
+    const expiry = offer.publicOfferExpiresAt;
+    const offerExpiresAtMs = typeof expiry?.toMillis === "function" ? expiry.toMillis() : null;
+    if (!Number.isFinite(offerExpiresAtMs) || publicOfferState(offer, job, now) !== "available") continue;
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, job),
       kind: agendaKinds.offer,
       acknowledged: false,
       offerStatus: offer.status,
+      offerExpiresAtMs,
       offeredCompensation: offeredCompensationFor(offer, job),
     });
   }
@@ -123,7 +126,7 @@ export function agendaEntryId(cleanerId, jobId) {
 
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
-  "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation",
+  "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offerExpiresAtMs",
 ];
 
 export function sameEntry(previous, next) {

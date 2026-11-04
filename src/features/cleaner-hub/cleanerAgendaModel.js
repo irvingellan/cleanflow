@@ -7,17 +7,20 @@ export const completedWindowDays = 30;
 export const changesWindowDays = 7;
 const openStatuses = ["ASSIGNED", "IN_PROGRESS"];
 
+const serviceDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+});
+
 export function localDateKey(date = new Date()) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
+  const parts = serviceDateFormatter.formatToParts(date);
+  const part = (type) => parts.find((entry) => entry.type === type).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 export function addDaysToKey(key, days) {
-  const [year, month, day] = key.split("-").map(Number);
-  return localDateKey(new Date(year, month - 1, day + days, 12));
+  const date = new Date(`${key}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function sortKey(entry) {
@@ -44,6 +47,7 @@ export function buildCleanerAgenda(entries = [], { now = new Date() } = {}) {
     .sort((first, second) => byTime(second, first));
   const offers = entries
     .filter((entry) => entry.kind === "OFFER" && ["PENDING", "INTERESTED"].includes(entry.offerStatus))
+    .filter((entry) => Number.isFinite(entry.offerExpiresAtMs) && entry.offerExpiresAtMs > now.getTime())
     .filter((entry) => !entry.scheduledDate || entry.scheduledDate >= today)
     .sort(byTime);
   const changesFrom = now.getTime() - changesWindowDays * 24 * 60 * 60 * 1000;
@@ -69,10 +73,13 @@ export function assignedStatusKey(entry) {
  * Freshness the screen may claim. "live" only after a server-confirmed snapshot;
  * cached or failed reads keep the last confirmed time and say so.
  */
-export function freshnessFor({ hasSnapshot, fromCache, error, online, lastVerifiedAt }) {
-  if (!hasSnapshot && !error) return { state: "loading", lastVerifiedAt: null };
-  if (error) return { state: lastVerifiedAt || hasSnapshot ? "stale" : "error", lastVerifiedAt, reason: "error" };
-  if (!online || fromCache) return { state: lastVerifiedAt || hasSnapshot ? "stale" : "loading", lastVerifiedAt, reason: online ? "cache" : "offline" };
+export function freshnessFor({ hasSnapshot, fromCache, error, online, lastVerifiedAt, nowMs, maxAgeMs }) {
+  if (!hasSnapshot) {
+    return error ? { state: "error", lastVerifiedAt, reason: "error" } : { state: "loading", lastVerifiedAt: null };
+  }
+  if (!online) return { state: "stale", lastVerifiedAt, reason: "offline" };
+  if (error || nowMs - lastVerifiedAt?.getTime() >= maxAgeMs) return { state: "stale", lastVerifiedAt, reason: "error" };
+  if (fromCache) return { state: "stale", lastVerifiedAt, reason: "cache" };
   return { state: "live", lastVerifiedAt };
 }
 

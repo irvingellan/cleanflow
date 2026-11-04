@@ -19,7 +19,7 @@ export function publicOfferState(offer, job, now) {
 }
 
 export async function respondToPublicOffer(database, {
-  organizationId, jobReference, offerReference, tokenHash, status, now = () => new Date(),
+  organizationId, jobReference, offerReference, tokenHash, status, now = () => new Date(), authorizeResponse,
 }) {
   const jobPath = `organizations/${organizationId}/jobs/${jobReference?.id || ""}`;
   if (jobReference?.path !== jobPath
@@ -33,6 +33,7 @@ export async function respondToPublicOffer(database, {
     const job = jobSnapshot.data();
     const offer = offerSnapshot.data();
     if (offer.publicOfferTokenHash !== tokenHash) return { state: "not-found" };
+    await authorizeResponse?.({ transaction, offer });
     const state = publicOfferState(offer, job, typeof now === "function" ? now() : now);
     if (state !== "available") return { state };
     if (offer.status !== "PENDING") return { state: "answered", status: offer.status };

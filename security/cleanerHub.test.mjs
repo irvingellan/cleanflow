@@ -40,16 +40,56 @@ const org = "cleanflow-demo";
 const root = `organizations/${org}`;
 const uidA = cleanerAccountUid(org, "cleaner-a");
 const uidB = cleanerAccountUid(org, "cleaner-b");
+const hubClaimsByUid = new Map();
 let environment;
 
 function managerRequest(data) {
   return { auth: { uid: "manager", token: { firebase: { sign_in_provider: "password" } } }, data };
 }
-function cleanerRequest(uid, data) {
-  return { auth: { uid, token: { firebase: { sign_in_provider: "custom" } } }, data };
+function decodeToken(token) {
+  return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
 }
-function cleanerDb(uid) {
-  return environment.authenticatedContext(uid, { firebase: { sign_in_provider: "custom" } }).firestore();
+function cleanerToken(uid, cleanerHub = hubClaimsByUid.get(uid)) {
+  return { firebase: { sign_in_provider: "custom" }, ...(cleanerHub && { cleanerHub }) };
+}
+function cleanerRequest(uid, data, claims) {
+  return { auth: { uid, token: cleanerToken(uid, claims) }, data };
+}
+function cleanerDb(uid, claims) {
+  return environment.authenticatedContext(uid, cleanerToken(uid, claims)).firestore();
+}
+async function signInWithCodeToken(token) {
+  const response = await fetch("http://127.0.0.1:19180/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, returnSecureToken: true }),
+  });
+  assert.equal(response.status, 200);
+  return response.json();
+}
+async function readAgendaWithToken(idToken, entryId) {
+  const response = await fetch(`http://127.0.0.1:18180/v1/projects/demo-cleanflow/databases/(default)/documents/${root}/cleanerAgenda/${entryId}`, {
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  await response.text();
+  return response.status;
+}
+async function refreshIdToken(refreshToken) {
+  const response = await fetch("http://127.0.0.1:19180/securetoken.googleapis.com/v1/token?key=synthetic", {
+    method: "POST",
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+  });
+  assert.equal(response.status, 200);
+  return (await response.json()).id_token;
+}
+async function readPublicChecklist(token) {
+  const response = {
+    code: 200,
+    set() {},
+    status(code) { this.code = code; return this; },
+    json(data) { this.body = data; return this; },
+    send(data) { this.body = data; return this; },
+  };
+  await functionsIndex.publicChecklist({ method: "GET", query: { token }, get() { return undefined; } }, response);
+  return response;
 }
 function dateKey(days) {
   const date = new Date();
@@ -64,6 +104,7 @@ async function sync(jobId, orgId = org) {
 async function link(cleanerId) {
   const { code } = await issueCleanerAccessCode.run(managerRequest({ cleanerId }));
   const { token } = await redeemCleanerAccessCode.run({ data: { code } });
+  hubClaimsByUid.set(cleanerAccountUid(org, cleanerId), decodeToken(token).claims.cleanerHub);
   return { code, token };
 }
 async function agendaFor(cleanerId) {
@@ -99,6 +140,7 @@ before(async () => {
 after(async () => { await environment?.cleanup(); });
 
 beforeEach(async () => {
+  hubClaimsByUid.clear();
   await environment.clearFirestore();
   await fetch("http://127.0.0.1:19180/emulator/v1/projects/demo-cleanflow/accounts", { method: "DELETE" });
   const batch = admin.batch();
@@ -139,29 +181,33 @@ test("manager-issued code links one CLEANER account once; code is hashed and sin
     { role: member.role, active: member.active, cleanerId: member.cleanerId, displayName: member.displayName },
     { role: "CLEANER", active: true, cleanerId: "cleaner-a", displayName: "Ana" },
   );
-  // The custom token signs in on the Auth emulator and carries only org/cleaner scope.
-  const response = await fetch("http://127.0.0.1:19180/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, returnSecureToken: true }),
-  });
-  const session = await response.json();
+  const session = await signInWithCodeToken(token);
   assert.ok(session.idToken && session.refreshToken);
-  const claims = JSON.parse(Buffer.from(session.idToken.split(".")[1], "base64url").toString());
+  const claims = decodeToken(session.idToken);
   assert.equal(claims.user_id, uidA);
-  assert.deepEqual(claims.cleanerHub, { organizationId: org, cleanerId: "cleaner-a" });
+  assert.match(member.sessionId, /^[a-f0-9]{32}$/);
+  assert.deepEqual(claims.cleanerHub, { organizationId: org, cleanerId: "cleaner-a", sessionId: member.sessionId });
 
   await assert.rejects(redeemCleanerAccessCode.run({ data: { code } }), { code: "failed-precondition" });
   await assert.rejects(redeemCleanerAccessCode.run({ data: { code: "AAAA-BBBB-CCCC" } }), { code: "failed-precondition" });
-  // A new code replaces an unused earlier one.
+  // A new code replaces the earlier one and only one concurrent redemption wins.
   const first = await issueCleanerAccessCode.run(managerRequest({ cleanerId: "cleaner-b" }));
   const second = await issueCleanerAccessCode.run(managerRequest({ cleanerId: "cleaner-b" }));
   await assert.rejects(redeemCleanerAccessCode.run({ data: { code: first.code } }), { code: "failed-precondition" });
-  await redeemCleanerAccessCode.run({ data: { code: second.code } });
+  const attempts = await Promise.allSettled([
+    redeemCleanerAccessCode.run({ data: { code: second.code } }),
+    redeemCleanerAccessCode.run({ data: { code: second.code } }),
+  ]);
+  assert.deepEqual(attempts.map(({ status }) => status).sort(), ["fulfilled", "rejected"]);
+  assert.equal(attempts.find(({ status }) => status === "rejected").reason.code, "failed-precondition");
 });
 
 test("expired codes and codes for deactivated cleaners never link", async () => {
   const { code } = await issueCleanerAccessCode.run(managerRequest({ cleanerId: "cleaner-a" }));
   const reference = admin.doc(`cleanerAccessCodes/${hashCleanerAccessCode(code.replaceAll("-", ""))}`);
   await reference.update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+  await assert.rejects(redeemCleanerAccessCode.run({ data: { code } }), { code: "failed-precondition" });
+  await reference.update({ expiresAt: null });
   await assert.rejects(redeemCleanerAccessCode.run({ data: { code } }), { code: "failed-precondition" });
   const fresh = await issueCleanerAccessCode.run(managerRequest({ cleanerId: "cleaner-a" }));
   await admin.doc(`${root}/cleaners/cleaner-a`).update({ active: false });
@@ -208,6 +254,15 @@ test("assignment through the real manager callable appears only in that cleaner'
   await assertFails(dbA.doc(`${root}/cleanerAgenda/cleaner-a__job-a`).update({ scheduledStart: "09:00" }));
   await assertFails(dbA.collection(`${root}/cleanerAgenda`).doc("forged").set({ organizationId: org, cleanerId: "cleaner-a" }));
   await assertSucceeds(dbA.doc(`${root}/members/${uidA}`).get());
+  const entry = `${root}/cleanerAgenda/cleaner-a__job-a`;
+  const claims = hubClaimsByUid.get(uidA);
+  await assertFails(cleanerDb(uidA, null).doc(entry).get());
+  await assertFails(cleanerDb(uidA, { ...claims, organizationId: "other-org" }).doc(entry).get());
+  await assertFails(cleanerDb(uidA, { ...claims, cleanerId: "cleaner-b" }).doc(entry).get());
+
+  await admin.doc(`${root}/cleaners/cleaner-a`).update({ active: false });
+  await assertFails(dbA.doc(entry).get());
+  await assert.rejects(openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" })), { code: "permission-denied" });
 });
 
 test("cross-organization: a cleaner of one organization reads nothing in another", async () => {
@@ -312,8 +367,7 @@ test("checklist opens through existing capability rules for the assigned cleaner
   assert.equal(typeof opened.token, "string");
   const capability = (await admin.doc(`${root}/jobs/job-a/checklistRuns/initial/checklistCapabilities/active`).get()).data();
   assert.deepEqual([capability.cleanerId, capability.status, capability.issuedByUid], ["cleaner-a", "ACTIVE", uidA]);
-  const read = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
-  await functionsIndex.publicChecklist({ method: "GET", query: { token: opened.token }, get() { return undefined; } }, read);
+  const read = await readPublicChecklist(opened.token);
   assert.equal(read.code, 200);
   assert.ok(read.body.checklist);
 
@@ -323,31 +377,70 @@ test("checklist opens through existing capability rules for the assigned cleaner
   assert.deepEqual(await openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" })), { state: "teammate" });
 });
 
-test("revocation ends reads, callables and refresh tokens; a new code restores access", async () => {
+test("revocation ends reads and callables; signing in again never restores the old session", async () => {
   await createJob("job-a");
   const { token } = await link("cleaner-a");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-a", cleanerId: "cleaner-a" }));
+  await createChecklistRun.run(managerRequest({ jobId: "job-a" }));
   await sync("job-a");
-  const session = await (await fetch("http://127.0.0.1:19180/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, returnSecureToken: true }),
-  })).json();
+  const session = await signInWithCodeToken(token);
+  const originalClaims = decodeToken(session.idToken).cleanerHub;
+  const opened = await openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" }));
+  assert.equal(opened.state, "ready");
+  assert.equal((await readPublicChecklist(opened.token)).code, 200);
+  await createJob("job-manager");
+  await assignCleanerDirectly.run(managerRequest({ jobId: "job-manager", cleanerId: "cleaner-a" }));
+  await createChecklistRun.run(managerRequest({ jobId: "job-manager" }));
+  const managerCapability = await issueChecklistCapability.run(managerRequest({ jobId: "job-manager", cleanerId: "cleaner-a" }));
+  const entryId = "cleaner-a__job-a";
+  assert.equal(await readAgendaWithToken(session.idToken, entryId), 200);
   await assert.rejects(revokeCleanerHubAccess.run(cleanerRequest(uidA, { cleanerId: "cleaner-a" })), { code: "permission-denied" });
-  await new Promise((resolve) => setTimeout(resolve, 1100)); // token revocation has 1-second granularity
   await revokeCleanerHubAccess.run(managerRequest({ cleanerId: "cleaner-a" }));
 
-  const dbA = cleanerDb(uidA);
+  const dbA = cleanerDb(uidA, originalClaims);
   await assertFails(dbA.collection(`${root}/cleanerAgenda`).where("cleanerId", "==", "cleaner-a").get());
-  await assert.rejects(openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" })), { code: "permission-denied" });
-  // Refresh tokens issued before revocation are invalidated (production Auth enforces this
-  // on refresh; the emulator only records it, so assert the recorded cut-off).
-  const { getAuth } = await import("firebase-admin/auth");
-  const user = await getAuth().getUser(uidA);
-  assert.ok(new Date(user.tokensValidAfterTime).getTime() > Date.parse(new Date(JSON.parse(Buffer.from(session.idToken.split(".")[1], "base64url").toString()).auth_time * 1000).toISOString()));
+  await assertFails(dbA.doc(`${root}/members/${uidA}`).get());
+  assert.equal(await readAgendaWithToken(session.idToken, entryId), 403);
+  assert.equal((await readPublicChecklist(opened.token)).code, 410);
+  assert.equal((await readPublicChecklist(managerCapability.token)).code, 200);
+  await assert.rejects(openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" }, originalClaims)), { code: "permission-denied" });
   const access = (await admin.doc(`${root}/cleanerHubAccess/cleaner-a`).get()).data();
   assert.equal(access.active, false);
 
-  await link("cleaner-a");
+  const replacement = await link("cleaner-a");
+  const nextSession = await signInWithCodeToken(replacement.token);
+  assert.notEqual(decodeToken(nextSession.idToken).cleanerHub.sessionId, originalClaims.sessionId);
+  assert.equal(await readAgendaWithToken(session.idToken, entryId), 403);
+  assert.equal(await readAgendaWithToken(nextSession.idToken, entryId), 200);
+  const refreshedOld = await refreshIdToken(session.refreshToken);
+  assert.deepEqual(decodeToken(refreshedOld).cleanerHub, originalClaims);
+  assert.equal(await readAgendaWithToken(refreshedOld, entryId), 403);
+  const refreshedNext = await refreshIdToken(nextSession.refreshToken);
+  assert.equal(await readAgendaWithToken(refreshedNext, entryId), 200);
+  await assert.rejects(openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" }, originalClaims)), { code: "permission-denied" });
   await assertSucceeds(cleanerDb(uidA).collection(`${root}/cleanerAgenda`).where("cleanerId", "==", "cleaner-a").get());
+});
+
+test("concurrent checklist opens protect the teammate's link, and device recovery retires the old bearer", async () => {
+  await createJob("job-team");
+  await assignCleanerDirectly.run(managerRequest({ jobId: "job-team", cleanerId: "cleaner-a" }));
+  await admin.doc(`${root}/jobs/job-team`).update({ assignedCleanerIds: ["cleaner-a", "cleaner-b"] });
+  await createChecklistRun.run(managerRequest({ jobId: "job-team" }));
+  await link("cleaner-a");
+  await link("cleaner-b");
+  const cleaners = [["cleaner-a", uidA], ["cleaner-b", uidB]];
+  const results = await Promise.all(cleaners.map(([, uid]) => openMyChecklist.run(cleanerRequest(uid, { jobId: "job-team" }))));
+  assert.deepEqual(results.map(({ state }) => state).sort(), ["ready", "teammate"]);
+  const winner = results.findIndex(({ state }) => state === "ready");
+  const [cleanerId, uid] = cleaners[winner];
+  const previousClaims = hubClaimsByUid.get(uid);
+  const { token } = results[winner];
+  assert.equal((await readPublicChecklist(token)).code, 200);
+
+  await link(cleanerId);
+  assert.equal((await readPublicChecklist(token)).code, 410);
+  await assert.rejects(openMyChecklist.run(cleanerRequest(uid, { jobId: "job-team" }, previousClaims)), { code: "permission-denied" });
+  assert.equal((await openMyChecklist.run(cleanerRequest(uid, { jobId: "job-team" }))).state, "ready");
 });
 
 test("linking backfills Jobs assigned before access existed, including legacy single-cleaner Jobs", async () => {

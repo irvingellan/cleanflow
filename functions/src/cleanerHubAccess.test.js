@@ -4,6 +4,7 @@ import {
   formatCleanerAccessCode,
   hashCleanerAccessCode,
   isActiveCleanerMembership,
+  isActiveCleanerSession,
   newCleanerAccessCode,
   normalizeCleanerAccessCode,
 } from "./cleanerHubAccess.js";
@@ -41,5 +42,15 @@ describe("cleaner access codes", () => {
     expect(isActiveCleanerMembership({ role: "CLEANER", active: false, cleanerId: "c" })).toBe(false);
     expect(isActiveCleanerMembership({ role: "MANAGER", active: true, cleanerId: "c" })).toBe(false);
     expect(isActiveCleanerMembership({ role: "CLEANER", active: true })).toBe(false);
+  });
+
+  it("authorizes only the exact current session, cleaner, and organization", () => {
+    const claims = { organizationId: "org", cleanerId: "c", sessionId: "current" };
+    const member = { ...claims, role: "CLEANER", active: true };
+    expect(isActiveCleanerSession(member, claims)).toBe(true);
+    expect(isActiveCleanerSession(member, undefined)).toBe(false);
+    expect(isActiveCleanerSession(member, { ...claims, sessionId: "retired" })).toBe(false);
+    expect(isActiveCleanerSession(member, { ...claims, organizationId: "other" })).toBe(false);
+    expect(isActiveCleanerSession(member, { ...claims, cleanerId: "other" })).toBe(false);
   });
 });

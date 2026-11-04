@@ -5,6 +5,7 @@ import {
   buildCleanerAgenda,
   formatAccessCodeInput,
   freshnessFor,
+  localDateKey,
   normalizeAccessCodeInput,
 } from "./cleanerAgendaModel.js";
 
@@ -21,7 +22,7 @@ describe("cleaner agenda buckets", () => {
       assigned("done", "2026-11-01", "COMPLETED"),
       assigned("old-done", "2026-09-01", "COMPLETED"),
       assigned("no-date", null),
-      { id: "o1", kind: "OFFER", jobId: "o1", offerStatus: "INTERESTED", scheduledDate: "2026-11-04" },
+      { id: "o1", kind: "OFFER", jobId: "o1", offerStatus: "INTERESTED", scheduledDate: "2026-11-04", offerExpiresAtMs: now.getTime() + 60_000 },
       { id: "o2", kind: "OFFER", jobId: "o2", offerStatus: "DECLINED", scheduledDate: "2026-11-04" },
       { id: "o3", kind: "OFFER", jobId: "o3", offerStatus: "PENDING", scheduledDate: "2026-11-01" },
       { id: "c1", kind: "CHANGE", change: "UNASSIGNED", atMs: now.getTime() - 1000 },
@@ -37,10 +38,27 @@ describe("cleaner agenda buckets", () => {
   });
 
   it("an interested Offer is never counted as confirmed work", () => {
-    const agenda = buildCleanerAgenda([{ id: "o", kind: "OFFER", jobId: "o", offerStatus: "INTERESTED", scheduledDate: "2026-11-04" }], { now });
+    const agenda = buildCleanerAgenda([{ id: "o", kind: "OFFER", jobId: "o", offerStatus: "INTERESTED", scheduledDate: "2026-11-04", offerExpiresAtMs: now.getTime() + 60_000 }], { now });
     expect(agenda.openCount).toBe(0);
     expect(agenda.today).toEqual([]);
     expect(agenda.upcoming).toEqual([]);
+  });
+
+  it("hides expired offers and projections with no confirmed expiry", () => {
+    const offer = { kind: "OFFER", offerStatus: "PENDING" };
+    const agenda = buildCleanerAgenda([
+      { ...offer, id: "expired", offerExpiresAtMs: now.getTime() },
+      { ...offer, id: "missing" },
+      { ...offer, id: "valid", offerExpiresAtMs: now.getTime() + 1 },
+    ], { now });
+    expect(agenda.offers.map((entry) => entry.id)).toEqual(["valid"]);
+  });
+
+  it("uses the Pacific service day across the UTC date boundary and daylight saving changes", () => {
+    expect(localDateKey(new Date("2026-11-01T06:59:00Z"))).toBe("2026-10-31");
+    expect(localDateKey(new Date("2026-11-01T07:00:00Z"))).toBe("2026-11-01");
+    expect(localDateKey(new Date("2026-11-02T07:59:00Z"))).toBe("2026-11-01");
+    expect(localDateKey(new Date("2026-11-02T08:00:00Z"))).toBe("2026-11-02");
   });
 
   it("maps assignment status without inventing confirmation states", () => {
@@ -57,6 +75,10 @@ describe("cleaner agenda buckets", () => {
 
 describe("freshness", () => {
   const at = new Date();
+  it("drops a stalled stream out of live without changing its last verified time", () => {
+    expect(freshnessFor({ hasSnapshot: true, online: true, lastVerifiedAt: at, nowMs: at.getTime() + 30_000, maxAgeMs: 30_000 }))
+      .toEqual({ state: "stale", lastVerifiedAt: at, reason: "error" });
+  });
   it("claims live only for a server-confirmed snapshot while online", () => {
     expect(freshnessFor({ hasSnapshot: false, online: true })).toEqual({ state: "loading", lastVerifiedAt: null });
     expect(freshnessFor({ hasSnapshot: true, fromCache: false, online: true, lastVerifiedAt: at }).state).toBe("live");

@@ -1632,7 +1632,7 @@ export const revokeCleanerHubAccess = onCall(
   async (request) => {
     await requireOrganizationManager(db, request, organizationId);
     return revokeCleanerHubAccessForManager(db, {
-      organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid, auth: getAuth(),
+      organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid,
     });
   },
 );
@@ -1646,9 +1646,9 @@ export const redeemCleanerAccessCode = onCall(
 export const openMyChecklist = onCall(
   { region: "us-central1" },
   async (request) => {
-    const { uid, cleanerId } = await requireActiveCleaner(db, request, organizationId);
+    const { uid, cleanerId, sessionId } = await requireActiveCleaner(db, request, organizationId);
     return openChecklistForCleaner(db, {
-      organizationId, cleanerId, uid, jobId: request.data?.jobId, runId: initialChecklistRunId,
+      organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, runId: initialChecklistRunId,
       newToken: newChecklistCapabilityToken, hashToken,
     });
   },
@@ -1657,9 +1657,9 @@ export const openMyChecklist = onCall(
 export const respondToMyOffer = onCall(
   { region: "us-central1" },
   async (request) => {
-    const { cleanerId } = await requireActiveCleaner(db, request, organizationId);
+    const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
     const result = await respondToOfferForCleaner(db, {
-      organizationId, cleanerId, jobId: request.data?.jobId, status: request.data?.status,
+      organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, status: request.data?.status,
     });
     return { state: result.state, status: result.status || null };
   },
@@ -1667,7 +1667,7 @@ export const respondToMyOffer = onCall(
 
 function cleanerAgendaTrigger(document) {
   return onDocumentWritten(
-    { document, region: "us-central1", retry: false, timeoutSeconds: 60 },
+    { document, region: "us-central1", retry: true, timeoutSeconds: 60 },
     async (event) => {
       try {
         await syncCleanerAgendaForJob(db, { organizationId: event.params.orgId, jobId: event.params.jobId });
