@@ -59,7 +59,7 @@ describe("notificationService channel coexistence", () => {
     firebase.getAuth.mockReturnValue({ currentUser: { uid: "synthetic-manager" } });
     firebase.onMessage.mockReturnValue(vi.fn());
     firebase.getToken.mockResolvedValue("fcm-token");
-    firebase.httpsCallable.mockReturnValue(vi.fn().mockResolvedValue(undefined));
+    firebase.httpsCallable.mockReturnValue(vi.fn().mockResolvedValue({ data: { registered: true, registrationRevision: 1 } }));
     oneSignal.associateOneSignalUser.mockResolvedValue({ configured: true, initialized: true, optedIn: false, state: "not-subscribed" });
     oneSignal.requestOneSignalSubscription.mockResolvedValue({ configured: true, initialized: true, optedIn: true, state: "active" });
     oneSignal.oneSignalSubscriptionState.mockResolvedValue({ configured: true, initialized: true, optedIn: false, state: "not-subscribed" });
@@ -160,4 +160,12 @@ describe("notificationService channel coexistence", () => {
       state: "unavailable",
     });
   });
+  it("does not enroll a switched account while passive diagnostics await support", async () => {
+    browserPermission("granted"); const api = await loadService(); let finish;
+    firebase.isSupported.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const pending = api.getPushChannelDiagnostics("synthetic-manager");
+    firebase.getAuth.mockReturnValue({ currentUser: { uid: "manager-b" } }); finish(true);
+    await pending; expect(firebase.getToken).not.toHaveBeenCalled();
+  });
+
 });

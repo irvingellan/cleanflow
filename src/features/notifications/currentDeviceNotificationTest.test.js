@@ -195,9 +195,13 @@ describe("explicit current-device notification self-test", () => {
     const passive = api.refreshPushNotifications();
     await vi.waitFor(() => expect(firebase.getToken).toHaveBeenCalledOnce());
     firebase.test.mockResolvedValueOnce(rejected).mockResolvedValueOnce(accepted);
-    await expect(api.testCurrentDeviceNotifications()).resolves.toMatchObject({ state: "fcm-accepted", recovered: true });
+    const action = api.testCurrentDeviceNotifications();
+    await Promise.resolve();
+    expect(firebase.getToken).toHaveBeenCalledOnce();
+    expect(firebase.register).not.toHaveBeenCalled();
     resolveOldToken("stale-passive-synthetic-token");
     await passive;
+    await expect(action).resolves.toMatchObject({ state: "fcm-accepted", recovered: true });
     expect(firebase.register.mock.calls.map(([request]) => request.token)).toEqual([
       "old-synthetic-token", "new-synthetic-token",
     ]);
@@ -222,10 +226,10 @@ describe("explicit current-device notification self-test", () => {
 
   it("does not race a new registration against an uncertain passive server write", async () => {
     const api = await service();
+    vi.useFakeTimers();
     firebase.register.mockImplementationOnce(() => new Promise(() => {}));
     const passive = api.refreshPushNotifications();
     await vi.waitFor(() => expect(firebase.register).toHaveBeenCalledOnce());
-    vi.useFakeTimers();
     const action = api.testCurrentDeviceNotifications();
     await vi.advanceTimersByTimeAsync(api.currentDeviceRegistrationTimeoutMs);
     await expect(action).resolves.toEqual({ state: "registration-failed" });

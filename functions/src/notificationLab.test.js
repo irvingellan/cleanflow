@@ -88,6 +88,16 @@ function managerSeed({ activeDevice = true, targetMember = true } = {}) {
 }
 
 describe("manager notification health snapshot", () => {
+  it("stores only bounded failure enums and records recovery clearing the prior failure", async () => {
+    const database = fakeDatabase({ [`organizations/${organizationId}/members/${targetUid}`]: managerMembership });
+    const run = (input) => reportManagerDeviceHealth({ database, organizationId, userId: targetUid, input, now: () => 1_000_000 });
+    await run({ ...healthInput, fcmErrorStage: "enrollment", fcmErrorCode: "timeout" });
+    const path = `organizations/${organizationId}/managerNotificationDeviceHealth/${targetRegistrationId}`;
+    expect(database.records.get(path)).toMatchObject({ fcmErrorStage: "enrollment", fcmErrorCode: "timeout" });
+    await run(healthInput);
+    expect(database.records.get(path)).toMatchObject({ fcmErrorStage: null, fcmErrorCode: null });
+    await expect(run({ ...healthInput, fcmErrorCode: "private raw error token" })).rejects.toMatchObject({ code: "invalid-argument" });
+  });
   it("records a denied, unregistered browser without needing an FCM token", async () => {
     const database = fakeDatabase({
       [`organizations/${organizationId}/members/${targetUid}`]: managerMembership,
@@ -274,7 +284,7 @@ describe("developer single-device FCM test", () => {
       status: "FAILED",
       failureCode: "messaging/registration-token-not-registered",
     });
-    expect(database.records.get(`managerPushDevices/${targetRegistrationId}`).active).toBe(false);
+    expect(database.records.get(`managerPushDevices/${targetRegistrationId}`)).toMatchObject({ active: false, tokenState: "invalidated", invalidationReason: "fcm-token-invalidated", deactivationReason: "FCM_INVALIDATED" });
   });
 
   it("does not deactivate a refreshed token if the old token is rejected", async () => {
@@ -293,6 +303,16 @@ describe("developer single-device FCM test", () => {
     });
     expect(result).toMatchObject({ status: "FAILED", invalidated: false });
     expect(database.records.get(`managerPushDevices/${targetRegistrationId}`).active).toBe(true);
+  });
+  it.each([{ registrationRevision: 2 }, { userId: "other" }, { organizationId: "other" }, { active: false, tokenState: "signed-out" }])("does not invalidate a changed exact registration %j", async (patch) => {
+    const database = fakeDatabase(managerSeed());
+    const path = `managerPushDevices/${targetRegistrationId}`;
+    const result = await request(database, { sendFcm: async () => {
+      database.records.set(path, { ...database.records.get(path), ...patch });
+      throw Object.assign(new Error("synthetic invalid"), { code: "messaging/invalid-registration-token" });
+    } });
+    expect(result.invalidated).toBe(false);
+    expect(database.records.get(path)).toMatchObject(patch);
   });
 
   it("classifies uncertain errors or unreadable acceptance as UNKNOWN, never retries", async () => {

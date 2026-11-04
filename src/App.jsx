@@ -7,6 +7,7 @@ import {
 } from "./components/UiPrimitives.jsx";
 import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
 import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
+import { abortManagerPushSignOut, prepareManagerPushSignOut } from "./features/notifications/notificationService.js";
 import { clearOneSignalUser } from "./features/notifications/oneSignalService.js";
 import { useOneSignalIdentity } from "./features/notifications/useOneSignalIdentity.js";
 import { PwaUpdatePrompt } from "./features/pwa/PwaUpdatePrompt.jsx";
@@ -173,11 +174,14 @@ function App() {
   async function handleSignOut() {
     setIsSigningOut(true);
     setHasSignOutError(false);
+    let pushSignOutPreparation;
 
     try {
+      pushSignOutPreparation = await prepareManagerPushSignOut().catch(() => undefined);
       await signOutManager();
       await clearOneSignalUser().catch(() => undefined);
     } catch {
+      abortManagerPushSignOut(pushSignOutPreparation);
       setHasSignOutError(true);
     } finally {
       setIsSigningOut(false);

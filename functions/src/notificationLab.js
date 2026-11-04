@@ -10,6 +10,7 @@ const appVersionPattern = /^[A-Za-z0-9._-]{1,64}$/;
 const healthFields = new Set([
   "deviceId", "notificationPermission", "serviceWorker", "fcmRegistration",
   "platform", "browserClass", "standalone", "appVersion",
+  "fcmErrorStage", "fcmErrorCode",
 ]);
 const healthValues = {
   notificationPermission: new Set(["granted", "denied", "default", "unsupported"]),
@@ -21,7 +22,10 @@ const healthValues = {
 const healthComparisonFields = [
   "notificationPermission", "serviceWorker", "fcmRegistration",
   "platform", "browserClass", "standalone", "appVersion",
+  "fcmErrorStage", "fcmErrorCode",
 ];
+export const notificationHealthErrorStages = new Set(["support", "permission", "serialization", "worker", "token", "enrollment"]);
+export const notificationHealthErrorCodes = new Set(["timeout", "superseded", "unauthenticated", "permission-denied", "unavailable", "invalid-token", "failed"]);
 const unchangedHealthIntervalMs = 6 * 60 * 60 * 1000;
 export const developerTestCooldownMs = 60 * 1000;
 export const developerTestTimeoutMs = 15 * 1000;
@@ -58,7 +62,9 @@ function validateHealthInput(input) {
     || !deviceIdPattern.test(input.deviceId || "")
     || Object.entries(healthValues).some(([key, values]) => !values.has(input[key]))
     || typeof input.standalone !== "boolean"
-    || (input.appVersion != null && !appVersionPattern.test(input.appVersion))) {
+    || (input.appVersion != null && !appVersionPattern.test(input.appVersion))
+    || (input.fcmErrorStage != null && !notificationHealthErrorStages.has(input.fcmErrorStage))
+    || (input.fcmErrorCode != null && !notificationHealthErrorCodes.has(input.fcmErrorCode))) {
     throw new HttpsError("invalid-argument", "Notification health snapshot is invalid.");
   }
 
@@ -70,6 +76,8 @@ function validateHealthInput(input) {
     browserClass: input.browserClass,
     standalone: input.standalone,
     appVersion: input.appVersion || null,
+    fcmErrorStage: input.fcmErrorStage ?? null,
+    fcmErrorCode: input.fcmErrorCode ?? null,
   };
 }
 
@@ -109,7 +117,7 @@ export async function reportManagerDeviceHealth({
 
     const previousData = previous.data();
     const changed = !previous.exists || healthComparisonFields.some(
-      (field) => previousData?.[field] !== health[field],
+      (field) => (previousData?.[field] ?? null) !== health[field],
     );
     const elapsed = checkedAtMs - timestampMillis(previousData?.checkedAtMs);
     // Report real permission/registration changes immediately; only identical
@@ -207,7 +215,7 @@ export async function sendDeveloperTestNotification({
 
   // Claim before sending: concurrent calls cannot both dispatch. A failed or
   // ambiguous FCM attempt still consumes the cooldown to avoid duplicate pushes.
-  const targetToken = await database.runTransaction(async (transaction) => {
+  const targetRegistration = await database.runTransaction(async (transaction) => {
     const [developerMembership, target, cooldown] = await Promise.all([
       transaction.get(developerMembershipReference),
       transaction.get(targetReference),
@@ -248,8 +256,9 @@ export async function sendDeveloperTestNotification({
       providerAccepted: null,
       tokenInvalidated: false,
     });
-    return targetData.token;
+    return { token: targetData.token, userId: targetData.userId, registrationRevision: targetData.registrationRevision };
   });
+  const targetToken = targetRegistration.token;
 
   try {
     const messageId = await boundedSend(sendFcm, fixedDeveloperTestMessage(targetToken));
@@ -283,8 +292,13 @@ export async function sendDeveloperTestNotification({
         invalidated = await database.runTransaction(async (transaction) => {
           const latest = await transaction.get(targetReference);
           // Do not disable a token that was refreshed while the test was in flight.
-          if (!latest.exists || latest.data()?.token !== targetToken) return false;
+          const current = latest.data();
+          if (!latest.exists || current?.token !== targetToken || current.active !== true
+            || current.userId !== targetRegistration.userId || current.organizationId !== organizationId
+            || current.registrationRevision !== targetRegistration.registrationRevision) return false;
           transaction.update(targetReference, {
+            tokenState: "invalidated", invalidationReason: "fcm-token-invalidated",
+            deactivationReason: "FCM_INVALIDATED",
             active: false,
             invalidatedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),

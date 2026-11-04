@@ -16,11 +16,20 @@ const messagingWorkerPath = "/firebase-messaging-sw.js";
 const messagingWorkerScope = "/firebase-messaging-push/";
 const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 const registerPushDeviceCall = httpsCallable(functions, "registerManagerPushDevice");
+const deactivatePushDeviceCall = httpsCallable(functions, "deactivateManagerPushDevice");
 const currentDeviceTestCall = httpsCallable(functions, "sendCurrentManagerTestNotification", { timeout: 30_000 });
-let fcmRegistrationState = "unknown";
 let fcmRegistrationGeneration = 0;
 let currentDeviceTestInFlight = false;
-const pendingDeviceRegistrationWrites = new Set();
+// Keep raw SDK operations/writes pending after the caller's deadline. A new
+// attempt must not race late token deletion/acquisition or an uncertain write.
+const pendingRegistrationWork = new Set();
+let passiveRegistration;
+let registrationDiagnostic = { state: "unknown", stage: null, code: null };
+let diagnosticUser;
+let successfulRegistration;
+let signingOutUser;
+let signingOutGeneration = 0;
+const signOutCleanupTimeoutMs = 5_000;
 let managerForegroundRegistration;
 let managerForegroundUnsubscribe;
 const operationalForegroundEvents = new Set([
@@ -31,7 +40,113 @@ export const currentDeviceTestTimeoutMs = 30_000;
 
 // A passive local observation. It must not fetch a token or register a worker.
 export function getCachedFcmRegistrationState() {
-  return fcmRegistrationState;
+  return getCachedFcmRegistrationDiagnostic().state;
+}
+
+export function getCachedFcmRegistrationDiagnostic() {
+  const user = getAuth(firebaseApp).currentUser;
+  const userId = user?.uid;
+  if (!userId || user !== diagnosticUser || user === signingOutUser) {
+    return { state: "unknown", stage: null, code: null };
+  }
+  return { ...registrationDiagnostic };
+}
+
+function setRegistrationDiagnostic(attempt, state, error) {
+  // A stale account/generation must never replace a newer session's observation.
+  if (attempt.generation !== fcmRegistrationGeneration || attempt.user !== getAuth(firebaseApp).currentUser
+    || attempt.user === signingOutUser) return;
+  diagnosticUser = attempt.user;
+  registrationDiagnostic = { state, stage: error ? attempt.stage : null, code: error ? safeRegistrationCode(error) : null };
+}
+
+function safeRegistrationCode(error) {
+  if (error?.name === "ProviderTimeoutError") return "timeout";
+  const code = typeof error?.code === "string" ? error.code.replace(/^functions\//, "") : null;
+  if (["unauthenticated", "permission-denied"].includes(code)) return code;
+  if (code === "registration-superseded") return "superseded";
+  if (code === "invalid-token") return "invalid-token";
+  return "failed";
+}
+
+function newRegistrationAttempt() {
+  const user = getAuth(firebaseApp).currentUser;
+  const userId = user?.uid;
+  if (signingOutUser && user !== signingOutUser) signingOutUser = undefined;
+  const attempt = { user, userId, generation: ++fcmRegistrationGeneration, stage: "support", deadlineAt: null, rotationUsed: false };
+  attempt.assertCurrent = () => {
+    if (!userId || getAuth(firebaseApp).currentUser !== user || signingOutUser === user) {
+      throw Object.assign(new Error("Manager session changed."), { code: "unauthenticated" });
+    }
+    if (attempt.generation !== fcmRegistrationGeneration) {
+      throw Object.assign(new Error("Registration superseded."), { code: "registration-superseded" });
+    }
+    if (attempt.deadlineAt != null && Date.now() >= attempt.deadlineAt) {
+      throw Object.assign(new Error("Registration deadline reached."), { name: "ProviderTimeoutError" });
+    }
+  };
+  return attempt;
+}
+
+function trackRegistrationWork(operation) {
+  const pending = Promise.resolve(operation);
+  pendingRegistrationWork.add(pending);
+  void pending.then(() => pendingRegistrationWork.delete(pending), () => pendingRegistrationWork.delete(pending));
+  return pending;
+}
+
+async function registrationStep(attempt, stage, operation, { tracked = true } = {}) {
+  attempt.stage = stage;
+  attempt.assertCurrent();
+  const pending = operation();
+  const result = await withProviderTimeout(tracked ? trackRegistrationWork(pending) : pending,
+    "Manager push registration", Math.max(0, attempt.deadlineAt - Date.now()));
+  attempt.assertCurrent();
+  return result;
+}
+
+/** Explicit sign-out only. Never delete a shared SDK token during logout. */
+export async function prepareManagerPushSignOut() {
+  const user = getAuth(firebaseApp).currentUser;
+  const userId = user?.uid;
+  signingOutUser = user;
+  const signOutGeneration = ++signingOutGeneration;
+  ++fcmRegistrationGeneration;
+  passiveRegistration = undefined;
+  managerForegroundRegistration = undefined;
+  managerForegroundUnsubscribe?.();
+  managerForegroundUnsubscribe = undefined;
+  registrationDiagnostic = { state: "unknown", stage: null, code: null };
+  const deadlineAt = Date.now() + signOutCleanupTimeoutMs;
+  try {
+    await withProviderTimeout(Promise.allSettled([...pendingRegistrationWork]), "Pending registration", signOutCleanupTimeoutMs);
+    const context = successfulRegistration;
+    if (!context || !userId || context.user !== user || getAuth(firebaseApp).currentUser !== user) {
+      return { deactivated: false, signOutGeneration };
+    }
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 0) return { deactivated: false, signOutGeneration };
+    // The server derives UID/org and compares all three captured fields. A late
+    // cleanup cannot deactivate a refreshed revision, even for the same token.
+    const result = await withProviderTimeout(deactivatePushDeviceCall({
+      deviceId: context.deviceId, token: context.token, registrationRevision: context.registrationRevision,
+    }), "Manager push sign-out", remaining);
+    return { deactivated: result?.data?.deactivated === true, signOutGeneration };
+  } catch {
+    return { deactivated: false, signOutGeneration };
+  }
+}
+
+/** Release only the exact failed sign-out attempt while its Auth session still owns the guard. */
+export function abortManagerPushSignOut(preparation) {
+  if (!signingOutUser || preparation?.signOutGeneration !== signingOutGeneration
+    || getAuth(firebaseApp).currentUser !== signingOutUser) return false;
+  signingOutUser = undefined;
+  ++fcmRegistrationGeneration;
+  successfulRegistration = undefined;
+  diagnosticUser = undefined;
+  registrationDiagnostic = { state: "unknown", stage: null, code: null };
+  return true;
 }
 
 function managerNotificationLanguage() {
@@ -76,52 +191,53 @@ function browserPermission() {
   return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
 }
 
-async function registerCurrentPushDevice({ deadlineAt, assertCurrentUser = () => {} } = {}) {
-  const generation = fcmRegistrationGeneration;
-  const userId = getAuth(firebaseApp).currentUser?.uid;
-  const assertRegistrationCurrent = () => {
-    assertCurrentUser();
-    if (!userId || getAuth(firebaseApp).currentUser?.uid !== userId) {
-      throw Object.assign(new Error("Manager session changed."), { code: "unauthenticated" });
-    }
-    if (generation !== fcmRegistrationGeneration) {
-      throw Object.assign(new Error("Device registration superseded."), { code: "registration-superseded" });
-    }
-    if (deadlineAt != null && Date.now() >= deadlineAt) throw new Error("Device registration timed out.");
-  };
-  const wait = (promise, label) => deadlineAt == null ? promise : withProviderTimeout(
-    promise, label, Math.max(0, deadlineAt - Date.now()),
-  );
-  assertRegistrationCurrent();
-  const serviceWorkerRegistration = await wait(navigator.serviceWorker.register(
-    messagingWorkerPath,
-    { scope: messagingWorkerScope },
-  ), "Firebase Messaging worker registration");
-  assertRegistrationCurrent();
+async function registerCurrentPushDevice({ attempt = newRegistrationAttempt(), rotateToken = false } = {}) {
+  attempt.deadlineAt = Date.now() + currentDeviceRegistrationTimeoutMs;
+  await registrationStep(attempt, "serialization", () => Promise.allSettled([...pendingRegistrationWork]), { tracked: false });
+  const serviceWorkerRegistration = await registrationStep(attempt, "worker", () => navigator.serviceWorker.register(
+    messagingWorkerPath, { scope: messagingWorkerScope },
+  ));
   const messaging = getMessaging(firebaseApp);
-  const token = await wait(getToken(messaging, {
-    vapidKey,
-    serviceWorkerRegistration,
-  }), "Firebase Messaging token registration");
-
-  if (!token) {
-    throw new Error("Unable to get a push token.");
+  async function removeConclusiveStaleToken() {
+    if (attempt.rotationUsed) throw Object.assign(new Error("Token rotation already used."), { code: "invalid-token" });
+    // Consume before dispatch: even a timed-out/failed deletion cannot be repeated.
+    attempt.rotationUsed = true;
+    const removed = await registrationStep(attempt, "token", () => deleteToken(messaging));
+    if (removed !== true) throw Object.assign(new Error("Unable to rotate token."), { code: "invalid-token" });
   }
-
-  assertRegistrationCurrent();
-  const registrationWrite = registerPushDeviceCall({
-    deviceId: pushDeviceId(),
-    token,
-    language: managerNotificationLanguage(),
-  });
-  pendingDeviceRegistrationWrites.add(registrationWrite);
-  void registrationWrite.then(
-    () => pendingDeviceRegistrationWrites.delete(registrationWrite),
-    () => pendingDeviceRegistrationWrites.delete(registrationWrite),
-  );
-  await wait(registrationWrite, "Manager device registration");
-  assertRegistrationCurrent();
-  fcmRegistrationState = "registered";
+  if (rotateToken) await removeConclusiveStaleToken();
+  while (true) {
+    const token = await registrationStep(attempt, "token", () => getToken(messaging, { vapidKey, serviceWorkerRegistration }));
+    if (!token) throw Object.assign(new Error("Unable to get push token."), { code: "invalid-token" });
+    const deviceId = pushDeviceId();
+    try {
+      const response = await registrationStep(attempt, "enrollment", () => Promise.resolve(registerPushDeviceCall({
+        deviceId, token, language: managerNotificationLanguage(),
+      })).then(response => {
+        // Retain the exact server response privately even if sign-out superseded
+        // the waiting caller. Cleanup can then compare the dispatched revision.
+        if (getAuth(firebaseApp).currentUser === attempt.user) {
+          const revision = response?.data?.registrationRevision;
+          successfulRegistration = response?.data?.registered === true && Number.isSafeInteger(revision) && revision > 0
+            ? { user: attempt.user, userId: attempt.userId, deviceId, token, registrationRevision: revision } : undefined;
+        }
+        return response;
+      }));
+      if (response?.data?.registered !== true) throw new Error("Manager registration was not confirmed.");
+      break;
+    } catch (error) {
+      attempt.assertCurrent();
+      if (attempt.rotationUsed || !["functions/failed-precondition", "failed-precondition"].includes(error?.code)
+        || error?.details?.reason !== "fcm-token-invalidated") throw error;
+      // This marker means the server conclusively invalidated this exact cached
+      // token. Generic preconditions, timeouts and UNKNOWN never authorize it.
+      await removeConclusiveStaleToken();
+    }
+  }
+  attempt.assertCurrent();
+  setRegistrationDiagnostic(attempt, "registered");
+  // The registration deadline does not shorten the independent test-send bound.
+  attempt.deadlineAt = null;
   receiveManagerNotifications({ messaging, serviceWorkerRegistration });
   return { messaging, serviceWorkerRegistration };
 }
@@ -168,21 +284,19 @@ export function testCurrentDeviceNotifications() {
   if (currentDeviceTestInFlight) return Promise.resolve({ state: "cooldown" });
   currentDeviceTestInFlight = true;
   // A passive token read must not overwrite a freshly self-healed registration.
-  fcmRegistrationGeneration += 1;
-  return runCurrentDeviceNotificationTest().finally(() => { currentDeviceTestInFlight = false; });
+  const attempt = newRegistrationAttempt();
+  return runCurrentDeviceNotificationTest(attempt).finally(() => { currentDeviceTestInFlight = false; });
 }
 
-async function runCurrentDeviceNotificationTest() {
+async function runCurrentDeviceNotificationTest(attempt) {
   if (browserPermission() === "denied") return { state: "permission-blocked" };
   if (!vapidKey || !window.isSecureContext || !("Notification" in window)
     || !("serviceWorker" in navigator) || !("PushManager" in window)) return { state: "unsupported" };
 
-  const userId = getAuth(firebaseApp).currentUser?.uid;
+  const userId = attempt.userId;
   if (!userId) return { state: "unauthorized" };
   const assertCurrentUser = () => {
-    if (getAuth(firebaseApp).currentUser?.uid !== userId) {
-      throw Object.assign(new Error("Manager session changed."), { code: "unauthenticated" });
-    }
+    attempt.assertCurrent();
   };
   let permission;
   try {
@@ -194,6 +308,7 @@ async function runCurrentDeviceNotificationTest() {
       pushNotificationsAvailable(),
       withProviderTimeout(permissionRequest, "Notification permission", currentDeviceTestTimeoutMs),
     ]);
+    assertCurrentUser();
     if (!supported) return { state: "unsupported" };
     permission = requestedPermission;
   } catch {
@@ -201,18 +316,10 @@ async function runCurrentDeviceNotificationTest() {
   }
   if (permission !== "granted") return { state: permission === "denied" ? "permission-blocked" : "permission-default" };
 
-  let registration;
   try {
-    const deadlineAt = Date.now() + currentDeviceRegistrationTimeoutMs;
-    // Wait for already-dispatched registration writes before replacing the token.
-    // On uncertainty, stop; do not race a new registration against the old write.
-    await withProviderTimeout(Promise.allSettled([...pendingDeviceRegistrationWrites]),
-      "Previous manager device registration", currentDeviceRegistrationTimeoutMs);
-    registration = await registerCurrentPushDevice({
-      deadlineAt, assertCurrentUser,
-    });
+    await registerCurrentPushDevice({ attempt });
   } catch (error) {
-    fcmRegistrationState = "error";
+    setRegistrationDiagnostic(attempt, "error", error);
     return { state: testFailureState(error) === "unauthorized" ? "unauthorized" : "registration-failed" };
   }
 
@@ -221,30 +328,27 @@ async function runCurrentDeviceNotificationTest() {
     const response = await withProviderTimeout(currentDeviceTestCall({
       deviceId: pushDeviceId(), confirm: true,
     }), "Current-device FCM test", currentDeviceTestTimeoutMs);
+    assertCurrentUser();
     return response?.data;
   };
   let result;
-  let recovered = false;
+  let recovered = attempt.rotationUsed;
   let refreshingStaleToken = false;
   try {
     result = await sendTest();
-    if (result?.status === "FAILED" && result.recoveryAllowed === true && [
+    if (!attempt.rotationUsed && result?.status === "FAILED" && result.recoveryAllowed === true && [
       "messaging/registration-token-not-registered", "messaging/invalid-registration-token",
     ].includes(result.failureCode)) {
       // Conclusive rejection only: a timeout/UNKNOWN may already have sent.
       assertCurrentUser();
       refreshingStaleToken = true;
-      const removed = await withProviderTimeout(deleteToken(registration.messaging),
-        "Stale FCM token removal", currentDeviceRegistrationTimeoutMs);
-      if (removed !== true) return { state: "registration-failed" };
-      registration = await registerCurrentPushDevice({
-        deadlineAt: Date.now() + currentDeviceRegistrationTimeoutMs, assertCurrentUser,
-      });
+      await registerCurrentPushDevice({ attempt, rotateToken: true });
       recovered = true;
       refreshingStaleToken = false;
       result = await sendTest();
     }
   } catch (error) {
+    if (refreshingStaleToken) setRegistrationDiagnostic(attempt, "error", error);
     const state = testFailureState(error);
     return { state: refreshingStaleToken && state !== "unauthorized" ? "registration-failed" : state, recovered };
   }
@@ -257,45 +361,58 @@ async function runCurrentDeviceNotificationTest() {
   return { state: "unknown", recovered };
 }
 
-async function enableFcmPushNotifications() {
-  if (!(await pushNotificationsAvailable())) return { state: "unavailable" };
-
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return { state: permission === "denied" ? "denied" : "default" };
-
+async function enableFcmPushNotifications(attempt) {
   try {
-    await withProviderTimeout(registerCurrentPushDevice(), "Firebase Messaging registration");
+    attempt.assertCurrent();
+    const supported = await pushNotificationsAvailable();
+    attempt.assertCurrent();
+    if (!supported) return { state: "unavailable" };
+    attempt.stage = "permission";
+    const permission = await withProviderTimeout(Notification.requestPermission(), "Notification permission", currentDeviceRegistrationTimeoutMs);
+    attempt.assertCurrent();
+    if (permission !== "granted") return { state: permission === "denied" ? "denied" : "default" };
+    await registerCurrentPushDevice({ attempt });
     return { state: "registered" };
-  } catch {
-    fcmRegistrationState = "error";
+  } catch (error) {
+    setRegistrationDiagnostic(attempt, "error", error);
     return { state: "error" };
   }
 }
 
-export async function refreshPushNotifications() {
-  const generation = fcmRegistrationGeneration;
-  if (currentDeviceTestInFlight) return { state: fcmRegistrationState };
-  if (!(await pushNotificationsAvailable()) || browserPermission() !== "granted") {
-    return { state: "unavailable" };
-  }
-  if (currentDeviceTestInFlight || generation !== fcmRegistrationGeneration) return { state: fcmRegistrationState };
-
-  try {
-    await withProviderTimeout(registerCurrentPushDevice(), "Firebase Messaging registration");
-    return { state: "registered" };
-  } catch (error) {
-    if (error?.code === "registration-superseded") return { state: fcmRegistrationState };
-    fcmRegistrationState = "error";
-    return { state: "error" };
-  }
+export function refreshPushNotifications({ userId: expectedUserId } = {}) {
+  const user = getAuth(firebaseApp).currentUser;
+  const userId = user?.uid;
+  if (expectedUserId && expectedUserId !== userId) return Promise.resolve({ state: "error" });
+  if (currentDeviceTestInFlight) return Promise.resolve({ state: getCachedFcmRegistrationState() });
+  if (passiveRegistration?.user === user) return passiveRegistration.promise;
+  const attempt = newRegistrationAttempt();
+  const promise = (async () => {
+    try {
+      attempt.assertCurrent();
+      const supported = await pushNotificationsAvailable();
+      attempt.assertCurrent();
+      if (!supported || browserPermission() !== "granted") return { state: "unavailable" };
+      await registerCurrentPushDevice({ attempt });
+      return { state: "registered" };
+    } catch (error) {
+      if (error?.code === "registration-superseded") return { state: getCachedFcmRegistrationState() };
+      setRegistrationDiagnostic(attempt, "error", error);
+      return { state: "error" };
+    }
+  })();
+  passiveRegistration = { user, promise };
+  void promise.finally(() => { if (passiveRegistration?.promise === promise) passiveRegistration = undefined; });
+  return promise;
 }
 
 async function fcmDiagnosticState() {
-  const generation = fcmRegistrationGeneration;
-  if (!(await pushNotificationsAvailable())) return { state: "unavailable" };
+  // Start the guarded attempt before support awaits; do not adopt a later Auth
+  // account when diagnostics started for the previous manager.
   if (browserPermission() === "denied") return { state: "unavailable" };
-  if (currentDeviceTestInFlight || generation !== fcmRegistrationGeneration) return { state: fcmRegistrationState };
-  return browserPermission() === "granted" ? refreshPushNotifications() : { state: fcmRegistrationState };
+  if (currentDeviceTestInFlight) return { state: getCachedFcmRegistrationState() };
+  if (browserPermission() === "granted") return refreshPushNotifications();
+  if (!(await pushNotificationsAvailable())) return { state: "unavailable" };
+  return { state: getCachedFcmRegistrationState() };
 }
 
 function notificationState({ fcm, oneSignal }) {
@@ -336,6 +453,7 @@ export async function getPushChannelDiagnostics(userId) {
 export async function enablePushNotifications({ userId } = {}) {
   // Browser denial must be changed in settings; another click cannot reprompt it.
   if (browserPermission() === "denied") return { state: "denied" };
+  const attempt = newRegistrationAttempt();
   let oneSignal;
 
   try {
@@ -345,6 +463,6 @@ export async function enablePushNotifications({ userId } = {}) {
     oneSignal = await oneSignalSubscriptionState().catch(() => oneSignalDiagnosticFailure(error));
   }
 
-  const fcm = await enableFcmPushNotifications();
+  const fcm = await enableFcmPushNotifications(attempt);
   return { state: notificationState({ fcm, oneSignal }), fcm, oneSignal };
 }

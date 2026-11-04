@@ -3,6 +3,7 @@ import { useTranslation } from "../../i18n/translations.js";
 import {
   enablePushNotifications,
   getPushChannelDiagnostics,
+  refreshPushNotifications,
   testCurrentDeviceNotifications,
 } from "./notificationService.js";
 import { reportCurrentManagerNotificationHealth } from "./notificationHealthReporter.js";
@@ -54,6 +55,42 @@ export function NotificationControl({ userId }) {
       isCurrent = false;
     };
   }, [language, userId]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    let inFlight = false;
+    let lastRefreshAt = Date.now();
+    async function refreshOnResume() {
+      if (!isCurrent || !userId || currentUserRef.current !== userId || busyRef.current || inFlight
+        || document.visibilityState !== "visible" || navigator.onLine !== true
+        || globalThis.Notification?.permission !== "granted" || Date.now() - lastRefreshAt < 60_000) return;
+      lastRefreshAt = Date.now();
+      inFlight = true;
+      const operation = operationRef.current;
+      try {
+        // Existing granted FCM enrollment only. No prompt, test send or dormant
+        // OneSignal initialization/identity traffic is added by lifecycle events.
+        const result = await refreshPushNotifications({ userId });
+        if (!isCurrent || currentUserRef.current !== userId || operation !== operationRef.current || busyRef.current) return;
+        if (result.state === "registered") setState("enabled");
+        else if (["error", "unavailable"].includes(result.state)) setState(result.state);
+        void reportCurrentManagerNotificationHealth();
+      } catch {
+        // A resume failure remains best effort; the explicit recovery action stays available.
+      } finally {
+        inFlight = false;
+      }
+    }
+    window.addEventListener("focus", refreshOnResume);
+    window.addEventListener("online", refreshOnResume);
+    document.addEventListener("visibilitychange", refreshOnResume);
+    return () => {
+      isCurrent = false;
+      window.removeEventListener("focus", refreshOnResume);
+      window.removeEventListener("online", refreshOnResume);
+      document.removeEventListener("visibilitychange", refreshOnResume);
+    };
+  }, [userId]);
 
   function beginAction() {
     if (busyRef.current) return null;
