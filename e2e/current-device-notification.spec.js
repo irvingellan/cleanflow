@@ -34,6 +34,10 @@ async function openManager(page, { locale = "en", result = "pending" } = {}) {
       export async function enablePushNotifications() { throw new Error("Not this explicit test action"); }
       export function getLocalPushDeviceId() { return "11111111-2222-4333-8444-555555555555"; }
       export function getCachedFcmRegistrationState() { return "unknown"; }
+      export function getCachedFcmRegistrationDiagnostic() { return { state: "unknown", stage: null, code: null }; }
+      export async function refreshPushNotifications() { return { state: "registered" }; }
+      export async function prepareManagerPushSignOut() { return { deactivated: false, signOutGeneration: 1 }; }
+      export function abortManagerPushSignOut() { return true; }
       export async function testCurrentDeviceNotifications() {
         window.__currentDeviceTestCalls = (window.__currentDeviceTestCalls || 0) + 1;
         return ${result === "pending"

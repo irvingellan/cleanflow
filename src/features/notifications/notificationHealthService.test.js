@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readLocalNotificationHealth } from "./notificationHealthService.js";
 
-const cache = vi.hoisted(() => ({ getCachedFcmRegistrationState: vi.fn() }));
-vi.mock("./notificationService.js", () => ({ getCachedFcmRegistrationState: cache.getCachedFcmRegistrationState }));
+const cache = vi.hoisted(() => ({ getCachedFcmRegistrationDiagnostic: vi.fn() }));
+vi.mock("./notificationService.js", () => ({ getCachedFcmRegistrationState: () => cache.getCachedFcmRegistrationDiagnostic()?.state, getCachedFcmRegistrationDiagnostic: cache.getCachedFcmRegistrationDiagnostic }));
 
 function environment(overrides = {}) {
-  const getRegistration = vi.fn(async () => ({ active: {} }));
+  const getRegistration = vi.fn(async () => ({ scope: "https://synthetic.example/firebase-messaging-push/", active: { scriptURL: "https://synthetic.example/firebase-messaging-sw.js" } }));
   const register = vi.fn();
   const requestPermission = vi.fn();
   return {
+    location: { origin: "https://synthetic.example" },
     Notification: { permission: "denied", requestPermission },
     navigator: { userAgent: "Mozilla/5.0 (iPhone) Safari/605.1", platform: "iPhone", serviceWorker: { getRegistration, register } },
     localStorage: { getItem: vi.fn(() => "local-device-12345678"), setItem: vi.fn() },
@@ -18,7 +19,7 @@ function environment(overrides = {}) {
 }
 
 describe("readLocalNotificationHealth", () => {
-  beforeEach(() => { cache.getCachedFcmRegistrationState.mockReturnValue("unknown"); });
+  beforeEach(() => { cache.getCachedFcmRegistrationDiagnostic.mockReturnValue({ state: "unknown", stage: null, code: null }); });
 
   it("reads coarse browser state without requesting permission, registering, or exposing a token", async () => {
     const browser = environment();
@@ -45,7 +46,7 @@ describe("readLocalNotificationHealth", () => {
   });
 
   it("does not call a stale cached registration ready after permission was denied", async () => {
-    cache.getCachedFcmRegistrationState.mockReturnValue("registered");
+    cache.getCachedFcmRegistrationDiagnostic.mockReturnValue({ state: "registered", stage: null, code: null });
     const snapshot = await readLocalNotificationHealth(environment());
     expect(snapshot).toMatchObject({ notificationPermission: "denied", fcmRegistration: "unknown" });
   });
@@ -61,4 +62,17 @@ describe("readLocalNotificationHealth", () => {
       vi.useRealTimers();
     }
   });
+  it("rejects root scope and wrong script workers in the passive health projection", async () => {
+    const browser = environment();
+    browser.navigator.serviceWorker.getRegistration.mockResolvedValue({ scope: "https://synthetic.example/", active: { scriptURL: "https://synthetic.example/sw.js" } });
+    const snapshot = await readLocalNotificationHealth(browser);
+    expect(snapshot).toMatchObject({ serviceWorker: "unavailable", readiness: { worker: "mismatch", delivery: "UNKNOWN" } });
+  });
+
+  it("projects only safe current failure fields", async () => {
+    cache.getCachedFcmRegistrationDiagnostic.mockReturnValue({ state: "error", stage: "token", code: "timeout", token: "must-not-project" });
+    const browser = environment(); browser.Notification.permission = "granted";
+    expect(await readLocalNotificationHealth(browser)).toMatchObject({ fcmRegistration: "error", fcmErrorStage: "token", fcmErrorCode: "timeout" });
+  });
+
 });

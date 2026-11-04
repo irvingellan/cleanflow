@@ -121,7 +121,7 @@ export function reminderDeliveryId(organizationId, reminder) {
  * Separates confirmed provider results from an unknown provider outcome. The
  * caller still sends at most once because FCM cannot supply an idempotency key.
  */
-export function summarizeManagerReminderDelivery({ attempted = 0, delivered = 0, failed = 0 }) {
+export function summarizeManagerReminderDelivery({ attempted = 0, delivered = 0, failed = 0, deliveryStatus, unknownDevices = 0 }) {
   if (attempted === 0) {
     return { deliveryStatus: "NO_ACTIVE_DEVICES", hasConfirmedDelivery: false };
   }
@@ -136,6 +136,10 @@ export function summarizeManagerReminderDelivery({ attempted = 0, delivered = 0,
       hasConfirmedDelivery: true,
       failureSummary: "Some manager devices did not confirm FCM delivery.",
     };
+  }
+
+  if (deliveryStatus === "UNKNOWN" || unknownDevices > 0 || delivered === null || failed === null) {
+    return { deliveryStatus: "UNKNOWN", hasConfirmedDelivery: false, failureSummary: "FCM request outcome was not confirmed." };
   }
 
   return {

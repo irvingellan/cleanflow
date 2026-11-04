@@ -4,6 +4,26 @@ import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 const timestamp = (iso) => ({ toDate: () => new Date(iso) });
 
 describe("notification diagnostics projection", () => {
+  it("reads the existing operational invalidated field and marks stale SENDING as indeterminate", () => {
+    const result = buildNotificationDiagnostics({ devices: [], deliveries: [], now: Date.parse("2026-11-03T10:00:00Z"),
+      reviewDeliveries: [{ data: { deliveryStatus: "SENDING", invalidated: 2, attemptedAt: timestamp("2026-11-03T09:00:00Z") } }],
+    });
+    expect(result.reviewDeliveries[0]).toMatchObject({ invalidatedDevices: 2, staleSending: true, acceptedByFcmDevices: null });
+  });
+  it("preserves unknown counts, failure enums, standalone, current-device tests and bounded-read caveats", () => {
+    const diagnostics = buildNotificationDiagnostics({ devices: [], deliveries: [{ data: { deliveryStatus: "UNKNOWN" } }],
+      healthReports: [{ id: "a".repeat(64), data: { standalone: true, serviceWorker: "unsupported", fcmErrorStage: "worker", fcmErrorCode: "timeout" } }],
+      currentDeviceTests: [{ data: { status: "UNKNOWN", providerAccepted: null, token: "private-token" } }],
+      reviewDeliveries: [{ data: { deliveryStatus: "PARTIAL", unknownDevices: 1, invalidDeviceCleanupFailed: true } }],
+      readMetadata: { reviewDeliveries: { readCount: 100, readCap: 100, returnedCount: 1, ordering: "unordered-global-sample" } },
+    });
+    expect(diagnostics.deliveries[0]).toMatchObject({ deliveredDevices: null, failedDevices: null, unknownDevices: null });
+    expect(diagnostics.healthReports[0]).toMatchObject({ standalone: true, serviceWorker: "unsupported", fcmErrorStage: "worker", fcmErrorCode: "timeout" });
+    expect(diagnostics.currentDeviceTests[0]).toMatchObject({ status: "UNKNOWN", providerAccepted: null });
+    expect(diagnostics.reviewDeliveries[0]).toMatchObject({ unknownDevices: 1, invalidDeviceCleanupFailed: true });
+    expect(diagnostics.readMetadata.reviewDeliveries).toMatchObject({ readCap: 100, capReached: true, completeness: "unknown", recentHistoryComplete: false });
+    expect(JSON.stringify(diagnostics)).not.toContain("private-token");
+  });
   it("allowlists all three operational event types without exposing event context or tokens", () => {
     const eventTypes = ["CHECKLIST_READY_FOR_REVIEW", "CLEANER_INTERESTED", "ASSIGNMENT_CONFIRMED", "PRIVATE_EVENT"];
     const projection = buildNotificationDiagnostics({ devices: [], deliveries: [],
@@ -97,7 +117,7 @@ describe("notification diagnostics projection", () => {
       attemptedRecipients: 2,
       acceptedRecipients: 1,
       noActiveRecipients: 1,
-      attemptedDevices: 0,
+      attemptedDevices: null,
     });
   });
 

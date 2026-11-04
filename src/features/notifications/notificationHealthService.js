@@ -1,5 +1,6 @@
 import { appVersion } from "../../appVersion.js";
-import { getCachedFcmRegistrationState } from "./notificationService.js";
+import { getCachedFcmRegistrationDiagnostic } from "./notificationService.js";
+import { deriveNotificationReadiness, messagingWorkerReadiness, safeFcmFailureFields } from "./notificationReadiness.js";
 
 const pushDeviceStorageKey = "cleanflow-push-device-id";
 const messagingWorkerScope = "/firebase-messaging-push/";
@@ -30,7 +31,7 @@ function permissionState(environment) {
 
 async function serviceWorkerState(environment) {
   const serviceWorker = environment.navigator?.serviceWorker;
-  if (typeof serviceWorker?.getRegistration !== "function") return "unavailable";
+  if (typeof serviceWorker?.getRegistration !== "function") return "unsupported";
 
   let timeoutId;
   try {
@@ -40,7 +41,7 @@ async function serviceWorkerState(environment) {
         timeoutId = setTimeout(() => reject(new Error("Service worker check timed out")), serviceWorkerCheckMs);
       }),
     ]);
-    return registration?.active ? "ready" : "unavailable";
+    return messagingWorkerReadiness(registration, environment.location?.origin);
   } catch {
     return "error";
   } finally {
@@ -64,19 +65,26 @@ export async function readLocalNotificationHealth(environment = globalThis) {
     // A browser may block local storage. The snapshot remains useful locally.
   }
 
-  const cachedFcmState = getCachedFcmRegistrationState();
+  const diagnostic = getCachedFcmRegistrationDiagnostic();
+  const cachedFcmState = diagnostic.state;
   const notificationPermission = permissionState(environment);
+  const worker = await serviceWorkerState(environment);
+  const fcmRegistration = notificationPermission === "granted" && ["registered", "error"].includes(cachedFcmState)
+    ? cachedFcmState : "unknown";
+  const platform = coarsePlatform(userAgent, environment.navigator?.platform);
+  const standalone = environment.navigator?.standalone === true || displayModeStandalone;
   return {
     deviceId,
     notificationPermission,
-    serviceWorker: await serviceWorkerState(environment),
+    serviceWorker: ["missing", "mismatch", "unsupported"].includes(worker) ? "unavailable" : worker,
     // Cached registration is not current readiness when permission was revoked.
     // Unknown also avoids treating a fresh page's empty cache as missing server state.
-    fcmRegistration: notificationPermission === "granted" && ["registered", "error"].includes(cachedFcmState)
-      ? cachedFcmState : "unknown",
-    platform: coarsePlatform(userAgent, environment.navigator?.platform),
+    fcmRegistration,
+    ...safeFcmFailureFields({ fcmRegistration, fcmErrorStage: diagnostic.stage, fcmErrorCode: diagnostic.code }),
+    readiness: deriveNotificationReadiness({ platform, standalone, notificationPermission, worker, fcmRegistration }),
+    platform,
     browserClass: coarseBrowser(userAgent),
-    standalone: environment.navigator?.standalone === true || displayModeStandalone,
+    standalone,
     appVersion,
     checkedAt: new Date().toISOString(),
   };

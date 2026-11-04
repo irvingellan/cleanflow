@@ -99,7 +99,7 @@ export async function sendCurrentManagerTestNotification({
   );
 
   // All reads precede writes. The manager-wide claim also bounds multiple device/browser calls.
-  const { token, recoveryAttempt } = await database.runTransaction(async (transaction) => {
+  const { token, recoveryAttempt, registrationRevision } = await database.runTransaction(async (transaction) => {
     const [membership, registration, cooldown] = await Promise.all([
       transaction.get(membershipReference), transaction.get(targetReference),
       transaction.get(cooldownReference),
@@ -152,7 +152,7 @@ export async function sendCurrentManagerTestNotification({
       recoveryAttempt: isRecovery,
       attemptedAt: FieldValue.serverTimestamp(), attemptedAtMs,
     });
-    return { token: device.token, recoveryAttempt: isRecovery };
+    return { token: device.token, recoveryAttempt: isRecovery, registrationRevision: device.registrationRevision };
   });
 
   try {
@@ -178,9 +178,12 @@ export async function sendCurrentManagerTestNotification({
         invalidated = await database.runTransaction(async (transaction) => {
           const latest = await transaction.get(targetReference);
           const latestDevice = latest.data();
-          if (!latest.exists || latestDevice?.token !== token
-            || latestDevice.userId !== userId || latestDevice.organizationId !== organizationId) return false;
+          if (!latest.exists || latestDevice?.token !== token || latestDevice.active !== true
+            || latestDevice.userId !== userId || latestDevice.organizationId !== organizationId
+            || latestDevice.registrationRevision !== registrationRevision) return false;
           transaction.update(targetReference, {
+            tokenState: "invalidated", invalidationReason: "fcm-token-invalidated",
+            deactivationReason: "FCM_INVALIDATED",
             active: false, invalidatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
           });
           return true;

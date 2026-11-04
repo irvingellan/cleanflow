@@ -240,7 +240,7 @@ describe("manager current-device notification test", () => {
         status: "FAILED", failureCode: code, providerAccepted: false,
         invalidated: true, recoveryAllowed: true,
       });
-      expect(database.records.get(devicePath).active).toBe(false);
+      expect(database.records.get(devicePath)).toMatchObject({ active: false, tokenState: "invalidated", invalidationReason: "fcm-token-invalidated", deactivationReason: "FCM_INVALIDATED" });
       // A client re-registering the same token cannot bypass the cooldown.
       database.records.set(devicePath, { ...database.records.get(devicePath), active: true });
       await expect(run(database)).rejects.toMatchObject({ code: "resource-exhausted" });
@@ -281,6 +281,15 @@ describe("manager current-device notification test", () => {
     });
     expect(result).toMatchObject({ status: "FAILED", invalidated: false, recoveryAllowed: true });
     expect(database.records.get(devicePath)).toMatchObject({ active: true, token: refreshedToken });
+  });
+  it.each([{ registrationRevision: 2 }, { active: false, tokenState: "signed-out" }])("does not overwrite a refreshed enrollment or sign-out %j", async (patch) => {
+    const database = seededDatabase();
+    const result = await run(database, { sendFcm: async () => {
+      database.records.set(devicePath, { ...database.records.get(devicePath), ...patch });
+      throw Object.assign(new Error("synthetic invalid"), { code: "messaging/invalid-registration-token" });
+    } });
+    expect(result.invalidated).toBe(false);
+    expect(database.records.get(devicePath)).toMatchObject(patch);
   });
 
   it.each(["unavailable", "messaging/server-unavailable", "messaging/internal-error"])(

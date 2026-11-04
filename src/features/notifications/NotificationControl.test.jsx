@@ -6,6 +6,7 @@ import { NotificationControl } from "./NotificationControl.jsx";
 
 const notificationService = vi.hoisted(() => ({
   enablePushNotifications: vi.fn(),
+  refreshPushNotifications: vi.fn(),
   getPushChannelDiagnostics: vi.fn(),
   testCurrentDeviceNotifications: vi.fn(),
 }));
@@ -15,9 +16,10 @@ const healthReporter = vi.hoisted(() => ({ reportCurrentManagerNotificationHealt
 vi.mock("./notificationHealthReporter.js", () => healthReporter);
 
 describe("NotificationControl", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   beforeEach(() => {
     vi.clearAllMocks();
+    notificationService.refreshPushNotifications.mockResolvedValue({ state: "registered" });
     window.localStorage.setItem("cleanflow-language", "en");
     notificationService.getPushChannelDiagnostics.mockResolvedValue({ state: "ready" });
     notificationService.enablePushNotifications.mockResolvedValue({ state: "enabled" });
@@ -258,4 +260,43 @@ describe("NotificationControl", () => {
     expect(button.querySelector(".notification-control__label")).toBeNull();
     expect(translateInLanguage(language, "notifications.currentDeviceAccepted")).not.toMatch(/^notifications\./);
   });
+  it("coalesces visible online lifecycle storms behind a 60-second cooldown", async () => {
+    vi.useFakeTimers(); vi.stubGlobal("Notification", { permission: "granted" });
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    let finish; notificationService.refreshPushNotifications.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const { unmount } = render(<TranslationProvider><NotificationControl userId="manager-a" /></TranslationProvider>);
+    await act(async () => {});
+    fireEvent(window, new Event("focus")); expect(notificationService.refreshPushNotifications).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    fireEvent(window, new Event("focus")); fireEvent(window, new Event("online")); fireEvent(document, new Event("visibilitychange"));
+    expect(notificationService.refreshPushNotifications).toHaveBeenCalledExactlyOnceWith({ userId: "manager-a" });
+    await act(async () => { finish({ state: "registered" }); });
+    fireEvent(window, new Event("focus")); expect(notificationService.refreshPushNotifications).toHaveBeenCalledOnce();
+    expect(notificationService.enablePushNotifications).not.toHaveBeenCalled(); expect(notificationService.testCurrentDeviceNotifications).not.toHaveBeenCalled();
+    unmount(); await act(async () => { await vi.advanceTimersByTimeAsync(60_000); }); fireEvent(window, new Event("online"));
+    expect(notificationService.refreshPushNotifications).toHaveBeenCalledOnce();
+  });
+
+  it.each(["hidden", "offline", "default", "denied"])("skips lifecycle refresh when %s", async condition => {
+    vi.useFakeTimers(); vi.stubGlobal("Notification", { permission: ["default", "denied"].includes(condition) ? condition : "granted" });
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue(condition === "hidden" ? "hidden" : "visible");
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(condition !== "offline");
+    render(<TranslationProvider><NotificationControl userId="manager-a" /></TranslationProvider>); await act(async () => {});
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); }); fireEvent(window, new Event("online")); fireEvent(window, new Event("focus")); fireEvent(document, new Event("visibilitychange"));
+    expect(notificationService.refreshPushNotifications).not.toHaveBeenCalled();
+  });
+
+  it("ignores old lifecycle completion after an account switch", async () => {
+    vi.useFakeTimers(); vi.stubGlobal("Notification", { permission: "granted" });
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible"); vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    let finish; notificationService.refreshPushNotifications.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const { rerender } = render(<TranslationProvider><NotificationControl userId="manager-a" /></TranslationProvider>); await act(async () => {});
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); }); fireEvent(window, new Event("focus"));
+    rerender(<TranslationProvider><NotificationControl userId="manager-b" /></TranslationProvider>); await act(async () => {});
+    const reports = healthReporter.reportCurrentManagerNotificationHealth.mock.calls.length;
+    await act(async () => { finish({ state: "registered" }); });
+    expect(healthReporter.reportCurrentManagerNotificationHealth).toHaveBeenCalledTimes(reports);
+  });
+
 });

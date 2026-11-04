@@ -87,8 +87,11 @@ export async function deactivateInvalidManagerDevices(database, devices, respons
         const latest = await transaction.get(sent.ref);
         const current = latest.data();
         if (!latest.exists || current?.active !== true || current.token !== original.token
-          || current.organizationId !== original.organizationId || current.userId !== original.userId) return false;
+          || current.organizationId !== original.organizationId || current.userId !== original.userId
+          || current.registrationRevision !== original.registrationRevision) return false;
         transaction.update(sent.ref, {
+          tokenState: "invalidated", invalidationReason: "fcm-token-invalidated",
+          deactivationReason: "FCM_INVALIDATED",
           active: false, invalidatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
         });
         return true;

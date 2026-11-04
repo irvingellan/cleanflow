@@ -1,4 +1,5 @@
 import { managerReminderPayload } from "./managerReminders.js";
+import { managerFcmFailureCode } from "./managerFcmDelivery.js";
 
 export const managerReminderProviders = Object.freeze({
   FCM: "fcm",
@@ -422,6 +423,8 @@ export function managerReminderDeliveryAuditFields(delivery, outcome) {
     failedDevices: delivery.failed,
     invalidatedDevices: delivery.invalidated,
     invalidDeviceCleanupFailed: delivery.invalidDeviceCleanupFailed,
+    ...(delivery.unknownDevices != null ? { unknownDevices: delivery.unknownDevices } : {}),
+    ...(delivery.failureCode ? { failureCode: delivery.failureCode } : {}),
     ...(outcome.failureSummary ? { failureSummary: outcome.failureSummary } : {}),
   };
 }
@@ -441,8 +444,11 @@ export function unknownManagerReminderDeliveryAuditFields(error) {
 
   return {
     deliveryProvider: managerReminderProviders.FCM,
-    attemptedDevices: error?.managerReminderAttemptedDevices || 0,
-    failureCode: error?.code || "unknown",
+    attemptedDevices: Number.isFinite(error?.managerReminderAttemptedDevices) ? error.managerReminderAttemptedDevices : null,
+    deliveredDevices: null,
+    failedDevices: null,
+    unknownDevices: Number.isFinite(error?.managerReminderAttemptedDevices) ? error.managerReminderAttemptedDevices : null,
+    failureCode: managerFcmFailureCode(error),
     failureSummary: "FCM request outcome was not confirmed.",
   };
 }

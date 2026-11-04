@@ -37,6 +37,8 @@ const {
   issueChecklistCapability,
   revokeChecklistCapability,
   registerManagerPushDevice,
+  deactivateManagerPushDevice,
+  getManagerNotificationDiagnostics,
   reportManagerNotificationHealth,
   sendDeveloperTestNotification,
   sendCurrentManagerTestNotification,
@@ -798,8 +800,8 @@ test("payout proof size/type/path limits survive; current authorized upload/read
 test("revocation or removal denies subsequent reads/writes, enrollment and recipient selection", async () => {
   const client = account("manager");
   await assertSucceeds(client.firestore().doc(`${root}/jobs/job`).get());
-  const data = { deviceId: "local-device-0001", token: "x".repeat(64), organizationId: "other" };
-  assert.deepEqual(await registerManagerPushDevice.run(request("manager", data)), { registered: true });
+  const data = { deviceId: "local-device-0001", token: "x".repeat(64) };
+  assert.deepEqual(await registerManagerPushDevice.run(request("manager", data)), { registered: true, registrationRevision: 1 });
   const devices = await admin.collection("managerPushDevices").get();
   assert.equal(devices.docs[0].data().organizationId, org);
   assert.equal((await authorizedManagerDevices(admin, org, devices.docs)).length, 1);
@@ -822,11 +824,88 @@ test("actual manager callables reject unauthorized/anonymous callers before enro
   ]) {
     const input = request(uid, { organizationId: "other", deviceId: "local-device-0001", token: "x".repeat(64) }, anonymous);
     await assert.rejects(registerManagerPushDevice.run(input), { code });
+    await assert.rejects(deactivateManagerPushDevice.run(request(uid, { deviceId: "local-device-0001", token: "x".repeat(64), registrationRevision: 1 }, anonymous)), { code });
     await assert.rejects(submitFeedback.run(input), { code });
   }
   assert.equal((await admin.collection("managerPushDevices").get()).size, 0);
   // An approved manager reaches payload validation, without contacting GitHub.
   await assert.rejects(submitFeedback.run(request("manager")), { code: "invalid-argument" });
+});
+
+test("versioned enrollment and exact sign-out cleanup reject stale or foreign state without extra writes", async () => {
+  const data = { deviceId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", token: "synthetic-registration-token-1234567890" };
+  const register = (input = data, uid = "manager") => registerManagerPushDevice.run(request(uid, input));
+  const deactivate = (changes = {}, uid = "manager") => deactivateManagerPushDevice.run(request(uid, { ...data, registrationRevision: 2, ...changes }));
+  assert.deepEqual(await register(), { registered: true, registrationRevision: 1 });
+  assert.deepEqual(await register(), { registered: true, registrationRevision: 2 });
+  const id = createHash("sha256").update(`manager:${data.deviceId}`).digest("hex");
+  const ref = admin.doc(`managerPushDevices/${id}`);
+  const before = (await ref.get()).data();
+  for (const changes of [{ registrationRevision: 1 }, { token: `${data.token}-other` }, { deviceId: "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee" }]) {
+    assert.deepEqual(await deactivate(changes), { deactivated: false });
+    assert.deepEqual((await ref.get()).data(), before);
+  }
+  await admin.doc(`${root}/members/second-manager`).set({ active: true, role: "MANAGER" });
+  assert.deepEqual(await deactivate({}, "second-manager"), { deactivated: false });
+  assert.deepEqual((await ref.get()).data(), before);
+  for (const changes of [{ userId: "second-manager" }, { organizationId: "other" }]) {
+    await assert.rejects(register({ ...data, ...changes }), { code: "invalid-argument" });
+    await assert.rejects(deactivate(changes), { code: "invalid-argument" });
+  }
+  for (const changes of [{ userId: "second-manager" }, { organizationId: "other" }]) {
+    await ref.set({ ...before, ...changes });
+    await assert.rejects(register(), { code: "permission-denied" });
+    await assert.rejects(deactivate(), { code: "permission-denied" });
+    assert.deepEqual((await ref.get()).data(), { ...before, ...changes });
+  }
+  await ref.set(before);
+  assert.deepEqual(await deactivate(), { deactivated: true });
+  assert.equal((await ref.get()).data().deactivationReason, "SIGNED_OUT");
+  assert.deepEqual(await register(), { registered: true, registrationRevision: 3 });
+  await ref.update({ active: false, invalidatedAt: FieldValue.serverTimestamp() });
+  await assert.rejects(register(), (error) => error.code === "failed-precondition" && error.details?.reason === "fcm-token-invalidated");
+  assert.deepEqual(await register({ ...data, token: `${data.token}-rotated` }), { registered: true, registrationRevision: 4 });
+  assert.equal((await admin.collection("managerPushDevices").get()).size, 1);
+  assert.equal((await admin.collection(`${root}/currentDeviceNotificationTests`).get()).size, 0);
+  assert.equal((await admin.collection(`${root}/developerNotificationTests`).get()).size, 0);
+  await admin.doc(`${root}/members/manager`).update({ active: false });
+  const revokedBefore = (await ref.get()).data();
+  await assert.rejects(deactivate({ registrationRevision: 4, token: `${data.token}-rotated` }), { code: "permission-denied" });
+  assert.deepEqual((await ref.get()).data(), revokedBefore);
+});
+
+test("diagnostics admit an unordered global cap can omit the newest organization event", async () => {
+  const previousDeveloperUids = process.env.DEV_CENTER_DEVELOPER_UIDS;
+  process.env.DEV_CENTER_DEVELOPER_UIDS = "manager";
+  try {
+    const batch = admin.batch();
+    for (let index = 0; index < 101; index++) {
+      batch.set(admin.doc(`organizations/aaa-foreign/jobs/old-${String(index).padStart(3, "0")}/managerNotificationDeliveries/event`), {
+        eventType: "CLEANER_INTERESTED", deliveryStatus: "FAILED", createdAt: Timestamp.fromMillis(1),
+      });
+    }
+    batch.set(admin.doc(`${root}/jobs/newest/managerNotificationDeliveries/event`), {
+      eventType: "CLEANER_INTERESTED", deliveryStatus: "SENDING", createdAt: Timestamp.fromMillis(2_000_000),
+    });
+    batch.set(admin.doc(`${root}/currentDeviceNotificationTests/synthetic-audit`), {
+      status: "UNKNOWN", providerAccepted: null, testType: "CURRENT_DEVICE", attemptedAt: Timestamp.fromMillis(1),
+      token: "synthetic-private-token-must-not-project",
+    });
+    await batch.commit();
+    const result = await getManagerNotificationDiagnostics.run(request("manager"));
+    assert.equal(result.reviewDeliveries.length, 0);
+    assert.deepEqual(result.readMetadata.reviewDeliveries, {
+      readCap: 100, readCount: 100, returnedCount: 0, capReached: true, ordering: "unordered-global-sample",
+      completeness: "unknown", recentHistoryComplete: false,
+    });
+    assert.equal(result.currentDeviceTests[0].status, "UNKNOWN");
+    assert.equal(result.currentDeviceTests[0].providerAccepted, null);
+    assert.equal(result.currentDeviceTests[0].testType, "CURRENT_DEVICE");
+    assert.ok(!JSON.stringify(result).includes("synthetic-private-token-must-not-project"));
+  } finally {
+    if (previousDeveloperUids === undefined) delete process.env.DEV_CENTER_DEVELOPER_UIDS;
+    else process.env.DEV_CENTER_DEVELOPER_UIDS = previousDeveloperUids;
+  }
 });
 
 test("manager notification health is owner-scoped and developer test push rejects ordinary managers", async () => {

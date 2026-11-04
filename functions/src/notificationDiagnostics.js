@@ -1,3 +1,5 @@
+import { notificationHealthErrorStages, notificationHealthErrorCodes } from "./notificationLab.js";
+
 const deliveryStatuses = new Set([
   "SENDING",
   "SENT",
@@ -29,6 +31,31 @@ function safeText(value, maximumLength = 240) {
   return typeof value === "string" ? value.slice(0, maximumLength) : null;
 }
 
+function testProjection({ data }) {
+  return {
+    testType: ["BASIC", "CURRENT_DEVICE"].includes(data.testType) ? data.testType : "UNKNOWN",
+    targetDeviceId: safeText(data.targetRegistrationId || data.registrationId, 64)?.slice(-8) || null,
+    status: ["SENDING", "FCM_ACCEPTED", "FAILED", "UNKNOWN"].includes(data.status) ? data.status : "UNKNOWN",
+    attemptedAt: timestampToIso(data.attemptedAt), completedAt: timestampToIso(data.completedAt),
+    providerAccepted: typeof data.providerAccepted === "boolean" ? data.providerAccepted : null,
+    tokenInvalidated: data.tokenInvalidated === true, failureCode: safeText(data.failureCode, 80),
+  };
+}
+
+function boundedReads(metadata) {
+  return Object.fromEntries(Object.entries(metadata).filter(([key]) => ["devices", "healthReports", "deliveries", "reviewDeliveries", "developerTests", "currentDeviceTests"].includes(key)).map(([key, value]) => {
+    const unordered = value.ordering === "unordered-global-sample" || value.ordering === "unordered";
+    const readCap = safeNullableCount(value.readCap);
+    const readCount = safeNullableCount(value.readCount);
+    const capReached = readCap !== null && readCount !== null && readCount >= readCap;
+    return [key, { readCap, readCount, returnedCount: safeNullableCount(value.returnedCount), capReached,
+      ordering: ["unordered-global-sample", "unordered", "attemptedAt-desc"].includes(value.ordering) ? value.ordering : "unknown",
+      completeness: unordered || capReached || readCap === null ? "unknown" : "complete-at-read",
+      recentHistoryComplete: !unordered && !capReached && readCap !== null,
+    }];
+  }));
+}
+
 /**
  * Public diagnostics projection. It intentionally omits push tokens and only
  * exposes aggregate delivery outcomes, which cannot prove device display.
@@ -39,9 +66,16 @@ export function buildNotificationDiagnostics({
   healthReports = [],
   reviewDeliveries = [],
   developerTests = [],
+  currentDeviceTests = [],
+  readMetadata = {},
+  now = Date.now(),
   emailsByUserId = new Map(),
 }) {
   return {
+    generatedAt: new Date(now).toISOString(),
+    readMetadata: boundedReads(readMetadata),
+    limitations: { providerAcceptanceProvesDisplay: false, perDeviceDeliveryHistoryAvailable: false,
+      operationalHistory: "bounded-unordered-global-sample", staleSendingOutcome: "unknown-no-resend" },
     devices: devices.map(({ id, data }) => ({
       deviceId: id.slice(-8),
       // A server-owned registration handle for targeting one explicit test.
@@ -61,13 +95,16 @@ export function buildNotificationDiagnostics({
       userEmail: emailsByUserId.get(data.userId) || null,
       notificationPermission: ["granted", "denied", "default", "unsupported"].includes(data.notificationPermission)
         ? data.notificationPermission : "unsupported",
-      serviceWorker: ["ready", "unavailable", "error"].includes(data.serviceWorker)
+      serviceWorker: ["ready", "unavailable", "error", "unsupported"].includes(data.serviceWorker)
         ? data.serviceWorker : "error",
       fcmRegistration: ["registered", "missing", "error", "unsupported", "unknown"].includes(data.fcmRegistration)
         ? data.fcmRegistration : "unknown",
       platform: safeText(data.platform, 30),
       browserClass: safeText(data.browserClass, 30),
       appVersion: safeText(data.appVersion, 40),
+      standalone: typeof data.standalone === "boolean" ? data.standalone : null,
+      fcmErrorStage: notificationHealthErrorStages.has(data.fcmErrorStage) ? data.fcmErrorStage : null,
+      fcmErrorCode: notificationHealthErrorCodes.has(data.fcmErrorCode) ? data.fcmErrorCode : null,
       checkedAt: timestampToIso(data.checkedAt),
     })),
     reviewDeliveries: reviewDeliveries.map(({ data }) => ({
@@ -81,18 +118,15 @@ export function buildNotificationDiagnostics({
       targetDeviceCount: safeNullableCount(data.targetDeviceCount),
       acceptedByFcmDevices: safeNullableCount(data.acceptedByFcmDevices),
       failedDevices: safeNullableCount(data.failedDevices),
+      unknownDevices: safeNullableCount(data.unknownDevices),
+      invalidatedDevices: safeNullableCount(data.invalidatedDevices ?? data.invalidated),
+      invalidDeviceCleanupFailed: data.invalidDeviceCleanupFailed === true,
+      staleSending: data.deliveryStatus === "SENDING" && Boolean(timestampToIso(data.attemptedAt))
+        && now - Date.parse(timestampToIso(data.attemptedAt)) >= 5 * 60 * 1000,
       failureCode: safeText(data.failureCode, 80),
     })),
-    developerTests: developerTests.map(({ data }) => ({
-      testType: data.testType === "BASIC" ? "BASIC" : "UNKNOWN",
-      targetDeviceId: safeText(data.targetRegistrationId, 64)?.slice(-8) || null,
-      status: ["SENDING", "FCM_ACCEPTED", "FAILED", "UNKNOWN"].includes(data.status) ? data.status : "UNKNOWN",
-      attemptedAt: timestampToIso(data.attemptedAt),
-      completedAt: timestampToIso(data.completedAt),
-      providerAccepted: typeof data.providerAccepted === "boolean" ? data.providerAccepted : null,
-      tokenInvalidated: data.tokenInvalidated === true,
-      failureCode: safeText(data.failureCode, 80),
-    })),
+    developerTests: developerTests.map(testProjection),
+    currentDeviceTests: currentDeviceTests.map(testProjection),
     deliveries: deliveries.map(({ data }) => ({
       reminderType: safeText(data.reminderType, 40) || "UNKNOWN",
       targetDate: safeText(data.targetDate, 20),
@@ -105,14 +139,18 @@ export function buildNotificationDiagnostics({
       attemptedAt: timestampToIso(data.attemptedAt),
       sentAt: timestampToIso(data.sentAt),
       failedAt: timestampToIso(data.failedAt),
-      attemptedDevices: safeCount(data.attemptedDevices),
-      deliveredDevices: safeCount(data.deliveredDevices),
-      failedDevices: safeCount(data.failedDevices),
-      invalidatedDevices: safeCount(data.invalidatedDevices),
-      attemptedRecipients: safeCount(data.attemptedRecipients),
-      acceptedRecipients: safeCount(data.acceptedRecipients),
-      failedRecipients: safeCount(data.failedRecipients),
-      noActiveRecipients: safeCount(data.noActiveRecipients),
+      attemptedDevices: safeNullableCount(data.attemptedDevices),
+      deliveredDevices: safeNullableCount(data.deliveredDevices),
+      failedDevices: safeNullableCount(data.failedDevices),
+      unknownDevices: safeNullableCount(data.unknownDevices),
+      invalidatedDevices: safeNullableCount(data.invalidatedDevices),
+      invalidDeviceCleanupFailed: data.invalidDeviceCleanupFailed === true,
+      staleSending: data.deliveryStatus === "SENDING" && Boolean(timestampToIso(data.attemptedAt))
+        && now - Date.parse(timestampToIso(data.attemptedAt)) >= 5 * 60 * 1000,
+      attemptedRecipients: safeNullableCount(data.attemptedRecipients),
+      acceptedRecipients: safeNullableCount(data.acceptedRecipients),
+      failedRecipients: safeNullableCount(data.failedRecipients),
+      noActiveRecipients: safeNullableCount(data.noActiveRecipients),
       failureCode: safeText(data.failureCode, 80),
       failureSummary: safeText(data.failureSummary),
     })),

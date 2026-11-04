@@ -22,7 +22,6 @@ import {
 import { assertDevCenterMutationEnvironment, resolveDevCenterEnvironment, resolveDevCenterProjectId } from "./devCenterSafety.js";
 import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 import {
-  registrationDocumentId as managerPushDeviceDocumentId,
   reportManagerDeviceHealth,
   sendDeveloperTestNotification as dispatchDeveloperTestNotification,
 } from "./notificationLab.js";
@@ -46,6 +45,8 @@ import {
   revokeCleanerHubAccessForManager,
 } from "./cleanerHubAccess.js";
 import { deactivateInvalidManagerDevices, loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
+import { registerManagerDevice, deactivateManagerDevice } from "./managerDeviceRegistration.js";
+import { sendFcmManagerReminder, processClaimedManagerReminder } from "./managerReminderDelivery.js";
 import { processManagerOperationalNotification } from "./managerOperationalNotifications.js";
 import { publicOfferState as offerState, respondToPublicOffer } from "./publicOfferResponseService.js";
 import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
@@ -99,15 +100,11 @@ import {
   managerReminderTypes,
   pilotReminderTimezone,
   reminderDeliveryId,
-  summarizeManagerReminderDelivery,
 } from "./managerReminders.js";
 import {
   dispatchManagerReminder,
-  managerReminderDeliveryAuditFields,
   managerReminderProvider,
-  managerReminderProviders,
   requireAvailablePilotReminderTransport,
-  unknownManagerReminderDeliveryAuditFields,
 } from "./managerReminderTransport.js";
 
 // Approved Node22 Policy B; preserve unspecified live configuration.
@@ -129,26 +126,12 @@ const feedbackTypes = {
   bug: "Problem / Bug",
   other: "Other",
 };
-const pushDeviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
-const pushTokenMaximumLength = 4096;
 const devCenterDeveloperUids = defineSecret("DEV_CENTER_DEVELOPER_UIDS");
 const devCenterSandboxProjectId = defineString("DEV_CENTER_SANDBOX_PROJECT_ID", { default: "" });
 const managerReminderProviderParam = defineString("MANAGER_REMINDER_PROVIDER", { default: "fcm" });
 
 function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function validPushLanguage(language) {
-  return ["en", "pt", "es"].includes(language);
-}
-
-function validPushDeviceId(deviceId) {
-  return typeof deviceId === "string" && pushDeviceIdPattern.test(deviceId);
-}
-
-function validPushToken(token) {
-  return typeof token === "string" && token.length >= 32 && token.length <= pushTokenMaximumLength;
 }
 
 function validToken(token) {
@@ -292,7 +275,7 @@ export const getManagerNotificationDiagnostics = onCall(
         .limit(20)
         .get(),
     ]);
-    const [healthSnapshot, reviewSnapshot, developerTestsSnapshot] = await Promise.all([
+    const [healthSnapshot, reviewSnapshot, developerTestsSnapshot, currentDeviceTestsSnapshot] = await Promise.all([
       organizationReference().collection("managerNotificationDeviceHealth").limit(100).get(),
       // The pilot has a small bounded outbox. Avoid a new collection-group index
       // solely for a developer diagnostic; filter to this organization below.
@@ -302,6 +285,8 @@ export const getManagerNotificationDiagnostics = onCall(
         .orderBy("attemptedAt", "desc")
         .limit(20)
         .get(),
+      organizationReference().collection("currentDeviceNotificationTests")
+        .orderBy("attemptedAt", "desc").limit(20).get(),
     ]);
     const devices = devicesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
     const healthReports = healthSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
@@ -318,6 +303,17 @@ export const getManagerNotificationDiagnostics = onCall(
         .sort((a, b) => (b.data.createdAt?.toMillis?.() || 0) - (a.data.createdAt?.toMillis?.() || 0))
         .slice(0, 20),
       developerTests: developerTestsSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
+      currentDeviceTests: currentDeviceTestsSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
+      readMetadata: {
+        devices: { readCount: devicesSnapshot.size, returnedCount: devices.length, readCap: null, ordering: "unordered" },
+        healthReports: { readCount: healthSnapshot.size, returnedCount: healthReports.length, readCap: 100, ordering: "unordered" },
+        deliveries: { readCount: deliveriesSnapshot.size, returnedCount: deliveriesSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
+        reviewDeliveries: { readCount: reviewSnapshot.size,
+          returnedCount: Math.min(20, reviewSnapshot.docs.filter((snapshot) => snapshot.ref.path.startsWith(`organizations/${organizationId}/jobs/`)).length),
+          readCap: 100, ordering: "unordered-global-sample" },
+        developerTests: { readCount: developerTestsSnapshot.size, returnedCount: developerTestsSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
+        currentDeviceTests: { readCount: currentDeviceTestsSnapshot.size, returnedCount: currentDeviceTestsSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
+      },
       emailsByUserId,
     });
   },
@@ -726,43 +722,12 @@ export const submitFeedback = onCall(
 
 export const registerManagerPushDevice = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
+  async (request) => registerManagerDevice({ database: db, organizationId, request }),
+);
 
-    const { deviceId, token } = request.data || {};
-    const language = validPushLanguage(request.data?.language) ? request.data.language : "pt";
-
-    if (!validPushDeviceId(deviceId) || !validPushToken(token)) {
-      throw new HttpsError("invalid-argument", "Push device registration is invalid.");
-    }
-
-    const deviceReference = db
-      .collection("managerPushDevices")
-      .doc(managerPushDeviceDocumentId(request.auth.uid, deviceId));
-
-    // The device identifier is random and local to this browser. Re-registering updates a refreshed FCM token.
-    await db.runTransaction(async (transaction) => {
-      const deviceSnapshot = await transaction.get(deviceReference);
-      const deviceData = {
-        organizationId,
-        userId: request.auth.uid,
-        token,
-        language,
-        platform: "web",
-        active: true,
-        updatedAt: FieldValue.serverTimestamp(),
-        lastSeenAt: FieldValue.serverTimestamp(),
-      };
-
-      if (!deviceSnapshot.exists) {
-        deviceData.createdAt = FieldValue.serverTimestamp();
-      }
-
-      transaction.set(deviceReference, deviceData, { merge: true });
-    });
-
-    return { registered: true };
-  },
+export const deactivateManagerPushDevice = onCall(
+  { region: "us-central1" },
+  async (request) => deactivateManagerDevice({ database: db, organizationId, request }),
 );
 
 export const createChecklistRun = onCall(
@@ -1066,61 +1031,8 @@ export const notifyManagersChecklistReadyForReview = onDocumentCreated(
 );
 
 async function sendFcmManagerReminderNotification(reminder) {
-  const deviceSnapshots = await activeManagerPushDevices();
-
-  if (deviceSnapshots.length === 0) {
-    return {
-      provider: managerReminderProviders.FCM,
-      attempted: 0,
-      delivered: 0,
-      failed: 0,
-      invalidated: 0,
-    };
-  }
-
-  let responses;
-  try {
-    responses = await getMessaging().sendEach(
-      deviceSnapshots.map((snapshot) => {
-        const payload = managerReminderPayload(reminder, snapshot.data().language);
-        return {
-          token: snapshot.data().token,
-          data: {
-            ...payload,
-            eventId: `manager-reminder-${reminder.targetDate}-${reminder.type}`,
-          },
-          webpush: { headers: { Urgency: "high" } },
-        };
-      }),
-    );
-  } catch (error) {
-    // The provider may have accepted some sends before a transport error, so
-    // record the attempt as unknown rather than treating it as retryable.
-    error.managerReminderAttemptedDevices = deviceSnapshots.length;
-    throw error;
-  }
-
-  let invalidated = 0;
-  let invalidDeviceCleanupFailed = false;
-  try {
-    const cleanup = await deactivateInvalidManagerDevices(db, deviceSnapshots, responses);
-    invalidated = cleanup.invalidated;
-    invalidDeviceCleanupFailed = cleanup.invalidDeviceCleanupFailed;
-  } catch (error) {
-    // Delivery is already known at this point; cleanup must not turn that
-    // confirmed outcome into an unknown one.
-    invalidDeviceCleanupFailed = true;
-    logger.warn("Invalid manager push-device cleanup failed.", { failureCode: error?.code || "unknown" });
-  }
-
-  return {
-    provider: managerReminderProviders.FCM,
-    attempted: deviceSnapshots.length,
-    delivered: responses.successCount,
-    failed: responses.failureCount,
-    invalidated,
-    invalidDeviceCleanupFailed,
-  };
+  return sendFcmManagerReminder({ database: db, reminder, loadManagerDevices: activeManagerPushDevices,
+    sendFcm: (messages) => getMessaging().sendEach(messages) });
 }
 
 function configuredManagerReminderProvider() {
@@ -1190,30 +1102,10 @@ export async function processManagerReminderWindow(type, { now = new Date() } = 
     return { ...reminder, skipped: "already-claimed" };
   }
 
-  try {
-    const delivery = await dispatchManagerReminder({
-      provider,
-      reminder,
-      sendFcm: sendFcmManagerReminderNotification,
-    });
-    const outcome = summarizeManagerReminderDelivery(delivery);
-    const deliveryUpdate = {
-      deliveryStatus: outcome.deliveryStatus,
-      ...managerReminderDeliveryAuditFields(delivery, outcome),
-      ...(outcome.hasConfirmedDelivery ? { sentAt: FieldValue.serverTimestamp() } : {}),
-      ...(outcome.deliveryStatus === "FAILED" ? { failedAt: FieldValue.serverTimestamp() } : {}),
-    };
-    await claim.deliveryReference.update(deliveryUpdate);
-    logger.info("Manager reminder delivery processed.", { ...reminder, ...delivery, ...outcome });
-    return { ...reminder, ...delivery, ...outcome };
-  } catch (error) {
-    await claim.deliveryReference.update({
-      deliveryStatus: "UNKNOWN",
-      failedAt: FieldValue.serverTimestamp(),
-      ...unknownManagerReminderDeliveryAuditFields(error),
-    });
-    throw error;
-  }
+  return processClaimedManagerReminder({
+    ...claim, reminder, logger,
+    dispatch: () => dispatchManagerReminder({ provider, reminder, sendFcm: sendFcmManagerReminderNotification }),
+  });
 }
 
 export const sendTomorrowPlanningReminder = onSchedule(
