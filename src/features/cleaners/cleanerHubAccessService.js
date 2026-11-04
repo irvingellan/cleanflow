@@ -21,8 +21,10 @@ export async function getCleanerHubAccess(cleanerId) {
   };
 }
 
-export async function issueCleanerAccessCode(cleanerId) {
-  const { data } = await httpsCallable(functions, "issueCleanerAccessCode")({ cleanerId });
+export async function issueCleanerAccessCode(cleanerId, { additionalDevice = false } = {}) {
+  const { data } = await httpsCallable(functions, "issueCleanerAccessCode")({
+    cleanerId, ...(additionalDevice ? { additionalDevice: true } : {}),
+  });
   return data;
 }
 

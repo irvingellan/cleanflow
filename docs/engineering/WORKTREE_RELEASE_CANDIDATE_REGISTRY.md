@@ -2,6 +2,15 @@
 
 Issue #83 remains the canonical ledger. Latest source snapshot is below; historical observations are retained, not silently overwritten.
 
+## 2026-11-04 — Notifications V1 local candidate
+
+`codex/notification-reliability-v1-85` isolates the Issue #85 candidate on
+`8d2a8f1cd5c726b5464ec2a94c3e9ba11e018653` with functional manager patch
+`a931468` selectively ported. The release Lab and original source branches
+remain separate. Fresh public Hosting files matched all 14 entries from the
+Cleaner Hub release manifest. The exact final candidate SHA, build and test
+results are recorded in the local handoff. See [Notifications V1](../NOTIFICATIONS_V1_85.md).
+
 ## 2026-11-04 — First Accept Wins V1 local release candidate
 
 | Source / resource | State |

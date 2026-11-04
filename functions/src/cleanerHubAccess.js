@@ -14,12 +14,14 @@ import { respondToAuthenticatedOffer } from "./publicOfferResponseService.js";
  * record. Redeeming it links one Firebase Auth account (a server-chosen UID) to
  * that Cleaner through a CLEANER membership. The code is never stored, only its
  * hash; it is not a session and cannot be reused. Revocation deactivates the
- * membership, and only the latest session is authorized after reactivation.
+ * membership. A replacement code resets sessions; an additional-device code
+ * adds one session to an already active membership.
  */
 
 export const cleanerAccessCodeCollection = "cleanerAccessCodes";
 export const cleanerHubAccessCollection = "cleanerHubAccess";
 export const cleanerAccessCodeLifetimeMilliseconds = 72 * 60 * 60 * 1000;
+const maximumCleanerSessions = 8;
 const codeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no I, L, O, 0, 1
 const codeLength = 12;
 const codePattern = new RegExp(`^[${codeAlphabet}]{${codeLength}}$`);
@@ -59,12 +61,17 @@ export function isActiveCleanerMembership(data) {
     && validCleanerId(data.cleanerId);
 }
 
+export function cleanerSessionIds(data) {
+  return Array.isArray(data?.sessionIds) ? data.sessionIds
+    : typeof data?.sessionId === "string" && data.sessionId ? [data.sessionId] : [];
+}
+
 export function isActiveCleanerSession(data, claims) {
   return isActiveCleanerMembership(data)
     && validCleanerId(claims?.organizationId) && data.organizationId === claims.organizationId
     && data.cleanerId === claims.cleanerId
     && typeof claims.sessionId === "string" && claims.sessionId.length > 0
-    && data.sessionId === claims.sessionId;
+    && cleanerSessionIds(data).includes(claims.sessionId);
 }
 
 function validCleanerId(cleanerId) {
@@ -111,7 +118,7 @@ export async function requireActiveCleaner(database, request, organizationId) {
 }
 
 export async function issueCleanerAccessCodeForManager(database, {
-  organizationId, cleanerId, actorUid, now = new Date(), randomSource = randomBytes,
+  organizationId, cleanerId, actorUid, additionalDevice = false, now = new Date(), randomSource = randomBytes,
 }) {
   if (!validCleanerId(cleanerId)) throw new HttpsError("invalid-argument", "Cleaner is invalid.");
   const code = newCleanerAccessCode(randomSource);
@@ -125,15 +132,21 @@ export async function issueCleanerAccessCodeForManager(database, {
   await database.runTransaction(async (transaction) => {
     // All changes for this cleaner serialize on their access record.
     await transaction.get(accessRef);
-    const [manager, cleaner, previousCodes] = await Promise.all([
+    const [manager, cleaner, previousCodes, member] = await Promise.all([
       transaction.get(actorRef),
       transaction.get(cleanerRef),
       transaction.get(codes.where("organizationId", "==", organizationId)
         .where("cleanerId", "==", cleanerId).where("status", "==", "ACTIVE")),
+      additionalDevice
+        ? transaction.get(database.doc(`organizations/${organizationId}/members/${cleanerAccountUid(organizationId, cleanerId)}`))
+        : null,
     ]);
     assertActiveManager(manager);
     if (!eligibleCleaner(cleaner.data())) {
       throw new HttpsError("failed-precondition", "Only an active, unarchived cleaner can receive access.");
+    }
+    if (additionalDevice && !canAddCleanerSession(member.data(), organizationId, cleanerId)) {
+      throw new HttpsError("failed-precondition", "This cleaner cannot add another device.");
     }
     for (const previous of previousCodes.docs) {
       transaction.update(previous.ref, { status: "REPLACED", replacedAt: FieldValue.serverTimestamp() });
@@ -142,6 +155,7 @@ export async function issueCleanerAccessCodeForManager(database, {
       organizationId,
       cleanerId,
       status: "ACTIVE",
+      ...(additionalDevice ? { additionalDevice: true } : {}),
       createdByUid: actorUid,
       createdAt: FieldValue.serverTimestamp(),
       expiresAt,
@@ -157,6 +171,12 @@ export async function issueCleanerAccessCodeForManager(database, {
   });
 
   return { code: formatCleanerAccessCode(code), expiresAt: expiresAt.toDate().toISOString() };
+}
+
+function canAddCleanerSession(data, organizationId, cleanerId) {
+  return isActiveCleanerMembership(data) && data.organizationId === organizationId
+    && data.cleanerId === cleanerId && cleanerSessionIds(data).length > 0
+    && cleanerSessionIds(data).length < maximumCleanerSessions;
 }
 
 /**
@@ -204,7 +224,10 @@ export async function redeemCleanerAccessCode(database, {
     if (!eligibleCleaner(cleaner.data())) throw unavailable();
     if (member.exists && (member.data().role !== "CLEANER" || member.data().cleanerId !== cleanerId)) throw unavailable();
     const cleanerData = cleaner.data();
-    revokeHubChecklistGrants(transaction, accessRef, grants);
+    const additionalDevice = current.additionalDevice === true;
+    if (additionalDevice && !canAddCleanerSession(member.data(), organizationId, cleanerId)) throw unavailable();
+    const sessionIds = additionalDevice ? [...cleanerSessionIds(member.data()), sessionId] : [sessionId];
+    if (!additionalDevice) revokeHubChecklistGrants(transaction, accessRef, grants);
     transaction.update(codeRef, { status: "USED", usedAt: FieldValue.serverTimestamp(), usedByUid: uid });
     // Only what the cleaner's own screen needs: her first name and language.
     transaction.set(memberRef, {
@@ -213,6 +236,7 @@ export async function redeemCleanerAccessCode(database, {
       active: true,
       cleanerId,
       sessionId,
+      sessionIds,
       displayName: firstName(cleanerData.name),
       preferredLanguage: ["pt", "en", "es"].includes(cleanerData.preferredLanguage) ? cleanerData.preferredLanguage : null,
       linkedVia: "ACCESS_CODE",
@@ -251,7 +275,7 @@ export async function revokeCleanerHubAccessForManager(database, { organizationI
     assertActiveManager(manager);
     revokeHubChecklistGrants(transaction, accessRef, grants);
     if (member.exists && member.data().role === "CLEANER") {
-      transaction.update(memberRef, { active: false, revokedAt: FieldValue.serverTimestamp(), revokedByUid: actorUid });
+      transaction.update(memberRef, { active: false, sessionIds: [], revokedAt: FieldValue.serverTimestamp(), revokedByUid: actorUid });
     }
     for (const code of activeCodes.docs) {
       transaction.update(code.ref, { status: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
@@ -275,7 +299,7 @@ function rosterIncludes(job, cleanerId) {
   return ids.includes(cleanerId);
 }
 
-async function assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId }) {
+export async function assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId }) {
   const [member, cleaner] = await Promise.all([
     transaction.get(database.doc(`organizations/${organizationId}/members/${uid}`)),
     transaction.get(database.doc(`organizations/${organizationId}/cleaners/${cleanerId}`)),

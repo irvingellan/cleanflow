@@ -1,7 +1,66 @@
+import { createHash } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { isActiveManagerMembership, requireOrganizationManager } from "./managerAuthorization.js";
 import { registrationDocumentId } from "./notificationLab.js";
+
+const claimIdPattern = /^[a-f0-9]{64}$/;
+const legacyTokenMatchLimit = 20;
+
+function claimKey(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export function managerTokenClaimReference(database, token) {
+  return database.doc(`managerPushTokenClaims/${claimKey(token)}`);
+}
+
+export function managerInstallationClaimReference(database, installationKey) {
+  return database.doc(`managerPushInstallationClaims/${installationKey}`);
+}
+
+export function managerClaimMatches(claim, registrationId, record) {
+  return claim?.registrationId === registrationId
+    && claim.organizationId === record.organizationId && claim.userId === record.userId
+    && claim.registrationRevision === record.registrationRevision && claim.installationKey === record.installationKey;
+}
+
+async function supersededRegistrations(transaction, database, { organizationId, reference, token, tokenClaim, installationClaim }) {
+  const claims = [tokenClaim, installationClaim].filter((snapshot) => snapshot.exists).map((snapshot) => snapshot.data());
+  if (claims.some((claim) => claim?.organizationId !== organizationId || !claimIdPattern.test(claim.registrationId || ""))) {
+    throw new HttpsError("permission-denied", "Push installation cannot be transferred.");
+  }
+
+  const matches = new Map();
+  const priorIds = new Set(claims.map((claim) => claim.registrationId).filter((id) => id !== reference.id));
+  for (const id of priorIds) {
+    const priorRef = database.doc(`managerPushDevices/${id}`);
+    const prior = (await transaction.get(priorRef)).data();
+    if (prior && claims.some((claim) => managerClaimMatches(claim, id, prior)) && prior.active === true) {
+      matches.set(priorRef.path, priorRef);
+    }
+  }
+
+  // Old documents carry no installation ownership. The exact existing token
+  // is the only safe way to adopt them without replacing unrelated devices.
+  if (!tokenClaim.exists) {
+    const legacy = await transaction.get(database.collection("managerPushDevices")
+      .where("token", "==", token).limit(legacyTokenMatchLimit));
+    if (legacy.docs.length === legacyTokenMatchLimit) {
+      throw new HttpsError("failed-precondition", "Push installation needs manager review.");
+    }
+    for (const previous of legacy.docs) {
+      const record = previous.data();
+      if (record.token !== token) continue;
+      if (record.organizationId !== organizationId) {
+        throw new HttpsError("permission-denied", "Push installation cannot be transferred.");
+      }
+      if (previous.ref.path !== reference.path && record.active === true) matches.set(previous.ref.path, previous.ref);
+    }
+  }
+
+  return [...matches.values()];
+}
 
 function validateInput(input, deactivate) {
   const allowed = new Set(deactivate ? ["deviceId", "token", "registrationRevision"] : ["deviceId", "token", "language"]);
@@ -60,7 +119,26 @@ async function mutateRegistration({ database, organizationId, request }, deactiv
       ? current.registrationRevision : 0;
     if (previousRevision >= Number.MAX_SAFE_INTEGER) throw new HttpsError("failed-precondition", "Registration revision exhausted.");
     const revision = previousRevision + 1;
-    transaction.set(reference, { organizationId, userId, token, registrationRevision: revision,
+    const installationKey = claimKey(deviceId);
+    const tokenClaimRef = managerTokenClaimReference(database, token);
+    const installationClaimRef = managerInstallationClaimReference(database, installationKey);
+    const [tokenClaim, installationClaim] = await Promise.all([
+      transaction.get(tokenClaimRef), transaction.get(installationClaimRef),
+    ]);
+    const previous = await supersededRegistrations(transaction, database, {
+      organizationId, reference, token, tokenClaim, installationClaim,
+    });
+    const now = FieldValue.serverTimestamp();
+    for (const previousReference of previous) {
+      transaction.update(previousReference, {
+        active: false, tokenState: "superseded", deactivationReason: "OWNERSHIP_SUPERSEDED",
+        deactivatedAt: now, updatedAt: now,
+      });
+    }
+    const claim = { organizationId, userId, registrationId: reference.id, registrationRevision: revision, installationKey, updatedAt: now };
+    transaction.set(tokenClaimRef, claim);
+    transaction.set(installationClaimRef, claim);
+    transaction.set(reference, { organizationId, userId, token, registrationRevision: revision, installationKey,
       language: ["en", "pt", "es"].includes(request.data.language) ? request.data.language : "pt",
       platform: "web", active: true, tokenState: "active", invalidationReason: null,
       deactivationReason: null,

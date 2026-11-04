@@ -1,5 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { authorizedManagerDevices } from "./managerAuthorization.js";
+import {
+  managerClaimMatches, managerInstallationClaimReference, managerTokenClaimReference,
+} from "./managerDeviceRegistration.js";
 
 export const managerFcmTimeoutMs = 15_000;
 export const managerFcmCleanupTimeoutMs = 5_000;
@@ -33,7 +36,27 @@ export async function loadEligibleManagerPushDevices(database, organizationId) {
       && device.token.length >= 32 && device.token.length <= 4096
       && !/[\s\u0000-\u001f\u007f]/.test(device.token);
   });
-  return authorizedManagerDevices(database, organizationId, active);
+  const authorized = await authorizedManagerDevices(database, organizationId, active);
+  const claimReferences = new Map();
+  const candidates = authorized.map((snapshot) => {
+    const device = snapshot.data();
+    const tokenClaim = managerTokenClaimReference(database, device.token);
+    claimReferences.set(tokenClaim.path, tokenClaim);
+    const installationClaim = typeof device.installationKey === "string" && /^[a-f0-9]{64}$/.test(device.installationKey)
+      ? managerInstallationClaimReference(database, device.installationKey) : null;
+    if (installationClaim) claimReferences.set(installationClaim.path, installationClaim);
+    return { snapshot, device, tokenClaim, installationClaim };
+  });
+  if (claimReferences.size === 0) return [];
+  const claims = new Map((await database.getAll(...claimReferences.values()))
+    .map((snapshot) => [snapshot.ref.path, snapshot.data()]));
+  return candidates.filter(({ snapshot, device, tokenClaim, installationClaim }) => {
+    const tokenOwner = claims.get(tokenClaim.path);
+    if (device.installationKey == null) return !tokenOwner; // Unclaimed legacy registration.
+    return installationClaim
+      && managerClaimMatches(tokenOwner, snapshot.id, device)
+      && managerClaimMatches(claims.get(installationClaim.path), snapshot.id, device);
+  }).map(({ snapshot }) => snapshot);
 }
 
 export async function boundedManagerFcmSend(sendFcm, messages) {

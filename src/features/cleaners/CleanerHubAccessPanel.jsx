@@ -31,12 +31,14 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
 
   useEffect(() => { setIssued(null); setAccess(null); load(); }, [load]);
 
-  async function issue() {
-    setBusy("issue");
+  async function issue(additionalDevice = false) {
+    setBusy(additionalDevice ? "additional" : "issue");
     setError(false);
     setCopied(false);
     try {
-      setIssued(await service.issueCleanerAccessCode(cleaner.id));
+      setIssued(additionalDevice
+        ? await service.issueCleanerAccessCode(cleaner.id, { additionalDevice: true })
+        : await service.issueCleanerAccessCode(cleaner.id));
       await load();
     } catch {
       setError(true);
@@ -99,9 +101,14 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
       {!eligible && <p className="property-history-state">{translate("cleanerHub.inactive")}</p>}
       {error && <p className="property-history-state property-history-state--error" role="alert">{translate("cleanerHub.error")}</p>}
       <div className="button-row">
-        <button className="button button--primary" type="button" onClick={issue} disabled={!eligible || Boolean(busy)}>
+        <button className="button button--primary" type="button" onClick={() => issue()} disabled={!eligible || Boolean(busy)}>
           {translate(busy === "issue" ? "cleanerHub.issuing" : access?.active || access?.pendingCodeExpiresAt ? "cleanerHub.issueAgain" : "cleanerHub.issue")}
         </button>
+        {access?.active && (
+          <button className="button" type="button" onClick={() => issue(true)} disabled={!eligible || Boolean(busy)}>
+            {translate(busy === "additional" ? "cleanerHub.issuing" : "cleanerHub.additionalDevice")}
+          </button>
+        )}
         {(access?.active || access?.pendingCodeExpiresAt) && (
           <button className="button" type="button" onClick={revoke} disabled={Boolean(busy)}>
             {translate(busy === "revoke" ? "cleanerHub.revoking" : "cleanerHub.revoke")}

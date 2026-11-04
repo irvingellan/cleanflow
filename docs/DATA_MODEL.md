@@ -417,3 +417,13 @@ must be explicit.
 Public-repository examples and fixtures must be fictitious. Public/cleaner
 payloads must be minimized and must never expose unrelated financial,
 operational, or private property information.
+
+
+## Notification Inbox and push evidence (Issue #85 candidate)
+
+Server-confirmed events create recipient-scoped Inbox items independently of
+push. Read and first authorized open receipts belong to an account. A device
+registration belongs to one active session and installation. Its token and
+binding are server-only. Provider attempts have a distinct receipt and an
+unknown state when acceptance cannot be established. See the
+[notification model](NOTIFICATIONS_V1_85.md).

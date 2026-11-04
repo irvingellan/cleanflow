@@ -994,3 +994,16 @@ close marker prevent later retries or removal from reopening old offers. The
 existing agenda projection converges after the commit. Per-recipient closed
 entries keep original invitation data. The existing notification, checklist,
 and payout boundaries apply. See [First Accept Wins V1](FIRST_ACCEPT_WINS_V1.md).
+
+
+## DEC-048 — Persist notification history independently of push
+
+**Status:** Implemented in the local Issue #85 candidate.
+
+Extend existing source events and Firebase Auth, Firestore and FCM. Persist
+recipient-scoped Inbox records and separate read/open receipts from transport
+receipts. Use an additional-device access code for up to eight explicitly
+linked cleaner sessions. Default cleaner FCM dispatch to disabled pending a
+separate messaging app configuration and authorized physical pilot. Treat
+ambiguous outcomes as unknown and retain the durable event without resending.
+See [Notifications V1](NOTIFICATIONS_V1_85.md).

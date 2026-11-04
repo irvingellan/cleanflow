@@ -24,7 +24,7 @@ service cloud.firestore {
     }
 
     // Cleaner Hub: a CLEANER membership is server-provisioned by a single-use
-    // access code and authorizes only the latest redeemed session.
+    // access code and authorizes only explicitly active sessions.
     function activeCleaner(orgId) {
       return signedInAccount()
         && request.auth.token.cleanerHub is map
@@ -37,7 +37,8 @@ service cloud.firestore {
         && request.auth.token.cleanerHub.cleanerId == get(memberPath(orgId)).data.cleanerId
         && request.auth.token.cleanerHub.sessionId is string
         && request.auth.token.cleanerHub.sessionId.size() > 0
-        && request.auth.token.cleanerHub.sessionId == get(memberPath(orgId)).data.sessionId
+        && request.auth.token.cleanerHub.sessionId in get(memberPath(orgId)).data.get(
+          'sessionIds', [get(memberPath(orgId)).data.get('sessionId', '')])
         && eligibleCleaner(orgId, get(memberPath(orgId)).data.cleanerId);
     }
 

@@ -137,8 +137,8 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     if (membership.state !== "revoked") return;
     setRevoked(true);
     setAgenda(emptyAgenda);
-    service.signOutCleaner().catch(() => undefined);
-  }, [membership.state, service]);
+    service.signOutCleaner(session).catch(() => undefined);
+  }, [membership.state, service, session]);
 
   useEffect(() => {
     if (!signedIn || membership.state !== "active" || !service.verifyFromServer) return undefined;
@@ -214,8 +214,8 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
   const redeem = useCallback((code) => service.redeemAccessCode(code), [service]);
   const signOut = useCallback(async () => {
     setAgenda(emptyAgenda);
-    await service.signOutCleaner();
-  }, [service]);
+    await service.signOutCleaner(session);
+  }, [service, session]);
 
   return {
     session,

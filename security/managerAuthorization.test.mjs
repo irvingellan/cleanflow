@@ -2324,6 +2324,10 @@ test("operational notifications: first/repeated/concurrent public interest creat
     const events = await fixture.job.collection("managerNotificationDeliveries").get();
     assert.equal(events.size, 1);
     assert.equal(events.docs[0].data().eventType, managerOperationalNotificationTypes.interest);
+    const inboxItem = (await admin.doc(`${root}/managerNotificationInbox/${events.docs[0].id}`).get()).data();
+    assert.equal(inboxItem.type, "CLEANER_INTERESTED");
+    assert.equal(inboxItem.jobId, fixture.job.id);
+    assert.equal(Object.hasOwn(inboxItem, "cleanerId"), false);
     assert.equal((await fixture.job.collection("assignments").get()).size, 0);
     assert.deepEqual((await fixture.job.get()).data(), beforeJob);
   }
@@ -2615,5 +2619,11 @@ test("operational notifications: committed checklist READY survives mixed provid
   const run = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
   assert.equal(run.status, "READY_FOR_REVIEW");
   assert.equal((await event.ref.get()).data().deliveryStatus, "PARTIAL");
+  const inbox = await admin.collection(`${root}/managerNotificationInbox`).get();
+  assert.equal(inbox.size, 1);
+  const inboxItem = inbox.docs[0].data();
+  assert.deepEqual([inboxItem.eventId, inboxItem.type, inboxItem.jobId, inboxItem.runId], [
+    event.id, "CHECKLIST_READY_FOR_REVIEW", "job", "initial",
+  ]);
   assert.equal((await publicChecklistGet(issued.token)).body.checklist.status, "READY_FOR_REVIEW");
 });

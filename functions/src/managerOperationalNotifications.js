@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
+import { createManagerInboxItem, managerInboxTypes } from "./notificationInboxEvents.js";
 import {
   boundedManagerFcmSend, deactivateInvalidManagerDevices, loadEligibleManagerPushDevices,
   managerFcmFailureCode, normalizeManagerFcmResult,
@@ -55,10 +56,11 @@ export function managerOperationalNotificationEventId({
   ])).digest("hex");
 }
 
-export function createManagerOperationalNotification(transaction, jobReference, context) {
+export function createManagerOperationalNotification(transaction, organizationReference, jobReference, context) {
   const identity = { ...context, jobId: jobReference.id };
   const eventId = managerOperationalNotificationEventId(identity);
-  if (jobReference.path !== `organizations/${context.organizationId}/jobs/${jobReference.id}`
+  if (organizationReference.path !== `organizations/${context.organizationId}`
+    || jobReference.path !== `organizations/${context.organizationId}/jobs/${jobReference.id}`
     || (context.eventType === managerOperationalNotificationTypes.acknowledgment
       && !validSegment(context.cleanerId))) throw new Error("Manager notification event scope is invalid.");
   transaction.create(jobReference.collection(managerOperationalNotificationCollection).doc(eventId), {
@@ -69,6 +71,10 @@ export function createManagerOperationalNotification(transaction, jobReference, 
       ? { offerGeneration: context.offerGeneration || "legacy" } : {}),
     ...(context.assignmentId ? { assignmentId: context.assignmentId } : {}),
     deliveryProvider: "fcm", deliveryStatus: "PENDING", createdAt: FieldValue.serverTimestamp(),
+  });
+  createManagerInboxItem(transaction, organizationReference, {
+    eventId, jobId: jobReference.id,
+    type: context.automatic ? managerInboxTypes.automatic : context.eventType,
   });
 }
 

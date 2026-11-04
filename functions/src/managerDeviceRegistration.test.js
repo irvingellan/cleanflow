@@ -15,9 +15,14 @@ const request = (data = {}, uid = "manager", provider = "password") => ({
 function fixture(seed = {}) {
   const records = new Map(Object.entries({ [memberPath]: { active: true, role: "MANAGER" }, ...seed }));
   let writes = 0;
-  const snapshot = (ref) => ({ exists: records.has(ref.path), data: () => records.get(ref.path) });
-  const database = { doc: (path) => ({ path, get: async () => snapshot({ path }) }),
-    runTransaction: async (fn) => fn({ get: async (ref) => snapshot(ref),
+  const snapshot = (ref) => ({ ref, exists: records.has(ref.path), data: () => records.get(ref.path) });
+  const doc = (path) => ({ path, id: path.split("/").at(-1), get: async () => snapshot({ path }) });
+  const database = { doc,
+    collection: (name) => ({ where: (key, _operator, value) => ({ limit: (limit) => ({ name, key, value, limit }) }) }),
+    runTransaction: async (fn) => fn({ get: async (ref) => ref.path ? snapshot(ref) : {
+      docs: [...records.entries()].filter(([path, item]) => path.startsWith(`${ref.name}/`) && item[ref.key] === ref.value)
+        .slice(0, ref.limit).map(([path]) => snapshot(doc(path))),
+    },
       set: (ref, value, options) => { writes++; records.set(ref.path, options?.merge ? { ...records.get(ref.path), ...value } : value); },
       update: (ref, value) => { writes++; records.set(ref.path, { ...records.get(ref.path), ...value }); },
     }),
@@ -27,6 +32,42 @@ function fixture(seed = {}) {
 const invoke = (fn, f, req) => fn({ database: f.database, organizationId, request: req });
 
 describe("versioned manager registration", () => {
+
+  it("supersedes an installation after an account switch with token rotation and leaves another install active", async () => {
+    const otherDeviceId = "f1e2e3e4-1234-4567-89ab-a1b2c3d4e5f6";
+    const f = fixture({ [`organizations/${organizationId}/members/other`]: { active: true, role: "MANAGER" } });
+    await invoke(registration.registerManagerDevice, f, request());
+    await invoke(registration.registerManagerDevice, f, request({ deviceId: otherDeviceId, token: `${token}-second-install` }));
+    await invoke(registration.registerManagerDevice, f, request({ token: `${token}-new-owner` }, "other"));
+
+    expect(f.records.get(path)).toMatchObject({ active: false, tokenState: "superseded" });
+    expect(f.records.get(`managerPushDevices/${registrationDocumentId("manager", otherDeviceId)}`)).toMatchObject({ active: true });
+    expect(f.records.get(`managerPushDevices/${registrationDocumentId("other", deviceId)}`)).toMatchObject({ active: true });
+    expect(await invoke(registration.deactivateManagerDevice, f, request({ registrationRevision: 1 }))).toEqual({ deactivated: false });
+  });
+
+  it("supersedes the prior owner of a token even with a different installation key", async () => {
+    const otherDeviceId = "f1e2e3e4-1234-4567-89ab-a1b2c3d4e5f6";
+    const f = fixture({ [`organizations/${organizationId}/members/other`]: { active: true, role: "MANAGER" } });
+    await invoke(registration.registerManagerDevice, f, request());
+    await invoke(registration.registerManagerDevice, f, request({ deviceId: otherDeviceId }, "other"));
+    expect(f.records.get(path)).toMatchObject({ active: false, tokenState: "superseded" });
+    expect(f.records.get(`managerPushDevices/${registrationDocumentId("other", otherDeviceId)}`)).toMatchObject({ active: true });
+  });
+
+  it("denies a cross-organization token or installation transfer without altering either registration", async () => {
+    const f = fixture({ "organizations/foreign/members/other": { active: true, role: "MANAGER" } });
+    await invoke(registration.registerManagerDevice, f, request());
+    const writes = f.writes();
+    for (const input of [{ token: `${token}-rotated` }, { deviceId: "f1e2e3e4-1234-4567-89ab-a1b2c3d4e5f6" }]) {
+      await expect(registration.registerManagerDevice({
+        database: f.database, organizationId: "foreign", request: request(input, "other"),
+      })).rejects.toMatchObject({ code: "permission-denied" });
+    }
+    expect(f.writes()).toBe(writes);
+    expect(f.records.get(path).active).toBe(true);
+  });
+
   it("increments enrollment and makes stale sign-out harmless", async () => {
     const f = fixture();
     expect(await invoke(registration.registerManagerDevice, f, request())).toEqual({ registered: true, registrationRevision: 1 });

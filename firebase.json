@@ -50,6 +50,13 @@
         ]
       },
       {
+        "source": "/cleaner-messaging-sw.js",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+          { "key": "Service-Worker-Allowed", "value": "/cleaner-messaging-push/" }
+        ]
+      },
+      {
         "source": "/onesignal/OneSignalSDKWorker.js",
         "headers": [
           {

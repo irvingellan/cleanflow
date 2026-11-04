@@ -4,6 +4,7 @@ import {
   deleteField,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   getDocsFromServer,
   limit,
@@ -52,8 +53,9 @@ function jobFromSnapshot(snapshot) {
   return normalizeJobRecord(snapshot.data(), snapshot.id);
 }
 
-export async function getJobById(jobId) {
-  const snapshot = await getDoc(jobDocument(jobId));
+export async function getJobById(jobId, { serverOnly = false } = {}) {
+  const read = serverOnly ? getDocFromServer : getDoc;
+  const snapshot = await read(jobDocument(jobId));
   if (!snapshot.exists()) {
     const error = new Error("Job not found.");
     error.code = "job-not-found";

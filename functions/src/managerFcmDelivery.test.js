@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { managerInstallationClaimReference, managerTokenClaimReference } from "./managerDeviceRegistration.js";
 import {
   boundedManagerFcmSend,
   deactivateInvalidManagerDevices,
@@ -131,6 +132,7 @@ describe("authoritative manager device selection", () => {
       device("control-character-token", { token: "synthetic\u0000invalid-token-".repeat(3) }),
       device("path-injection", { userId: "members/active-manager" }),
     ];
+    const claims = new Map();
     const memberships = {
       "active-manager": { role: "MANAGER", active: true },
       "inactive-manager": { role: "MANAGER", active: false },
@@ -142,10 +144,11 @@ describe("authoritative manager device selection", () => {
       collection: vi.fn().mockReturnValue({ where }),
       doc: vi.fn((path) => ({ path, id: path.split("/").at(-1) })),
       getAll: vi.fn(async (...references) => references.map((reference) => ({
-        id: reference.id, data: () => memberships[reference.id],
+        id: reference.id, ref: reference,
+        data: () => claims.get(reference.path) ?? memberships[reference.id],
       }))),
     };
-    return { organizationId, database, where };
+    return { organizationId, database, where, claims, devices, device };
   }
 
   it("rechecks active membership and organization, omitting removed/inactive/non-manager/foreign devices", async () => {
@@ -154,7 +157,7 @@ describe("authoritative manager device selection", () => {
     expect(devices.map((device) => device.id)).toEqual(["healthy-one", "healthy-two"]);
     expect(fixture.database.collection).toHaveBeenCalledWith("managerPushDevices");
     expect(fixture.where).toHaveBeenCalledWith("organizationId", "==", fixture.organizationId);
-    expect(fixture.database.getAll).toHaveBeenCalledTimes(1);
+    expect(fixture.database.getAll).toHaveBeenCalledTimes(2);
     const references = fixture.database.getAll.mock.calls[0];
     expect(references.map(({ path }) => path)).toEqual([
       "organizations/synthetic-org/members/active-manager",
@@ -163,6 +166,23 @@ describe("authoritative manager device selection", () => {
       "organizations/synthetic-org/members/cleaner-user",
     ]);
     expect(new Set(references.map(({ path }) => path)).size).toBe(references.length);
+  });
+
+  it("admits only the exact current owner of a claimed token and installation", async () => {
+    const fixture = selectionFixture();
+    const installationKey = "a".repeat(64);
+    const current = fixture.device("bound", { installationKey, registrationRevision: 2 });
+    const stale = fixture.device("stale", { installationKey, registrationRevision: 1 });
+    fixture.devices.push(current, stale);
+    const owner = {
+      registrationId: current.id, registrationRevision: 2, organizationId: fixture.organizationId,
+      userId: "active-manager", installationKey,
+    };
+    fixture.claims.set(managerTokenClaimReference(fixture.database, current.data().token).path, owner);
+    fixture.claims.set(managerInstallationClaimReference(fixture.database, installationKey).path, owner);
+    expect((await loadEligibleManagerPushDevices(fixture.database, fixture.organizationId)).map(({ id }) => id)).toEqual(["bound"]);
+    fixture.claims.delete(managerInstallationClaimReference(fixture.database, installationKey).path);
+    expect(await loadEligibleManagerPushDevices(fixture.database, fixture.organizationId)).toEqual([]);
   });
 
   it("does not turn membership lookup failure into an allowed device list", async () => {

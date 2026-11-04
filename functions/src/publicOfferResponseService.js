@@ -40,6 +40,7 @@ async function respondToOffer(database, {
     || !(identity ? ["INTERESTED", "DECLINED", "ACCEPTED"] : ["INTERESTED", "DECLINED"]).includes(status)) {
     return { state: "unavailable" };
   }
+  const organizationReference = database.doc(`organizations/${organizationId}`);
   return database.runTransaction(async (transaction) => {
     const [jobSnapshot, offerSnapshot] = await Promise.all([
       transaction.get(jobReference), transaction.get(offerReference),
@@ -66,7 +67,7 @@ async function respondToOffer(database, {
       const state = automaticOfferState(offer, job, typeof now === "function" ? now() : now);
       if (!identity) return { state: state === "available" ? "hub-required" : state };
       return respondToAutomaticOffer(transaction, {
-        organizationId, jobReference, job, offerReference, offer, status, state, identity,
+        organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity,
         now,
       });
     }
@@ -90,14 +91,14 @@ async function respondToOffer(database, {
     ) : null;
     transaction.update(offerReference, { status, respondedAt: FieldValue.serverTimestamp() });
     if (status === "INTERESTED" && !existingEvent.exists) {
-      createManagerOperationalNotification(transaction, jobReference, notificationContext);
+      createManagerOperationalNotification(transaction, organizationReference, jobReference, notificationContext);
     }
     return { state: "answered", status };
   });
 }
 
 async function respondToAutomaticOffer(transaction, {
-  organizationId, jobReference, job, offerReference, offer, status, state, identity, now,
+  organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity, now,
 }) {
   const assignments = jobReference.collection("assignments");
   const claim = job.firstAcceptClaim;
@@ -152,8 +153,8 @@ async function respondToAutomaticOffer(transaction, {
     },
   });
   transaction.update(offerReference, { status, respondedAt: acceptedAt });
-  createManagerOperationalNotification(transaction, jobReference, {
-    organizationId, offerId: offerReference.id, assignmentId: assignment.id,
+  createManagerOperationalNotification(transaction, organizationReference, jobReference, {
+    organizationId, automatic: true, offerId: offerReference.id, assignmentId: assignment.id,
     cleanerId: identity.cleanerId, eventType: managerOperationalNotificationTypes.acknowledgment,
     propertyName: job.propertyName,
   });

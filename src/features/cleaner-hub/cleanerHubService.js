@@ -1,6 +1,7 @@
 import { onIdTokenChanged, signInWithCustomToken, signOut } from "firebase/auth";
 import { clearIndexedDbPersistence, collection, disableNetwork, doc, enableNetwork, getDocFromServer, getDocsFromServer, onSnapshot, query, terminate, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
+import { prepareCleanerPushAccountSwitch, prepareCleanerPushSignOut } from "../notifications/cleanerPushService.js";
 import { cleanerHubFirebase } from "./cleanerHubFirebase.js";
 
 /**
@@ -45,12 +46,14 @@ export async function redeemAccessCode(code) {
   const { auth, functions } = cleanerHubFirebase();
   const redeem = httpsCallable(functions, "redeemCleanerAccessCode");
   const { data } = await redeem({ code });
+  await prepareCleanerPushAccountSwitch();
   await signInWithCustomToken(auth, data.token);
 }
 
 function activeMembership(data, { cleanerId, sessionId }) {
   return data?.role === "CLEANER" && data.active === true
-    && data.cleanerId === cleanerId && data.sessionId === sessionId;
+    && data.cleanerId === cleanerId
+    && (Array.isArray(data.sessionIds) ? data.sessionIds.includes(sessionId) : data.sessionId === sessionId);
 }
 
 /** Live CLEANER membership. Revocation or removal ends the session here. */
@@ -137,8 +140,9 @@ export async function respondToMyOffer(jobId, status) {
 }
 
 /** Signs out and wipes this device's cached agenda before the page reloads. */
-export async function signOutCleaner() {
+export async function signOutCleaner(session) {
   const { auth, db } = cleanerHubFirebase();
+  await prepareCleanerPushSignOut(session);
   await signOut(auth);
   try {
     await terminate(db);

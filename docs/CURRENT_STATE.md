@@ -1,5 +1,14 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — Notifications V1 (Issue #85, local candidate)
+
+`codex/notification-reliability-v1-85` adds an authorized Inbox for managers
+and cleaners, per-installation cleaner push registration, and bounded
+technical diagnostics. The manager reliability patch and the local #86
+award flow are integrated on the published Hub source. The cleaner push
+transport requires separate release configuration and physical validation.
+See [Notifications V1](NOTIFICATIONS_V1_85.md).
+
 ## 2026-11-04 — First Accept Wins V1 (Issue #86, local candidate)
 
 `codex/first-accept-wins-86` derives from the published Cleaner Hub source and

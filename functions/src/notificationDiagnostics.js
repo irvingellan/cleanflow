@@ -1,3 +1,4 @@
+import { cleanerInboxTypes } from "./notificationInboxEvents.js";
 import { notificationHealthErrorStages, notificationHealthErrorCodes } from "./notificationLab.js";
 
 const deliveryStatuses = new Set([
@@ -42,6 +43,31 @@ function testProjection({ data }) {
   };
 }
 
+function cleanerDeliveryProjection({ data }) {
+  const stages = ["EVENT_CREATED", "RECIPIENT_SELECTED", "INBOX_STORED", "DEVICE_SELECTED",
+    "PUSH_ATTEMPTED", "PROVIDER_ACCEPTED", "REJECTED", "UNKNOWN"];
+  const outcomes = ["PROVIDER_ACCEPTED", "REJECTED", "UNKNOWN"];
+  return {
+    type: Object.values(cleanerInboxTypes).includes(data.type) ? data.type : "UNKNOWN",
+    deliveryStatus: deliveryStatuses.has(data.deliveryStatus)
+      || ["FCM_ACCEPTED", "STALE_EVENT", "RECIPIENT_INELIGIBLE"].includes(data.deliveryStatus)
+      ? data.deliveryStatus : "UNKNOWN",
+    recordedAt: timestampToIso(data.recordedAt),
+    targetDeviceCount: safeNullableCount(data.targetDeviceCount),
+    acceptedByFcmDevices: safeNullableCount(data.acceptedByFcmDevices),
+    rejectedDevices: safeNullableCount(data.rejectedDevices),
+    unknownDevices: safeNullableCount(data.unknownDevices),
+    stages: Array.isArray(data.stages) ? stages.filter((stage) => data.stages.includes(stage)) : [],
+    devices: Array.isArray(data.devices) ? data.devices.slice(0, 8)
+      .filter((device) => typeof device?.installationKey === "string" && /^[a-f0-9]{64}$/.test(device.installationKey))
+      .map((device) => ({
+        installation: device.installationKey.slice(0, 12),
+        registrationRevision: safeNullableCount(device.registrationRevision),
+        outcome: outcomes.includes(device.outcome) ? device.outcome : "UNKNOWN",
+      })) : [],
+  };
+}
+
 function boundedReads(metadata) {
   return Object.fromEntries(Object.entries(metadata).filter(([key]) => ["devices", "healthReports", "deliveries", "reviewDeliveries", "developerTests", "currentDeviceTests"].includes(key)).map(([key, value]) => {
     const unordered = value.ordering === "unordered-global-sample" || value.ordering === "unordered";
@@ -67,12 +93,14 @@ export function buildNotificationDiagnostics({
   reviewDeliveries = [],
   developerTests = [],
   currentDeviceTests = [],
+  cleanerDeliveries = [],
   readMetadata = {},
   now = Date.now(),
   emailsByUserId = new Map(),
 }) {
   return {
     generatedAt: new Date(now).toISOString(),
+    cleanerDeliveries: cleanerDeliveries.slice(0, 20).map(cleanerDeliveryProjection),
     readMetadata: boundedReads(readMetadata),
     limitations: { providerAcceptanceProvesDisplay: false, perDeviceDeliveryHistoryAvailable: false,
       operationalHistory: "bounded-unordered-global-sample", staleSendingOutcome: "unknown-no-resend" },

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FIRST_ACCEPT_WINS } from "../jobs/automaticOffers.js";
 import { HubIcon } from "./HubIcon.jsx";
+import { NotificationInbox, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
+import { inboxMessage } from "../notifications/notificationInboxMessages.js";
+import { useCleanerNotificationSettings } from "../notifications/useCleanerNotificationSettings.js";
 import { InstallGuide } from "./InstallGuide.jsx";
 import {
   addDaysToKey,
@@ -364,14 +367,32 @@ function Offers({ t, hub, go, today }) {
   );
 }
 
-function Account({ t, name, setLang, go, onSignOut, signingOut }) {
+function CleanerPushSettings({ t, push, go }) {
+  const { state } = push;
+  const recoverable = ["permission-default", "missing", "invalidated", "worker-missing", "worker-mismatch", "error"].includes(state);
+  return (
+    <div className="hb-onb-note tone-info">
+      <HubIcon name="bell" size={18} />
+      <div>
+        <strong>{t("hb.acc.notifications")}</strong>
+        <p className="mw-hint" role="status">{t(`hb.push.${state}`)}</p>
+        <p className="mw-hint">{t("hb.push.inboxAlways")}</p>
+        {recoverable && <button type="button" className="cfv2-button cfv2-button-primary mw-btn" onClick={push.enable}>{t("hb.push.enable")}</button>}
+        {state === "ios-standalone-required" && <button type="button" className="mw-linkbtn" onClick={() => go({ type: "install" })}>{t("hb.acc.install")}</button>}
+        {["permission-denied", "offline", "superseded", "error"].includes(state) && <button type="button" className="mw-linkbtn" onClick={push.recheck}>{t("hb.push.recheck")}</button>}
+      </div>
+    </div>
+  );
+}
+
+function Account({ t, name, setLang, go, onSignOut, signingOut, push }) {
   return (
     <div className="hb-screen">
       <header className="hb-profile"><span className="mw-avatar is-large">{(name || "CF").slice(0, 2).toUpperCase()}</span><div><h2>{name || t("hb.helloNoName")}</h2><p className="mw-sec">{t("hb.acc.role")}</p></div></header>
       <ul className="hb-menu">
         <li><button type="button" onClick={() => go({ type: "install" })}><HubIcon name="phone" size={18} /><span className="mw-grow">{t("hb.acc.install")}</span><HubIcon name="arrowR" size={16} /></button></li>
       </ul>
-      <div className="hb-onb-note tone-info"><HubIcon name="bell" size={18} /><p><strong>{t("hb.acc.notifications")}</strong><br />{t("hb.acc.notificationsNote")}</p></div>
+      <CleanerPushSettings t={t} push={push} go={go} />
       <div className="mw-setgroup">
         <h4>{t("hb.acc.language")}</h4>
         <div className="cfv2-segmented mw-seg-control" role="group" aria-label={t("hb.acc.language")}>
@@ -509,11 +530,20 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   const installPrompt = useInstallPrompt();
   const [platform] = useState(detectPlatform);
   const [displayMode] = useState(detectDisplayMode);
-  const [view, setView] = useState({ type: "tab", tab: "agenda" });
+  const [view, setView] = useState(() => ({
+    type: new URLSearchParams(window.location.search).get("inbox") === "1" ? "inbox" : "tab",
+    tab: "agenda",
+  }));
   const [segment, setSegment] = useState("today");
   const [signingOut, setSigningOut] = useState(false);
   const [onboarded, setOnboarded] = useState(() => readStorage(onboardingStorageKey));
   const main = useRef(null);
+  const { session } = hub;
+  const active = session.status === "signed-in" && hub.membership.state === "active" && !hub.revoked;
+  const inbox = useNotificationInbox({
+    role: "CLEANER", sessionKey: active ? session.sessionId : null, service: hubOptions?.inboxService,
+  });
+  const push = useCleanerNotificationSettings({ session, active, platform, displayMode, language: t.lang });
   useCleanerManifest(`${t("hb.brand")} · CleanFlow`);
   const today = localDateKey(new Date());
   const go = (next) => setView((current) => ({ ...next, tab: next.tab || current.tab }));
@@ -533,7 +563,13 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     try { await hub.signOut(); } finally { window.location.replace("/agenda"); }
   }
 
-  const { session } = hub;
+  function openInboxTarget(destination) {
+    if (!["JOB", "OFFER"].includes(destination?.kind) || typeof destination.jobId !== "string") return false;
+    const targetType = destination.kind === "JOB" ? "job" : "offer";
+    go({ type: targetType, jobId: destination.jobId, wasAutomatic: true });
+    return true;
+  }
+
   if (session.status === "loading") {
     return <Shell t={t} theme={theme} bar={<Brand t={t} />}><div className="hb-screen"><div className="hb-coverage is-unknown" role="status"><HubIcon name="refresh" size={16} /><span><strong>{t("hb.fresh.loading")}</strong></span></div></div></Shell>;
   }
@@ -567,9 +603,10 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     body = <FirstRun t={t} hub={hub} platform={platform} displayMode={displayMode} installPrompt={installPrompt} today={today} onDone={() => { writeStorage(onboardingStorageKey, session.uid); setOnboarded(session.uid); }} />;
   } else if (view.type === "job") body = <JobView t={t} hub={hub} jobId={view.jobId} today={today} />;
   else if (view.type === "offer") body = <OfferView key={view.jobId} t={t} hub={hub} jobId={view.jobId} today={today} wasAutomatic={view.wasAutomatic} />;
+  else if (view.type === "inbox") body = <div className="hb-screen"><NotificationInbox inbox={inbox} language={t.lang} onOpen={openInboxTarget} /></div>;
   else if (view.type === "install") body = <div className="hb-screen"><InstallGuide t={t} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onSkip={() => go({ type: "tab" })} /></div>;
   else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} today={today} />;
-  else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} />;
+  else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} push={push} />;
   else body = <Agenda t={t} hub={hub} name={name} segment={segment} setSegment={setSegment} go={go} today={today} />;
 
   const freshChip = hub.freshness.state === "live" ? "live" : hub.freshness.state === "loading" ? "loading" : "stale";
@@ -581,6 +618,12 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
         {sub && onboardingDone
           ? <button type="button" className="mw-linkbtn" onClick={() => go({ type: "tab" })}><HubIcon name="arrowL" size={16} />{t("hb.back")}</button>
           : <Brand t={t} />}
+        {onboardingDone && view.type !== "inbox" && (
+          <button type="button" className="mw-linkbtn" onClick={() => go({ type: "inbox" })}>
+            <HubIcon name="bell" size={16} />{inboxMessage(t.lang, "inbox.title")}
+            {inbox.unreadCount > 0 && <span className="mw-badge" aria-label={inboxMessage(t.lang, "inbox.unreadCount", { count: inbox.unreadCount })}>{inbox.unreadCount}</span>}
+          </button>
+        )}
         <span className={`hb-barchip hb-fresh is-${freshChip}`} role="status"><HubIcon name={freshChip === "live" ? "checkCircle" : freshChip === "loading" ? "refresh" : "alert"} size={14} />{t(`hb.fresh.chip.${freshChip}`)}</span>
       </>}
       tabs={onboardingDone && (

@@ -21,7 +21,8 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
   }
   walk(dist);
   const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
-  const allowed = new Set(required);
+  // Builds on the previous source line do not emit the optional cleaner worker.
+  const allowed = new Set([...required, "cleaner-messaging-sw.js"]);
   for (const file of files) {
     if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file)) {
       throw new Error(`Unexpected Hosting file: ${file}`);

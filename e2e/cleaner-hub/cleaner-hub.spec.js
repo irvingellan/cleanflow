@@ -251,7 +251,11 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
 
   await test.step("11. Sign-out clears private data on that phone", async () => {
     await pageB.getByRole("button", { name: /^Account/ }).click();
+    const signedOutNavigation = pageB.waitForEvent("framenavigated", {
+      predicate: (frame) => frame === pageB.mainFrame(),
+    });
     await pageB.getByRole("button", { name: "Sign out on this phone" }).click();
+    await signedOutNavigation;
     await expect(pageB.getByRole("heading", { name: "Open your schedule" })).toBeVisible();
     await pageB.reload();
     await expect(pageB.getByRole("heading", { name: "Open your schedule" })).toBeVisible();
@@ -300,14 +304,24 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await expect(publicPage.getByRole("button", { name: /accept|interested|confirm/i })).toHaveCount(0);
 
     const scenarios = [
-      { target: pageA, cleanerId: fixture.cleanerAId, lang: "pt", offers: /^Ofertas/, accept: "Aceitar serviço", interest: "Tenho interesse" },
-      { target: pageB, cleanerId: fixture.cleanerBId, lang: "en", offers: /^Offers/, accept: "Accept job", interest: "I'm interested" },
+      { target: pageA, cleanerId: fixture.cleanerAId, lang: "pt", accept: "Aceitar serviço", interest: "Tenho interesse" },
+      { target: pageB, cleanerId: fixture.cleanerBId, lang: "en", accept: "Accept job", interest: "I'm interested" },
     ];
-    for (const { target, cleanerId, lang, offers, accept, interest } of scenarios) {
+    for (const { target, cleanerId, lang, accept, interest } of scenarios) {
       const { code } = await managerCall(fixture, "issueCleanerAccessCode", { cleanerId });
       await signInCleaner(target, code, { lang });
-      await target.getByRole("button", { name: offers }).click();
-      await target.locator(`[data-job-id="${job.id}"]`).click();
+      await target.goto("/agenda?inbox=1");
+      const offerHeading = target.getByRole("heading", { name: lang === "pt" ? "Nova oferta" : "New offer" });
+      await expect(offerHeading).toBeVisible();
+      const inboxOffer = target.getByRole("listitem").filter({ has: offerHeading });
+      await expect(inboxOffer).toContainText(fixture.mapleName);
+      if (lang === "pt") {
+        await evidence(target, "85-01-cleaner-inbox");
+        await inboxOffer.getByRole("button", { name: "Marcar como lido" }).click();
+        await target.getByRole("button", { name: "Lidos", exact: true }).click();
+        await expect(offerHeading).toBeVisible();
+      }
+      await inboxOffer.getByRole("button", { name: lang === "pt" ? "Abrir" : "Open", exact: true }).click();
       await expect(target.getByRole("button", { name: accept })).toBeEnabled();
       await expect(target.getByRole("button", { name: interest })).toHaveCount(0);
     }
@@ -334,11 +348,13 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await expect(pageB.locator("body")).not.toContainText(fixture.cleanerAName);
     await evidence(pageB, "86-03-other-invitee-unavailable");
 
-    await pageA.reload();
+    await pageA.goto("/agenda");
+    await expect(pageA.getByRole("button", { name: /^Próximas/ })).toBeVisible();
     await pageA.getByRole("button", { name: /^Próximas/ }).click();
     await expect(pageA.locator(`[data-job-id="${job.id}"]`)).toContainText("Confirmada para você");
     await evidence(pageA, "86-04-confirmed-agenda-after-reload");
-    await pageB.reload();
+    await pageB.goto("/agenda");
+    await expect(pageB.getByRole("button", { name: /^Upcoming/ })).toBeVisible();
     await pageB.getByRole("button", { name: /^Upcoming/ }).click();
     await expect(pageB.locator(`[data-job-id="${job.id}"]`)).toHaveCount(0);
     await pageB.getByRole("button", { name: /^Offers/ }).click();
@@ -363,6 +379,30 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     const rosterItem = page.locator(".assignment-roster__item").filter({ hasText: fixture.cleanerAName });
     await expect(rosterItem).toContainText("Assigned automatically");
     await evidence(page, "86-05-manager-assignment");
+
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+    const managerJobItems = page.getByRole("listitem").filter({ hasText: fixture.mapleName });
+    await expect(managerJobItems.getByRole("heading", { name: "Automatic assignment confirmed" })).toHaveCount(1);
+    await expect(managerJobItems.getByRole("heading", { name: "Cleaner expressed interest" })).toHaveCount(0);
+    await evidence(page, "85-02-manager-inbox");
+
+    await pageA.goto("/agenda?inbox=1");
+    const autoReceipt = pageA.getByRole("heading", { name: "Serviço confirmado pelo seu aceite" });
+    await expect(autoReceipt).toHaveCount(1);
+    await evidence(pageA, "85-03-cleaner-confirmation-inbox");
+    await managerCall(fixture, "createChecklistRun", { jobId: job.id });
+    await pageA.getByRole("listitem").filter({ has: autoReceipt }).getByRole("button", { name: "Abrir", exact: true }).click();
+    await pageA.getByRole("button", { name: "Abrir checklist" }).click();
+    await pageA.waitForURL(/\/checklist\?t=/);
+    const capability = (await job.collection("checklistRuns").doc("initial").collection("checklistCapabilities").doc("active").get()).data();
+    expect(capability.cleanerId).toBe(fixture.cleanerAId);
+
+    await pageB.goto("/agenda?inbox=1");
+    await expect(pageB.getByRole("heading", { name: "New offer" })).toHaveCount(1);
+    await expect(pageB.getByRole("heading", { name: "Job confirmed by your acceptance" })).toHaveCount(0);
+    await expect(pageB.getByText("This item is no longer available.")).toBeVisible();
+    await expect(pageB.locator("body")).not.toContainText(fixture.cleanerAName);
+    await evidence(pageB, "85-04-closed-inbox");
   } finally {
     releaseAcceptance();
     await Promise.all([cleanerA.close(), cleanerB.close(), guest.close()]);

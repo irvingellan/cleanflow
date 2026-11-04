@@ -214,6 +214,27 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
             )}
           </section>
 
+          {diagnostics.cleanerDeliveries && (
+            <section>
+              <h4>{translate("devCenter.cleanerPushHistory")}</h4>
+              {diagnostics.cleanerDeliveries.length === 0 ? <p>{translate("devCenter.noCleanerPushHistory")}</p> : (
+                <ul className="dev-center__diagnostics-list">
+                  {diagnostics.cleanerDeliveries.map((delivery, index) => (
+                    <li key={`${delivery.recordedAt}-${index}`}>
+                      <strong>{delivery.type} · {delivery.deliveryStatus}</strong>
+                      <span>{formatTimestamp(delivery.recordedAt, language, translate)}</span>
+                      <span>{delivery.stages.join(" · ")}</span>
+                      <span>{translate("devCenter.attempted")}: {countOrUnknown(delivery.targetDeviceCount, translate)} · {translate("devCenter.fcmAccepted")}: {countOrUnknown(delivery.acceptedByFcmDevices, translate)}</span>
+                      {delivery.devices.map((device) => (
+                        <span key={device.installation}>{device.installation} · {device.outcome}</span>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           <section>
             <h4>{translate("devCenter.developerTestHistory")}</h4>
             {(diagnostics.developerTests || []).length === 0 ? <p>{translate("devCenter.noDeveloperTests")}</p> : (

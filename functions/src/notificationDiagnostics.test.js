@@ -4,6 +4,23 @@ import { buildNotificationDiagnostics } from "./notificationDiagnostics.js";
 const timestamp = (iso) => ({ toDate: () => new Date(iso) });
 
 describe("notification diagnostics projection", () => {
+  it("shows bounded cleaner delivery evidence without identity, token, or display claims", () => {
+    const { cleanerDeliveries } = buildNotificationDiagnostics({
+      devices: [], deliveries: [],
+      cleanerDeliveries: [{ data: {
+        type: "NEW_OFFER", deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, unknownDevices: 1,
+        stages: ["EVENT_CREATED", "PROVIDER_ACCEPTED", "DISPLAYED", "untrusted"],
+        cleanerId: "private-cleaner", token: "private-token",
+        devices: [{ installationKey: "a".repeat(64), outcome: "UNKNOWN", token: "private-token" }],
+      } }],
+    });
+    expect(cleanerDeliveries).toEqual([expect.objectContaining({
+      type: "NEW_OFFER", deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, unknownDevices: 1,
+      stages: ["EVENT_CREATED", "PROVIDER_ACCEPTED"],
+      devices: [expect.objectContaining({ installation: "aaaaaaaaaaaa", outcome: "UNKNOWN" })],
+    })]);
+    expect(JSON.stringify(cleanerDeliveries)).not.toMatch(/private-|DISPLAYED|untrusted/);
+  });
   it("reads the existing operational invalidated field and marks stale SENDING as indeterminate", () => {
     const result = buildNotificationDiagnostics({ devices: [], deliveries: [], now: Date.parse("2026-11-03T10:00:00Z"),
       reviewDeliveries: [{ data: { deliveryStatus: "SENDING", invalidated: 2, attemptedAt: timestamp("2026-11-03T09:00:00Z") } }],

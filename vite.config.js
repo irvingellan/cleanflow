@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { assertBuildEnvironment } from './src/environment.js'
+import {
+  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerPushBinding, cleanerPushDisplay, cleanerPushReceiptEvent,
+} from './src/features/notifications/cleanerPushBinding.js'
 
 const firebaseConfigKeys = [
   'VITE_FIREBASE_API_KEY',
@@ -59,6 +62,69 @@ firebase.messaging().onBackgroundMessage((payload) => {
 `
 }
 
+export function cleanerMessagingWorkerSource(firebaseConfig) {
+  if (!firebaseConfig) return "// Cleaner push is disabled for this build.\n";
+  return `// Isolated Firebase Messaging worker for Cleaner Hub.
+const binding = ${cleanerPushBinding.toString()};
+const display = ${cleanerPushDisplay.toString()};
+const inboxUrl = new URL("/agenda?inbox=1", self.location.origin);
+const agendaClients = async () => {
+  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  return windows.filter((client) => {
+    const url = new URL(client.url);
+    return url.origin === inboxUrl.origin && ["/agenda", "/agenda/"].includes(url.pathname);
+  });
+};
+
+self.addEventListener("notificationclick", (event) => {
+  event.stopImmediatePropagation();
+  event.notification.close();
+  event.waitUntil((async () => {
+    const current = await binding("read");
+    if (!current?.bindingId || event.notification.data?.cleanerBindingId !== current.bindingId) return;
+    const [agenda] = await agendaClients();
+    if (agenda) {
+      await agenda.navigate(inboxUrl.href).catch(() => undefined);
+      await agenda.focus();
+    } else {
+      await self.clients.openWindow(inboxUrl.href);
+    }
+  })().catch(() => {}));
+});
+
+// Own the data-only PushEvent on this isolated scope. FCM's default worker
+// considers a visible manager tab foreground and otherwise skips display.
+self.addEventListener("push", (event) => {
+  event.stopImmediatePropagation();
+  event.waitUntil((async () => {
+    const payload = event.data?.json();
+    const current = await binding("read");
+    const message = display(payload, current);
+    if (!message) return;
+    await self.registration.showNotification(message.title, message.options);
+    const latest = await binding("read").catch(() => null);
+    if (latest?.bindingId !== current.bindingId) {
+      const notifications = await self.registration.getNotifications({ tag: message.options.tag });
+      for (const notification of notifications) {
+        if (notification.data?.cleanerBindingId === current.bindingId) notification.close();
+      }
+      return;
+    }
+    for (const agenda of await agendaClients()) {
+      agenda.postMessage({ type: ${JSON.stringify(cleanerPushReceiptEvent)} });
+    }
+  })().catch(() => {}));
+});
+
+importScripts("https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging-compat.js");
+
+firebase.initializeApp(${JSON.stringify(firebaseConfig)});
+// Keep FCM's subscription-change handling. Only this worker handles display.
+firebase.messaging();
+`
+}
+
 function rootWorkerSource(buildId) {
   return `const buildId = ${JSON.stringify(buildId)};
 const acknowledgedClients = new Set();
@@ -107,6 +173,7 @@ self.addEventListener("activate", (event) => {
 
 function cleanflowServiceWorkers(buildInfo) {
   let source = ''
+  let cleanerSource = ''
 
   return {
     name: 'cleanflow-firebase-messaging-worker',
@@ -128,6 +195,9 @@ function cleanflowServiceWorkers(buildInfo) {
       }
 
       source = messagingWorkerSource(firebaseConfig)
+      cleanerSource = cleanerMessagingWorkerSource(
+        config.mode === 'emulator' ? null : cleanerMessagingConfig(firebaseConfig, environment.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID),
+      )
     },
     configureServer(server) {
       server.middlewares.use('/sw.js', (_request, response) => {
@@ -139,6 +209,11 @@ function cleanflowServiceWorkers(buildInfo) {
         response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
         response.setHeader('Cache-Control', 'no-cache')
         response.end(source)
+      })
+      server.middlewares.use(cleanerMessagingWorkerPath, (_request, response) => {
+        response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+        response.setHeader('Cache-Control', 'no-cache')
+        response.end(cleanerSource)
       })
       server.middlewares.use('/version.json', (_request, response) => {
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -156,6 +231,11 @@ function cleanflowServiceWorkers(buildInfo) {
         type: 'asset',
         fileName: 'firebase-messaging-sw.js',
         source,
+      })
+      this.emitFile({
+        type: 'asset',
+        fileName: cleanerMessagingWorkerPath.slice(1),
+        source: cleanerSource,
       })
       this.emitFile({
         type: 'asset',

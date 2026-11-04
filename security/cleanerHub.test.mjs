@@ -434,6 +434,29 @@ test("revocation ends reads and callables; signing in again never restores the o
   await assertSucceeds(cleanerDb(uidA).collection(`${root}/cleanerAgenda`).where("cleanerId", "==", "cleaner-a").get());
 });
 
+test("an additional device preserves both signed-in sessions until replacement or revocation", async () => {
+  await createJob("job-two-devices");
+  await assignCleanerDirectly.run(managerRequest({ jobId: "job-two-devices", cleanerId: "cleaner-a" }));
+  await sync("job-two-devices");
+  const first = await signInWithCodeToken((await link("cleaner-a")).token);
+  const { code } = await issueCleanerAccessCode.run(managerRequest({ cleanerId: "cleaner-a", additionalDevice: true }));
+  const { token } = await redeemCleanerAccessCode.run({ data: { code } });
+  const second = await signInWithCodeToken(token);
+  const entry = "cleaner-a__job-two-devices";
+  assert.notEqual(decodeToken(first.idToken).cleanerHub.sessionId, decodeToken(second.idToken).cleanerHub.sessionId);
+  assert.equal(await readAgendaWithToken(await refreshIdToken(first.refreshToken), entry), 200);
+  assert.equal(await readAgendaWithToken(await refreshIdToken(second.refreshToken), entry), 200);
+  const replacement = await signInWithCodeToken((await link("cleaner-a")).token);
+  assert.equal(await readAgendaWithToken(first.idToken, entry), 403);
+  assert.equal(await readAgendaWithToken(second.idToken, entry), 403);
+  assert.equal(await readAgendaWithToken(replacement.idToken, entry), 200);
+  await revokeCleanerHubAccess.run(managerRequest({ cleanerId: "cleaner-a" }));
+  assert.equal(await readAgendaWithToken(replacement.idToken, entry), 403);
+  await assert.rejects(issueCleanerAccessCode.run(managerRequest({
+    cleanerId: "cleaner-a", additionalDevice: true,
+  })), { code: "failed-precondition" });
+});
+
 test("concurrent checklist opens protect the teammate's link, and device recovery retires the old bearer", async () => {
   await createJob("job-team");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-team", cleanerId: "cleaner-a" }));

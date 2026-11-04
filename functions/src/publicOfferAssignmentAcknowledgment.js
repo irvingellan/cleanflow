@@ -113,6 +113,7 @@ export async function acknowledgePublicOfferAssignment(database, {
     return { state: "unavailable" };
   }
 
+  const organizationReference = database.doc(`organizations/${organizationId}`);
   return database.runTransaction(async (transaction) => {
     const [jobSnapshot, offerSnapshot, assignmentsSnapshot] = await Promise.all([
       transaction.get(jobReference),
@@ -155,7 +156,7 @@ export async function acknowledgePublicOfferAssignment(database, {
       cleanerAcknowledgedAt: FieldValue.serverTimestamp(),
       cleanerAcknowledgedOfferId: offerReference.id,
     });
-    createManagerOperationalNotification(transaction, jobReference, {
+    createManagerOperationalNotification(transaction, organizationReference, jobReference, {
       organizationId, offerId: offerReference.id, assignmentId: assignmentDocument.id,
       cleanerId: offer.cleanerId, eventType: managerOperationalNotificationTypes.acknowledgment,
       propertyName: job.propertyName,

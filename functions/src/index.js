@@ -36,6 +36,11 @@ import {
 import { processChecklistReviewNotification } from "./checklistReviewNotifications.js";
 import { requireOrganizationManager } from "./managerAuthorization.js";
 import { syncCleanerAgendaForJob } from "./cleanerAgenda.js";
+import { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } from "./cleanerNotificationEvents.js";
+import { createManagerReminderInboxItem, inboxEventId, managerInboxCollection } from "./notificationInboxEvents.js";
+import { changeNotificationInboxItemForRequest, listNotificationInboxForRequest } from "./notificationInbox.js";
+import { deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice } from "./cleanerPushDevices.js";
+import { processCleanerNotification } from "./cleanerPushDelivery.js";
 import {
   issueCleanerAccessCodeForManager,
   openChecklistForCleaner,
@@ -44,7 +49,7 @@ import {
   respondToOfferForCleaner,
   revokeCleanerHubAccessForManager,
 } from "./cleanerHubAccess.js";
-import { deactivateInvalidManagerDevices, loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
+import { loadEligibleManagerPushDevices } from "./managerFcmDelivery.js";
 import { registerManagerDevice, deactivateManagerDevice } from "./managerDeviceRegistration.js";
 import { sendFcmManagerReminder, processClaimedManagerReminder } from "./managerReminderDelivery.js";
 import { processManagerOperationalNotification } from "./managerOperationalNotifications.js";
@@ -115,6 +120,17 @@ if (getApps().length === 0) {
 }
 
 const db = getFirestore();
+
+function emulatorPushDisabled() {
+  return process.env.FUNCTIONS_EMULATOR === "true" || Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+}
+
+function liveMessaging() {
+  if (emulatorPushDisabled()) {
+    throw new HttpsError("unavailable", "Push transport is disabled in emulators.");
+  }
+  return getMessaging();
+}
 const organizationId = "cleanflow-demo";
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
 const supportedCleanerLanguages = new Set(["en", "pt", "es"]);
@@ -275,7 +291,7 @@ export const getManagerNotificationDiagnostics = onCall(
         .limit(20)
         .get(),
     ]);
-    const [healthSnapshot, reviewSnapshot, developerTestsSnapshot, currentDeviceTestsSnapshot] = await Promise.all([
+    const [healthSnapshot, reviewSnapshot, developerTestsSnapshot, currentDeviceTestsSnapshot, cleanerDeliveries] = await Promise.all([
       organizationReference().collection("managerNotificationDeviceHealth").limit(100).get(),
       // The pilot has a small bounded outbox. Avoid a new collection-group index
       // solely for a developer diagnostic; filter to this organization below.
@@ -287,6 +303,8 @@ export const getManagerNotificationDiagnostics = onCall(
         .get(),
       organizationReference().collection("currentDeviceNotificationTests")
         .orderBy("attemptedAt", "desc").limit(20).get(),
+      organizationReference().collection("cleanerNotificationDeliveries")
+        .orderBy("recordedAt", "desc").limit(20).get(),
     ]);
     const devices = devicesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
     const healthReports = healthSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
@@ -304,6 +322,7 @@ export const getManagerNotificationDiagnostics = onCall(
         .slice(0, 20),
       developerTests: developerTestsSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
       currentDeviceTests: currentDeviceTestsSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
+      cleanerDeliveries: cleanerDeliveries.docs.map((snapshot) => ({ data: snapshot.data() })),
       readMetadata: {
         devices: { readCount: devicesSnapshot.size, returnedCount: devices.length, readCap: null, ordering: "unordered" },
         healthReports: { readCount: healthSnapshot.size, returnedCount: healthReports.length, readCap: 100, ordering: "unordered" },
@@ -348,7 +367,7 @@ export const sendDeveloperTestNotification = onCall(
       developerUid: request.auth.uid,
       targetRegistrationId: data.targetRegistrationId,
       confirm: data.confirm,
-      sendFcm: (message) => getMessaging().send(message),
+      sendFcm: (message) => liveMessaging().send(message),
       logger,
     });
   },
@@ -360,7 +379,7 @@ export const sendCurrentManagerTestNotification = onCall(
     database: db,
     organizationId,
     request,
-    sendFcm: (message) => getMessaging().send(message),
+    sendFcm: (message) => liveMessaging().send(message),
     logger,
   }),
 );
@@ -1000,7 +1019,7 @@ export const notifyManagersOperationalEvent = onDocumentCreated(
     await processManagerOperationalNotification({
       database: db, deliveryReference: event.data.ref,
       organizationId: event.params.orgId, jobId: event.params.jobId, eventId: event.params.eventId,
-      sendFcm: (messages) => getMessaging().sendEach(messages), logger,
+      sendFcm: (messages) => liveMessaging().sendEach(messages), logger,
     });
   },
 );
@@ -1024,7 +1043,7 @@ export const notifyManagersChecklistReadyForReview = onDocumentCreated(
       runId,
       eventId,
       loadManagerDevices: activeManagerPushDevices,
-      sendFcm: (messages) => getMessaging().sendEach(messages),
+      sendFcm: (messages) => liveMessaging().sendEach(messages),
       logger,
     });
   },
@@ -1032,7 +1051,7 @@ export const notifyManagersChecklistReadyForReview = onDocumentCreated(
 
 async function sendFcmManagerReminderNotification(reminder) {
   return sendFcmManagerReminder({ database: db, reminder, loadManagerDevices: activeManagerPushDevices,
-    sendFcm: (messages) => getMessaging().sendEach(messages) });
+    sendFcm: (messages) => liveMessaging().sendEach(messages) });
 }
 
 function configuredManagerReminderProvider() {
@@ -1090,6 +1109,13 @@ export async function processManagerReminderWindow(type, { now = new Date() } = 
     });
     return { ...reminder, skipped: "no-jobs" };
   }
+
+  const organization = organizationReference();
+  const inboxId = inboxEventId("manager-reminder", reminderDeliveryId(organizationId, reminder));
+  await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(organization.collection(managerInboxCollection).doc(inboxId));
+    if (!existing.exists) createManagerReminderInboxItem(transaction, organization, reminder, inboxId);
+  });
 
   const provider = configuredManagerReminderProvider();
   requireAvailablePilotReminderTransport(provider);
@@ -1550,8 +1576,12 @@ export const issueCleanerAccessCode = onCall(
   { region: "us-central1" },
   async (request) => {
     await requireOrganizationManager(db, request, organizationId);
+    if (request.data?.additionalDevice !== undefined && typeof request.data.additionalDevice !== "boolean") {
+      throw new HttpsError("invalid-argument", "The additional device option must be a boolean.");
+    }
     return issueCleanerAccessCodeForManager(db, {
       organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid,
+      additionalDevice: request.data?.additionalDevice === true,
     });
   },
 );
@@ -1594,12 +1624,73 @@ export const respondToMyOffer = onCall(
   },
 );
 
-function cleanerAgendaTrigger(document) {
+export const listNotificationInbox = onCall(
+  { region: "us-central1" },
+  (request) => listNotificationInboxForRequest(db, { organizationId, request }),
+);
+
+export const markNotificationRead = onCall(
+  { region: "us-central1" },
+  (request) => changeNotificationInboxItemForRequest(db, { organizationId, request, open: false }),
+);
+
+export const openNotificationInboxItem = onCall(
+  { region: "us-central1" },
+  (request) => changeNotificationInboxItemForRequest(db, { organizationId, request, open: true }),
+);
+
+async function cleanerPushIdentity(request) {
+  return { organizationId, ...await requireActiveCleaner(db, request, organizationId) };
+}
+
+export const registerCleanerPushDevice = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const identity = await cleanerPushIdentity(request);
+    if (!emulatorPushDisabled() && process.env.CLEANER_PUSH_MODE !== "enabled") {
+      throw new HttpsError("failed-precondition", "Cleaner push is not enabled.");
+    }
+    return registerCleanerDevice(db, identity, request.data);
+  },
+);
+
+export const deactivateCleanerPushDevice = onCall(
+  { region: "us-central1" },
+  async (request) => deactivateCleanerDevice(db, await cleanerPushIdentity(request), request.data),
+);
+
+export const getCleanerPushDeviceStatus = onCall(
+  { region: "us-central1" },
+  async (request) => getCleanerDeviceStatus(db, await cleanerPushIdentity(request), request.data),
+);
+
+export const notifyCleanerInboxEvent = onDocumentCreated(
+  {
+    document: "organizations/{orgId}/cleanerNotificationInboxes/{cleanerId}/items/{eventId}",
+    region: "us-central1", retry: true, timeoutSeconds: 60,
+  },
+  async (event) => {
+    if (!event.data || (!emulatorPushDisabled() && process.env.CLEANER_PUSH_MODE !== "enabled")) return;
+    await processCleanerNotification({
+      database: db, organizationId: event.params.orgId, cleanerId: event.params.cleanerId,
+      eventId: event.params.eventId, sendFcm: (messages) => liveMessaging().sendEach(messages), logger,
+    });
+  },
+);
+
+function cleanerAgendaTrigger(document, recordInbox) {
   return onDocumentWritten(
     { document, region: "us-central1", retry: true, timeoutSeconds: 60 },
     async (event) => {
       try {
-        await syncCleanerAgendaForJob(db, { organizationId: event.params.orgId, jobId: event.params.jobId });
+        const context = { organizationId: event.params.orgId, jobId: event.params.jobId };
+        await Promise.all([
+          syncCleanerAgendaForJob(db, context),
+          recordInbox?.(db, {
+            ...context, offerId: event.params.offerId, eventId: event.id,
+            before: event.data?.before, after: event.data?.after,
+          }),
+        ]);
       } catch (error) {
         logger.error("Cleaner agenda sync failed.", { code: error?.code || "unknown" });
         throw error;
@@ -1608,8 +1699,12 @@ function cleanerAgendaTrigger(document) {
   );
 }
 
-export const syncCleanerAgendaOnJobWrite = cleanerAgendaTrigger("organizations/{orgId}/jobs/{jobId}");
+export const syncCleanerAgendaOnJobWrite = cleanerAgendaTrigger(
+  "organizations/{orgId}/jobs/{jobId}", recordCleanerJobInboxEvents,
+);
 export const syncCleanerAgendaOnAssignmentWrite = cleanerAgendaTrigger(
   "organizations/{orgId}/jobs/{jobId}/assignments/{assignmentId}",
 );
-export const syncCleanerAgendaOnOfferWrite = cleanerAgendaTrigger("organizations/{orgId}/jobs/{jobId}/offers/{offerId}");
+export const syncCleanerAgendaOnOfferWrite = cleanerAgendaTrigger(
+  "organizations/{orgId}/jobs/{jobId}/offers/{offerId}", recordCleanerOfferInboxEvent,
+);

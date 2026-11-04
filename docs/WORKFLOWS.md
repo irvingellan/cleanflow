@@ -444,3 +444,12 @@ External cancellation
 
 Synchronization must be idempotent, preserve external references, and audit
 meaningful changes.
+
+
+## Notification Inbox (Issue #85 candidate)
+
+Manager and Cleaner Hub users can open a server-backed Inbox, filter by read
+state and open currently authorized targets. An event remains in history when
+push fails. The manager can issue a one-time additional-device code to preserve
+a cleaner's existing sessions. Replacement and revocation retain their
+access-reset meaning. See the [notification runbook](NOTIFICATIONS_V1_85.md).

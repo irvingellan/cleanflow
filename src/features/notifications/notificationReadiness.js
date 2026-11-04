@@ -1,9 +1,11 @@
 /** Pure worker identity check; a root app-shell worker is not the FCM worker. */
-export function messagingWorkerReadiness(registration, origin) {
+export function messagingWorkerReadiness(registration, origin, {
+  scope: workerScope = "/firebase-messaging-push/", script: workerScript = "/firebase-messaging-sw.js",
+} = {}) {
   if (!registration?.active) return "missing";
   try {
-    const scope = new URL("/firebase-messaging-push/", origin);
-    const script = new URL("/firebase-messaging-sw.js", origin);
+    const scope = new URL(workerScope, origin);
+    const script = new URL(workerScript, origin);
     return registration.scope === scope.href && registration.active.scriptURL === script.href ? "ready" : "mismatch";
   } catch {
     return "mismatch";

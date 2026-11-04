@@ -6,6 +6,9 @@ import {
   StateCard,
 } from "./components/UiPrimitives.jsx";
 import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
+import { NotificationInbox, useNotificationInbox } from "./features/notifications/NotificationInbox.jsx";
+import { inboxMessage } from "./features/notifications/notificationInboxMessages.js";
+import { getJobById } from "./features/jobs/jobService.js";
 import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
 import { abortManagerPushSignOut, prepareManagerPushSignOut } from "./features/notifications/notificationService.js";
 import { clearOneSignalUser } from "./features/notifications/oneSignalService.js";
@@ -441,6 +444,7 @@ function PublicOfferPage({ token }) {
 function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
   useOneSignalIdentity(authUser?.uid);
+  const inbox = useNotificationInbox({ role: "MANAGER", sessionKey: authUser.uid });
   const [activeSection, setActiveSection] = useState(() => (
     isManagerLoadDiagnosticsPath() ? "dev-center" : isWeeklyClosePreviewPath() ? "payouts" : "dashboard"
   ));
@@ -896,6 +900,22 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("property-detail");
   }
 
+  async function openInboxTarget(destination) {
+    if (destination?.kind === "DASHBOARD") {
+      showDashboard();
+      return true;
+    }
+    if (destination?.kind === "JOB" && typeof destination.jobId === "string") {
+      try {
+        openDashboardJob(await getJobById(destination.jobId, { serverOnly: true }));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
   function openDashboardJob(job) {
     setActiveSection("dashboard");
     setJobDetailOrigin("dashboard");
@@ -961,6 +981,10 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <LanguageSelector language={language} onChange={setLanguage} />
                 <ThemeToggle />
                 <NotificationControl userId={authUser.uid} />
+                <button className="button button--small" type="button" onClick={() => setView("notification-inbox")}>
+                  {inboxMessage(language, "inbox.title")}
+                  {inbox.unreadCount > 0 && <span className="badge" aria-label={inboxMessage(language, "inbox.unreadCount", { count: inbox.unreadCount })}>{inbox.unreadCount}</span>}
+                </button>
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
                 <DeveloperEnvironmentControls user={authUser} />
@@ -991,6 +1015,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
           && <SandboxLifecyclePreview onBack={showDashboard} />}
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
+        {view === "notification-inbox" && (
+          <NotificationInbox inbox={inbox} language={language} onBack={showDashboard} onOpen={openInboxTarget} />
+        )}
 
         {view === "dashboard" && (
           <Dashboard

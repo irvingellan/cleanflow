@@ -1,3 +1,4 @@
+import { createManagerInboxItem, managerInboxTypes } from "./notificationInboxEvents.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import {
@@ -471,6 +472,9 @@ export async function readyPublicChecklistForReview(database, {
       deliveryProvider: "fcm",
       deliveryStatus: "PENDING",
       createdAt: FieldValue.serverTimestamp(),
+    });
+    createManagerInboxItem(transaction, database.doc(`organizations/${organizationId}`), {
+      eventId: notificationEventId, jobId: location.jobId, runId: location.runId, type: managerInboxTypes.checklist,
     });
     return {
       duplicate: false,
