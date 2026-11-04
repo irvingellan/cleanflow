@@ -16,14 +16,15 @@ const inboxApplied = { ...rulesApplied, functions: {
 } };
 
 test("Release A uses exact named targets and changes reader compatibility before enrollment", () => {
-  const [rules, main, redeem, issue, hosting] = releaseSteps.publish;
+  const [rules, main, manager, redeem, issue, hosting] = releaseSteps.publish;
   assert.equal(rules.only, "firestore:rules");
   assert.equal(hosting.only, "hosting");
+  assert.deepEqual(manager.functions, ["registerManagerPushDevice"]);
   assert.deepEqual(redeem.functions, ["redeemCleanerAccessCode"]);
   assert.deepEqual(issue.functions, ["issueCleanerAccessCode"]);
-  assert.deepEqual([...(main.functions || []), ...redeem.functions, ...issue.functions].sort(),
+  assert.deepEqual([...main.functions, ...manager.functions, ...redeem.functions, ...issue.functions].sort(),
     [...deployGroups.create, ...deployGroups.update].sort());
-  assert.equal(main.functions.length, 20);
+  assert.equal(main.functions.length, 19);
   assert.ok(deployGroups.defer.every((name) => !main.functions.includes(name)));
   assert.deepEqual(releaseSteps.rollback.map(({ only }) => only), [
     "functions:listNotificationInbox,functions:markNotificationRead,functions:openNotificationInboxItem", "hosting",

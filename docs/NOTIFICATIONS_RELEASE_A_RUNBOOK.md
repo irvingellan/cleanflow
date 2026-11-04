@@ -52,7 +52,8 @@ The command checks the immutable assets, extracts source from the approved
 Git object, sets explicit non-secret runtime modes, and acquires the shared
 Firestore mutex `cleanflowReleaseControl/production` with an atomic
 absence precondition. Rules go first, then session readers and normal
-notification Functions, redemption, issuance, and finally Hosting. The
+notification Functions, manager device registration, cleaner redemption,
+cleaner code issuance, and finally Hosting. The
 script checks the exact live snapshot before each step and compares the
 result and unchanged resources before advancing. It verifies public assets
 before writing the completed receipt. The lock document has no browser

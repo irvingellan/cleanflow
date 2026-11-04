@@ -283,6 +283,12 @@ export default defineConfig(({ mode }) => {
   }
   if (environment.VITE_NOTIFICATION_INBOX_MODE === 'disabled') {
     buildInfo.deploymentId = `${buildInfo.buildId}-inbox-off`
+  } else if (mode === 'production' && isCleanerVapidKey(environment.VITE_FIREBASE_VAPID_KEY)
+    && cleanerMessagingConfig({
+      appId: environment.VITE_FIREBASE_APP_ID,
+      messagingSenderId: environment.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    }, environment.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID)) {
+    buildInfo.deploymentId = `${buildInfo.buildId}-cleaner-push`
   }
 
   return {

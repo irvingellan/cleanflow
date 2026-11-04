@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadEnv } from "vite";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
-import { dedicatedCleanerAppName, notificationProject, readNotificationProduction, sha256 } from "./notificationReleaseCloud.mjs";
+import { dedicatedCleanerAppName, notificationProject, readNotificationProduction, releaseApis, sha256 } from "./notificationReleaseCloud.mjs";
 import { cleanerMessagingConfig } from "../src/features/notifications/cleanerPushBinding.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -118,6 +118,9 @@ function verifyFunctions(stage, cloud, candidateNames) {
       state === "ACTIVE" && runtime === "nodejs22" && region === "us-central1" && revision && maxInstances === 20)
     && cloud.functions.filter(({ id }) => ["sendTodayExecutionReminder", "sendTomorrowPlanningReminder"].includes(id))
       .every(({ managerFcm }) => managerFcm === true)
+    && (stage === "A" || cloud.functions.filter(({ id }) =>
+      ["listNotificationInbox", "markNotificationRead", "openNotificationInboxItem"].includes(id))
+      .every(({ inboxMode }) => inboxMode === "enabled"))
     && cloud.noPendingFunctionOperations;
 }
 
@@ -161,7 +164,8 @@ async function preflight(options) {
 
   // SDK discovery imports declarations only, under a demo identity.
   process.env.GCLOUD_PROJECT = "demo-cleanflow";
-  const declarations = Object.keys((await declaredFunctions()).endpoints).sort();
+  const stack = await declaredFunctions();
+  const declarations = Object.keys(stack.endpoints).sort();
   check("functionAllowlist", [...deployGroups.create, ...deployGroups.update].every((name) => declarations.includes(name))
     && new Set([...deployGroups.create, ...deployGroups.update]).size === deployGroups.create.length + deployGroups.update.length,
   "A named Function is missing or repeated.");
@@ -185,6 +189,12 @@ async function preflight(options) {
     && (stage === "B" || cloud.ruleset === oldRuleset), "Live Firestore Rules differ or could not be verified.");
   check("productionFunctions", cloud && verifyFunctions(stage, cloud, declarations), "Live Functions inventory, runtime, or cleaner mode differs.");
   check("iam", cloud?.iam.ok, "The caller's scoped deployment permissions could not be verified.");
+  check("deploymentPrerequisites", (stack.requiredAPIs || []).every(({ api }) => releaseApis.includes(api))
+    && cloud?.deploymentPrerequisites.existingServiceAgents && cloud.deploymentPrerequisites.artifactCleanupConfigured
+    && cloud.deploymentPrerequisites.unavailableApis.length === 0,
+  "A deploy API, established service agent or artifact cleanup policy is unavailable.");
+  check("reminderSchedules", cloud?.reminderSchedules.length === 2
+    && cloud.reminderSchedules.every(({ compatible }) => compatible), "Published reminder schedules differ.");
   check("runtimeConfiguration", cloud?.functions.filter(({ id }) => deployGroups.update.includes(id))
     .every(({ runtimeCompatible }) => runtimeCompatible), "A targeted Function has unreviewed environment or secret version drift.");
   check("releaseLock", cloud?.releaseLock.state === "AVAILABLE",
@@ -196,8 +206,11 @@ async function preflight(options) {
   const cleaner = dedicatedCleanerConfig(manager, production?.dedicatedApp);
   const oldCleanerWorker = staticAssets.find((row) => row.file === "cleaner-messaging-sw.js" && row.matched)?.bytes;
   if (stage === "B") {
-    check("releaseALive", oldCleanerWorker?.toString() === "// Cleaner push is disabled for this build.\n",
-      "Release B requires the published disabled Release A worker as rollback baseline.");
+    const version = staticAssets.find((row) => row.file === "version.json" && row.matched)?.bytes;
+    const versionInfo = version && JSON.parse(version);
+    check("releaseALive", oldCleanerWorker?.toString() === "// Cleaner push is disabled for this build.\n"
+      && versionInfo?.buildId === sha && !versionInfo.deploymentId,
+    "Release B requires the live Inbox-enabled Release A build and its disabled cleaner worker.");
     check("dedicatedCleanerApp", cleaner, "A dedicated same-project Cleaner Hub Web app is required.");
     check("consoleVapidAttestation", vapidFingerprint && options["vapid-console-sha256"] === vapidFingerprint,
       "Compare the public VAPID key fingerprint from Firebase Console before Release B.");
@@ -235,7 +248,8 @@ async function preflight(options) {
     check("manifest", JSON.stringify(current) === JSON.stringify(JSON.parse(preparedBytes).files),
       "Prepared Hosting manifest does not match the built files.");
     const version = JSON.parse(readFileSync(resolve(dist, "version.json"), "utf8"));
-    check("buildVariant", compatibility ? version.deploymentId === `${sha}-inbox-off` : !version.deploymentId,
+    const expectedVariant = compatibility ? `${sha}-inbox-off` : stage === "B" ? `${sha}-cleaner-push` : undefined;
+    check("buildVariant", version.deploymentId === expectedVariant,
       "The Hosting update marker does not match the selected build variant.");
     manifest = { sha256: sha256(preparedBytes), files: current.length };
   }

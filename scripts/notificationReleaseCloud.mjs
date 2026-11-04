@@ -14,6 +14,8 @@ const sortKeys = (value) => Array.isArray(value) ? value.map(sortKeys)
     ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys(value[key])]))
     : value;
 const projectPath = `projects/${notificationProject}`;
+export const releaseApis = ["cloudfunctions", "cloudbuild", "artifactregistry", "run", "eventarc", "pubsub",
+  "storage", "secretmanager", "cloudscheduler", "firestore", "firebasehosting"].map((name) => `${name}.googleapis.com`);
 const hosts = {
   firebase: "https://firebase.googleapis.com",
   hosting: "https://firebasehosting.googleapis.com",
@@ -24,6 +26,8 @@ const hosts = {
   services: "https://serviceusage.googleapis.com",
   firestore: "https://firestore.googleapis.com",
   secrets: "https://secretmanager.googleapis.com",
+  scheduler: "https://cloudscheduler.googleapis.com",
+  artifacts: "https://artifactregistry.googleapis.com",
 };
 
 async function query(host, path, body) {
@@ -39,7 +43,9 @@ async function attempt(task) {
 }
 
 const { TARGET_PERMISSIONS } = require("firebase-tools/lib/deploy");
-const basePermissions = [...TARGET_PERMISSIONS.hosting, ...TARGET_PERMISSIONS.functions, "serviceusage.services.use"];
+const basePermissions = [...TARGET_PERMISSIONS.hosting, ...TARGET_PERMISSIONS.functions,
+  "serviceusage.services.use", "run.services.getIamPolicy", "run.services.setIamPolicy",
+  "cloudscheduler.jobs.get", "cloudscheduler.jobs.update"];
 const permissionsA = [...new Set([...basePermissions, ...TARGET_PERMISSIONS.storage,
   "cloudfunctions.functions.setIamPolicy", "firebaserules.releases.get"])];
 const permissionsB = basePermissions;
@@ -114,10 +120,41 @@ async function inspectIam(stage, functions) {
   };
 }
 
+async function inspectDeploymentPrerequisites() {
+  const [project, policy, repository, ...apis] = await Promise.all([
+    attempt(() => query("firebase", `/v1beta1/${projectPath}`)),
+    attempt(() => query("resources", `/v1/${projectPath}:getIamPolicy`, { options: { requestedPolicyVersion: 3 } })),
+    attempt(() => query("artifacts", `/v1/${projectPath}/locations/us-central1/repositories/gcf-artifacts`)),
+    ...releaseApis.map((api) => attempt(() => query("services", `/v1/${projectPath}/services/${api}`))),
+  ]);
+  return {
+    unavailableApis: releaseApis.filter((_, index) => apis[index].state !== "ENABLED"),
+    artifactCleanupConfigured: Object.keys(repository.cleanupPolicies || {}).length > 0,
+    existingServiceAgents: Boolean(project.projectNumber) && ["pubsub", "eventarc"].every((service) =>
+      policy.bindings?.some((entry) => entry.role === `roles/${service}.serviceAgent` && !entry.condition
+        && entry.members?.includes(`serviceAccount:service-${project.projectNumber}@gcp-sa-${service}.iam.gserviceaccount.com`))),
+  };
+}
+
+async function inspectReminderSchedules() {
+  const expected = [["sendTomorrowPlanningReminder", "0 19 * * *"], ["sendTodayExecutionReminder", "0 7 * * *"]];
+  const rows = await Promise.all(expected.map(async ([id, cron]) => {
+    const path = `/v1/${projectPath}/locations/us-central1/jobs/firebase-schedule-${id}-us-central1`;
+    const { state, schedule, timeZone, attemptDeadline, retryConfig, httpTarget } = await attempt(() => query("scheduler", path));
+    return {
+      id,
+      compatible: state === "ENABLED" && schedule === cron && timeZone === "America/Los_Angeles"
+        && attemptDeadline === "180s" && Boolean(httpTarget?.uri),
+      hash: sha256(JSON.stringify(sortKeys({ state, schedule, timeZone, attemptDeadline, retryConfig, httpTarget }))),
+    };
+  }));
+  return rows;
+}
+
 export async function readNotificationProduction(stage, managerAppId) {
   const account = getGlobalDefaultAccount();
   await requireAuth({ project: notificationProject, ...account });
-  const [apps, hosting, rules, functions, registrationApi, deliveryApi, operations, lock, secretVersion] = await Promise.all([
+  const [apps, hosting, rules, functions, registrationApi, deliveryApi, operations, lock, secretVersion, prerequisites, schedules] = await Promise.all([
     attempt(() => query("firebase", `/v1beta1/${projectPath}/webApps?pageSize=100`)),
     attempt(() => query("hosting", `/v1beta1/sites/${notificationProject}/releases?pageSize=1`)),
     attempt(() => query("rules", `/v1/${projectPath}/releases/cloud.firestore`)),
@@ -127,6 +164,8 @@ export async function readNotificationProduction(stage, managerAppId) {
     attempt(() => query("functions", `/v2/${projectPath}/locations/us-central1/operations?filter=done%3Dfalse&pageSize=100`)),
     attempt(lockDocument),
     attempt(() => query("secrets", `/v1/${projectPath}/secrets/${developerSecret}/versions/latest`)),
+    inspectDeploymentPrerequisites(),
+    inspectReminderSchedules(),
   ]);
   const webApps = apps.apps || [];
   const dedicated = webApps.filter((entry) => entry.displayName === dedicatedCleanerAppName && entry.state !== "DELETED");
@@ -176,6 +215,8 @@ export async function readNotificationProduction(stage, managerAppId) {
       noPendingFunctionOperations: !operations.error && !operations.nextPageToken
         && !operations.operations?.some((operation) => !operation.done),
       releaseLock: { state: lock.error === 404 ? "AVAILABLE" : lock.updateTime ? "HELD" : "UNVERIFIED" },
+      deploymentPrerequisites: prerequisites,
+      reminderSchedules: schedules,
       iam,
     },
   };

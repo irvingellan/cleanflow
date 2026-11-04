@@ -17,13 +17,13 @@ const require = createRequire(import.meta.url);
 const releaseToolchain = () => ({ firebaseTools: require("firebase-tools/package.json").version, node: process.versions.node });
 const evidenceFiles = ["verification.json", "preflight-A.json", "preflight-rollback.json"];
 const recoveryEndpoints = ["listNotificationInbox", "markNotificationRead", "openNotificationInboxItem"];
-const enrollment = ["redeemCleanerAccessCode", "issueCleanerAccessCode"];
+const registrationWriters = ["registerManagerPushDevice", "redeemCleanerAccessCode", "issueCleanerAccessCode"];
 const functions = (names) => ({ id: names.join(","), only: names.map((name) => `functions:${name}`).join(","), functions: names });
 export const releaseSteps = {
   publish: [
     { id: "rules", only: "firestore:rules" },
-    functions([...deployGroups.create, ...deployGroups.update.filter((name) => !enrollment.includes(name))]),
-    ...enrollment.map((name) => functions([name])),
+    functions([...deployGroups.create, ...deployGroups.update.filter((name) => !registrationWriters.includes(name))]),
+    ...registrationWriters.map((name) => functions([name])),
     { id: "hosting", only: "hosting" },
   ],
   rollback: [
@@ -44,6 +44,9 @@ function requireCondition(condition, message) {
 
 export function productionSnapshot(report) {
   requireCondition(report?.functionsComplete && report.noPendingFunctionOperations && report.iam?.ok
+    && report.deploymentPrerequisites?.existingServiceAgents && report.deploymentPrerequisites.unavailableApis.length === 0
+    && report.deploymentPrerequisites.artifactCleanupConfigured
+    && report.reminderSchedules?.length === 2 && report.reminderSchedules.every((schedule) => schedule.compatible)
     && report.hostingVersion && report.hostingRelease && report.ruleset && report.rulesUpdated
     && digestFormat.test(report.firestoreRulesSha256)
     && report.functions.filter((row) => ["sendTomorrowPlanningReminder", "sendTodayExecutionReminder"].includes(row.id))
@@ -54,6 +57,7 @@ export function productionSnapshot(report) {
   return {
     hosting: { version: report.hostingVersion, release: report.hostingRelease },
     rules: { id: report.ruleset, hash: report.firestoreRulesSha256, updated: report.rulesUpdated },
+    schedules: report.reminderSchedules,
     functions: Object.fromEntries(report.functions.map((row) => [row.id, {
       revision: row.revision, hash: row.configurationHash,
       secretBindingHash: row.secretBindingHash, runtimeCompatible: row.runtimeCompatible,
@@ -64,6 +68,7 @@ export function productionSnapshot(report) {
 
 export function verifyTransition(before, after, step, { rulesHash, inboxMode }) {
   const unchanged = (part) => requireCondition(equal(before[part], after[part]), `Concurrent ${part} change detected.`);
+  unchanged("schedules");
   if (step.id === "rules") {
     requireCondition(after.rules.hash === rulesHash && before.rules.id !== after.rules.id,
       "Deployed Firestore Rules do not match the reviewed file.");
@@ -180,6 +185,10 @@ function stageInputs(sha, artifact, action, workspace) {
     cwd: root, maxBuffer: 16 * 1024 * 1024,
   });
   execFileSync("tar", ["-xf", "-", "-C", workspace], { input: source, stdio: ["pipe", "pipe", "pipe"] });
+  const configFile = join(workspace, "firebase.json");
+  const config = json(configFile);
+  config.functions.disallowLegacyRuntimeConfig = true;
+  writeFileSync(configFile, encode(config));
   const localDeps = join(root, "functions/node_modules");
   symlinkSync(localDeps, join(workspace, "functions/node_modules"), "dir");
   const inboxMode = action === "publish" ? "enabled" : "disabled";
