@@ -41,6 +41,7 @@ import { createManagerReminderInboxItem, inboxEventId, managerInboxCollection } 
 import { changeNotificationInboxItemForRequest, listNotificationInboxForRequest } from "./notificationInbox.js";
 import { deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice } from "./cleanerPushDevices.js";
 import { processCleanerNotification } from "./cleanerPushDelivery.js";
+import { resolveCleanerPushMode } from "./cleanerPushPilot.js";
 import {
   issueCleanerAccessCodeForManager,
   openChecklistForCleaner,
@@ -1679,14 +1680,19 @@ async function cleanerPushIdentity(request) {
   return { organizationId, ...await requireActiveCleaner(db, request, organizationId) };
 }
 
+function cleanerPushMode() {
+  const options = devCenterEnvironmentOptions();
+  const environment = resolveDevCenterEnvironment({
+    ...options, functionsEmulator: emulatorPushDisabled() ? "true" : options.functionsEmulator,
+  });
+  return resolveCleanerPushMode(process.env.CLEANER_PUSH_MODE, environment, process.env.CLEANER_PUSH_PILOT_RELEASE);
+}
+
 export const registerCleanerPushDevice = onCall(
   { region: "us-central1" },
   async (request) => {
     const identity = await cleanerPushIdentity(request);
-    if (!emulatorPushDisabled() && process.env.CLEANER_PUSH_MODE !== "enabled") {
-      throw new HttpsError("failed-precondition", "Cleaner push is not enabled.");
-    }
-    return registerCleanerDevice(db, identity, request.data);
+    return registerCleanerDevice(db, identity, request.data, cleanerPushMode());
   },
 );
 
@@ -1697,7 +1703,7 @@ export const deactivateCleanerPushDevice = onCall(
 
 export const getCleanerPushDeviceStatus = onCall(
   { region: "us-central1" },
-  async (request) => getCleanerDeviceStatus(db, await cleanerPushIdentity(request), request.data),
+  async (request) => getCleanerDeviceStatus(db, await cleanerPushIdentity(request), request.data, cleanerPushMode()),
 );
 
 export const notifyCleanerInboxEvent = onDocumentCreated(
@@ -1706,10 +1712,12 @@ export const notifyCleanerInboxEvent = onDocumentCreated(
     region: "us-central1", retry: true, timeoutSeconds: 60,
   },
   async (event) => {
-    if (!event.data || (!emulatorPushDisabled() && process.env.CLEANER_PUSH_MODE !== "enabled")) return;
+    if (!event.data) return;
+    const mode = cleanerPushMode();
+    if (mode === "disabled") return;
     await processCleanerNotification({
       database: db, organizationId: event.params.orgId, cleanerId: event.params.cleanerId,
-      eventId: event.params.eventId, sendFcm: (messages) => liveMessaging().sendEach(messages), logger,
+      eventId: event.params.eventId, sendFcm: (messages) => liveMessaging().sendEach(messages), logger, mode,
     });
   },
 );

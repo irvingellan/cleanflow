@@ -32,10 +32,10 @@ const hosting = { id: "hosting", only: "hosting" };
 
 export const releaseBSteps = {
   publish: [
-    functionsStep(deployGroups.prepareB, "disabled"),
+    functionsStep(deployGroups.prepareB, "pilot"),
     hosting,
-    functionsStep([register], "enabled"),
-    functionsStep([sender], "enabled"),
+    functionsStep([register], "pilot"),
+    functionsStep([sender], "pilot"),
   ],
   rollback: [
     functionsStep([sender], "disabled"),
@@ -73,22 +73,28 @@ export function releaseBSnapshot(report) {
   for (const row of report.functions) {
     const isTransport = transportFunctions.includes(row.id);
     requireCondition(row.automaticOffersMode === "disabled"
-      && (row.cleanerPushMode === "disabled" || (row.cleanerPushMode === "enabled" && [register, sender].includes(row.id))),
+      && (row.cleanerPushMode === "disabled" || (isTransport && row.cleanerPushMode === "pilot" && fullSha.test(row.cleanerPushPilotRelease ?? ""))),
     "A Production Function has an unexpected automatic-offer or cleaner push mode.");
-    if (isTransport) snapshot.functions[row.id].cleanerPushMode = row.cleanerPushMode;
+    if (isTransport) Object.assign(snapshot.functions[row.id], {
+      cleanerPushMode: row.cleanerPushMode,
+      cleanerPushPilotRelease: row.cleanerPushPilotRelease ?? null,
+    });
   }
   return snapshot;
 }
 
-export function verifyBStep(snapshot, step) {
+export function verifyBStep(snapshot, step, sha) {
   assertAInbox(snapshot);
-  requireCondition((step.functions || []).every((name) => snapshot.functions[name]?.cleanerPushMode === step.cleanerPushMode),
+  requireCondition((step.functions || []).every((name) => snapshot.functions[name]?.cleanerPushMode === step.cleanerPushMode
+    && (step.cleanerPushMode !== "pilot" || snapshot.functions[name].cleanerPushPilotRelease === sha)),
     "Targeted Release B Function has an unexpected cleaner push mode.");
 }
 
-function checkTransport(snapshot, mode) {
-  requireCondition(transportFunctions.every((name) => snapshot.functions[name]?.cleanerPushMode
-    === ([register, sender].includes(name) ? mode : "disabled")), "Release B transport modes do not match the action.");
+function checkTransport(snapshot, action, sha) {
+  const expectedMode = (name) => action === "rollback" && [register, sender].includes(name) ? "disabled" : "pilot";
+  requireCondition(transportFunctions.every((name) => snapshot.functions[name]?.cleanerPushMode === expectedMode(name)
+    && (expectedMode(name) !== "pilot" || snapshot.functions[name].cleanerPushPilotRelease === sha)),
+  "Release B transport modes or pilot release binding differ.");
 }
 
 export function verifiedBReceipt(receipt, { action, sha, planHash, artifactHash, snapshot }) {
@@ -147,16 +153,16 @@ function reviewedPlan(directory, sha, previous) {
   const current = artifact(directory, "B", sha, preflight.manifest?.sha256);
   requireCondition(preflight.status === "DRY_RUN_READY" && preflight.stage === "B" && preflight.sha === sha
     && preflight.manifest?.sha256 === current.manifestHash
-    && preflight.cleanerPushMode === "enabled" && preflight.automaticOffersMode === "disabled"
+    && preflight.cleanerPushMode === "pilot" && preflight.pilotPolicy === "explicit-device-approval"
+    && preflight.automaticOffersMode === "disabled"
     && preflight.production?.releaseLock?.state === "AVAILABLE" && preflight.deploymentPerformed === false
     && equal(preflight.targets?.createBeforeHosting, deployGroups.prepareB)
     && equal(preflight.targets?.createAfterHosting, deployGroups.enable)
     && equal(preflight.releaseA, previous.hashes) && equal(releaseBSnapshot(preflight.production), previous.baseline)
     && digest.test(preflight.cleanerBinding?.appIdHash) && digest.test(preflight.cleanerBinding?.apiKeyHash)
     && digest.test(preflight.cleanerBinding?.vapidFingerprint)
-    && digest.test(preflight.physicalEvidence?.receiptHash) && digest.test(preflight.physicalEvidence?.pilotManifestHash)
     && validReleaseVerification(json(verificationFile), sha),
-  "Release B needs the exact final passing preflight, physical gate, scope and test receipt.");
+  "Release B needs the exact passing pilot preflight, scope and test receipt.");
   return { current, plan: {
     schema: 1,
     project: notificationProject,
@@ -166,6 +172,7 @@ function reviewedPlan(directory, sha, previous) {
     releaseA: previous.hashes,
     artifactHash: current.manifestHash,
     cleanerBinding: preflight.cleanerBinding,
+    pilotPolicy: preflight.pilotPolicy,
     physicalEvidence: preflight.physicalEvidence,
     evidence: { preflight: hashFile(preflightFile), verification: hashFile(verificationFile) },
     steps: releaseBSteps,
@@ -208,7 +215,7 @@ async function execute(action, directory, plan, current, previous, approval, exc
   if (prior) {
     requireCondition(verifiedBReceipt(prior, { ...receiptIdentity, snapshot: live }),
       "An incomplete or drifted Release B attempt needs explicit reconciliation.");
-    checkTransport(live, action === "publish" ? "enabled" : "disabled");
+    checkTransport(live, action, plan.sha);
     if (action === "publish") checkBinding(production, plan, current);
     await verifyLiveAssets(actionArtifact.manifest);
     const confirmed = await readProduction();
@@ -224,7 +231,7 @@ async function execute(action, directory, plan, current, previous, approval, exc
     requireCondition(verifiedBReceipt(completedPublish, { ...receiptIdentity, action: "publish",
       artifactHash: current.manifestHash, snapshot: live }),
     "Rollback requires the exact verified completed Release B receipt.");
-    checkTransport(live, "enabled");
+    checkTransport(live, "publish", plan.sha);
   } else {
     requireCondition(equal(live, previous.baseline), "Production differs from the sealed Release A baseline.");
     checkBinding(production, plan, current);
@@ -264,14 +271,15 @@ async function execute(action, directory, plan, current, previous, approval, exc
       inspect,
       verifyLock: () => assertReleaseLock(lockTime),
       journal(state, id, snapshot) {
-        if (state === "VERIFIED") verifyBStep(snapshot, releaseBSteps[action].find((step) => step.id === id));
+        if (state === "VERIFIED") verifyBStep(snapshot, releaseBSteps[action].find((step) => step.id === id), plan.sha);
         before = snapshot;
         record(state, id, snapshot);
       },
       deploy(step) {
         const args = releaseBDeploymentArgs(action, step, before);
         if (step.cleanerPushMode) {
-          writeReleaseModes(workspace, { inboxMode: "enabled", cleanerPushMode: step.cleanerPushMode });
+          writeReleaseModes(workspace, { inboxMode: "enabled", cleanerPushMode: step.cleanerPushMode,
+            pilotRelease: step.cleanerPushMode === "pilot" ? plan.sha : undefined });
         }
         changed = true;
         const cli = join(root, "node_modules/firebase-tools/lib/bin/firebase.js");
@@ -282,7 +290,7 @@ async function execute(action, directory, plan, current, previous, approval, exc
       },
       verifyAssets: () => verifyLiveAssets(actionArtifact.manifest),
     });
-    checkTransport(result, action === "publish" ? "enabled" : "disabled");
+    checkTransport(result, action, plan.sha);
     record("COMPLETE", null, result);
     completed = true;
   } finally {

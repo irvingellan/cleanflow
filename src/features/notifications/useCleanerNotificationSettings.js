@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { enableCleanerPush, inspectCleanerPush, refreshCleanerPush } from "./cleanerPushService.js";
+import { cleanerPushCanEnable, cleanerPushPairingReference, enableCleanerPush, inspectCleanerPush, refreshCleanerPush } from "./cleanerPushService.js";
 
 const resumeIntervalMs = 60_000;
 const refreshIntervalMs = 15 * 60_000;
@@ -59,6 +59,9 @@ export function useCleanerNotificationSettings({ session, active, platform, disp
 
   return {
     state: active && result.sessionId === session.sessionId ? result.state : "checking",
+    pairingReference: active && result.sessionId === session.sessionId && result.state === "pilot-ineligible"
+      ? cleanerPushPairingReference(session) : null,
+    canEnable: active && cleanerPushCanEnable(session),
     enable: () => act(enableCleanerPush),
     recheck: () => act(inspectCleanerPush),
   };

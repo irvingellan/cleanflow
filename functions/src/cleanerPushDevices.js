@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertSessionForMutation, cleanerAccountUid } from "./cleanerHubAccess.js";
+import { approvedCleanerPushPilotDevice } from "./cleanerPushPilot.js";
 
 const deviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
 const sessionIdPattern = /^[A-Za-z0-9_-]{1,128}$/;
@@ -90,7 +91,10 @@ function assertRegistrationOwner(snapshot, identity) {
   }
 }
 
-export async function registerCleanerDevice(database, identity, data) {
+export async function registerCleanerDevice(database, identity, data, mode) {
+  if (mode !== "pilot" && mode !== "enabled") {
+    throw new HttpsError("failed-precondition", "Cleaner push is not enabled.");
+  }
   validateRequest(identity, data, ["deviceId", "token", "platform", "permission", "language"]);
   if (!validCleanerFcmToken(data.token) || !platforms.has(data.platform) || data.permission !== "granted") {
     throw new HttpsError("invalid-argument", "Push enrollment requires a granted permission and valid installation.");
@@ -99,10 +103,16 @@ export async function registerCleanerDevice(database, identity, data) {
   const [tokenClaimRef, installationClaimRef] = cleanerClaimsFor(database, data);
   const nextBinding = randomBytes(16).toString("hex");
   return database.runTransaction(async (transaction) => {
-    const [snapshot, tokenClaim, installationClaim] = await Promise.all([
+    const [snapshot, tokenClaim, installationClaim, approved] = await Promise.all([
       transaction.get(reference), transaction.get(tokenClaimRef), transaction.get(installationClaimRef),
+      mode !== "pilot" || approvedCleanerPushPilotDevice(transaction, database, { ...identity, deviceId: data.deviceId }),
       assertSessionForMutation(transaction, database, identity),
     ]);
+    if (!approved) {
+      throw new HttpsError("permission-denied", "This installation is not eligible for cleaner push.", {
+        reason: "cleaner-push-pilot-ineligible",
+      });
+    }
     assertRegistrationOwner(snapshot, identity);
     const current = snapshot.data();
     const claim = tokenClaim.data();
@@ -177,13 +187,16 @@ export async function deactivateCleanerDevice(database, identity, data) {
   });
 }
 
-export async function getCleanerDeviceStatus(database, identity, data) {
+export async function getCleanerDeviceStatus(database, identity, data, mode) {
   validateRequest(identity, data, ["deviceId"]);
+  if (mode !== "pilot" && mode !== "enabled") return { state: "unavailable" };
   return database.runTransaction(async (transaction) => {
-    const [snapshot] = await Promise.all([
+    const [snapshot, approved] = await Promise.all([
       transaction.get(cleanerDeviceReference(database, identity)),
+      mode !== "pilot" || approvedCleanerPushPilotDevice(transaction, database, { ...identity, deviceId: data.deviceId }),
       assertSessionForMutation(transaction, database, identity),
     ]);
+    if (!approved) return { state: "pilot-ineligible" };
     assertRegistrationOwner(snapshot, identity);
     const current = snapshot.data();
     if (current?.deviceId !== data.deviceId || !validRegistrationRevision(current.registrationRevision)) return { state: "missing" };

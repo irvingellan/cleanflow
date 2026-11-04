@@ -12,6 +12,21 @@ operations manager. See [DESIGN.md](../DESIGN.md) and
 [the Codex mission](definitive-ui/CODEX_NEXT_ACTION.md).
 
 
+## 2026-11-04 — Release B pilot infrastructure configured (Issue #85)
+
+The dedicated `CleanFlow Cleaner Hub Messaging` Web App now exists in the
+existing Production Firebase project. Its public binding matches the manager's
+project and sender. The Console public VAPID fingerprint matches the already
+published manager key. A readback matched the COMPLETE Release A Hosting,
+Rules and Function revisions after app registration. The manager transport
+and cleaner Inbox continue on Release A.
+
+The Release B branch prepares a pilot whose registration and sender require
+an expiring exact account, session, device, organization and release approval.
+The Production pilot, real sends and physical acceptance await separate
+authorization. The Sandbox Functions inventory limitation is independent.
+See the [pilot procedure](NOTIFICATIONS_RELEASE_A_RUNBOOK.md#release-b-pilot).
+
 ## 2026-11-04 — Release B qualification prepared locally (Issue #85)
 
 A fresh read-only comparison matches the complete Release A receipt, including
