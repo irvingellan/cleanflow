@@ -1,3 +1,14 @@
+> **2026-11-03 Cleaner Hub V1 — functional local candidate (Claude, isolated worktree).**
+> `feature/cleaner-hub-real-v1` from `codex/development` @ `19d7faa`. Cleaners link
+> once with a manager-issued single-use code and see only their own real Assignments
+> (Today/Upcoming/Completed, Offers apart), live, through a trigger-maintained
+> `cleanerAgenda` projection; checklist and Offer answers reuse existing services.
+> Validated only on isolated emulators: 1,484 unit, 9 cleaner + 84 manager security,
+> 42 guard tests, and an E2E with the real manager screens plus WebKit iPhone and
+> Chromium Android cleaners. Not deployed: Production needs rules, 8 Functions, one
+> IAM signing permission and Hosting (see `CLEANER_HUB_V1.md`). Sandbox cannot run
+> Functions without billing. No Production/Sandbox/billing/real-data change.
+
 > **2026-11-03 canonical development checkpoint — LOCAL ONLY.**
 > The single local integration line is now `codex/development`, created from
 > verified Production-compatibleb7 only after the private source-preservation gate.

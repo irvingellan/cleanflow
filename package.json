@@ -16,6 +16,8 @@
     "scenario": "node scripts/scenarios/run.mjs",
     "test:security": "firebase emulators:exec --project demo-cleanflow --only firestore,storage \"node --test --test-concurrency=1 security/managerAuthorization.test.mjs\"",
     "test:all": "npm test && npm run test:e2e",
+    "test:cleaner-hub:security": "GOOGLE_APPLICATION_CREDENTIALS=/nonexistent/cleanflow-no-credentials.json firebase emulators:exec --config firebase.cleaner-hub-test.json --project demo-cleanflow --only firestore,auth \"node --test --test-concurrency=1 security/cleanerHub.test.mjs\"",
+    "test:cleaner-hub:e2e": "node scripts/cleaner-hub/run-e2e.mjs",
     "visual:env": "npm run build:emulators",
     "visual:fixtures": "node scripts/visual-smoke/seedE2eFixtures.mjs",
     "visual:smoke": "node scripts/visual-smoke/prepareAgentBrowser.mjs",
