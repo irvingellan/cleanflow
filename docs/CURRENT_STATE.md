@@ -1,3 +1,16 @@
+> **2026-11-03 local engineering checkpoint — source reconciliation + notification reliability.**
+> Current main/origin remain `8bc70165c9bdf8a48ba54aa5c3ff5b3583c6a526`;
+> separately verified Production Hosting remains `b7b0eeac5374a8ffb072972c671f8803b680a1a0`
+> with31 ACTIVE Node22 Functions. This local branch is based on that deployed source,
+> not an integration of main/V2/V3/Intake. No Production deployment/write or visual
+> change was performed. See `engineering/WORKTREE_RELEASE_CANDIDATE_REGISTRY.md`
+> for the dated21-tree/61-branch/37-remote source census, verified existing backups
+> and remaining local-only gaps; see `engineering/NOTIFICATION_RELIABILITY_REVIEW_2026-11-03.md`
+> for bounded registration, exact-version sign-out, conservative FCM outcomes,
+> diagnostic limits and physical-device acceptance still pending. Account, device
+> and human attribution are distinct; the exact real token-invalidation cause is
+> not established. Historical deployment/STOP notes below remain preserved.
+
 # CleanFlow — Current State
 
 ## Issues #81/#82 — integrated Multi-Photo + Node22 candidate (2026-10-21)
