@@ -1,5 +1,17 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — Pilot feedback UX V1 (branch-only, synthetic)
+
+`feature/gabi-feedback-ux-v1` from the deployed Hub pilot `5469a32` addresses the
+operations manager's 2026-11-04 review in presentation code only. Interested
+cleaners become the manager's first decision; manual assignment stays as an explicit
+exception. Hub "Agendadas" lists every future Job (all / by month). Checklist
+situation, access/house instructions and photo-requirement lists are ready behind
+optional server contracts that do not exist yet. Photo guidance no longer implies
+one photo is enough. FB05 (16-photo stop) is untouched and remains a Codex
+investigation. No Functions/Rules/data/deploy. Vitest 1,412/1,412; synthetic
+Chromium + WebKit checks 24/24. See [Pilot feedback UX V1](PILOT_FEEDBACK_UX_V1.md).
+
 ## 2026-11-03 — Cleaner Hub V1 Production pilot (Issues #84 / #85)
 
 **Published for controlled pilot; physical iPhone and Android acceptance pending.**

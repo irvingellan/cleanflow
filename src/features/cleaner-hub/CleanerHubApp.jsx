@@ -147,7 +147,8 @@ function FreshnessBanner({ t, freshness }) {
 function monthLabel(t, month) {
   if (!month) return t("hb.dateNotSet");
   const [year, number] = month.split("-").map(Number);
-  return new Intl.DateTimeFormat(t.locale, { month: "long", year: "numeric" }).format(new Date(year, number - 1, 15, 12));
+  const label = new Intl.DateTimeFormat(t.locale, { month: "long", year: "numeric" }).format(new Date(year, number - 1, 15, 12));
+  return label.charAt(0).toLocaleUpperCase(t.locale) + label.slice(1);
 }
 
 const checklistChipStates = ["available", "started", "submitted"];

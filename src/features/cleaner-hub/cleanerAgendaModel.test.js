@@ -99,7 +99,7 @@ describe("access code input", () => {
 
 import { agendaMonths, checklistSituation, entriesInMonth, normalizeJobAccess } from "./cleanerAgendaModel.js";
 
-describe("Gabi feedback model rules", () => {
+describe("Pilot feedback model rules", () => {
   it("months cover every entry exactly once, undated last", () => {
     const list = [{ scheduledDate: "2027-01-03" }, { scheduledDate: null }, { scheduledDate: "2026-12-30" }, { scheduledDate: "2026-12-01" }];
     const months = agendaMonths(list);

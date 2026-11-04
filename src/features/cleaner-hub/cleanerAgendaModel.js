@@ -93,7 +93,7 @@ export function formatAccessCodeInput(value) {
   return code.match(/.{1,4}/g)?.join("-") || "";
 }
 
-/* ---------- Gabi feedback 2026-11-04 (FB02, FB04, FB01) ---------- */
+/* ---------- Pilot feedback 2026-11-04 (FB02, FB04, FB01) ---------- */
 
 /** "YYYY-MM" for a dated entry, "" when the date is not set yet. */
 export function monthKeyOf(entry) {
@@ -120,7 +120,7 @@ const runStatuses = ["NONE", "DRAFT", "READY_FOR_REVIEW", "ABANDONED"];
  * Cleaner-facing checklist situation for an assigned agenda entry.
  *
  * Reads the optional server-written `entry.checklist` summary proposed in
- * docs/GABI_FEEDBACK_UX_V1.md ({status, started}). The current projection does
+ * docs/PILOT_FEEDBACK_UX_V1.md ({status, started}). The current projection does
  * not write it yet, so the honest answer is "unknown": the screen then offers
  * the existing "Abrir checklist" path, where the server decides. Nothing here
  * creates, starts or submits a Run, and saving answers is never "sent".

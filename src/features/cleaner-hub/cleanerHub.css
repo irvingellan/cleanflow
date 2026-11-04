@@ -420,7 +420,7 @@
   .hb-root .hb-app { border: 0; border-radius: 0; height: 100dvh; }
 }
 
-/* ---------- Gabi feedback 2026-11-04: schedule, checklist situation, access ---------- */
+/* ---------- Pilot feedback 2026-11-04: schedule, checklist situation, access ---------- */
 .hb-seg .hb-count { display: inline-grid; place-items: center; min-width: 22px; height: 20px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--v2-color-surface-sunken); color: var(--v2-color-text-secondary); font-size: 12px; font-weight: 800; }
 .hb-seg button[aria-pressed="true"] .hb-count { background: var(--v2-color-brand); color: var(--v2-color-on-brand); }
 .hb-sched { display: grid; gap: 10px; }
@@ -430,11 +430,10 @@
 .hb-root .hb-chipbtn { min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--v2-color-border-strong); background: var(--v2-color-surface); color: var(--v2-color-text-primary); font-weight: 700; font-size: 14px; }
 .hb-root .hb-chipbtn[aria-pressed="true"] { background: var(--v2-color-surface-selected); border-color: var(--v2-color-border-selected); color: var(--v2-color-brand-text); }
 .hb-month { display: grid; gap: 8px; }
-.hb-month-title { margin: 6px 0 0; font-size: 15px; font-weight: 800; text-transform: capitalize; }
-.hb-month-title .mw-sec { text-transform: none; font-weight: 600; }
+.hb-month-title { margin: 6px 0 0; font-size: 15px; font-weight: 800; }
+.hb-month-title .mw-sec { font-weight: 600; }
 .hb-monthnav { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 6px; border-radius: 14px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); }
-.hb-monthnav strong { text-align: center; text-transform: capitalize; font-size: 15px; }
-.hb-monthnav strong .mw-sec { text-transform: none; }
+.hb-monthnav strong { text-align: center; font-size: 15px; }
 .hb-root .hb-iconbtn { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--v2-color-border); background: var(--v2-color-surface-subtle); color: var(--v2-color-text-primary); }
 .hb-root .hb-iconbtn:disabled { color: var(--v2-color-text-disabled); background: transparent; }
 .hb-clchip { display: inline-flex; align-items: center; gap: 4px; justify-self: start; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
@@ -462,3 +461,6 @@
 .hb-house > p { margin: 0; padding: 0 12px 12px; white-space: pre-line; font-size: 15px; line-height: 1.5; }
 .hb-record > .hb-facts { padding: 0 10px 10px; }
 .hb-record > summary { color: var(--v2-color-text-secondary); font-size: 14px; }
+.hb-root .hb-seg button { white-space: nowrap; padding-inline: 4px; }
+.hb-root .hb-seg .hb-count { margin-left: 3px; min-width: 20px; padding: 0 5px; }
+.hb-clchip { width: fit-content; max-width: 100%; }

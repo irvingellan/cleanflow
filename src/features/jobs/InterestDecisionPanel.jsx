@@ -1,6 +1,6 @@
 import { useTranslation } from "../../i18n/translations.js";
 
-// FB03 (Gabi pilot feedback 2026-11-04). When cleaners answered "interested",
+// FB03 (Pilot feedback 2026-11-04). When cleaners answered "interested",
 // the manager's decision is shown first instead of a generic "Assign cleaner".
 // Interest never assigns: only the manager's explicit confirmation does, through
 // the same onAssignCleaner(offer) handler as the Offers section. Manual direct

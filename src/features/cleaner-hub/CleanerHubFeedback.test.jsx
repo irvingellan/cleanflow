@@ -1,4 +1,4 @@
-// Gabi pilot feedback 2026-11-04 — FB01 (access), FB02 (full schedule), FB04 (checklist situation).
+// Pilot feedback 2026-11-04 — FB01 (access), FB02 (full schedule), FB04 (checklist situation).
 // Fictitious data only.
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -26,7 +26,7 @@ function fakeService(extra = {}) {
 }
 
 const job = (n, date, extra = {}) => ({ id: `ana__j${n}`, kind: "ASSIGNED", jobId: `j${n}`, cleanerId: "ana", jobStatus: "ASSIGNED", propertyName: `Example House ${n}`, scheduledDate: date, scheduledStart: "10:00", acknowledged: true, ...extra });
-// Nine future Jobs over three months (more than the "7" Gabi saw).
+// Nine future Jobs over three months (more than the reported "7").
 const firstOfNextMonth = (() => { const [y, m] = today.split("-").map(Number); return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`; })();
 const plusMonth = (key) => { const [y, m] = key.split("-").map(Number); return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`; };
 const m1 = firstOfNextMonth; const m2 = plusMonth(m1); const m3 = plusMonth(m2);

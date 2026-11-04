@@ -1,4 +1,4 @@
-// FB03 (Gabi pilot feedback 2026-11-04): the interested-cleaner decision comes
+// FB03 (Pilot feedback 2026-11-04): the interested-cleaner decision comes
 // first; manual assignment stays as an explicit exception. Fictitious data.
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";

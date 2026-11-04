@@ -137,6 +137,7 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
 function ChecklistAnswer({
   item, value, onChange, translate, token, evidence, disabled = false,
   missing = false, photoMissing = false, answerTargetRef, photoTargetRef, onEvidenceSaved, gallery,
+  photoRequirements = null, photoRequirementsAreExample = false,
 }) {
   const label = itemLabel(item, translate);
   const answerValues = ["UNANSWERED", "DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
@@ -163,7 +164,7 @@ function ChecklistAnswer({
       </div>
       {missing && <p className="public-checklist__missing-marker" id={missingAnswerId}>{translate("checklists.answerRequiredBeforeReview")}</p>}
       {item.requiresPhoto && item.id === pilotPhotoRequirementId && (
-        gallery ? <ChecklistPhotoGallery gallery={gallery} token={token} disabled={disabled} missing={photoMissing} targetRef={photoTargetRef} translate={translate} /> : <ChecklistPhoto
+        gallery ? <ChecklistPhotoGallery gallery={gallery} token={token} disabled={disabled} missing={photoMissing} targetRef={photoTargetRef} translate={translate} photoRequirements={photoRequirements} requirementsAreExample={photoRequirementsAreExample} /> : <ChecklistPhoto
           item={item}
           token={token}
           evidence={evidence}
@@ -545,6 +546,9 @@ export function PublicChecklistPage({ token }) {
                   else fieldTargetsRef.current.delete(`photo:${item.id}`);
                 }}
                 onEvidenceSaved={(requirementId) => setConfirmedEvidenceIds((current) => new Set([...current, requirementId]))}
+                // FB06: optional frozen list from the Run (proposed contract). Absent on current Runs.
+                photoRequirements={Array.isArray(checklist.photoRequirements) ? checklist.photoRequirements : null}
+                photoRequirementsAreExample={checklist.photoRequirementsSample === true}
               />
             ))}
           </section>

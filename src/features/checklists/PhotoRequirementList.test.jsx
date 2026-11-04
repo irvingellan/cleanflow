@@ -1,4 +1,4 @@
-// FB06 (Gabi pilot feedback 2026-11-04): explicit photo requirements, no invented minimum.
+// FB06 (Pilot feedback 2026-11-04): explicit photo requirements, no invented minimum.
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PhotoRequirementList } from "./ChecklistPhotoGallery.jsx";
