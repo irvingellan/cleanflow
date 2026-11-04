@@ -15,22 +15,23 @@ const require = createRequire(import.meta.url);
 const deployedSha = "a593daf636024d6830bf89c75bd7f6353b4b759f";
 const deployedManifestHash = "ddbc29c2e86ff71e5539acb6551c4679724d323efbad502b457cfdb558c173e5";
 const oldRuleset = "03de7532-ddb1-4f6e-b6d7-137d0717572d";
-const expectedBranch = "codex/notification-reliability-v1-85";
+export const expectedBranch = "codex/notification-reliability-v1-85";
 const origin = `https://${notificationProject}.web.app`;
-const deployGroups = {
+export const deployGroups = {
   create: [
-    "createAutomaticJobOffers", "deactivateManagerPushDevice", "listNotificationInbox", "markNotificationRead",
-    "openNotificationInboxItem", "registerCleanerPushDevice", "deactivateCleanerPushDevice",
-    "getCleanerPushDeviceStatus", "notifyCleanerInboxEvent",
+    "deactivateManagerPushDevice", "listNotificationInbox", "markNotificationRead", "openNotificationInboxItem",
   ],
   update: [
-    "assignCleanerDirectly", "publicOffer", "publicChecklist", "respondToMyOffer", "issueCleanerAccessCode",
+    "publicOffer", "publicChecklist", "respondToMyOffer", "issueCleanerAccessCode",
     "redeemCleanerAccessCode", "revokeCleanerHubAccess", "openMyChecklist", "syncCleanerAgendaOnJobWrite",
-    "syncCleanerAgendaOnAssignmentWrite", "syncCleanerAgendaOnOfferWrite", "registerManagerPushDevice",
+    "syncCleanerAgendaOnOfferWrite", "registerManagerPushDevice",
     "getManagerNotificationDiagnostics", "reportManagerNotificationHealth", "sendDeveloperTestNotification",
     "sendCurrentManagerTestNotification", "notifyManagersOperationalEvent", "notifyManagersChecklistReadyForReview",
     "sendTomorrowPlanningReminder", "sendTodayExecutionReminder",
   ],
+  defer: ["createAutomaticJobOffers", "getCleanerPushDeviceStatus", "deactivateCleanerPushDevice",
+    "registerCleanerPushDevice", "notifyCleanerInboxEvent"],
+  prepareB: ["getCleanerPushDeviceStatus", "deactivateCleanerPushDevice"],
   enable: ["registerCleanerPushDevice", "notifyCleanerInboxEvent"],
 };
 const webFields = {
@@ -72,7 +73,7 @@ export function validPhysicalVerification(receipt, { sha, appId, vapidFingerprin
     && receipt.iosHomeScreenObserved === true && receipt.androidObserved === true);
 }
 
-async function readPublishedAssets(manifest) {
+export async function readPublishedAssets(manifest) {
   if (manifest.projectId !== notificationProject || manifest.environment !== "production"
     || !Array.isArray(manifest.files) || manifest.files.length > 60
     || new Set(manifest.files.map((row) => row.file)).size !== manifest.files.length
@@ -99,6 +100,8 @@ function checkedWebEnvironment(directory) {
   const names = [...Object.values(webFields).map((key) => "VITE_FIREBASE_" + key), ...optionalWebEnv];
   const env = Object.fromEntries(names.map((name) => [name, source[name] || ""]));
   env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID = "";
+  env.VITE_AUTOMATIC_OFFERS_MODE = "disabled";
+  env.VITE_NOTIFICATION_INBOX_MODE = "enabled";
   env.VITE_USE_FIREBASE_EMULATORS = "false";
   env.VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN = "";
   env.VITE_CLEANFLOW_ENV = "production";
@@ -108,14 +111,14 @@ function checkedWebEnvironment(directory) {
 
 function verifyFunctions(stage, cloud, candidateNames) {
   const names = cloud.functions.map(({ id }) => id).sort();
-  const expected = stage === "A" ? candidateNames.filter((name) => !deployGroups.create.includes(name)) : candidateNames;
+  const expected = candidateNames.filter((name) => !deployGroups.defer.includes(name)
+    && (stage !== "A" || !deployGroups.create.includes(name)));
   return cloud.functionsComplete && JSON.stringify(names) === JSON.stringify(expected)
     && cloud.functions.every(({ state, runtime, region, revision, maxInstances }) =>
       state === "ACTIVE" && runtime === "nodejs22" && region === "us-central1" && revision && maxInstances === 20)
     && cloud.functions.filter(({ id }) => ["sendTodayExecutionReminder", "sendTomorrowPlanningReminder"].includes(id))
       .every(({ managerFcm }) => managerFcm === true)
-    && (stage === "A" || cloud.functions.filter(({ id }) => deployGroups.enable.includes(id))
-      .every(({ cleanerPushEnabled }) => cleanerPushEnabled === false));
+    && cloud.noPendingFunctionOperations;
 }
 
 function declaredFunctions() {
@@ -125,6 +128,8 @@ function declaredFunctions() {
 
 async function preflight(options) {
   const { stage, sha, "env-dir": envDir, "previous-manifest": previousManifest, verification, build } = options;
+  const compatibility = options.compatibility === true;
+  if (compatibility && (stage !== "A" || !build)) throw new Error("Compatibility mode requires a Release A build.");
   if (!["A", "B"].includes(stage) || !/^[a-f0-9]{40}$/.test(sha || "") || !envDir || !previousManifest) {
     throw new Error("Use --stage A|B --sha <40-character SHA> --env-dir <local path> --previous-manifest <verified prior manifest>.");
   }
@@ -145,6 +150,7 @@ async function preflight(options) {
   const sdkVersion = require("firebase/package.json").version;
   const messagingVersion = require("@firebase/messaging/package.json").version;
   const { env, manager } = checkedWebEnvironment(envDir);
+  if (compatibility) env.VITE_NOTIFICATION_INBOX_MODE = "disabled";
   const localVapid = env.VITE_FIREBASE_VAPID_KEY;
   const vapidFingerprint = validVapidFingerprint(localVapid);
   const previousBytes = readFileSync(resolve(previousManifest));
@@ -179,6 +185,8 @@ async function preflight(options) {
     && (stage === "B" || cloud.ruleset === oldRuleset), "Live Firestore Rules differ or could not be verified.");
   check("productionFunctions", cloud && verifyFunctions(stage, cloud, declarations), "Live Functions inventory, runtime, or cleaner mode differs.");
   check("iam", cloud?.iam.ok, "The caller's scoped deployment permissions could not be verified.");
+  check("releaseLock", cloud?.releaseLock.state === "AVAILABLE",
+    "The Production release mutex is held or unavailable.");
   check("managerVapid", vapidFingerprint && staticAssets.some((row) => row.matched && row.file.endsWith(".js") && row.bytes.includes(localVapid)),
     "The local public VAPID key must match a verified live asset and be a valid P-256 point.");
   check("fcmApis", cloud?.fcmRegistrationApi === "ENABLED" && cloud.fcmDeliveryApi === "ENABLED",
@@ -224,15 +232,19 @@ async function preflight(options) {
     check("cleanerWorker", workerMatches, "The built cleaner worker does not match the selected release stage.");
     check("manifest", JSON.stringify(current) === JSON.stringify(JSON.parse(preparedBytes).files),
       "Prepared Hosting manifest does not match the built files.");
+    const version = JSON.parse(readFileSync(resolve(dist, "version.json"), "utf8"));
+    check("buildVariant", compatibility ? version.deploymentId === `${sha}-inbox-off` : !version.deploymentId,
+      "The Hosting update marker does not match the selected build variant.");
     manifest = { sha256: sha256(preparedBytes), files: current.length };
   }
   if (!manifest) check("manifest", false, "A stage-specific build manifest is required.");
   return {
     status: blockers.length ? "BLOCKED" : "DRY_RUN_READY",
-    stage, sha, branch, sdkVersion, messagingVersion, checks, blockers, manifest,
+    stage, sha, branch, compatibility, sdkVersion, messagingVersion, checks, blockers, manifest,
     production: cloud || null, publicHostingFiles: { matched: staticMatches, total: staticAssets.length },
     targets: stage === "A" ? { rules: ["firestore.rules"], hosting: true, functions: { create: deployGroups.create, update: deployGroups.update } }
-      : { rules: [], hosting: true, enableAfterHosting: deployGroups.enable },
+      : { rules: [], hosting: true, createBeforeHosting: deployGroups.prepareB, createAfterHosting: deployGroups.enable },
+    automaticOffersMode: "disabled",
     cleanerPushMode: stage === "A" ? "disabled" : "enabled",
     relevantSourceFiles: git("diff", "--name-only", `${deployedSha}..HEAD`, "--",
       "firebase.json", "firestore.rules", "functions/src", "vite.config.js").split("\n").filter(Boolean),
@@ -249,7 +261,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const { values } = parseArgs({ options: {
       stage: { type: "string" }, sha: { type: "string" }, "env-dir": { type: "string" },
       "previous-manifest": { type: "string" }, verification: { type: "string" },
-      "vapid-console-sha256": { type: "string" }, "physical-verification": { type: "string" }, report: { type: "string" }, build: { type: "boolean" },
+      "vapid-console-sha256": { type: "string" }, "physical-verification": { type: "string" }, report: { type: "string" },
+      build: { type: "boolean" }, compatibility: { type: "boolean" },
     } });
     const reportPath = resolve(root, values.report || `.tmp/notification-preflight-${values.stage}.json`);
     if (!relative(root, reportPath).startsWith(".tmp/")) throw new Error("Write the report under the ignored .tmp directory.");

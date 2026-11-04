@@ -821,6 +821,9 @@ export const createAutomaticJobOffers = onCall(
     if (!request.auth?.uid || request.auth.token?.firebase?.sign_in_provider === "anonymous") {
       throw new HttpsError("unauthenticated", "A non-anonymous account is required.");
     }
+    if (process.env.AUTOMATIC_OFFERS_MODE !== "enabled") {
+      throw new HttpsError("failed-precondition", "Automatic offer creation is disabled.");
+    }
     return createAutomaticJobOffersForManager(db, {
       organizationId,
       actorUid: request.auth.uid,
@@ -1642,19 +1645,34 @@ export const respondToMyOffer = onCall(
   },
 );
 
+function requireNotificationInboxEnabled() {
+  if (process.env.NOTIFICATION_INBOX_MODE === "disabled") {
+    throw new HttpsError("failed-precondition", "The notification inbox is temporarily unavailable.");
+  }
+}
+
 export const listNotificationInbox = onCall(
   { region: "us-central1" },
-  (request) => listNotificationInboxForRequest(db, { organizationId, request }),
+  (request) => {
+    requireNotificationInboxEnabled();
+    return listNotificationInboxForRequest(db, { organizationId, request });
+  },
 );
 
 export const markNotificationRead = onCall(
   { region: "us-central1" },
-  (request) => changeNotificationInboxItemForRequest(db, { organizationId, request, open: false }),
+  (request) => {
+    requireNotificationInboxEnabled();
+    return changeNotificationInboxItemForRequest(db, { organizationId, request, open: false });
+  },
 );
 
 export const openNotificationInboxItem = onCall(
   { region: "us-central1" },
-  (request) => changeNotificationInboxItemForRequest(db, { organizationId, request, open: true }),
+  (request) => {
+    requireNotificationInboxEnabled();
+    return changeNotificationInboxItemForRequest(db, { organizationId, request, open: true });
+  },
 );
 
 async function cleanerPushIdentity(request) {

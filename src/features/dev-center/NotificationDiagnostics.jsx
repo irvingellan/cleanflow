@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n/translations.js";
 import { readLocalNotificationHealth } from "../notifications/notificationHealthService.js";
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
+import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
 import { diagnosticCopy } from "./devCenterNotificationCopy.js";
 import { sendDeveloperTestNotification } from "./devCenterService.js";
 
@@ -126,7 +127,7 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
         <>
           {diagnostics.viewerAccount && <p>{copy("viewer")}: {diagnostics.viewerAccount}</p>}
           {diagnostics.readMetadata && <p>{copy("boundedHistory")}</p>}
-          {diagnostics.latestInbox && (
+          {notificationInboxEnabled() && diagnostics.latestInbox && (
             <section aria-label={copy("latestInbox")}>
               <h4>{copy("latestInbox")}</h4>
               {diagnostics.latestInbox.state === "available" ? (

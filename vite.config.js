@@ -175,6 +175,7 @@ self.addEventListener("activate", (event) => {
 function cleanflowServiceWorkers(buildInfo) {
   let source = ''
   let cleanerSource = ''
+  const deploymentId = buildInfo.deploymentId || buildInfo.buildId
 
   return {
     name: 'cleanflow-firebase-messaging-worker',
@@ -205,7 +206,7 @@ function cleanflowServiceWorkers(buildInfo) {
       server.middlewares.use('/sw.js', (_request, response) => {
         response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
         response.setHeader('Cache-Control', 'no-cache')
-        response.end(rootWorkerSource(buildInfo.buildId))
+        response.end(rootWorkerSource(deploymentId))
       })
       server.middlewares.use('/firebase-messaging-sw.js', (_request, response) => {
         response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -227,7 +228,7 @@ function cleanflowServiceWorkers(buildInfo) {
       this.emitFile({
         type: 'asset',
         fileName: 'sw.js',
-        source: rootWorkerSource(buildInfo.buildId),
+        source: rootWorkerSource(deploymentId),
       })
       this.emitFile({
         type: 'asset',
@@ -280,11 +281,14 @@ export default defineConfig(({ mode }) => {
     buildId: process.env.GITHUB_SHA || `${packageMetadata.version}-${new Date().toISOString()}`,
     ...binding,
   }
+  if (environment.VITE_NOTIFICATION_INBOX_MODE === 'disabled') {
+    buildInfo.deploymentId = `${buildInfo.buildId}-inbox-off`
+  }
 
   return {
     define: {
       __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__: JSON.stringify(mode === "emulator" ? approvedPrivateEmulatorOrigin : ""),
-      __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.buildId),
+      __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.deploymentId || buildInfo.buildId),
     },
     plugins: ["test", "e2e"].includes(mode)
       ? [react()]

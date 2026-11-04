@@ -12,6 +12,7 @@ const expected = {
 for (const [name, value] of Object.entries(expected)) {
   assert.equal(process.env[name], value, `Inbox security tests require local ${name}`);
 }
+process.env.AUTOMATIC_OFFERS_MODE = "enabled";
 
 const requireFromFunctions = createRequire(new URL("../functions/src/index.js", import.meta.url));
 const { getFirestore, Timestamp } = requireFromFunctions("firebase-admin/firestore");
@@ -141,6 +142,37 @@ test("offers are durable only in intended cleaner inboxes and replay does not du
   await org.collection("members").doc("uid-ana").update({ active: false });
   await assert.rejects(listNotificationInbox.run(cleaner("ana")), { code: "permission-denied" });
   await assert.rejects(openNotificationInboxItem.run(cleaner("ana", { id })), { code: "permission-denied" });
+});
+
+test("rollback gates all Inbox callables while keeping the durable event and its authorized session", async () => {
+  const jobId = "rollback-keeps-inbox-data";
+  const originalMode = process.env.NOTIFICATION_INBOX_MODE;
+  try {
+    process.env.NOTIFICATION_INBOX_MODE = "enabled";
+    await writeJob(jobId);
+    const before = await job(jobId).get();
+    await assignCleanerDirectly.run(manager("manager", { jobId, cleanerId: "ana" }));
+    assert.equal(await jobTransition(jobId, "rollback-assignment", before, await job(jobId).get()), 1);
+    const { items: [{ id }] } = await listNotificationInbox.run(cleaner("ana"));
+    const item = admin.doc(`${org.path}/cleanerNotificationInboxes/ana/items/${id}`);
+    const receipt = admin.doc(`${org.path}/notificationInboxReadStates/uid-ana/items/${id}`);
+
+    process.env.NOTIFICATION_INBOX_MODE = "disabled";
+    for (const endpoint of [listNotificationInbox, markNotificationRead, openNotificationInboxItem]) {
+      await assert.rejects(async () => endpoint.run(cleaner("ana", { id })), { code: "failed-precondition" });
+    }
+    assert.equal((await item.get()).exists, true);
+    assert.equal((await receipt.get()).exists, false);
+
+    process.env.NOTIFICATION_INBOX_MODE = "enabled";
+    assert.deepEqual(await openNotificationInboxItem.run(cleaner("ana", { id })), {
+      state: "opened", destination: { kind: "JOB", jobId },
+    });
+    assert.equal((await receipt.get()).exists, true);
+  } finally {
+    if (originalMode === undefined) delete process.env.NOTIFICATION_INBOX_MODE;
+    else process.env.NOTIFICATION_INBOX_MODE = originalMode;
+  }
 });
 
 test("automatic award makes one manager inbox entry with per-manager reading and one cleaner assignment", async () => {

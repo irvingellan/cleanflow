@@ -23,6 +23,11 @@ service cloud.firestore {
       return cleaner.active == true && cleaner.get('archivedAt', null) == null;
     }
 
+    function activeCleanerSession(member, sessionId) {
+      let sessions = member.get('sessionIds', [member.get('sessionId', '')]);
+      return sessions is list && sessionId in sessions;
+    }
+
     // Cleaner Hub: a CLEANER membership is server-provisioned by a single-use
     // access code and authorizes only explicitly active sessions.
     function activeCleaner(orgId) {
@@ -37,8 +42,7 @@ service cloud.firestore {
         && request.auth.token.cleanerHub.cleanerId == get(memberPath(orgId)).data.cleanerId
         && request.auth.token.cleanerHub.sessionId is string
         && request.auth.token.cleanerHub.sessionId.size() > 0
-        && request.auth.token.cleanerHub.sessionId in get(memberPath(orgId)).data.get(
-          'sessionIds', [get(memberPath(orgId)).data.get('sessionId', '')])
+        && activeCleanerSession(get(memberPath(orgId)).data, request.auth.token.cleanerHub.sessionId)
         && eligibleCleaner(orgId, get(memberPath(orgId)).data.cleanerId);
     }
 

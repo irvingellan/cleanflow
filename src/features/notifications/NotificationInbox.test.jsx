@@ -1,7 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { NotificationInbox, useNotificationInbox } from "./NotificationInbox.jsx";
+import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from "./NotificationInbox.jsx";
 
 const items = [
   { id: "a", type: "NEW_OFFER", read: false, createdAtMs: 1793816400000, openable: true, serviceLabel: "Synthetic Flat" },
@@ -10,7 +10,10 @@ const items = [
 
 function Example({ sessionKey = "session-a", service, onOpen }) {
   const inbox = useNotificationInbox({ role: "CLEANER", sessionKey, service });
-  return <NotificationInbox inbox={inbox} language="pt" onOpen={onOpen} />;
+  return <>
+    <button type="button">Inbox <NotificationInboxBadge inbox={inbox} language="pt" className="badge" /></button>
+    <NotificationInbox inbox={inbox} language="pt" onOpen={onOpen} />
+  </>;
 }
 
 describe("Notification Inbox", () => {
@@ -22,17 +25,17 @@ describe("Notification Inbox", () => {
     };
     render(<Example service={service} onOpen={vi.fn()} />);
     expect(await screen.findByRole("heading", { name: "Nova oferta" })).toBeInTheDocument();
-    expect(screen.getByText("O contador considera os avisos carregados.")).toBeInTheDocument();
+    expect(screen.getByText("Há avisos anteriores por carregar. O total de não lidos ainda é desconhecido.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Lidos" }));
     expect(screen.queryByText("Synthetic Flat")).not.toBeInTheDocument();
     expect(screen.getByText("Este item não está mais disponível.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Abrir" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Não lidos" }));
-    expect(screen.getByText("1 não lido(s)")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1 não lido(s) nos avisos carregados");
     await userEvent.click(screen.getByRole("button", { name: "Marcar como lido" }));
     expect(service.mark).toHaveBeenCalledExactlyOnceWith("CLEANER", "a");
-    expect(await screen.findByText("0 não lido(s)")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("0 não lido(s) nos avisos carregados");
     expect(screen.getByText("Nenhum aviso neste filtro.")).toBeInTheDocument();
   });
 
@@ -67,7 +70,7 @@ describe("Notification Inbox", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Carregar avisos anteriores" }));
     expect(await screen.findByText("Synthetic Older Flat")).toBeInTheDocument();
     expect(screen.getAllByText("Synthetic Flat")).toHaveLength(1);
-    expect(screen.getByText("2 não lido(s)")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("2 não lido(s)");
     expect(service.list.mock.calls).toEqual([
       ["CLEANER", { pageSize: 25 }], ["CLEANER", { pageSize: 25, cursor: "cursor-1" }],
     ]);
@@ -76,6 +79,25 @@ describe("Notification Inbox", () => {
     expect(await screen.findByText("Nenhum aviso neste filtro.")).toBeInTheDocument();
     expect(screen.queryByText("Synthetic Older Flat")).not.toBeInTheDocument();
     expect(service.list).toHaveBeenLastCalledWith("CLEANER", { pageSize: 25 });
+  });
+
+  it("labels zero as a partial count until an older unread notification is loaded", async () => {
+    const service = {
+      list: vi.fn()
+        .mockResolvedValueOnce({ items: [items[1]], unreadCount: 0, hasOlder: true, nextCursor: "older" })
+        .mockResolvedValueOnce({ items: [items[0]], unreadCount: 1, hasOlder: false, nextCursor: null }),
+    };
+    render(<Example service={service} />);
+    expect(screen.queryByText("0 não lido(s)")).not.toBeInTheDocument();
+    const partialBadge = await screen.findByRole("button", { name: "Inbox 0 não lido(s) nos avisos carregados" });
+    expect(within(partialBadge).getByText("0+")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("0 não lido(s) nos avisos carregados");
+
+    await userEvent.click(screen.getByRole("button", { name: "Carregar avisos anteriores" }));
+    const fullBadge = await screen.findByRole("button", { name: "Inbox 1 não lido(s)" });
+    expect(within(fullBadge).getByText("1")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1 não lido(s)");
+    expect(screen.queryByText("Há avisos anteriores por carregar. O total de não lidos ainda é desconhecido.")).not.toBeInTheDocument();
   });
 
   it("drops the old account and ignores its late list response on session replacement", async () => {

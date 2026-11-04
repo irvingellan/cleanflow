@@ -62,8 +62,8 @@ export function isActiveCleanerMembership(data) {
 }
 
 export function cleanerSessionIds(data) {
-  return Array.isArray(data?.sessionIds) ? data.sessionIds
-    : typeof data?.sessionId === "string" && data.sessionId ? [data.sessionId] : [];
+  if (data && Object.hasOwn(data, "sessionIds")) return Array.isArray(data.sessionIds) ? data.sessionIds : [];
+  return typeof data?.sessionId === "string" && data.sessionId ? [data.sessionId] : [];
 }
 
 export function isActiveCleanerSession(data, claims) {
@@ -226,7 +226,11 @@ export async function redeemCleanerAccessCode(database, {
     const cleanerData = cleaner.data();
     const additionalDevice = current.additionalDevice === true;
     if (additionalDevice && !canAddCleanerSession(member.data(), organizationId, cleanerId)) throw unavailable();
-    const sessionIds = additionalDevice ? [...cleanerSessionIds(member.data()), sessionId] : [sessionId];
+    const retainedSessionIds = additionalDevice ? cleanerSessionIds(member.data()) : [];
+    // A published Hub tab checks the scalar against its own Auth claim.
+    const previousAnchor = member.data()?.sessionId;
+    const legacySessionId = retainedSessionIds.includes(previousAnchor) ? previousAnchor : sessionId;
+    const sessionIds = [...retainedSessionIds, sessionId];
     if (!additionalDevice) revokeHubChecklistGrants(transaction, accessRef, grants);
     transaction.update(codeRef, { status: "USED", usedAt: FieldValue.serverTimestamp(), usedByUid: uid });
     // Only what the cleaner's own screen needs: her first name and language.
@@ -235,7 +239,7 @@ export async function redeemCleanerAccessCode(database, {
       role: "CLEANER",
       active: true,
       cleanerId,
-      sessionId,
+      sessionId: legacySessionId,
       sessionIds,
       displayName: firstName(cleanerData.name),
       preferredLanguage: ["pt", "en", "es"].includes(cleanerData.preferredLanguage) ? cleanerData.preferredLanguage : null,

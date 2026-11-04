@@ -53,7 +53,9 @@ export async function redeemAccessCode(code) {
 function activeMembership(data, { cleanerId, sessionId }) {
   return data?.role === "CLEANER" && data.active === true
     && data.cleanerId === cleanerId
-    && (Array.isArray(data.sessionIds) ? data.sessionIds.includes(sessionId) : data.sessionId === sessionId);
+    && (Object.hasOwn(data, "sessionIds")
+      ? Array.isArray(data.sessionIds) && data.sessionIds.includes(sessionId)
+      : data.sessionId === sessionId);
 }
 
 /** Live CLEANER membership. Revocation or removal ends the session here. */

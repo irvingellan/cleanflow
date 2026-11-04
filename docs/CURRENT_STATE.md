@@ -1,5 +1,13 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — Notifications Release A review (local candidate)
+
+Release A is narrowed to four creates and 18 updates, Firestore Rules and
+Hosting. Automatic Offer activation and cleaner push are staged separately.
+The local release plan uses exact SHA and manifests, a compatible Inbox-off
+rollback, and a Production drift and mutex guard. See the
+[review matrix](NOTIFICATIONS_RELEASE_A_MATRIX.md) and [runbook](NOTIFICATIONS_RELEASE_A_RUNBOOK.md).
+
 ## 2026-11-04 — Notifications V1 Phase 2 (local candidate)
 
 The Issue #85 worktree adds paged Inbox reads, reduced automatic-offer agenda

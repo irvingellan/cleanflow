@@ -6,8 +6,9 @@ import {
   StateCard,
 } from "./components/UiPrimitives.jsx";
 import { FeedbackPanel } from "./features/feedback/FeedbackPanel.jsx";
-import { NotificationInbox, useNotificationInbox } from "./features/notifications/NotificationInbox.jsx";
+import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from "./features/notifications/NotificationInbox.jsx";
 import { inboxMessage } from "./features/notifications/notificationInboxMessages.js";
+import { notificationInboxEnabled } from "./features/notifications/notificationInboxMode.js";
 import { getJobById } from "./features/jobs/jobService.js";
 import { NotificationControl } from "./features/notifications/NotificationControl.jsx";
 import { abortManagerPushSignOut, prepareManagerPushSignOut } from "./features/notifications/notificationService.js";
@@ -981,10 +982,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                 <LanguageSelector language={language} onChange={setLanguage} />
                 <ThemeToggle />
                 <NotificationControl userId={authUser.uid} />
-                <button className="button button--small" type="button" onClick={() => setView("notification-inbox")}>
-                  {inboxMessage(language, "inbox.title")}
-                  {inbox.unreadCount > 0 && <span className="badge" aria-label={inboxMessage(language, "inbox.unreadCount", { count: inbox.unreadCount })}>{inbox.unreadCount}</span>}
-                </button>
+                {notificationInboxEnabled() && (
+                  <button className="button button--small" type="button" onClick={() => setView("notification-inbox")}>
+                    {inboxMessage(language, "inbox.title")}
+                    <NotificationInboxBadge inbox={inbox} language={language} className="badge" />
+                  </button>
+                )}
                 <FeedbackPanel screen={view} />
                 <WhatsNewPanel />
                 <DeveloperEnvironmentControls user={authUser} />
@@ -1015,7 +1018,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
           && <SandboxLifecyclePreview onBack={showDashboard} />}
         {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
-        {view === "notification-inbox" && (
+        {notificationInboxEnabled() && view === "notification-inbox" && (
           <NotificationInbox inbox={inbox} language={language} onBack={showDashboard} onOpen={openInboxTarget} />
         )}
 

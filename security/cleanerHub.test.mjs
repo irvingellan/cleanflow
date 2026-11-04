@@ -14,10 +14,11 @@ const expected = {
 for (const [name, value] of Object.entries(expected)) {
   assert.equal(process.env[name], value, `Cleaner Hub security tests require local ${name}`);
 }
+process.env.AUTOMATIC_OFFERS_MODE = "enabled";
 
 const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow" });
-const { getFirestore, Timestamp } = await import("firebase-admin/firestore");
+const { FieldValue, getFirestore, Timestamp } = await import("firebase-admin/firestore");
 const { serverTimestamp } = await import("firebase/firestore");
 const functionsIndex = await import("../functions/src/index.js");
 const {
@@ -26,6 +27,7 @@ const {
   createChecklistRun,
   issueChecklistCapability,
   issueCleanerAccessCode,
+  listNotificationInbox,
   openMyChecklist,
   redeemCleanerAccessCode,
   rescheduleJob,
@@ -439,14 +441,25 @@ test("an additional device preserves both signed-in sessions until replacement o
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-two-devices", cleanerId: "cleaner-a" }));
   await sync("job-two-devices");
   const first = await signInWithCodeToken((await link("cleaner-a")).token);
+  const firstSessionId = decodeToken(first.idToken).cleanerHub.sessionId;
+  const member = admin.doc(`${root}/members/${uidA}`);
+  // Published Hub installs check this scalar, and existing members have no list.
+  await member.update({ sessionIds: FieldValue.delete() });
+  const entry = "cleaner-a__job-two-devices";
+  assert.equal(await readAgendaWithToken(first.idToken, entry), 200);
   const { code } = await issueCleanerAccessCode.run(managerRequest({ cleanerId: "cleaner-a", additionalDevice: true }));
   const { token } = await redeemCleanerAccessCode.run({ data: { code } });
   const second = await signInWithCodeToken(token);
-  const entry = "cleaner-a__job-two-devices";
-  assert.notEqual(decodeToken(first.idToken).cleanerHub.sessionId, decodeToken(second.idToken).cleanerHub.sessionId);
+  const secondSessionId = decodeToken(second.idToken).cleanerHub.sessionId;
+  assert.notEqual(firstSessionId, secondSessionId);
+  assert.equal((await member.get()).data().sessionId, firstSessionId);
+  assert.deepEqual((await member.get()).data().sessionIds, [firstSessionId, secondSessionId]);
   assert.equal(await readAgendaWithToken(await refreshIdToken(first.refreshToken), entry), 200);
   assert.equal(await readAgendaWithToken(await refreshIdToken(second.refreshToken), entry), 200);
   const replacement = await signInWithCodeToken((await link("cleaner-a")).token);
+  const replacementSessionId = decodeToken(replacement.idToken).cleanerHub.sessionId;
+  assert.equal((await member.get()).data().sessionId, replacementSessionId);
+  assert.deepEqual((await member.get()).data().sessionIds, [replacementSessionId]);
   assert.equal(await readAgendaWithToken(first.idToken, entry), 403);
   assert.equal(await readAgendaWithToken(second.idToken, entry), 403);
   assert.equal(await readAgendaWithToken(replacement.idToken, entry), 200);
@@ -455,6 +468,24 @@ test("an additional device preserves both signed-in sessions until replacement o
   await assert.rejects(issueCleanerAccessCode.run(managerRequest({
     cleanerId: "cleaner-a", additionalDevice: true,
   })), { code: "failed-precondition" });
+});
+
+test("a malformed explicit session list cannot authorize through Rules or a callable", async () => {
+  await createJob("job-malformed-sessions");
+  await assignCleanerDirectly.run(managerRequest({ jobId: "job-malformed-sessions", cleanerId: "cleaner-a" }));
+  await sync("job-malformed-sessions");
+  const { idToken } = await signInWithCodeToken((await link("cleaner-a")).token);
+  const claims = decodeToken(idToken).cleanerHub;
+  const member = admin.doc(`${root}/members/${uidA}`);
+  const entry = "cleaner-a__job-malformed-sessions";
+  assert.equal(await readAgendaWithToken(idToken, entry), 200);
+  for (const malformed of [{ [claims.sessionId]: true }, null]) {
+    await member.update({ sessionIds: malformed });
+    assert.equal(await readAgendaWithToken(idToken, entry), 403);
+    await assert.rejects(listNotificationInbox.run(cleanerRequest(uidA, { role: "CLEANER" }, claims)), {
+      code: "permission-denied",
+    });
+  }
 });
 
 test("eight Hub sessions remain authorized; concurrent final add and a ninth session cannot exceed the cap", async () => {
@@ -537,6 +568,23 @@ test("linking backfills Jobs assigned before access existed, including legacy si
 
 
 const autoMode = "FIRST_ACCEPT_WINS";
+
+test("without explicit enablement a manager cannot create an automatic batch", async () => {
+  const jobId = "disabled-automatic-offer";
+  await createJob(jobId);
+  const previousMode = process.env.AUTOMATIC_OFFERS_MODE;
+  delete process.env.AUTOMATIC_OFFERS_MODE;
+  try {
+    await assert.rejects(createAutomaticJobOffers.run(managerRequest({ jobId, cleanerIds: ["cleaner-a"] })), {
+      code: "failed-precondition",
+    });
+    const job = jobDocument(jobId);
+    assert.equal((await job.get()).data().offerDistributionMode, undefined);
+    assert.equal((await job.collection("offers").get()).size, 0);
+  } finally {
+    if (previousMode !== undefined) process.env.AUTOMATIC_OFFERS_MODE = previousMode;
+  }
+});
 const automaticCleaners = [["cleaner-a", uidA], ["cleaner-b", uidB], ["cleaner-c", uidC]];
 const jobDocument = (jobId) => admin.doc(`${root}/jobs/${jobId}`);
 

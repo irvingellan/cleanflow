@@ -20,9 +20,10 @@ export function PwaUpdatePrompt() {
       try {
         const response = await fetch(versionMarkerPath, { cache: "no-store" });
         const buildInfo = await response.json();
+        const deploymentId = buildInfo.deploymentId ?? buildInfo.buildId;
 
-        if (isCurrent && typeof buildInfo.buildId === "string" && buildInfo.buildId !== appBuildId) {
-          setAvailableBuild(buildInfo.buildId);
+        if (isCurrent && typeof deploymentId === "string" && deploymentId !== appBuildId) {
+          setAvailableBuild(deploymentId);
         }
       } catch {
         // Version checks are advisory. Normal manager workflows remain available offline or on failure.

@@ -11,6 +11,7 @@ for (const [name, expected] of Object.entries({
   FIRESTORE_EMULATOR_HOST: "127.0.0.1:18180",
   FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:19180",
 })) assert.equal(process.env[name], expected, `Cleaner push security tests require local ${name}`);
+process.env.AUTOMATIC_OFFERS_MODE = "enabled";
 
 const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow" });

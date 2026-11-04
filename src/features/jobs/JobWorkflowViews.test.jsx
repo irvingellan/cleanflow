@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 
 const { createJobOffers, respondToJobOffer, createIssue } = vi.hoisted(() => ({
@@ -19,6 +19,7 @@ beforeEach(() => {
   respondToJobOffer.mockReset();
   createIssue.mockReset();
 });
+afterEach(() => vi.unstubAllEnvs());
 
 function renderOfferCleaners(onSent = vi.fn(), language = "en", job = {}) {
   window.localStorage.setItem("cleanflow-language", language);
@@ -89,7 +90,24 @@ describe("OfferCleaners name search", () => {
 });
 
 describe("automatic offer opt-in", () => {
+  it("keeps Release A manual on an eligible Job when automatic offers are disabled", async () => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "disabled");
+    const user = userEvent.setup();
+    renderOfferCleaners(vi.fn(), "en", {
+      schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [],
+    });
+    expect(screen.queryByRole("checkbox", { name: "Assign automatically to the first cleaner who accepts" }))
+      .not.toBeInTheDocument();
+    await user.click(screen.getByLabelText("Ana"));
+    await user.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({
+      jobId: "job-1",
+      cleaners: [{ id: "ana", name: "Ana" }],
+    });
+  });
+
   it("opts a new single-slot Job in only after the manager checks the option", async () => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
     const user = userEvent.setup();
     renderOfferCleaners(vi.fn(), "en", {
       schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [],
@@ -112,6 +130,7 @@ describe("automatic offer opt-in", () => {
     { assignedCleanerIds: ["ana"] },
     { archivedAt: new Date() },
   ])("keeps the automatic option out of incompatible Jobs (%o)", (data) => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
     renderOfferCleaners(vi.fn(), "en", {
       schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], ...data,
     });

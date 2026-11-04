@@ -26,7 +26,8 @@ export function OfferCleaners({
   const [cleanerSearch, setCleanerSearch] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [automatic, setAutomatic] = useState(false);
-  const canOptIn = canOfferAutomatically && canOptIntoAutomaticOffers(job);
+  const canOptIn = import.meta.env.VITE_AUTOMATIC_OFFERS_MODE === "enabled"
+    && canOfferAutomatically && canOptIntoAutomaticOffers(job);
   const [hasSendError, setHasSendError] = useState(false);
   const visibleCleaners = filterCleanersByName(cleaners, cleanerSearch);
 

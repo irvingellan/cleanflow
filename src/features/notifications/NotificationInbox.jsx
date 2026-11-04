@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanerMessagingWorkerPath, cleanerPushReceiptEvent } from "./cleanerPushBinding.js";
 import { inboxMessage } from "./notificationInboxMessages.js";
+import { notificationInboxEnabled } from "./notificationInboxMode.js";
 import { notificationInboxService } from "./notificationInboxService.js";
 
 const pageSize = 25;
-const empty = { items: [], unreadCount: 0, hasOlder: false, nextCursor: null, loadingOlder: false };
+const empty = { items: [], loadedUnreadCount: 0, hasOlder: false, nextCursor: null, loadingOlder: false };
 
 function unreadCount(items) {
   return items.filter((item) => item.read === false).length;
 }
 
 export function useNotificationInbox({ role, sessionKey, service = notificationInboxService }) {
+  const enabled = notificationInboxEnabled();
   const [snapshot, setSnapshot] = useState({ sessionKey: null, state: "loading", ...empty });
   const current = useRef(null);
   const load = useCallback(async (cursor = null) => {
@@ -35,7 +37,7 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
           data.items.forEach((item) => loaded.set(item.id, item));
           const items = [...loaded.values()];
           return {
-            sessionKey, state: "ready", items, unreadCount: unreadCount(items),
+            sessionKey, state: "ready", items, loadedUnreadCount: unreadCount(items),
             hasOlder: data.hasOlder === true, nextCursor: typeof data.nextCursor === "string" ? data.nextCursor : null,
             loadingOlder: false,
           };
@@ -59,7 +61,7 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
   const refresh = useCallback(() => load(), [load]);
 
   useEffect(() => {
-    if (!sessionKey) return undefined;
+    if (!enabled || !sessionKey) return undefined;
     const request = { sessionKey, version: 0, loading: false };
     current.current = request;
     void refresh();
@@ -85,7 +87,7 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
       document.removeEventListener("visibilitychange", resume);
       worker?.removeEventListener?.("message", onPush);
     };
-  }, [refresh, role, sessionKey]);
+  }, [enabled, refresh, role, sessionKey]);
 
   async function action(method, id) {
     const request = current.current;
@@ -106,18 +108,32 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
       setSnapshot((previous) => {
         const items = previous.items.map((item) => item.id !== id ? item : result.state === "unavailable"
           ? { ...item, serviceLabel: null, openable: false } : { ...item, read: true });
-        return { ...previous, items, unreadCount: unreadCount(items) };
+        return { ...previous, items, loadedUnreadCount: unreadCount(items) };
       });
     }
     return result;
   }
 
-  const data = snapshot.sessionKey === sessionKey ? snapshot : { state: "loading", ...empty };
+  const data = enabled && snapshot.sessionKey === sessionKey ? snapshot : { state: "loading", ...empty };
   return {
     ...data, refresh,
     loadOlder: () => data.nextCursor && load(data.nextCursor),
     mark: (id) => action("mark", id), open: (id) => action("open", id),
   };
+}
+
+function unreadLabel(language, { loadedUnreadCount, hasOlder }) {
+  return inboxMessage(language, hasOlder ? "inbox.loadedUnreadCount" : "inbox.unreadCount", { count: loadedUnreadCount });
+}
+
+export function NotificationInboxBadge({ inbox, language, className }) {
+  if (inbox.state !== "ready" || (!inbox.loadedUnreadCount && !inbox.hasOlder)) return null;
+  return (
+    <>
+      <span className={className} aria-hidden="true">{inbox.loadedUnreadCount}{inbox.hasOlder && "+"}</span>
+      <span className="visually-hidden">{unreadLabel(language, inbox)}</span>
+    </>
+  );
 }
 
 export function NotificationInbox({ inbox, language, onOpen, onBack }) {
@@ -157,7 +173,7 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
     <section className="panel" aria-labelledby="notification-inbox-title">
       <h2 className="panel__title" id="notification-inbox-title">{t("inbox.title")}</h2>
       {onBack && <button type="button" className="button" onClick={onBack}>{t("inbox.back")}</button>}
-      <p role="status">{t("inbox.unreadCount", { count: inbox.unreadCount })}</p>
+      {inbox.state === "ready" && <p role="status">{unreadLabel(language, inbox)}</p>}
       <div className="cfv2-segmented" role="group" aria-label={t("inbox.filter")}>
         {["all", "unread", "read"].map((key) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{t(`inbox.filter.${key}`)}</button>)}
       </div>

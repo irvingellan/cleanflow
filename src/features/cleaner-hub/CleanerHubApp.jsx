@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FIRST_ACCEPT_WINS } from "../jobs/automaticOffers.js";
 import { HubIcon } from "./HubIcon.jsx";
-import { NotificationInbox, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
+import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
+import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
 import { useCleanerNotificationSettings } from "../notifications/useCleanerNotificationSettings.js";
 import { InstallGuide } from "./InstallGuide.jsx";
 import {
@@ -376,7 +377,7 @@ function CleanerPushSettings({ t, push, go }) {
       <div>
         <strong>{t("hb.acc.notifications")}</strong>
         <p className="mw-hint" role="status">{t(`hb.push.${state}`)}</p>
-        <p className="mw-hint">{t("hb.push.inboxAlways")}</p>
+        {notificationInboxEnabled() && <p className="mw-hint">{t("hb.push.inboxAlways")}</p>}
         {recoverable && <button type="button" className="cfv2-button cfv2-button-primary mw-btn" onClick={push.enable}>{t("hb.push.enable")}</button>}
         {state === "ios-standalone-required" && <button type="button" className="mw-linkbtn" onClick={() => go({ type: "install" })}>{t("hb.acc.install")}</button>}
         {["permission-denied", "offline", "superseded", "error"].includes(state) && <button type="button" className="mw-linkbtn" onClick={push.recheck}>{t("hb.push.recheck")}</button>}
@@ -531,7 +532,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   const [platform] = useState(detectPlatform);
   const [displayMode] = useState(detectDisplayMode);
   const [view, setView] = useState(() => ({
-    type: new URLSearchParams(window.location.search).get("inbox") === "1" ? "inbox" : "tab",
+    type: notificationInboxEnabled() && new URLSearchParams(window.location.search).get("inbox") === "1" ? "inbox" : "tab",
     tab: "agenda",
   }));
   const [segment, setSegment] = useState("today");
@@ -603,7 +604,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     body = <FirstRun t={t} hub={hub} platform={platform} displayMode={displayMode} installPrompt={installPrompt} today={today} onDone={() => { writeStorage(onboardingStorageKey, session.uid); setOnboarded(session.uid); }} />;
   } else if (view.type === "job") body = <JobView t={t} hub={hub} jobId={view.jobId} today={today} />;
   else if (view.type === "offer") body = <OfferView key={view.jobId} t={t} hub={hub} jobId={view.jobId} today={today} wasAutomatic={view.wasAutomatic} />;
-  else if (view.type === "inbox") body = <div className="hb-screen"><NotificationInbox inbox={inbox} language={t.lang} onOpen={openInboxTarget} /></div>;
+  else if (notificationInboxEnabled() && view.type === "inbox") body = <div className="hb-screen"><NotificationInbox inbox={inbox} language={t.lang} onOpen={openInboxTarget} /></div>;
   else if (view.type === "install") body = <div className="hb-screen"><InstallGuide t={t} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onSkip={() => go({ type: "tab" })} /></div>;
   else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} today={today} />;
   else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} push={push} />;
@@ -618,10 +619,10 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
         {sub && onboardingDone
           ? <button type="button" className="mw-linkbtn" onClick={() => go({ type: "tab" })}><HubIcon name="arrowL" size={16} />{t("hb.back")}</button>
           : <Brand t={t} />}
-        {onboardingDone && view.type !== "inbox" && (
+        {notificationInboxEnabled() && onboardingDone && view.type !== "inbox" && (
           <button type="button" className="mw-linkbtn" onClick={() => go({ type: "inbox" })}>
             <HubIcon name="bell" size={16} />{inboxMessage(t.lang, "inbox.title")}
-            {inbox.unreadCount > 0 && <span className="mw-badge" aria-label={inboxMessage(t.lang, "inbox.unreadCount", { count: inbox.unreadCount })}>{inbox.unreadCount}</span>}
+            <NotificationInboxBadge inbox={inbox} language={t.lang} className="mw-badge" />
           </button>
         )}
         <span className={`hb-barchip hb-fresh is-${freshChip}`} role="status"><HubIcon name={freshChip === "live" ? "checkCircle" : freshChip === "loading" ? "refresh" : "alert"} size={14} />{t(`hb.fresh.chip.${freshChip}`)}</span>

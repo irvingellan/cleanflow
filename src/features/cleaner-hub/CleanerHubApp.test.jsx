@@ -34,9 +34,27 @@ beforeEach(() => {
   window.localStorage.setItem("cleanflow.cleanerHub.onboarded", "u1");
   window.localStorage.setItem("cleanflow.cleanerHub.language", "pt");
 });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("CleanerHubApp (live data boundary)", () => {
+  it("keeps the agenda active and ignores an Inbox deep link on the rollback build", () => {
+    vi.stubEnv("VITE_NOTIFICATION_INBOX_MODE", "disabled");
+    const previous = window.location.href;
+    window.history.replaceState(null, "", "/agenda?inbox=1");
+    const { service, handlers } = fakeService();
+    const inboxService = { list: vi.fn().mockResolvedValue({ items: [], unreadCount: 0 }) };
+    try {
+      render(<CleanerHubApp hubOptions={{ service, inboxService }} />);
+      act(() => handlers.agenda({ entries, fromCache: false }));
+      expect(screen.getByRole("heading", { name: "Olá, Ana" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Caixa de entrada" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Caixa de entrada" })).not.toBeInTheDocument();
+      expect(inboxService.list).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, "", previous);
+    }
+  });
+
   it("signs in once with a pasted access code, normalised", async () => {
     const { service } = fakeService({ session: { status: "signed-out" } });
     render(<CleanerHubApp hubOptions={{ service }} />);
