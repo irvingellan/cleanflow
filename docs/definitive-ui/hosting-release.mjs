@@ -77,7 +77,7 @@ async function versionConfig(version) {
   return ordered(response.body.config);
 }
 function hostingConfig() {
-  const config = json(join(root, "firebase.json")).hosting;
+  const config = JSON.parse(git("show", `${productionSha}:firebase.json`)).hosting;
   check(config.public === "dist" && !config.predeploy && !config.postdeploy && !config.target && !config.site
     && config.rewrites.every(({ run, function: fn }) => !run && !fn?.pinTag),
   "Unexpected Hosting targets, hooks or tagged rewrites.");
