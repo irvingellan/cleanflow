@@ -1,5 +1,28 @@
 # CleanFlow — Current State
 
+## 2026-11-04 — Definitive UI V1 Hosting publication blocked (Issues #51 and #84)
+
+The owner authorized a Hosting-only release of
+`codex/definitive-ui-release` at `a7cdb66407a07097a3952d1197a6131e8c43f6e0`.
+The sealed command exited before deploy because its required
+`ios-acceptance.json` receipt was absent. The technical seal and all 26
+candidate assets matched. Production preflight matched the approved Release A
+baseline and the finalized rollback configuration.
+
+Production serves `12f432dd46a6c93e45bfb78ac1993568143c3840`, Hosting
+`2aa48a01a2244d34` (release `1793827781258000`). All 15 live asset hashes,
+43 Function revisions and configuration hashes, Rules, reminder schedules,
+FCM binding and the release lock matched the sealed baseline. Release B
+cleaner push and automatic Offers remain disabled. On LIVE, both the manager
+root and the agenda route still receive the Release A initial HTML.
+
+The owner observed an independent Home Screen icon on the static Sandbox
+preview. That test covered installation isolation on the preview origin.
+The sealed receipt additionally requires the exact candidate identity, app
+routes, session separation, legacy icon, link handoff and checklist return.
+Record the physical results under the release plan and rerun the sealed
+Hosting-only command during an exclusive window. The owner's authorization
+for this exact SHA is recorded.
 
 ## 2026-11-04 — Integrated Release A published and verified (Issue #85)
 
