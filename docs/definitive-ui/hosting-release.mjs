@@ -60,9 +60,10 @@ const check = (ok, reason) => { if (!ok) throw new Error(reason); };
 const hostingStep = { id: "hosting", only: "hosting" };
 const versions = () => ({ node: process.versions.node, firebase: require("firebase-tools/package.json").version });
 
-function checkout() {
+function checkout(candidateRoot = root) {
+  const git = (...args) => execFileSync("git", args, { cwd: candidateRoot, encoding: "utf8" }).trim();
   const head = git("rev-parse", "HEAD");
-  check(git("branch", "--show-current") === branch && realpathSync(process.cwd()) === root
+  check(git("branch", "--show-current") === branch && realpathSync(candidateRoot) === candidateRoot
     && !git("status", "--porcelain") && process.versions.node.split(".")[0] === "22"
     && git("merge-base", visualSha, head) === visualSha && git("merge-base", priorCandidateSha, head) === priorCandidateSha,
   "Use the clean integrated branch based on the approved Claude and Production commits.");
@@ -77,7 +78,7 @@ function checkout() {
     "Manager entry or install identity differs from the previous candidate.");
   for (const file of ["package.json", "package-lock.json"]) {
     const before = JSON.parse(git("show", `${productionSha}:${file}`));
-    const after = json(join(root, file));
+    const after = json(join(candidateRoot, file));
     delete (file === "package.json" ? after.dependencies : after.packages[""].dependencies)["@fontsource-variable/inter"];
     if (file === "package-lock.json") delete after.packages["node_modules/@fontsource-variable/inter"];
     check(same(before, after), "Dependencies outside the approved Inter font differ.");
@@ -360,6 +361,9 @@ async function apply(action, dir, a, review, approve, exclusive) {
   }
 }
 
+export { checkout, previous, validated, hostingConfig, normalizedConfig, versionConfig,
+  inspect, inspectAssets, inspectEntryRoutes };
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) try {
   const [action, ...args] = process.argv.slice(2);
   const { values } = parseArgs({ args, options: {
@@ -370,6 +374,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   check(!["FIREBASE_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS", "GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT",
     "FIREBASE_CONFIG", "FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST"].some((key) => process.env[key]),
   "Use the verified Firebase CLI login without environment overrides.");
+  check(realpathSync(process.cwd()) === root, "Run from the integrated checkout.");
   const head = checkout();
   const directory = resolve(values.dir);
   check(relative(root, directory).startsWith(".tmp/"), "Review directory must be under .tmp.");

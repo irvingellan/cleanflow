@@ -104,6 +104,14 @@ export async function acquireReleaseLock(operation) {
   return updateTime;
 }
 
+export async function recoverReleaseLock(operation) {
+  const response = await lockDocument();
+  const expected = createLockWrite(releaseLockName, operation).update;
+  return response.name === expected.name && response.updateTime
+    && JSON.stringify(sortKeys(response.fields)) === JSON.stringify(sortKeys(expected.fields))
+    ? response.updateTime : null;
+}
+
 export async function assertReleaseLock(updateTime) {
   const response = await lockDocument();
   if (response.updateTime !== updateTime) {
