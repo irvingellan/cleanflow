@@ -285,8 +285,10 @@ async function preflight(options) {
       const agenda = JSON.parse(readFileSync(resolve(dist, "agenda.webmanifest"), "utf8"));
       const hosting = JSON.parse(readFileSync(resolve(root, "firebase.json"), "utf8")).hosting;
       const headers = hosting.headers.find((row) => row.source === "/cleaner-messaging-sw.js")?.headers;
+      // The published independent install keeps Minha agenda in its own
+      // /agenda scope; the push worker keeps its separate registration scope.
       check("cleanerPilotHosting", agenda.id === "/agenda" && agenda.start_url === "/agenda"
-        && agenda.scope === "/" && agenda.display === "standalone"
+        && agenda.scope === "/agenda" && agenda.display === "standalone"
         && headers?.some((row) => row.key === "Service-Worker-Allowed" && row.value === "/cleaner-messaging-push/")
         && headers.some((row) => row.key === "Cache-Control" && row.value.includes("no-store")),
       "Cleaner manifest or scoped worker Hosting headers differ.");
