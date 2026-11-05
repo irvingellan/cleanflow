@@ -132,6 +132,18 @@ describe("cleaner device lifecycle", () => {
     expect(await register(f)).toMatchObject({ registered: true, registrationRevision: 2 });
   });
 
+  it("issues a new revision and binding for an explicit rebind, and rejects malformed rebind values", async () => {
+    const f = fixture();
+    const first = await register(f);
+    expect(await register(f)).toEqual(first);
+    const rebound = await register(f, { ...registration, rebind: true });
+    expect(rebound).toMatchObject({ registered: true, registrationRevision: 2 });
+    expect(rebound.bindingId).not.toBe(first.bindingId);
+    expect(await status(f)).toEqual({ state: "active", registrationRevision: 2 });
+    await expect(register(f, { ...registration, rebind: false })).rejects.toThrow();
+    await expect(register(f, { ...registration, rebind: "yes" })).rejects.toThrow();
+  });
+
   it("keeps late sign-out and late provider invalidation from deactivating a replacement", async () => {
     const f = fixture();
     const first = await register(f);

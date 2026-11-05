@@ -14,10 +14,12 @@ import { inspectHostingBuild } from "./prepareHosting.mjs";
 
 // Updates the published Release B pilot in place: the four cleaner push
 // Functions move to the new source (bound to the new SHA) and Hosting moves to
-// the new build. Rollback restores the exact previous B source and build.
+// the new build. Rollback restores the exact previous source and build, which
+// is the original B publication or an earlier sealed update.
 
 const root = resolve(import.meta.dirname, "..");
-export const updateBranch = "claude/cleaner-push-update";
+/** Reviewed update branches, in publication order. */
+export const updateBranches = ["claude/cleaner-push-update", "claude/cleaner-push-rebind"];
 const fullSha = /^[a-f0-9]{40}$/;
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const encode = (value) => JSON.stringify(value, null, 2) + "\n";
@@ -33,7 +35,9 @@ export const updateSteps = {
   rollback: releaseBSteps.publish.slice(1),
 };
 /** Source files an update may change outside the client bundle. */
-export const allowedServerPaths = ["functions/src/cleanerPushPilot.js", "functions/src/cleanerPush.test.js"];
+export const allowedServerPaths = [
+  "functions/src/cleanerPushPilot.js", "functions/src/cleanerPushDevices.js", "functions/src/cleanerPush.test.js",
+];
 
 export function deploymentArgs(step) {
   requireCondition(updateSteps.publish.some((reviewed) => equal(reviewed, step)), "Unreviewed update step.");
@@ -69,17 +73,28 @@ function artifact(manifestFile, dist, sha, hash) {
   return { sha, manifest, manifestHash, dist, worker };
 }
 
-/** The live B publication: its sealed plan, COMPLETE receipt and reviewed build. */
+/** Which sealed publication a review directory holds: the original B or an earlier update. */
+export function previousVariant(directory) {
+  const update = existsSync(join(directory, "release-plan-U.json"));
+  const original = existsSync(join(directory, "release-plan-B.json"));
+  requireCondition(update !== original, "The previous directory must hold exactly one sealed publication.");
+  return update ? "U" : "B";
+}
+
+/** The live publication: its sealed plan, COMPLETE receipt and reviewed build. */
 function readPrevious(directory) {
-  const planFile = join(directory, "release-plan-B.json");
+  const variant = previousVariant(directory);
+  const planFile = join(directory, `release-plan-${variant}.json`);
   const plan = json(planFile);
   const planHash = hashFile(planFile);
-  const receiptFile = join(directory, "publish-receipt-B.json");
+  const receiptFile = join(directory, `publish-receipt-${variant}.json`);
   const receipt = json(receiptFile);
   requireCondition(receipt.state === "COMPLETE" && receipt.action === "publish" && receipt.sha === plan.sha
     && receipt.planHash === planHash && receipt.artifactHash === plan.artifactHash,
-  "The previous Release B publication needs its exact COMPLETE receipt.");
-  const build = artifact(join(directory, "hosting-manifest-B.json"), join(directory, "assets-B"), plan.sha, plan.artifactHash);
+  "The previous publication needs its exact COMPLETE receipt.");
+  requireCondition(variant === "B" || (plan.kind === "RELEASE_B_UPDATE" && updateBranches.includes(plan.branch)),
+    "The previous update plan is not a reviewed update.");
+  const build = artifact(join(directory, `hosting-manifest-${variant}.json`), join(directory, `assets-${variant}`), plan.sha, plan.artifactHash);
   checkTransportRelease(receipt.snapshot, plan.sha);
   return { plan, planHash, receipt, receiptHash: hashFile(receiptFile), build };
 }
@@ -103,7 +118,7 @@ async function prepare({ directory, previousDir, envDir, verification }) {
   const live = releaseBSnapshot(production.report);
   requireCondition(production.report.releaseLock?.state === "AVAILABLE", "The Production release mutex is held.");
   requireCondition(verifiedBReceipt(previous.receipt, { action: "publish", sha: previous.plan.sha, planHash: previous.planHash,
-    artifactHash: previous.plan.artifactHash, snapshot: live }), "Production differs from the COMPLETE Release B receipt.");
+    artifactHash: previous.plan.artifactHash, snapshot: live }), "Production differs from the previous COMPLETE receipt.");
   requireCondition(production.report.iam?.ok && production.report.noPendingFunctionOperations
     && production.report.functions.filter(({ id }) => transportFunctions.includes(id)).every(({ runtimeCompatible }) => runtimeCompatible),
   "IAM, pending Function operations or transport runtime configuration need review.");
@@ -125,7 +140,7 @@ async function prepare({ directory, previousDir, envDir, verification }) {
     "The manager worker must keep the published bytes.");
   checkBinding(production, previous.plan, build);
   const plan = {
-    schema: 1, kind: "RELEASE_B_UPDATE", project: notificationProject, branch: updateBranch, sha,
+    schema: 1, kind: "RELEASE_B_UPDATE", project: notificationProject, branch: git("branch", "--show-current"), sha,
     toolchain: releaseToolchain(), artifactHash: build.manifestHash,
     previous: { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash, artifactHash: previous.plan.artifactHash },
     cleanerBinding: previous.plan.cleanerBinding, serverChanges: scope.changed,
@@ -142,7 +157,8 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
   const plan = json(planFile);
   const planHash = hashFile(planFile);
   requireCondition(exclusiveWindow && approval === `${action}:${planHash}`, "Execution needs the exact plan approval and an exclusive window.");
-  requireCondition(git("rev-parse", "HEAD") === plan.sha, "Run from the sealed update SHA.");
+  requireCondition(git("rev-parse", "HEAD") === plan.sha && git("branch", "--show-current") === plan.branch,
+    "Run from the sealed update SHA and branch.");
   const previous = readPrevious(previousDir);
   requireCondition(equal(plan.previous, { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash,
     artifactHash: previous.plan.artifactHash }), "The previous publication differs from the sealed plan.");
@@ -161,7 +177,7 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
   requireCondition(production.report.releaseLock?.state === "AVAILABLE", "The Production release mutex is held.");
   if (action === "publish") {
     requireCondition(verifiedBReceipt(previous.receipt, { action: "publish", sha: previous.plan.sha, planHash: previous.planHash,
-      artifactHash: previous.plan.artifactHash, snapshot: live }), "Production differs from the COMPLETE Release B receipt.");
+      artifactHash: previous.plan.artifactHash, snapshot: live }), "Production differs from the previous COMPLETE receipt.");
   } else {
     const published = json(join(directory, "publish-receipt-U.json"));
     requireCondition(published.state === "COMPLETE" && equal(published.snapshot, live), "Rollback needs the exact COMPLETE update receipt.");
@@ -223,7 +239,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     } });
     requireCondition(["seal", "publish", "rollback"].includes(action) && values.dir && values["previous-dir"],
       "Use seal|publish|rollback with --dir and --previous-dir.");
-    requireCondition(git("branch", "--show-current") === updateBranch && !git("status", "--porcelain")
+    requireCondition(updateBranches.includes(git("branch", "--show-current")) && !git("status", "--porcelain")
       && realpathSync(process.cwd()) === root && process.versions.node.split(".")[0] === "22",
     "Use the clean update worktree on Node 22.");
     for (const name of ["FIREBASE_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS", "GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT",

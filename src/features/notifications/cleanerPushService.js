@@ -210,6 +210,9 @@ async function enrollCleanerPush(session, options, permissionRequest) {
   const installation = deviceId(true);
   let registrationResult;
   let token;
+  // An invalidated local binding keeps its revision but loses its binding ID.
+  // Ask for a new revision so the local binding can be restored.
+  const rebind = Number.isSafeInteger(before.registrationRevision) && before.registrationRevision > 0 && !before.bindingId;
   const register = async () => {
     if (Notification.permission !== "granted" || authorizedSession(session) !== user
       || (await cleanerPushBinding("read"))?.sessionId !== session.sessionId) return null;
@@ -221,7 +224,7 @@ async function enrollCleanerPush(session, options, permissionRequest) {
     return invoke("registerCleanerPushDevice", {
       deviceId: installation, token,
       platform: options.platform === "ios" ? "ios-pwa" : options.platform === "android" ? "android" : "desktop",
-      permission: "granted", language: options.language,
+      permission: "granted", language: options.language, ...(rebind ? { rebind: true } : {}),
     });
   };
   try {

@@ -119,6 +119,38 @@ describe("Cleaner push pilot precheck", () => {
     expect(push.cleanerPushPairingReference(session)).toBeNull();
   });
 
+  it("re-enrolls with a new binding after eligibility was lost and restored on the same installation", async () => {
+    const push = await import("./cleanerPushService.js");
+    const { cleanerPushBinding } = await import("./cleanerPushBinding.js");
+    const rebound = "22222222222222222222222222222222";
+    let eligible = true;
+    let serverRevision = 1;
+    let serverBinding = bindingId;
+    sdk.invoke.mockImplementation(async (name, data) => {
+      if (name === "getCleanerPushDeviceStatus") {
+        return { data: eligible ? { state: "active", registrationRevision: serverRevision } : { state: "pilot-ineligible" } };
+      }
+      // Like the server: a plain repeat keeps the binding, a rebind rotates it.
+      if (data.rebind === true) { serverRevision += 1; serverBinding = rebound; }
+      return { data: { registered: true, registrationRevision: serverRevision, bindingId: serverBinding } };
+    });
+    permission = "granted";
+    expect(await push.inspectCleanerPush(session, options)).toBe("missing");
+    expect(await push.enableCleanerPush(session, options)).toBe("registered");
+    expect((await cleanerPushBinding("read")).bindingId).toBe(bindingId);
+
+    eligible = false;
+    expect(await push.inspectCleanerPush(session, options)).toBe("pilot-ineligible");
+    expect((await cleanerPushBinding("read")).bindingId).toBeUndefined();
+
+    eligible = true;
+    expect(await push.inspectCleanerPush(session, options)).toBe("missing");
+    expect(await push.enableCleanerPush(session, options)).toBe("registered");
+    expect(sdk.invoke).toHaveBeenLastCalledWith("registerCleanerPushDevice", expect.objectContaining({ rebind: true }));
+    expect(await cleanerPushBinding("read")).toMatchObject({ bindingId: rebound, registrationRevision: 2 });
+    expect(await push.inspectCleanerPush(session, options)).toBe("registered");
+  });
+
   it("requires an approved precheck and preserves the explicit permission gesture once approved", async () => {
     status("missing");
     const push = await import("./cleanerPushService.js");

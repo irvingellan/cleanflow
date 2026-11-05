@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runReleaseSequence } from "./releaseNotificationA.mjs";
 import { transportFunctions, verifyBStep } from "./releaseNotificationB.mjs";
-import { checkTransportRelease, deploymentArgs, serverScopeChanges, updateSteps } from "./releaseNotificationBUpdate.mjs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { checkTransportRelease, deploymentArgs, previousVariant, serverScopeChanges, updateSteps } from "./releaseNotificationBUpdate.mjs";
 
 const oldSha = "a".repeat(40);
 const newSha = "b".repeat(40);
@@ -63,4 +66,22 @@ test("the reviewed update only changes the pilot check on the server", () => {
   const scope = serverScopeChanges("4ec289ec0ac4785f56cd4e33830f152287ec1cd0", "0e36437");
   assert.ok(scope.allowed, scope.changed.join(","));
   assert.ok(scope.changed.includes("functions/src/cleanerPushPilot.js"));
+});
+
+test("an update chains from either the original B publication or an earlier update", () => {
+  const make = (...files) => {
+    const directory = mkdtempSync(join(tmpdir(), "cleanflow-previous-"));
+    mkdirSync(directory, { recursive: true });
+    for (const file of files) writeFileSync(join(directory, file), "{}");
+    return directory;
+  };
+  assert.equal(previousVariant(make("release-plan-B.json")), "B");
+  assert.equal(previousVariant(make("release-plan-U.json")), "U");
+  assert.throws(() => previousVariant(make()), /exactly one/);
+  assert.throws(() => previousVariant(make("release-plan-B.json", "release-plan-U.json")), /exactly one/);
+});
+
+test("the rebind update only changes device registration on the server", () => {
+  const scope = serverScopeChanges("be914086655dab7337c79e55e40a4f0f3e95e742", "HEAD");
+  assert.ok(scope.allowed, scope.changed.join(","));
 });

@@ -1,5 +1,22 @@
 # CleanFlow — Current State
 
+## 2026-11-05 — Cleaner push: manager switch and rebind fix (Issue #85)
+
+Production runs the cleaner push pilot on the Definitive UI. Each cleaner
+profile has a manager switch, **Avisos no celular** (`pushAlertsEnabled`,
+`pushAlertsEnabledAt`), that replaces the per-device terminal grants. Only
+events created after the switch was turned on are pushed. Production still
+refuses the `enabled` mode, so the switch is the per-cleaner gate.
+
+Fix on `claude/cleaner-push-rebind`: an installation that lost eligibility
+(switch off, expired grant) invalidates its local binding but keeps its
+revision. A later enrollment repeated the same server revision, the client
+correctly refused to restore it, and the device showed "superseded" while the
+worker dropped every notification. Enrollment now sends `rebind: true` in that
+case and the server issues a new revision and binding. The in-place update tool
+(`scripts/releaseNotificationBUpdate.mjs`) can now chain from an earlier sealed
+update, and its rollback restores that update.
+
 ## 2026-11-04 — Definitive UI V1 (Claude, local, not published)
 
 `feature/definitive-ui-v1` replaces the legacy manager header/centred column with

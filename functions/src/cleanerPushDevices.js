@@ -95,8 +95,9 @@ export async function registerCleanerDevice(database, identity, data, mode) {
   if (mode !== "pilot" && mode !== "enabled") {
     throw new HttpsError("failed-precondition", "Cleaner push is not enabled.");
   }
-  validateRequest(identity, data, ["deviceId", "token", "platform", "permission", "language"]);
-  if (!validCleanerFcmToken(data.token) || !platforms.has(data.platform) || data.permission !== "granted") {
+  validateRequest(identity, data, ["deviceId", "token", "platform", "permission", "language", "rebind"]);
+  if (!validCleanerFcmToken(data.token) || !platforms.has(data.platform) || data.permission !== "granted"
+    || (data.rebind !== undefined && data.rebind !== true)) {
     throw new HttpsError("invalid-argument", "Push enrollment requires a granted permission and valid installation.");
   }
   const reference = cleanerDeviceReference(database, identity);
@@ -119,7 +120,10 @@ export async function registerCleanerDevice(database, identity, data, mode) {
     if (claim?.invalidatedAt != null || (current?.token === data.token && current.tokenState === "invalidated")) {
       throw new HttpsError("failed-precondition", "The cached FCM token was invalidated.", { reason: "fcm-token-invalidated" });
     }
-    const repeated = eligibleCleanerRegistration(current, identity) && current.deviceId === data.deviceId
+    // A rebind comes from an installation whose local binding was invalidated.
+    // It must receive a new revision, because the client never restores an
+    // invalidated binding at the same revision.
+    const repeated = data.rebind !== true && eligibleCleanerRegistration(current, identity) && current.deviceId === data.deviceId
       && current.token === data.token && cleanerClaimMatches(claim, current)
       && cleanerClaimMatches(installationClaim.data(), current);
     const language = languages.has(data.language) ? data.language : "pt";
