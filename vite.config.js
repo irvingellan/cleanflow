@@ -6,7 +6,8 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { assertBuildEnvironment, webPushVapidKey } from './src/environment.js'
 import {
-  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerPushBinding, cleanerPushDisplay, cleanerPushReceiptEvent, isCleanerVapidKey,
+  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerPushBinding, cleanerPushDisplay, cleanerPushOpenInboxEvent,
+  cleanerPushReceiptEvent, isCleanerVapidKey,
 } from './src/features/notifications/cleanerPushBinding.js'
 
 const firebaseConfigKeys = [
@@ -85,8 +86,9 @@ self.addEventListener("notificationclick", (event) => {
     const [agenda] = await agendaClients();
     if ((await binding("read"))?.bindingId !== current.bindingId) return;
     if (agenda) {
+      agenda.postMessage({ type: ${JSON.stringify(cleanerPushOpenInboxEvent)} });
+      await Promise.resolve().then(() => agenda.focus()).catch(() => undefined);
       await agenda.navigate(inboxUrl.href).catch(() => undefined);
-      await agenda.focus();
     } else {
       await self.clients.openWindow(inboxUrl.href);
     }

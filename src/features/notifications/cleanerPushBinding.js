@@ -1,6 +1,8 @@
 export const cleanerMessagingWorkerPath = "/cleaner-messaging-sw.js";
 export const cleanerMessagingWorkerScope = "/cleaner-messaging-push/";
 export const cleanerPushReceiptEvent = "cleanflow-cleaner-push-received";
+// Sent on notification tap to an already open Minha agenda, which iOS does not navigate.
+export const cleanerPushOpenInboxEvent = "cleanflow-cleaner-open-inbox";
 
 /** Public VAPID key encoding. The release preflight also verifies the P-256 point. */
 export function isCleanerVapidKey(value) {

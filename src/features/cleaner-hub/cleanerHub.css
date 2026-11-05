@@ -611,3 +611,17 @@
   background: transparent;
   box-shadow: none;
 }
+
+/* Pilot pairing reference: label, full-width field, help text stacked. */
+.hb-pairing {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.hb-pairing input {
+  width: 100%;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}

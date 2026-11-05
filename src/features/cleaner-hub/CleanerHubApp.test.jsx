@@ -288,6 +288,29 @@ describe("CleanerHubApp (live data boundary)", () => {
     }
   });
 
+  it("opens the Inbox when the cleaner push worker reports a notification tap", async () => {
+    const worker = new EventTarget();
+    worker.ready = new Promise(() => {});
+    Object.defineProperty(window.navigator, "serviceWorker", { configurable: true, value: worker });
+    const inboxService = { list: vi.fn().mockResolvedValue({ items: [], unreadCount: 0 }), open: vi.fn() };
+    try {
+      const { service, handlers } = fakeService();
+      render(<CleanerHubApp hubOptions={{ service, inboxService }} />);
+      act(() => handlers.agenda({ entries, fromCache: false }));
+      const send = (scriptURL) => act(() => {
+        const event = new Event("message");
+        Object.assign(event, { data: { type: "cleanflow-cleaner-open-inbox" }, source: { scriptURL } });
+        worker.dispatchEvent(event);
+      });
+      send(`${window.location.origin}/sw.js`);
+      expect(screen.queryByRole("heading", { name: "Caixa de entrada" })).toBeNull();
+      send(`${window.location.origin}/cleaner-messaging-sw.js`);
+      expect(await screen.findByRole("heading", { name: "Caixa de entrada" })).toBeInTheDocument();
+    } finally {
+      delete window.navigator.serviceWorker;
+    }
+  });
+
   it("drops private data and signs out when access is revoked", () => {
     const { service, handlers } = fakeService();
     render(<CleanerHubApp hubOptions={{ service }} />);

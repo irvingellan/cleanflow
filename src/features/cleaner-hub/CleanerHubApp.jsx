@@ -5,6 +5,7 @@ import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from 
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
 import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
 import { useCleanerNotificationSettings } from "../notifications/useCleanerNotificationSettings.js";
+import { cleanerMessagingWorkerPath, cleanerPushOpenInboxEvent } from "../notifications/cleanerPushBinding.js";
 import { InstallGuide } from "./InstallGuide.jsx";
 import {
   addDaysToKey,
@@ -546,7 +547,7 @@ export function CleanerPushSettings({ t, push, go }) {
         <strong>{t("hb.acc.notifications")}</strong>
         <p className="mw-hint" role="status">{t(`hb.push.${state}`)}</p>
         {notificationInboxEnabled() && <p className="mw-hint">{t("hb.push.inboxAlways")}</p>}
-        {state === "pilot-ineligible" && push.pairingReference && <label className="mw-hint">
+        {state === "pilot-ineligible" && push.pairingReference && <label className="mw-hint hb-pairing">
           {t("hb.push.pairingReference")}
           <input type="text" readOnly value={push.pairingReference} aria-label={t("hb.push.pairingReference")} />
           <span>{t("hb.push.pairingHelp")}</span>
@@ -559,13 +560,13 @@ export function CleanerPushSettings({ t, push, go }) {
   );
 }
 
-function Account({ t, name, setLang, go, onSignOut, signingOut, push }) {
+function Account({ t, name, setLang, go, onSignOut, signingOut, push, installed }) {
   return (
     <div className="hb-screen">
       <header className="hb-profile"><span className="mw-avatar is-large">{(name || "CF").slice(0, 2).toUpperCase()}</span><div><h2>{name || t("hb.helloNoName")}</h2><p className="mw-sec">{t("hb.acc.role")}</p></div></header>
-      <ul className="hb-menu">
+      {!installed && <ul className="hb-menu">
         <li><button type="button" onClick={() => go({ type: "install" })}><HubIcon name="phone" size={18} /><span className="mw-grow">{t("hb.acc.install")}</span><HubIcon name="arrowR" size={16} /></button></li>
-      </ul>
+      </ul>}
       <CleanerPushSettings t={t} push={push} go={go} />
       <div className="mw-setgroup">
         <h4>{t("hb.acc.language")}</h4>
@@ -727,6 +728,17 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   }, [browserTitle]);
   const today = localDateKey(new Date());
   const go = (next) => setView((current) => ({ ...next, tab: next.tab || current.tab }));
+  useEffect(() => {
+    const worker = notificationInboxEnabled() ? navigator.serviceWorker : null;
+    const openInbox = (event) => {
+      if (event.data?.type === cleanerPushOpenInboxEvent
+        && event.source?.scriptURL === new URL(cleanerMessagingWorkerPath, window.location.origin).href) {
+        setView((current) => ({ type: "inbox", tab: current.tab }));
+      }
+    };
+    worker?.addEventListener?.("message", openInbox);
+    return () => worker?.removeEventListener?.("message", openInbox);
+  }, []);
   useEffect(() => { document.getElementById("hb-main")?.scrollTo?.(0, 0); }, [view.type, view.tab, view.jobId]);
 
   // First visit defaults to Upcoming when nothing is scheduled today.
@@ -786,7 +798,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   else if (notificationInboxEnabled() && view.type === "inbox") body = <div className="hb-screen"><NotificationInbox inbox={inbox} language={t.lang} onOpen={openInboxTarget} /></div>;
   else if (view.type === "install") body = <div className="hb-screen"><InstallGuide t={t} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onSkip={() => go({ type: "tab" })} /></div>;
   else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} today={today} />;
-  else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} push={push} />;
+  else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} push={push} installed={displayMode === "standalone"} />;
   else body = <Agenda t={t} hub={hub} name={name} segment={segment} setSegment={setSegment} go={go} today={today} />;
 
   const freshChip = hub.freshness.state === "live" ? "live" : hub.freshness.state === "loading" ? "loading" : "stale";

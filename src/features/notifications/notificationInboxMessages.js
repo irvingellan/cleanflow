@@ -16,6 +16,7 @@ const messages = {
   "inbox.empty": ["Nenhum aviso neste filtro.", "No notifications in this filter.", "No hay avisos en este filtro."],
   "inbox.read": ["Lido", "Read", "Leído"],
   "inbox.unread": ["Não lido", "Unread", "Sin leer"],
+  "inbox.testNotice": ["Teste de aviso no celular. Nenhuma ação é necessária.", "Phone alert test. No action needed.", "Prueba de aviso en el celular. No hace falta hacer nada."],
   "inbox.targetUnavailable": ["Este item não está mais disponível.", "This item is no longer available.", "Este elemento ya no está disponible."],
   "inbox.open": ["Abrir", "Open", "Abrir"],
   "inbox.markRead": ["Marcar como lido", "Mark as read", "Marcar como leído"],

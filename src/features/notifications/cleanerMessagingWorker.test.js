@@ -121,10 +121,13 @@ describe("Isolated Cleaner Hub push worker", () => {
     await tap();
     expect(fixture.agendaNavigate).toHaveBeenCalledExactlyOnceWith("https://example.test/agenda?inbox=1");
     expect(fixture.focus).toHaveBeenCalledOnce();
+    // iOS ignores navigate() on an open standalone app; the Hub switches on this message.
+    expect(fixture.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "cleanflow-cleaner-open-inbox" });
     expect(fixture.managerNavigate).not.toHaveBeenCalled();
     expect(fixture.openWindow).not.toHaveBeenCalled();
     fixture.indexedDB.set({ blockedSessionId: "a" });
     await tap();
     expect(fixture.agendaNavigate).toHaveBeenCalledOnce();
+    expect(fixture.postMessage).toHaveBeenCalledOnce();
   });
 });

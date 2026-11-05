@@ -230,7 +230,7 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
                   </div>
                   <h3>{t(`inbox.event.${item.type}`)}</h3>
                   {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
-                  {!item.openable && <p className="cf-notice__unavailable">{t("inbox.targetUnavailable")}</p>}
+                  {!item.openable && <p className="cf-notice__unavailable">{t(item.type === "PUSH_TEST" ? "inbox.testNotice" : "inbox.targetUnavailable")}</p>}
                 </div>
                 <div className="cf-notice__actions">
                   {item.openable && <button type="button" className={`button${item.read ? "" : " button--primary"}`} disabled={busyId !== null} onClick={() => act("open", item.id)}>
