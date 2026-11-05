@@ -8,12 +8,11 @@ const t = (key) => hubTranslate("pt", key);
 const pairingReference = "synthetic-session.synthetic-device";
 
 describe("Cleaner pilot account settings", () => {
-  it("shows only the current pairing reference with recheck and keeps the Inbox available", async () => {
+  it("asks the cleaner to wait for her manager, shows no pairing reference and keeps the Inbox available", async () => {
     const push = { state: "pilot-ineligible", pairingReference, canEnable: false, enable: vi.fn(), recheck: vi.fn() };
     const view = render(<CleanerPushSettings t={t} push={push} go={vi.fn()} />);
-    const reference = screen.getByRole("textbox", { name: t("hb.push.pairingReference") });
-    expect(reference).toHaveValue(pairingReference);
-    expect(reference).toHaveAttribute("readonly");
+    expect(screen.getByText(t("hb.push.pilot-ineligible"))).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.getByText(t("hb.push.inboxAlways"))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: t("hb.push.enable") })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: t("hb.push.recheck") }));
