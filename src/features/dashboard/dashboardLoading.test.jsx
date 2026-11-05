@@ -3,11 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useDashboardController } from "./useDashboardController.js";
 
 const services = vi.hoisted(() => ({
-  getDocs: vi.fn(), names: vi.fn(), issues: vi.fn(), interested: vi.fn(), pending: vi.fn(),
+  getDocsFromServer: vi.fn(), names: vi.fn(), issues: vi.fn(), interested: vi.fn(), pending: vi.fn(),
 }));
 vi.mock("firebase/firestore", () => ({
   collection: vi.fn(), query: vi.fn(), where: vi.fn(), orderBy: vi.fn(),
-  getDocs: services.getDocs, Timestamp: { fromDate: (date) => date },
+  getDocsFromServer: services.getDocsFromServer, Timestamp: { fromDate: (date) => date },
 }));
 vi.mock("../../services/firebase/client.js", () => ({ db: {} }));
 vi.mock("../cleaners/cleanerService.js", () => ({ getCleanerNamesById: services.names }));
@@ -28,7 +28,7 @@ beforeEach(() => {
   for (const rows of [
     [{ id: "synthetic-property" }], [job("offered", "OFFERED")],
     [job("working", "IN_PROGRESS")], [job("next", "ASSIGNED")], [], [], [],
-  ]) services.getDocs.mockResolvedValueOnce(snapshot(rows));
+  ]) services.getDocsFromServer.mockResolvedValueOnce(snapshot(rows));
   services.interested.mockResolvedValue([]);
   services.pending.mockResolvedValue([]);
   services.issues.mockResolvedValue([]);
@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-it.each(["getDocs", "interested", "pending", "issues", "names"])(
+it.each(["getDocsFromServer", "interested", "pending", "issues", "names"])(
   "bounds the actual Dashboard dependency chain when %s never settles", async (dependency) => {
     services[dependency].mockReset().mockReturnValue(new Promise(() => {}));
     const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
