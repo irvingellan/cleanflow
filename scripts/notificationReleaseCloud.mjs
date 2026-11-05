@@ -198,7 +198,7 @@ export async function readNotificationProduction(stage, managerAppId) {
     revision: entry.serviceConfig?.revision || null,
     configurationHash: functionConfigurationHash(entry),
     runtimeCompatible: compatibleRuntime(entry.serviceConfig || {}, secretVersion,
-      stage === "B" && /\/(getCleanerPushDeviceStatus|deactivateCleanerPushDevice|registerCleanerPushDevice|notifyCleanerInboxEvent)$/.test(entry.name)),
+      stage === "B" && /\/(getCleanerPushDeviceStatus|deactivateCleanerPushDevice|registerCleanerPushDevice|notifyCleanerInboxEvent|cleanerPushTest)$/.test(entry.name)),
     cleanerPushMode: entry.serviceConfig?.environmentVariables?.CLEANER_PUSH_MODE ?? "disabled",
     automaticOffersMode: entry.serviceConfig?.environmentVariables?.AUTOMATIC_OFFERS_MODE ?? "disabled",
     cleanerPushPilotRelease: entry.serviceConfig?.environmentVariables?.CLEANER_PUSH_PILOT_RELEASE ?? null,

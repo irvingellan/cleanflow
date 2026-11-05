@@ -110,3 +110,26 @@ test("a rollback to a release without test notices removes that Function first",
   assert.throws(() => checkPushTestFunction(published, oldSha, false), /test notice/);
   assert.throws(() => checkPushTestFunction(published, oldSha, true), /test notice/);
 });
+
+test("reconciles an attempt that stopped right after its reviewed first step", async () => {
+  const { partialReconciliation } = await import("./releaseNotificationBUpdate.mjs");
+  const { sha256 } = await import("./notificationReleaseCloud.mjs");
+  const steps = updateStepsFor(false);
+  const plan = Buffer.from(JSON.stringify({ sha: newSha, steps, previous: { sha: oldSha } }));
+  const previousReceipt = { sha: oldSha, snapshot: live };
+  const attempt = (overrides = {}) => Buffer.from(JSON.stringify({
+    schema: 1, action: "publish", sha: newSha, planHash: sha256(plan), step: steps.publish[0].id, state: "DEPLOYING",
+    snapshot: live, lockUpdateTime: "2026-11-05T00:00:00Z", ...overrides,
+  }));
+  const functions = { ...live.functions };
+  for (const name of steps.publish[0].functions) {
+    functions[name] = { ...(functions[name] || fn("pilot")), revision: "r2", cleanerPushMode: "pilot", cleanerPushPilotRelease: newSha };
+  }
+  const partial = { ...live, functions };
+  const { record } = partialReconciliation({ attemptBytes: attempt(), attemptPlanBytes: plan, previousReceipt, live: partial });
+  assert.equal(record.kind, "RELEASE_U_PARTIAL_RECONCILED");
+  assert.deepEqual(record.snapshot, partial);
+  assert.throws(() => partialReconciliation({ attemptBytes: attempt({ step: "hosting" }), attemptPlanBytes: plan, previousReceipt, live: partial }), /first step/);
+  const drifted = { ...partial, hosting: { version: "X", release: "X" } };
+  assert.throws(() => partialReconciliation({ attemptBytes: attempt(), attemptPlanBytes: plan, previousReceipt, live: drifted }), /hosting/);
+});

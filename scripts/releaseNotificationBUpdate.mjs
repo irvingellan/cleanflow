@@ -8,7 +8,7 @@ import {
   acquireReleaseLock, assertReleaseLock, notificationProject, readNotificationProduction, releaseReleaseLock, sha256,
 } from "./notificationReleaseCloud.mjs";
 import { checkedWebEnvironment, deployGroups, validReleaseVerification } from "./preflightNotificationRelease.mjs";
-import { releaseToolchain, runReleaseSequence, stageReleaseInputs, verifyLiveAssets, writeReleaseModes } from "./releaseNotificationA.mjs";
+import { releaseToolchain, runReleaseSequence, stageReleaseInputs, verifyLiveAssets, verifyTransition, writeReleaseModes } from "./releaseNotificationA.mjs";
 import { pushTestFunction, releaseBSnapshot, releaseBSteps, transportFunctions, verifiedBReceipt, verifyBStep } from "./releaseNotificationB.mjs";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
 
@@ -120,6 +120,50 @@ function readPrevious(directory) {
   return { plan, planHash, receipt, receiptHash: hashFile(receiptFile), build };
 }
 
+/**
+ * Pure check for an update attempt that stopped after its first step: the live
+ * state is exactly that step's reviewed outcome on top of the previous release.
+ */
+export function partialReconciliation({ attemptBytes, attemptPlanBytes, previousReceipt, live }) {
+  const attempt = JSON.parse(attemptBytes);
+  const attemptPlan = JSON.parse(attemptPlanBytes);
+  const first = attemptPlan.steps?.publish?.[0];
+  requireCondition(attempt.schema === 1 && attempt.action === "publish" && attempt.sha === attemptPlan.sha
+    && attempt.planHash === sha256(attemptPlanBytes) && first && attempt.step === first.id
+    && ["DEPLOYING", "VERIFIED"].includes(attempt.state) && equal(attempt.snapshot, previousReceipt.snapshot)
+    && typeof attempt.lockUpdateTime === "string",
+  "Only an attempt stopped at its first step on the previous release can be reconciled.");
+  requireCondition(equal(attemptPlan.steps, updateStepsFor(false)) && attemptPlan.previous?.sha === previousReceipt.sha,
+    "The stopped attempt is not a reviewed update of the previous release.");
+  verifyTransition(previousReceipt.snapshot, live, first, { inboxMode: "enabled" });
+  verifyBStep(live, first, attempt.sha);
+  return {
+    record: {
+      schema: 1, kind: "RELEASE_U_PARTIAL_RECONCILED", attemptSha: attempt.sha, attemptPlanHash: attempt.planHash,
+      attemptReceiptHash: sha256(attemptBytes), stoppedStep: first.id, previousReceiptHash: sha256(JSON.stringify(previousReceipt)),
+      previousSha: previousReceipt.sha, snapshot: live, lockReleased: true,
+    },
+    lockUpdateTime: attempt.lockUpdateTime,
+  };
+}
+
+/** A reconciled partial attempt, valid only on top of this exact previous publication. */
+function readBaseline(file, previous) {
+  if (!file) return null;
+  const record = json(file);
+  requireCondition(record.schema === 1 && record.kind === "RELEASE_U_PARTIAL_RECONCILED" && record.lockReleased === true
+    && record.previousSha === previous.plan.sha && record.previousReceiptHash === sha256(JSON.stringify(previous.receipt)),
+  "The reconciled baseline does not belong to the previous publication.");
+  return { record, hash: hashFile(file) };
+}
+
+/** Production matches the previous COMPLETE receipt, or the reconciled partial attempt on top of it. */
+function liveMatchesPrevious(previous, baseline, live) {
+  return baseline ? equal(baseline.record.snapshot, live)
+    : verifiedBReceipt(previous.receipt, { action: "publish", sha: previous.plan.sha, planHash: previous.planHash,
+      artifactHash: previous.plan.artifactHash, snapshot: live });
+}
+
 function checkBinding(production, plan, build) {
   const app = production.dedicatedApp;
   requireCondition(production.report.fcmRegistrationApi === "ENABLED" && production.report.fcmDeliveryApi === "ENABLED"
@@ -129,17 +173,17 @@ function checkBinding(production, plan, build) {
   "The dedicated cleaner app or Firebase Messaging APIs differ from the reviewed binding.");
 }
 
-async function prepare({ directory, previousDir, envDir, verification }) {
+async function prepare({ directory, previousDir, envDir, verification, baselineFile }) {
   const sha = git("rev-parse", "HEAD");
   const previous = readPrevious(previousDir);
+  const baseline = readBaseline(baselineFile, previous);
   requireCondition(validReleaseVerification(json(verification), sha), "The test receipt must pass for this exact SHA.");
   const scope = serverScopeChanges(previous.plan.sha, sha);
   requireCondition(scope.allowed, `Server-side change outside the reviewed update scope: ${scope.changed.join(", ")}`);
   const production = await readNotificationProduction("B");
   const live = releaseBSnapshot(production.report);
   requireCondition(production.report.releaseLock?.state === "AVAILABLE", "The Production release mutex is held.");
-  requireCondition(verifiedBReceipt(previous.receipt, { action: "publish", sha: previous.plan.sha, planHash: previous.planHash,
-    artifactHash: previous.plan.artifactHash, snapshot: live }), "Production differs from the previous COMPLETE receipt.");
+  requireCondition(liveMatchesPrevious(previous, baseline, live), "Production differs from the previous COMPLETE receipt.");
   requireCondition(production.report.iam?.ok && production.report.noPendingFunctionOperations
     && production.report.functions.filter(({ id }) => transportFunctions.includes(id)).every(({ runtimeCompatible }) => runtimeCompatible),
   "IAM, pending Function operations or transport runtime configuration need review.");
@@ -160,14 +204,14 @@ async function prepare({ directory, previousDir, envDir, verification }) {
   requireCondition(readFileSync(join(dist, "firebase-messaging-sw.js")).equals(readFileSync(join(previous.build.dist, "firebase-messaging-sw.js"))),
     "The manager worker must keep the published bytes.");
   checkBinding(production, previous.plan, build);
-  const previousHasTest = Object.hasOwn(live.functions, pushTestFunction);
-  checkPushTestFunction(live, previous.plan.sha, previousHasTest);
+  const previousHasTest = Object.hasOwn(previous.receipt.snapshot.functions, pushTestFunction);
+  if (!baseline) checkPushTestFunction(live, previous.plan.sha, previousHasTest);
   const plan = {
     schema: 1, kind: "RELEASE_B_UPDATE", project: notificationProject, branch: git("branch", "--show-current"), sha,
     toolchain: releaseToolchain(), artifactHash: build.manifestHash,
     previous: { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash, artifactHash: previous.plan.artifactHash },
     cleanerBinding: previous.plan.cleanerBinding, serverChanges: scope.changed,
-    evidence: { verification: hashFile(verification) }, previousHasTest, steps: updateStepsFor(previousHasTest),
+    evidence: { verification: hashFile(verification) }, previousHasTest, baseline: baseline?.hash ?? null, steps: updateStepsFor(previousHasTest),
   };
   const bytes = encode(plan);
   writeFileSync(join(directory, "release-plan-U.json"), bytes, { flag: "wx", mode: 0o600 });
@@ -175,7 +219,7 @@ async function prepare({ directory, previousDir, envDir, verification }) {
   console.log(JSON.stringify({ state: "SEALED_LOCAL_ONLY", sha, planHash: sha256(bytes), files: build.manifest.files.length }));
 }
 
-async function execute(action, { directory, previousDir, approval, exclusiveWindow }) {
+async function execute(action, { directory, previousDir, approval, exclusiveWindow, baselineFile }) {
   const planFile = join(directory, "release-plan-U.json");
   const plan = json(planFile);
   const planHash = hashFile(planFile);
@@ -183,6 +227,8 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
   requireCondition(git("rev-parse", "HEAD") === plan.sha && git("branch", "--show-current") === plan.branch,
     "Run from the sealed update SHA and branch.");
   const previous = readPrevious(previousDir);
+  const baseline = readBaseline(baselineFile, previous);
+  requireCondition((baseline?.hash ?? null) === (plan.baseline ?? null), "The reconciled baseline differs from the sealed plan.");
   requireCondition(equal(plan.previous, { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash,
     artifactHash: previous.plan.artifactHash }), "The previous publication differs from the sealed plan.");
   const current = artifact(join(directory, "hosting-manifest-U.json"), join(directory, "assets-U"), plan.sha, plan.artifactHash);
@@ -203,14 +249,15 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
   const { production, snapshot: live } = await read();
   requireCondition(production.report.releaseLock?.state === "AVAILABLE", "The Production release mutex is held.");
   if (action === "publish") {
-    requireCondition(verifiedBReceipt(previous.receipt, { action: "publish", sha: previous.plan.sha, planHash: previous.planHash,
-      artifactHash: previous.plan.artifactHash, snapshot: live }), "Production differs from the previous COMPLETE receipt.");
+    requireCondition(liveMatchesPrevious(previous, baseline, live), "Production differs from the previous COMPLETE receipt.");
   } else {
     const published = json(join(directory, "publish-receipt-U.json"));
     requireCondition(published.state === "COMPLETE" && equal(published.snapshot, live), "Rollback needs the exact COMPLETE update receipt.");
   }
-  checkTransportRelease(live, fromSha);
-  checkPushTestFunction(live, fromSha, action === "rollback" || previousHasTest);
+  if (!(action === "publish" && baseline)) {
+    checkTransportRelease(live, fromSha);
+    checkPushTestFunction(live, fromSha, action === "rollback" || previousHasTest);
+  }
   await verifyLiveAssets(action === "publish" ? previous.build.manifest : current.manifest);
 
   const workspace = mkdtempSync(join(tmpdir(), "cleanflow-release-u-"));
@@ -259,15 +306,42 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
   console.log(JSON.stringify({ state: "COMPLETE", action, sha: target.sha, planHash }));
 }
 
+/** Records a stopped first step as the new baseline and releases the attempt's own mutex. */
+async function reconcile({ directory, previousDir, out, approval }) {
+  const previous = readPrevious(previousDir);
+  const attemptFile = join(directory, "publish-receipt-U.json");
+  const attemptBytes = readFileSync(attemptFile);
+  const attemptPlanBytes = readFileSync(join(directory, "release-plan-U.json"));
+  const production = await readNotificationProduction("B");
+  requireCondition(production.report.releaseLock?.state === "HELD", "The release mutex is not held by a stopped attempt.");
+  const { record, lockUpdateTime } = partialReconciliation({
+    attemptBytes, attemptPlanBytes, previousReceipt: previous.receipt, live: releaseBSnapshot(production.report),
+  });
+  await assertReleaseLock(lockUpdateTime);
+  const required = `reconcile:${sha256(attemptBytes)}`;
+  if (approval !== required) {
+    console.log(JSON.stringify({ state: "DRY_RUN_READY", requiredApproval: required, stoppedStep: record.stoppedStep }));
+    return;
+  }
+  await releaseReleaseLock(lockUpdateTime);
+  const after = await readNotificationProduction("B");
+  requireCondition(after.report.releaseLock?.state === "AVAILABLE" && equal(releaseBSnapshot(after.report), record.snapshot),
+    "Production changed while the mutex was released. Inspect before continuing.");
+  writeFileSync(out, encode(record), { flag: "wx", mode: 0o600 });
+  renameSync(attemptFile, join(directory, `publish-receipt-U.stopped-${Date.now()}.json`));
+  console.log(JSON.stringify({ state: "RECONCILED", baseline: out, baselineHash: hashFile(out) }));
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [action, ...args] = process.argv.slice(2);
     const { values } = parseArgs({ args, options: {
       dir: { type: "string" }, "previous-dir": { type: "string" }, "env-dir": { type: "string" }, verification: { type: "string" },
-      approve: { type: "string" }, "exclusive-window": { type: "boolean" },
+      approve: { type: "string" }, "exclusive-window": { type: "boolean" }, baseline: { type: "string" },
+      attempt: { type: "string" }, out: { type: "string" },
     } });
-    requireCondition(["seal", "publish", "rollback"].includes(action) && values.dir && values["previous-dir"],
-      "Use seal|publish|rollback with --dir and --previous-dir.");
+    requireCondition(["seal", "publish", "rollback", "reconcile"].includes(action) && values.dir && values["previous-dir"],
+      "Use seal|publish|rollback|reconcile with --dir and --previous-dir.");
     requireCondition(updateBranches.includes(git("branch", "--show-current")) && !git("status", "--porcelain")
       && realpathSync(process.cwd()) === root && process.versions.node.split(".")[0] === "22",
     "Use the clean update worktree on Node 22.");
@@ -278,11 +352,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const directory = resolve(values.dir);
     requireCondition(relative(root, directory).startsWith(".tmp/"), "Use an ignored directory under .tmp/.");
     const previousDir = realpathSync(resolve(values["previous-dir"]));
+    const baselineFile = values.baseline ? realpathSync(resolve(values.baseline)) : null;
     if (action === "seal") {
       requireCondition(values["env-dir"] && values.verification, "Seal needs --env-dir and --verification.");
-      await prepare({ directory, previousDir, envDir: values["env-dir"], verification: realpathSync(resolve(values.verification)) });
+      await prepare({ directory, previousDir, envDir: values["env-dir"], verification: realpathSync(resolve(values.verification)), baselineFile });
+    } else if (action === "reconcile") {
+      requireCondition(values.out, "Reconcile needs --out; --dir is the stopped attempt's review directory.");
+      await reconcile({ directory: realpathSync(directory), previousDir, out: resolve(values.out), approval: values.approve });
     } else {
-      await execute(action, { directory: realpathSync(directory), previousDir, approval: values.approve, exclusiveWindow: values["exclusive-window"] });
+      await execute(action, { directory: realpathSync(directory), previousDir, approval: values.approve, exclusiveWindow: values["exclusive-window"], baselineFile });
     }
   } catch (error) {
     console.error(error.message);
