@@ -120,7 +120,7 @@ test.describe("FB02/FB04/FB01 — cleaner hub", () => {
     await expect(page.getByRole("heading", { name: "Caixa de entrada" })).toBeVisible();
     await expect(page.getByText("2 não lido(s) nos avisos carregados").last()).toBeVisible();
     await expect(page.getByText("Há avisos anteriores por carregar. O total de não lidos ainda é desconhecido.")).toBeVisible();
-    await page.locator("li").filter({ has: page.getByRole("heading", { name: "Serviço confirmado", exact: true }) }).getByRole("button", { name: "Abrir", exact: true }).click();
+    await page.locator("li").filter({ has: page.getByRole("heading", { name: "Serviço confirmado", exact: true }) }).getByRole("button", { name: "Ver serviço", exact: true }).click();
     await expect(page.getByRole("button", { name: "Abrir checklist" })).toBeVisible();
     await expect(page.locator('.hb-access[data-access-state="unsupported"]')).toBeVisible();
     expect(await providerCalls(page)).toEqual([]);
@@ -129,7 +129,7 @@ test.describe("FB02/FB04/FB01 — cleaner hub", () => {
 
   test("Inbox offer link preserves the manual interest action", async ({ page }) => {
     await page.goto("/?screen=hub&lang=pt&inbox=1");
-    await page.locator("li").filter({ has: page.getByRole("heading", { name: "Nova oferta", exact: true }) }).getByRole("button", { name: "Abrir", exact: true }).click();
+    await page.locator("li").filter({ has: page.getByRole("heading", { name: "Nova oferta", exact: true }) }).getByRole("button", { name: "Ver oferta", exact: true }).click();
     await expect(page.getByRole("button", { name: /Tenho interesse/i })).toBeVisible();
     expect(await providerCalls(page)).toEqual([]);
   });
