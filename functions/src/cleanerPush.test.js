@@ -7,6 +7,7 @@ import {
 import { processCleanerNotification } from "./cleanerPushDelivery.js";
 import { isCleanerPushEnabledProfile, isCleanerPushPilotApproval, resolveCleanerPushMode } from "./cleanerPushPilot.js";
 import { managerFcmTimeoutMs } from "./managerFcmDelivery.js";
+import { awaitCleanerPushTest, cleanerPushOverview, pushTestLimits, requestCleanerPushTest } from "./cleanerPushTest.js";
 
 const organizationId = "synthetic-org";
 const cleanerId = "cleaner-a";
@@ -412,4 +413,71 @@ it("lets an enabled cleaner enroll in pilot mode without a per-device grant", as
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+describe("manager and cleaner test notices", () => {
+  const manager = { role: "MANAGER", uid: "synthetic-manager" };
+  const cleaner = { role: "CLEANER", uid };
+  const at = Date.parse("2026-11-05T12:00:00Z");
+  const testRequest = (f, overrides = {}) => requestCleanerPushTest(f.database, {
+    organizationId, cleanerId, requester: manager, mode: "enabled", now: at, timestamp: () => Timestamp.now(), ...overrides,
+  });
+  const deliverTest = async (f, id) => {
+    const sendFcm = vi.fn(async (messages) => batch(...messages.map(() => accepted)));
+    await processCleanerNotification({ database: f.database, organizationId, cleanerId, eventId: id, sendFcm, mode: "enabled" });
+    return sendFcm;
+  };
+
+  it("stores one PUSH_TEST that the regular sender delivers to every active phone", async () => {
+    const f = fixture();
+    await register(f);
+    await register(f, otherRegistration, identity(sessionB));
+    expect(await cleanerPushOverview(f.database, { organizationId, cleanerId, mode: "enabled", now: at }))
+      .toEqual({ state: "ready", alertsEnabled: false, activeDevices: 2 });
+    const stored = await testRequest(f);
+    expect(stored).toMatchObject({ state: "stored", targetDeviceCount: 2 });
+    const record = f.records.get(`${orgPath}/cleanerNotificationInboxes/${cleanerId}/items/${stored.eventId}`);
+    expect(record).toMatchObject({ type: "PUSH_TEST", processingState: "STORED", requestedByRole: "MANAGER", requestedByUid: manager.uid });
+    expect(record).not.toHaveProperty("targetSessionId");
+    const sendFcm = await deliverTest(f, stored.eventId);
+    expect(sendFcm.mock.calls[0][0]).toHaveLength(2);
+    await expect(awaitCleanerPushTest(f.database, { organizationId, eventId: stored.eventId, wait: async () => {} }))
+      .resolves.toEqual({ state: "sent", acceptedDevices: 2, targetDevices: 2 });
+  });
+
+  it("sends a cleaner's own test only to the phone that asked for it", async () => {
+    const f = fixture();
+    await register(f);
+    await register(f, otherRegistration, identity(sessionB));
+    const stored = await testRequest(f, { requester: cleaner, targetSessionId: sessionB });
+    expect(stored).toMatchObject({ state: "stored", targetDeviceCount: 1 });
+    const sendFcm = await deliverTest(f, stored.eventId);
+    expect(sendFcm.mock.calls[0][0].map(({ token }) => token)).toEqual([otherRegistration.token]);
+  });
+
+  it("limits tests per minute and per day, and refuses without phones or transport", async () => {
+    const f = fixture();
+    expect(await testRequest(f)).toEqual({ state: "no-devices" });
+    await register(f);
+    expect(await testRequest(f, { mode: "disabled" })).toEqual({ state: "unavailable" });
+    expect((await testRequest(f)).state).toBe("stored");
+    expect(await testRequest(f, { now: at + 30_000 })).toEqual({ state: "rate-limited", retryAfterSeconds: 30 });
+    for (let index = 1; index < pushTestLimits.perDay; index += 1) {
+      expect((await testRequest(f, { now: at + index * pushTestLimits.minIntervalMs })).state).toBe("stored");
+    }
+    expect(await testRequest(f, { now: at + pushTestLimits.perDay * pushTestLimits.minIntervalMs })).toEqual({ state: "daily-limit" });
+    expect((await testRequest(f, { now: at + 86_400_000 })).state).toBe("stored");
+    await expect(testRequest(f, { requester: { role: "ADMIN", uid: "x" } })).rejects.toThrow();
+  });
+
+  it("in pilot mode counts and reaches phones only after the manager switch is on", async () => {
+    const f = fixture();
+    await register(f);
+    const pilot = { mode: "pilot" };
+    expect(await testRequest(f, pilot)).toEqual({ state: "no-devices" });
+    f.records.set(cleanerPath, { ...f.records.get(cleanerPath), pushAlertsEnabled: true, pushAlertsEnabledAt: Timestamp.fromMillis(at - 60_000) });
+    expect(await cleanerPushOverview(f.database, { organizationId, cleanerId, mode: "pilot", now: at }))
+      .toEqual({ state: "ready", alertsEnabled: true, activeDevices: 1 });
+    expect(await testRequest(f, pilot)).toMatchObject({ state: "stored", targetDeviceCount: 1 });
+  });
 });

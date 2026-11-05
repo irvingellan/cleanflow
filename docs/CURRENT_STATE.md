@@ -1,5 +1,22 @@
 # CleanFlow — Current State
 
+## 2026-11-05 — Cleaner push test notices (Issue #85)
+
+`claude/cleaner-push-test-button` adds one callable, `cleanerPushTest`:
+
+- A manager, from the cleaner's **Acesso à Minha agenda** panel with phone
+  alerts on, sees how many of her phones are active and can send a test notice
+  to all of them.
+- A cleaner with an active registration can send a test to her own phone only
+  (**Testar neste aparelho**); the record carries `targetSessionId`.
+
+A test is a `PUSH_TEST` Inbox record delivered by the regular sender, so it
+exercises the real path. Limits per cleaner: one per minute and ten per UTC day,
+stored server-only in `organizations/{org}/cleanerPushTests/{cleanerId}` with the
+requester's role and uid. The callable waits up to 12 s for the provider result;
+provider acceptance is not proof of display. The update tool can now remove the
+test Function when rolling back to a release that predates it.
+
 ## 2026-11-05 — Cleaner push: manager switch and rebind fix (Issue #85)
 
 Production runs the cleaner push pilot on the Definitive UI. Each cleaner

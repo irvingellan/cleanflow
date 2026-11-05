@@ -9,7 +9,7 @@ import {
 } from "./notificationReleaseCloud.mjs";
 import { checkedWebEnvironment, deployGroups, validReleaseVerification } from "./preflightNotificationRelease.mjs";
 import { releaseToolchain, runReleaseSequence, stageReleaseInputs, verifyLiveAssets, writeReleaseModes } from "./releaseNotificationA.mjs";
-import { releaseBSnapshot, releaseBSteps, transportFunctions, verifiedBReceipt, verifyBStep } from "./releaseNotificationB.mjs";
+import { pushTestFunction, releaseBSnapshot, releaseBSteps, transportFunctions, verifiedBReceipt, verifyBStep } from "./releaseNotificationB.mjs";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
 
 // Updates the published Release B pilot in place: the four cleaner push
@@ -19,7 +19,7 @@ import { inspectHostingBuild } from "./prepareHosting.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 /** Reviewed update branches, in publication order. */
-export const updateBranches = ["claude/cleaner-push-update", "claude/cleaner-push-rebind"];
+export const updateBranches = ["claude/cleaner-push-update", "claude/cleaner-push-rebind", "claude/cleaner-push-test-button"];
 const fullSha = /^[a-f0-9]{40}$/;
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const encode = (value) => JSON.stringify(value, null, 2) + "\n";
@@ -29,19 +29,40 @@ const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8"
 const requireCondition = (condition, message) => { if (!condition) throw new Error(message); };
 const disabledWorker = "// Cleaner push is disabled for this build.\n";
 
-// Same order as the original pilot publish, without the Inbox step.
-export const updateSteps = {
-  publish: releaseBSteps.publish.slice(1),
-  rollback: releaseBSteps.publish.slice(1),
-};
+// Same order as the original pilot publish, without the Inbox step. The test
+// notice Function joins the first group so it exists before Hosting calls it.
+const [statusStep, ...laterSteps] = releaseBSteps.publish.slice(1);
+const withTest = { ...statusStep, functions: [...statusStep.functions, pushTestFunction] };
+withTest.id = withTest.functions.join(",");
+withTest.only = withTest.functions.map((name) => `functions:${name}`).join(",");
+const removeTest = { id: `delete:${pushTestFunction}`, delete: [pushTestFunction] };
+
+/** Reviewed steps; a rollback removes the test Function when the previous release lacked it. */
+export function updateStepsFor(previousHasTest) {
+  const publish = [withTest, ...laterSteps];
+  return { publish, rollback: previousHasTest ? publish : [removeTest, statusStep, ...laterSteps] };
+}
+export const updateSteps = updateStepsFor(false);
 /** Source files an update may change outside the client bundle. */
 export const allowedServerPaths = [
   "functions/src/cleanerPushPilot.js", "functions/src/cleanerPushDevices.js", "functions/src/cleanerPush.test.js",
+  "functions/src/cleanerPushDelivery.js", "functions/src/cleanerPushTest.js", "functions/src/index.js",
 ];
 
 export function deploymentArgs(step) {
-  requireCondition(updateSteps.publish.some((reviewed) => equal(reviewed, step)), "Unreviewed update step.");
+  const reviewed = [...updateStepsFor(true).publish, ...updateStepsFor(false).rollback];
+  requireCondition(reviewed.some((candidate) => equal(candidate, step)), "Unreviewed update step.");
+  if (step.delete) {
+    return ["functions:delete", ...step.delete, "--region", "us-central1", "--project", notificationProject, "--force", "--non-interactive"];
+  }
   return ["deploy", "--only", step.only, "--project", notificationProject, "--config", "firebase.json", "--non-interactive"];
+}
+
+/** The test Function is bound to the release when present, and absent when the release predates it. */
+export function checkPushTestFunction(snapshot, sha, present) {
+  const row = snapshot.functions[pushTestFunction];
+  requireCondition(present ? row?.cleanerPushMode === "pilot" && row.cleanerPushPilotRelease === sha : !row,
+    "The test notice Function does not match the expected release.");
 }
 
 /** Every transport Function is in pilot mode and bound to one release SHA. */
@@ -139,12 +160,14 @@ async function prepare({ directory, previousDir, envDir, verification }) {
   requireCondition(readFileSync(join(dist, "firebase-messaging-sw.js")).equals(readFileSync(join(previous.build.dist, "firebase-messaging-sw.js"))),
     "The manager worker must keep the published bytes.");
   checkBinding(production, previous.plan, build);
+  const previousHasTest = Object.hasOwn(live.functions, pushTestFunction);
+  checkPushTestFunction(live, previous.plan.sha, previousHasTest);
   const plan = {
     schema: 1, kind: "RELEASE_B_UPDATE", project: notificationProject, branch: git("branch", "--show-current"), sha,
     toolchain: releaseToolchain(), artifactHash: build.manifestHash,
     previous: { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash, artifactHash: previous.plan.artifactHash },
     cleanerBinding: previous.plan.cleanerBinding, serverChanges: scope.changed,
-    evidence: { verification: hashFile(verification) }, steps: updateSteps,
+    evidence: { verification: hashFile(verification) }, previousHasTest, steps: updateStepsFor(previousHasTest),
   };
   const bytes = encode(plan);
   writeFileSync(join(directory, "release-plan-U.json"), bytes, { flag: "wx", mode: 0o600 });
@@ -163,6 +186,10 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
   requireCondition(equal(plan.previous, { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash,
     artifactHash: previous.plan.artifactHash }), "The previous publication differs from the sealed plan.");
   const current = artifact(join(directory, "hosting-manifest-U.json"), join(directory, "assets-U"), plan.sha, plan.artifactHash);
+  const previousHasTest = Object.hasOwn(previous.receipt.snapshot.functions, pushTestFunction);
+  requireCondition(plan.previousHasTest === previousHasTest && equal(plan.steps, updateStepsFor(previousHasTest)),
+    "The sealed steps differ from the reviewed update steps.");
+  const steps = plan.steps[action];
   const target = action === "publish" ? current : previous.build;
   const fromSha = action === "publish" ? previous.plan.sha : plan.sha;
   const receiptPath = join(directory, `${action}-receipt-U.json`);
@@ -183,6 +210,7 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
     requireCondition(published.state === "COMPLETE" && equal(published.snapshot, live), "Rollback needs the exact COMPLETE update receipt.");
   }
   checkTransportRelease(live, fromSha);
+  checkPushTestFunction(live, fromSha, action === "rollback" || previousHasTest);
   await verifyLiveAssets(action === "publish" ? previous.build.manifest : current.manifest);
 
   const workspace = mkdtempSync(join(tmpdir(), "cleanflow-release-u-"));
@@ -200,12 +228,12 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
     lockTime = await acquireReleaseLock({ action: `B-update-${action}`, sha: plan.sha, planHash });
     const result = await runReleaseSequence({
       initial: live,
-      steps: updateSteps[action],
+      steps,
       inboxMode: "enabled",
       inspect: async () => (await read()).snapshot,
       verifyLock: () => assertReleaseLock(lockTime),
       journal(state, id, snapshot) {
-        if (state === "VERIFIED") verifyBStep(snapshot, updateSteps[action].find((step) => step.id === id), target.sha);
+        if (state === "VERIFIED") verifyBStep(snapshot, steps.find((step) => step.id === id), target.sha);
         record(state, id, snapshot);
       },
       deploy(step) {
@@ -218,6 +246,7 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
       verifyAssets: () => verifyLiveAssets(target.manifest),
     });
     checkTransportRelease(result, target.sha);
+    checkPushTestFunction(result, target.sha, action === "publish" || previousHasTest);
     record("COMPLETE", null, result);
     completed = true;
   } finally {

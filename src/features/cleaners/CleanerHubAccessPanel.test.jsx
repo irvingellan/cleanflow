@@ -45,6 +45,44 @@ describe("CleanerHubAccessPanel", () => {
     expect(screen.getByRole("switch", { name: /Phone alerts/ })).toBeChecked();
   });
 
+  it("shows the cleaner's active phones and sends a test notice only when alerts are on", async () => {
+    const fake = {
+      ...service(), setCleanerPushAlerts: vi.fn(async () => {}),
+      getCleanerPushOverview: vi.fn(async () => ({ state: "ready", alertsEnabled: true, activeDevices: 2 })),
+      sendCleanerPushTest: vi.fn(async () => ({ state: "sent", acceptedDevices: 2, targetDevices: 2 })),
+    };
+    const view = renderPanel({ id: "ana", active: true }, fake);
+    await screen.findByRole("switch", { name: /Phone alerts/ });
+    expect(screen.queryByRole("button", { name: "Send test alert" })).toBeNull();
+    expect(fake.getCleanerPushOverview).not.toHaveBeenCalled();
+
+    view.unmount();
+    renderPanel({ id: "ana", active: true, pushAlertsEnabled: true }, fake);
+    expect(await screen.findByText("Phones with alerts on: 2.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Send test alert" }));
+    expect(fake.sendCleanerPushTest).toHaveBeenCalledWith("ana");
+    expect(await screen.findByText(/Accepted for 2 of 2 phones/)).toBeInTheDocument();
+
+    fake.sendCleanerPushTest.mockResolvedValueOnce({ state: "rate-limited", retryAfterSeconds: 42 });
+    await userEvent.click(screen.getByRole("button", { name: "Send test alert" }));
+    expect(await screen.findByText("Wait 42 s before sending another test.")).toBeInTheDocument();
+  });
+
+  it("explains how to activate a phone and keeps the test disabled without one", async () => {
+    const fake = {
+      ...service(), setCleanerPushAlerts: vi.fn(async () => {}),
+      getCleanerPushOverview: vi.fn(async () => ({ state: "ready", alertsEnabled: true, activeDevices: 0 })),
+      sendCleanerPushTest: vi.fn(),
+    };
+    renderPanel({ id: "ana", active: true, pushAlertsEnabled: true }, fake);
+    expect(await screen.findByText(/No phone has turned on alerts yet/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send test alert" })).toBeDisabled();
+    fake.getCleanerPushOverview.mockResolvedValueOnce({ state: "ready", alertsEnabled: true, activeDevices: 1 });
+    await userEvent.click(screen.getByRole("button", { name: "Check phones again" }));
+    expect(await screen.findByText("Phones with alerts on: 1.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send test alert" })).toBeEnabled();
+  });
+
   it("hides phone alerts for an inactive cleaner", async () => {
     renderPanel({ id: "ana", active: false }, { ...service(), setCleanerPushAlerts: vi.fn() });
     expect(await screen.findByText(/Only an active cleaner/)).toBeInTheDocument();

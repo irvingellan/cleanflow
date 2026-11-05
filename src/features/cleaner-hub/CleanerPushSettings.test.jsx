@@ -24,6 +24,21 @@ describe("Cleaner pilot account settings", () => {
     expect(push.enable).toHaveBeenCalledOnce();
   });
 
+  it("lets a registered cleaner test her own phone and explains the outcome", async () => {
+    const push = { state: "registered", canEnable: true, enable: vi.fn(), recheck: vi.fn(), test: vi.fn(), testState: null, testRetryAfterSeconds: 60 };
+    const view = render(<CleanerPushSettings t={t} push={push} go={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: t("hb.push.test") }));
+    expect(push.test).toHaveBeenCalledOnce();
+    view.rerender(<CleanerPushSettings t={t} push={{ ...push, testState: "sending" }} go={vi.fn()} />);
+    expect(screen.getByRole("button", { name: t("hb.push.testSending") })).toBeDisabled();
+    view.rerender(<CleanerPushSettings t={t} push={{ ...push, testState: "sent" }} go={vi.fn()} />);
+    expect(screen.getByText(t("hb.push.test.sent"))).toBeInTheDocument();
+    view.rerender(<CleanerPushSettings t={t} push={{ ...push, testState: "rate-limited", testRetryAfterSeconds: 25 }} go={vi.fn()} />);
+    expect(screen.getByText("Espere 25 s para testar de novo.")).toBeInTheDocument();
+    view.rerender(<CleanerPushSettings t={t} push={{ ...push, state: "missing" }} go={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: t("hb.push.test") })).toBeNull();
+  });
+
   it.each(["missing", "error", "pilot-check-required", "unavailable"])("offers a fresh check instead of permission when approval is absent in %s", (state) => {
     render(<CleanerPushSettings t={t} push={{ state, pairingReference, canEnable: false, enable: vi.fn(), recheck: vi.fn() }} go={vi.fn()} />);
     expect(screen.queryByRole("textbox")).toBeNull();

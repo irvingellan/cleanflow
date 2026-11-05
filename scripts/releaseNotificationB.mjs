@@ -22,6 +22,9 @@ const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8"
 const inboxEndpoints = ["listNotificationInbox", "markNotificationRead", "openNotificationInboxItem"];
 const [register, sender] = deployGroups.enable;
 export const transportFunctions = [...deployGroups.prepareB, register, sender];
+/** Manager and cleaner test notices; added by a later in-place update. */
+export const pushTestFunction = "cleanerPushTest";
+const pilotFunctions = [...transportFunctions, pushTestFunction];
 const functionsStep = (names, cleanerPushMode) => ({
   id: names.join(","),
   only: names.map((name) => `functions:${name}`).join(","),
@@ -73,7 +76,7 @@ export function releaseBSnapshot(report) {
   const snapshot = productionSnapshot(report);
   assertAInbox(snapshot);
   for (const row of report.functions) {
-    const isTransport = transportFunctions.includes(row.id);
+    const isTransport = pilotFunctions.includes(row.id);
     requireCondition(row.automaticOffersMode === "disabled"
       && (row.cleanerPushMode === "disabled" || (isTransport && row.cleanerPushMode === "pilot" && fullSha.test(row.cleanerPushPilotRelease ?? ""))),
     "A Production Function has an unexpected automatic-offer or cleaner push mode.");
@@ -89,7 +92,7 @@ export function verifyBStep(snapshot, step, sha) {
   assertAInbox(snapshot);
   // releaseBSnapshot records a mode only for transport Functions; it already
   // rejected any other Function whose effective mode is not disabled.
-  requireCondition((step.functions || []).every((name) => (transportFunctions.includes(name)
+  requireCondition((step.functions || []).every((name) => (pilotFunctions.includes(name)
     ? snapshot.functions[name]?.cleanerPushMode === step.cleanerPushMode
       && (step.cleanerPushMode !== "pilot" || snapshot.functions[name].cleanerPushPilotRelease === sha)
     : step.cleanerPushMode === "disabled" && Boolean(snapshot.functions[name]))),

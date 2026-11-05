@@ -56,9 +56,14 @@ export function verifyTransition(before, after, step, { rulesHash, inboxMode }) 
   } else unchanged("hosting");
   const changed = [...new Set([...Object.keys(before.functions), ...Object.keys(after.functions)])]
     .filter((name) => !equal(before.functions[name], after.functions[name])).sort();
-  requireCondition(equal(changed, [...(step.functions || [])].sort()), "Unexpected Functions changed or did not change.");
+  const removed = step.delete || [];
+  requireCondition(equal(changed, [...(step.functions || []), ...removed].sort()), "Unexpected Functions changed or did not change.");
   for (const name of changed) {
     const result = after.functions[name];
+    if (removed.includes(name)) {
+      requireCondition(before.functions[name] && !result, "A Function to remove was absent before or still exists.");
+      continue;
+    }
     requireCondition(result && result.revision !== before.functions[name]?.revision,
       "A reviewed Function is absent or did not advance its revision.");
     requireCondition(result.runtimeCompatible && (!before.functions[name]

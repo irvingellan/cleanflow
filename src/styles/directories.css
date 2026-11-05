@@ -255,3 +255,21 @@
   color: var(--cf-text-secondary);
   font-size: var(--cf-text-sm);
 }
+
+/* Test notice: device count, actions and the last result, under the switch. */
+.cleaner-push-test {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-left: 32px;
+}
+
+.cleaner-push-test .property-history-state {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .cleaner-push-test {
+    padding-left: 0;
+  }
+}

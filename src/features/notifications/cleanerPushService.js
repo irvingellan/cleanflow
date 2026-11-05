@@ -81,6 +81,13 @@ function currentPilotReadiness(session) {
   } catch { return null; }
 }
 
+/** Sends one test notice to this phone only. The server targets the caller's own session. */
+export async function sendCleanerPushSelfTest(session) {
+  if (!authorizedSession(session)) return { state: "error" };
+  const response = await httpsCallable(cleanerHubFirebase().functions, "cleanerPushTest", { timeout: 30_000 })({ action: "send" });
+  return response.data;
+}
+
 /** Display only to the current authenticated cleaner; this is never a credential or telemetry. */
 export function cleanerPushPairingReference(session) {
   if (!pilotEnabled) return null;

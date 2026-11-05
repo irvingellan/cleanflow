@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { cleanerPushCanEnable, cleanerPushPairingReference, enableCleanerPush, inspectCleanerPush, refreshCleanerPush } from "./cleanerPushService.js";
+import {
+  cleanerPushCanEnable, cleanerPushPairingReference, enableCleanerPush, inspectCleanerPush, refreshCleanerPush, sendCleanerPushSelfTest,
+} from "./cleanerPushService.js";
 
 const resumeIntervalMs = 60_000;
 const refreshIntervalMs = 15 * 60_000;
 
 export function useCleanerNotificationSettings({ session, active, platform, displayMode, language }) {
   const [result, setResult] = useState({ sessionId: null, state: "checking" });
+  const [test, setTest] = useState({ sessionId: null, state: null });
   const current = useRef(null);
   const options = useMemo(() => ({ platform, standalone: displayMode === "standalone", language }), [platform, displayMode, language]);
   useEffect(() => {
@@ -64,5 +67,12 @@ export function useCleanerNotificationSettings({ session, active, platform, disp
     canEnable: active && cleanerPushCanEnable(session),
     enable: () => act(enableCleanerPush),
     recheck: () => act(inspectCleanerPush),
+    testState: active && test.sessionId === session.sessionId ? test.state : null,
+    testRetryAfterSeconds: test.retryAfterSeconds ?? 60,
+    test: async () => {
+      setTest({ sessionId: session.sessionId, state: "sending" });
+      const outcome = await sendCleanerPushSelfTest(session).catch(() => ({ state: "error" }));
+      setTest({ sessionId: session.sessionId, state: outcome?.state || "error", retryAfterSeconds: outcome?.retryAfterSeconds });
+    },
   };
 }

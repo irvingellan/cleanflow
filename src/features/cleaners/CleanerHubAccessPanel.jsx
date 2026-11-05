@@ -20,6 +20,8 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
   const [copied, setCopied] = useState(false);
   const [alerts, setAlerts] = useState(cleaner.pushAlertsEnabled === true);
   const [alertsError, setAlertsError] = useState(false);
+  const [overview, setOverview] = useState(null);
+  const [testResult, setTestResult] = useState(null);
   const eligible = cleaner.active !== false && !cleaner.archivedAt;
   const url = service.cleanerHubUrl();
 
@@ -33,6 +35,40 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
 
   useEffect(() => { setIssued(null); setAccess(null); load(); }, [load]);
   useEffect(() => { setAlerts(cleaner.pushAlertsEnabled === true); }, [cleaner.id, cleaner.pushAlertsEnabled]);
+
+  const canTest = Boolean(service.getCleanerPushOverview && service.sendCleanerPushTest) && eligible && alerts;
+  const loadOverview = useCallback(async () => {
+    try {
+      setOverview(await service.getCleanerPushOverview(cleaner.id));
+    } catch {
+      setOverview({ state: "error" });
+    }
+  }, [cleaner.id, service]);
+
+  useEffect(() => {
+    setOverview(null);
+    setTestResult(null);
+    if (canTest) loadOverview();
+  }, [canTest, loadOverview]);
+
+  async function sendTest() {
+    setBusy("test");
+    setTestResult(null);
+    try {
+      setTestResult(await service.sendCleanerPushTest(cleaner.id));
+    } catch {
+      setTestResult({ state: "error" });
+    } finally {
+      setBusy(null);
+      loadOverview();
+    }
+  }
+
+  const testMessage = testResult && ({
+    sent: "cleanerHub.testSent", "not-delivered": "cleanerHub.testNotDelivered", pending: "cleanerHub.testPending",
+    "rate-limited": "cleanerHub.testWait", "daily-limit": "cleanerHub.testDailyLimit", "no-devices": "cleanerHub.testNoDevices",
+    unavailable: "cleanerHub.testUnavailable",
+  }[testResult.state] || "cleanerHub.testError");
 
   async function toggleAlerts() {
     const next = !alerts;
@@ -142,6 +178,30 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
             </span>
           </label>
           {alertsError && <p className="property-history-state property-history-state--error" role="alert">{translate("cleanerHub.alertsError")}</p>}
+          {canTest && (
+            <div className="cleaner-push-test">
+              <p className="property-history-state" data-testid="cleaner-push-devices">
+                {!overview ? translate("cleanerHub.testChecking")
+                  : overview.state !== "ready" ? translate(overview.state === "unavailable" ? "cleanerHub.testUnavailable" : "cleanerHub.testError")
+                    : overview.activeDevices > 0 ? translate("cleanerHub.testDevices", { count: overview.activeDevices })
+                      : translate("cleanerHub.testNoDevices")}
+              </p>
+              <div className="button-row">
+                <button className="button" type="button" onClick={sendTest}
+                  disabled={Boolean(busy) || !(overview?.state === "ready" && overview.activeDevices > 0)}>
+                  {translate(busy === "test" ? "cleanerHub.testSending" : "cleanerHub.testSend")}
+                </button>
+                <button className="button button--text" type="button" onClick={loadOverview} disabled={Boolean(busy)}>
+                  {translate("cleanerHub.testRefresh")}
+                </button>
+              </div>
+              {testMessage && (
+                <p className={`property-history-state${["sent", "pending"].includes(testResult.state) ? "" : " property-history-state--error"}`} role="status">
+                  {translate(testMessage, { accepted: testResult.acceptedDevices ?? 0, target: testResult.targetDevices ?? 0, seconds: testResult.retryAfterSeconds ?? 60 })}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>

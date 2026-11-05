@@ -41,7 +41,8 @@ function cleanerFcmMessage(snapshot, eventId) {
   };
 }
 
-async function chooseDevices(transaction, database, identity, sessionIds, mode, eventAtMs) {
+/** Current installations of the given sessions that may receive this event. */
+export async function chooseDevices(transaction, database, identity, sessionIds, mode, eventAtMs) {
   const candidates = await Promise.all(sessionIds.map(async (sessionId) => {
     const session = { ...identity, sessionId };
     const snapshot = await transaction.get(cleanerDeviceReference(database, session));
@@ -58,32 +59,44 @@ async function chooseDevices(transaction, database, identity, sessionIds, mode, 
   return bindings.filter(Boolean);
 }
 
-async function claimDelivery(database, { organization, cleanerId, eventId, deliveryReference, mode }) {
+/** The cleaner's active sessions, and whether she can receive cleaner push at all. */
+export async function cleanerRecipient(transaction, organization, cleanerId) {
   const organizationId = organization.id;
   const uid = cleanerAccountUid(organizationId, cleanerId);
   const identity = { organizationId, cleanerId, uid };
+  const [membership, cleaner] = await Promise.all([
+    transaction.get(organization.collection("members").doc(uid)),
+    transaction.get(organization.collection("cleaners").doc(cleanerId)),
+  ]);
+  const member = membership.data();
+  const profile = cleaner.data();
+  const sessions = [...new Set(cleanerSessionIds(member))].slice(0, 8).filter((sessionId) => (
+    typeof sessionId === "string" && safeSessionId.test(sessionId)
+    && isActiveCleanerSession(member, { ...identity, sessionId })
+  ));
+  const activeRecipient = sessions.length > 0 && eligibleCleaner(profile)
+    && (profile.organizationId == null || profile.organizationId === organizationId);
+  return { identity, sessions, activeRecipient, profile };
+}
+
+async function claimDelivery(database, { organization, cleanerId, eventId, deliveryReference, mode }) {
+  const organizationId = organization.id;
   const eventRef = cleanerInbox(organization, cleanerId).doc(eventId);
   return database.runTransaction(async (transaction) => {
-    const [delivery, source, membership, cleaner] = await Promise.all([
-      transaction.get(deliveryReference), transaction.get(eventRef),
-      transaction.get(organization.collection("members").doc(uid)),
-      transaction.get(organization.collection("cleaners").doc(cleanerId)),
+    const [delivery, source, recipient] = await Promise.all([
+      transaction.get(deliveryReference), transaction.get(eventRef), cleanerRecipient(transaction, organization, cleanerId),
     ]);
     if (delivery.exists) return null;
+    const { identity, activeRecipient } = recipient;
 
     const event = source.data();
     if (event?.eventId !== eventId || event.organizationId !== organizationId || event.cleanerId !== cleanerId
       || event.eventVersion !== inboxEventVersion || !eventTypes.has(event.type)
       || event.processingState !== "STORED" || !Number.isFinite(event.createdAt?.toMillis?.())) return null;
 
-    const member = membership.data();
-    const profile = cleaner.data();
-    const sessions = [...new Set(cleanerSessionIds(member))].slice(0, 8).filter((sessionId) => (
-      typeof sessionId === "string" && safeSessionId.test(sessionId)
-      && isActiveCleanerSession(member, { ...identity, sessionId })
-    ));
-    const activeRecipient = sessions.length > 0 && eligibleCleaner(profile)
-      && (profile.organizationId == null || profile.organizationId === organizationId);
+    // A cleaner's own test reaches only the installation that asked for it.
+    const sessions = event.type === cleanerInboxTypes.pilotTest && typeof event.targetSessionId === "string"
+      ? recipient.sessions.filter((sessionId) => sessionId === event.targetSessionId) : recipient.sessions;
     const destination = activeRecipient && await notificationDestination(transaction, organization, event, identity, { forPush: true });
     const devices = destination
       ? await chooseDevices(transaction, database, identity, sessions, mode, event.createdAt.toMillis()) : [];

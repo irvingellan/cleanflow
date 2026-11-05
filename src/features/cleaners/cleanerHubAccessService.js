@@ -39,6 +39,18 @@ export function cleanerHubUrl(origin = window.location.origin) {
   return `${origin}/agenda`;
 }
 
+/** Whether alerts are on and how many of the cleaner's phones would receive them. */
+export async function getCleanerPushOverview(cleanerId) {
+  const { data } = await httpsCallable(functions, "cleanerPushTest")({ action: "overview", cleanerId });
+  return data;
+}
+
+/** Sends one test notice to the cleaner's active phones and returns the provider outcome. */
+export async function sendCleanerPushTest(cleanerId) {
+  const { data } = await httpsCallable(functions, "cleanerPushTest", { timeout: 30_000 })({ action: "send", cleanerId });
+  return data;
+}
+
 export function setCleanerPushAlerts(cleanerId, enabled) {
   return writeCleanerPushAlerts(cleanerId, enabled, getAuth(firebaseApp).currentUser?.uid);
 }

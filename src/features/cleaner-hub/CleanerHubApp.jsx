@@ -548,6 +548,15 @@ export function CleanerPushSettings({ t, push, go }) {
         <p className="mw-hint" role="status">{t(`hb.push.${state}`)}</p>
         {notificationInboxEnabled() && <p className="mw-hint">{t("hb.push.inboxAlways")}</p>}
         {recoverable && push.canEnable !== false && <button type="button" className="cfv2-button cfv2-button-primary mw-btn" onClick={push.enable}>{t("hb.push.enable")}</button>}
+        {state === "registered" && push.test && <>
+          <button type="button" className="mw-linkbtn" onClick={push.test} disabled={push.testState === "sending"}>
+            {t(push.testState === "sending" ? "hb.push.testSending" : "hb.push.test")}
+          </button>
+          {push.testState && push.testState !== "sending" && <p className="mw-hint" role="status">
+            {t(`hb.push.test.${["sent", "not-delivered", "pending", "rate-limited", "daily-limit", "no-devices"].includes(push.testState) ? push.testState : "error"}`)
+              .replace("{seconds}", String(push.testRetryAfterSeconds))}
+          </p>}
+        </>}
         {state === "ios-standalone-required" && <button type="button" className="mw-linkbtn" onClick={() => go({ type: "install" })}>{t("hb.acc.install")}</button>}
         {(["permission-denied", "offline", "superseded", "error", "pilot-ineligible", "pilot-check-required", "unavailable"].includes(state) || (recoverable && push.canEnable === false)) && <button type="button" className="mw-linkbtn" onClick={push.recheck}>{t("hb.push.recheck")}</button>}
       </div>
