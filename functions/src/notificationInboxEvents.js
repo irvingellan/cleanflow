@@ -13,6 +13,8 @@ export const cleanerInboxTypes = Object.freeze({
   rescheduled: "RESCHEDULED",
   cancelled: "CANCELLED",
   unassigned: "UNASSIGNED",
+  // Operator-approved transport check for an already authorized pilot device.
+  pilotTest: "PUSH_TEST",
 });
 
 export const managerInboxTypes = Object.freeze({

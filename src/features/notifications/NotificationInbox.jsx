@@ -262,6 +262,7 @@ const noticeLooks = {
   RESCHEDULED: { icon: "clock", tone: "warning", action: "inbox.action.openJob" },
   CANCELLED: { icon: "x", tone: "risk", action: "inbox.open" },
   UNASSIGNED: { icon: "userX", tone: "risk", action: "inbox.open" },
+  PUSH_TEST: { icon: "bell", tone: "info", action: "inbox.open" },
 };
 
 function noticeLook(type) {

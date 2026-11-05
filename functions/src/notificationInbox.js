@@ -77,6 +77,11 @@ function targetOfferReference(jobRef, job, event, organizationId) {
 }
 
 function projectAuthorizedTarget(organization, event, identity, job, offer, { forPush = false, now = new Date() } = {}) {
+  // A pilot test names no Job. It may reach an approved device and then stays
+  // in the cleaner's Inbox as a read-only record.
+  if (event.type === cleanerTypes.pilotTest) {
+    return forPush && identity.role === cleanerRole ? { destination: { kind: "INBOX" }, serviceLabel: null } : null;
+  }
   if (event.type === managerTypes.today || event.type === managerTypes.tomorrow) {
     return { destination: { kind: "DASHBOARD" }, serviceLabel: null };
   }
@@ -118,7 +123,7 @@ async function authorizedTarget(transaction, organization, event, identity, opti
 
   const jobRef = targetJobReference(organization, event, options.forPush);
   // A deleted Job has no reference data, but may still have a valid cancellation.
-  if (options.forPush && !jobRef) return null;
+  if (options.forPush && !jobRef && event.type !== cleanerTypes.pilotTest) return null;
   const job = jobRef ? (await transaction.get(jobRef)).data() : null;
   const offerRef = targetOfferReference(jobRef, job, event, organization.id);
   const offer = offerRef ? (await transaction.get(offerRef)).data() : null;

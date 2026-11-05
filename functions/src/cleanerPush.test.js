@@ -292,3 +292,61 @@ describe("cleaner push pilot eligibility", () => {
     expect(isCleanerPushPilotApproval({ ...approval, deviceId: undefined }, { ...identity, deviceId: undefined }, options)).toBe(false);
   });
 });
+
+describe("cleaner push pilot test notice", () => {
+  const testEvent = {
+    eventId, organizationId, cleanerId, type: "PUSH_TEST", eventVersion: 1, processingState: "STORED",
+    priority: "HIGH", transitionKey: "operator-test",
+  };
+
+  it("reaches registered installations without a Job and records the private outcome", async () => {
+    const f = fixture();
+    await register(f);
+    f.records.set(eventPath, { ...testEvent, createdAt: Timestamp.now() });
+    const sendFcm = vi.fn(async () => batch(accepted));
+
+    await expect(deliver(f, sendFcm)).resolves.toEqual({ deliveryStatus: "FCM_ACCEPTED" });
+    const [messages] = sendFcm.mock.calls[0];
+    expect(messages).toHaveLength(1);
+    expect(JSON.stringify(messages)).not.toContain("private-property-marker");
+    expect(f.records.get(deliveryPath)).toMatchObject({ type: "PUSH_TEST", acceptedByFcmDevices: 1, targetDeviceCount: 1 });
+  });
+
+  it("in pilot mode sends only to an installation with a current grant made before the test", async () => {
+    const release = "c".repeat(40);
+    vi.stubEnv("CLEANER_PUSH_PILOT_RELEASE", release);
+    try {
+      const f = fixture();
+      await register(f);
+      await register(f, otherRegistration, identity(sessionB));
+      const approvedAt = Timestamp.fromMillis(Date.now() - 60_000);
+      f.records.set(`${orgPath}/cleanerPushPilotSessions/${sessionA}`, {
+        active: true, organizationId, cleanerId, uid, sessionId: sessionA, deviceId: registration.deviceId,
+        releaseSha: release, approvedAt, expiresAt: Timestamp.fromMillis(Date.now() + 3_600_000),
+      });
+      f.records.set(eventPath, { ...testEvent, createdAt: Timestamp.now() });
+      const sendFcm = vi.fn(async () => batch(accepted));
+
+      await processCleanerNotification({ database: f.database, organizationId, cleanerId, eventId, sendFcm, mode: "pilot" });
+      const [messages] = sendFcm.mock.calls[0];
+      expect(messages.map(({ token }) => token)).toEqual([registration.token]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("skips a test notice when no installation is approved", async () => {
+    vi.stubEnv("CLEANER_PUSH_PILOT_RELEASE", "c".repeat(40));
+    try {
+      const f = fixture();
+      await register(f);
+      f.records.set(eventPath, { ...testEvent, createdAt: Timestamp.now() });
+      const sendFcm = vi.fn();
+      await expect(processCleanerNotification({ database: f.database, organizationId, cleanerId, eventId, sendFcm, mode: "pilot" }))
+        .resolves.toEqual({ skipped: "NO_ACTIVE_DEVICES" });
+      expect(sendFcm).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});

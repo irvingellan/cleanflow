@@ -37,6 +37,7 @@ const messages = {
   "inbox.event.RESCHEDULED": ["Data ou horário alterado", "Date or time changed", "Cambió la fecha o la hora"],
   "inbox.event.CANCELLED": ["Serviço cancelado", "Job cancelled", "Servicio cancelado"],
   "inbox.event.UNASSIGNED": ["Serviço retirado da sua agenda", "Job removed from your schedule", "Servicio retirado de tu agenda"],
+  "inbox.event.PUSH_TEST": ["Aviso de teste do CleanFlow", "CleanFlow test alert", "Aviso de prueba de CleanFlow"],
 };
 
 export function inboxMessage(language, key, params = {}) {

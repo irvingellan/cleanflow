@@ -245,6 +245,34 @@ test("reschedule push rejects the superseded revision and cancellation never reo
   }
 });
 
+test("an operator pilot test notice reaches only its cleaner, needs no Job and stays read-only", async () => {
+  const id = "e".repeat(64);
+  const record = {
+    eventId: id, organizationId, cleanerId: "ana", type: "PUSH_TEST", eventVersion: 1,
+    processingState: "STORED", priority: "HIGH", transitionKey: "operator-test", createdAt: Timestamp.now(),
+  };
+  const client = environment.authenticatedContext("uid-ana", {
+    firebase: { sign_in_provider: "custom" }, cleanerHub: { organizationId, cleanerId: "ana", sessionId: "session-1" },
+  }).firestore();
+  const { createdAt: _serverTime, ...clientRecord } = record;
+  await assertFails(client.doc(`organizations/${organizationId}/cleanerNotificationInboxes/ana/items/${id}`).set(clientRecord));
+  await org.collection("cleanerNotificationInboxes").doc("ana").collection("items").doc(id).set(record);
+
+  const pushTarget = await admin.runTransaction(
+    (transaction) => notificationDestination(transaction, org, record, { organizationId, cleanerId: "ana" }, { forPush: true }),
+    { readOnly: true },
+  );
+  assert.deepEqual(pushTarget, { kind: "INBOX" });
+  const listed = await listNotificationInbox.run(cleaner("ana"));
+  assert.deepEqual(listed.items.map(({ id: itemId, type, openable, read }) => ({ itemId, type, openable, read })),
+    [{ itemId: id, type: "PUSH_TEST", openable: false, read: false }]);
+  assert.deepEqual(await openNotificationInboxItem.run(cleaner("ana", { id })), { state: "unavailable", destination: null });
+  assert.deepEqual(await markNotificationRead.run(cleaner("ana", { id })), { state: "read" });
+  assert.equal((await listNotificationInbox.run(cleaner("ana"))).items[0].read, true);
+  assert.equal((await listNotificationInbox.run(cleaner("bia"))).items.length, 0);
+  assert.equal((await listNotificationInbox.run(manager("manager"))).items.length, 0);
+});
+
 test("manager 7h and 19h reminder windows persist once without any registered device", async () => {
   const now = new Date("2026-11-04T16:00:00Z");
   await writeJob("today", { scheduledDate: "2026-11-04" });
