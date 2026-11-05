@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const bundleAsset = /^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/;
+export const hostingBundleAsset = /^assets\/(?:index|main)-[A-Za-z0-9_-]+\.(js|css)$/;
 // Emitted by Vite from @fontsource-variable/inter 5.2.8's wght.css.
 // Pin both the emitted paths and the SHA-256 of the reviewed package bytes.
 const interFonts = new Map([
@@ -20,7 +20,7 @@ const fileHash = (file) => crypto.createHash("sha256").update(fs.readFileSync(fi
 
 export function inspectHostingFonts(dist, files) {
   const declared = new Set();
-  for (const file of files.filter((name) => bundleAsset.test(name) && name.endsWith(".css"))) {
+  for (const file of files.filter((name) => hostingBundleAsset.test(name) && name.endsWith(".css"))) {
     const css = fs.readFileSync(path.join(dist, file), "utf8");
     for (const match of css.matchAll(/url\(\s*(["']?)\/(assets\/[^)'"\s]+\.woff2)\1\s*\)/g)) {
       declared.add(match[2]);
@@ -53,11 +53,11 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
   }
   walk(dist);
   const fonts = inspectHostingFonts(dist, files);
-  const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
+  const required = [...publicFiles, "index.html", "agenda.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
   // Builds on the previous source line do not emit the optional cleaner worker.
   const allowed = new Set([...required, "cleaner-messaging-sw.js"]);
   for (const file of files) {
-    if (!allowed.has(file) && !fonts.has(file) && !bundleAsset.test(file)) {
+    if (!allowed.has(file) && !fonts.has(file) && !hostingBundleAsset.test(file)) {
       throw new Error(`Unexpected Hosting file: ${file}`);
     }
     if (file.split("/").some(part => part.startsWith(".")) || /(?:\.tmp|\.temp|\.swp|\.swo|~)$/.test(file)) {

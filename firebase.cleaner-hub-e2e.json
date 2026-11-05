@@ -4,10 +4,39 @@
   "storage": { "rules": "storage.rules" },
   "hosting": {
     "public": "dist",
+    "headers": [
+      {
+        "source": "/agenda",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, private" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
+        ]
+      },
+      {
+        "source": "/agenda/",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, private" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
+        ]
+      },
+      {
+        "source": "/agenda.html",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, private" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
+        ]
+      },
+      {
+        "source": "/agenda.webmanifest",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ],
     "rewrites": [
       { "source": "/api/public-offer", "function": { "functionId": "publicOffer", "region": "us-central1" } },
       { "source": "/api/public-checklist", "function": { "functionId": "publicChecklist", "region": "us-central1" } },
       { "source": "/api/client-report", "function": { "functionId": "publicClientReport", "region": "us-central1" } },
+      { "source": "/agenda", "destination": "/agenda.html" },
+      { "source": "/agenda/", "destination": "/agenda.html" },
       { "source": "**", "destination": "/index.html" }
     ]
   },

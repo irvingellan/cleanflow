@@ -121,7 +121,8 @@ function isChecklistPreviewPath(pathname = window.location.pathname) {
 }
 
 export function isCleanerHubPath(pathname = window.location.pathname) {
-  return pathname.replace(/\/+$/, "") === "/agenda";
+  const route = pathname.replace(/\/+$/, "");
+  return route === "/agenda" || route === "/agenda.html";
 }
 
 function isWeeklyClosePreviewPath(pathname = window.location.pathname) {

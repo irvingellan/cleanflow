@@ -1,21 +1,21 @@
 {
   "id": "/agenda",
-  "name": "CleanFlow — Minha agenda",
-  "short_name": "CleanFlow",
+  "name": "Minha agenda",
+  "short_name": "Minha agenda",
   "start_url": "/agenda",
-  "scope": "/",
+  "scope": "/agenda",
   "display": "standalone",
   "background_color": "#f4f7f5",
   "theme_color": "#315c49",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/agenda-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/agenda-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

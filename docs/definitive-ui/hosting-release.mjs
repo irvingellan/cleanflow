@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -10,7 +10,7 @@ import {
 } from "../../scripts/notificationReleaseCloud.mjs";
 import { productionSnapshot, runReleaseSequence, verifyTransition } from "../../scripts/releaseNotificationA.mjs";
 import { readPublishedAssets, validVapidFingerprint } from "../../scripts/preflightNotificationRelease.mjs";
-import { inspectHostingFonts } from "../../scripts/prepareHosting.mjs";
+import { hostingBundleAsset, inspectHostingFonts } from "../../scripts/prepareHosting.mjs";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -22,10 +22,23 @@ const cli = join(root, "node_modules/firebase-tools/lib/bin/firebase.js");
 const project = notificationProject;
 const productionSha = "12f432dd46a6c93e45bfb78ac1993568143c3840";
 const visualSha = "fc6f7467ca834569ca2724c5e36c1da81f0f4357";
+const priorCandidateSha = "973adad7ca67a5e1570a31ef0367ffc0375ca7ed";
 const branch = "codex/definitive-ui-release";
+const agendaPublicAssets = new Set([
+  "agenda.webmanifest",
+  "agenda-apple-touch-icon.png",
+  "agenda-icon-192.png",
+  "agenda-icon-512.png",
+]);
 const extraReleaseFiles = new Set([
+  "agenda.html",
+  "vite.config.js",
+  "firebase.json",
+  "firebase.cleaner-hub-e2e.json",
+  "playwright.config.js",
   "scripts/prepareHosting.mjs",
   "scripts/prepareHosting.test.mjs",
+  "scripts/sandboxBuildGuards.test.mjs",
   "e2e/cleaner-hub/cleaner-hub.spec.js",
   "e2e/current-device-notification.spec.js",
   "e2e/jobs-navigation.spec.js",
@@ -51,14 +64,17 @@ function checkout() {
   const head = git("rev-parse", "HEAD");
   check(git("branch", "--show-current") === branch && realpathSync(process.cwd()) === root
     && !git("status", "--porcelain") && process.versions.node.split(".")[0] === "22"
-    && git("merge-base", visualSha, head) === visualSha && git("merge-base", productionSha, head) === productionSha,
+    && git("merge-base", visualSha, head) === visualSha && git("merge-base", priorCandidateSha, head) === priorCandidateSha,
   "Use the clean integrated branch based on the approved Claude and Production commits.");
   const changed = git("diff", "--name-only", productionSha, head).split("\n");
   check(changed.every((path) => extraReleaseFiles.has(path)
-    || /^(src\/|docs\/|e2e\/definitive-ui\/|DESIGN\.md$|package(?:-lock)?\.json$)/.test(path)),
+    || (path.startsWith("public/") && agendaPublicAssets.has(path.slice(7)))
+    || /^(src\/|docs\/|e2e\/(?:definitive-ui|pwa-entry)\/|DESIGN\.md$|package(?:-lock)?\.json$)/.test(path)),
     "Candidate changes files outside the Hosting-only scope.");
   check(!git("diff", "--name-only", visualSha, head, "--", "src/index.css", "src/**/*.css", "src/styles", "src/components/shell", "DESIGN.md"),
     "Claude CSS, design contract or shell differs from the approved visual source.");
+  check(!git("diff", "--name-only", priorCandidateSha, head, "--", "index.html", "public/manifest.webmanifest"),
+    "Manager entry or install identity differs from the previous candidate.");
   for (const file of ["package.json", "package-lock.json"]) {
     const before = JSON.parse(git("show", `${productionSha}:${file}`));
     const after = json(join(root, file));
@@ -104,12 +120,40 @@ export function interruptedPublishLock(baseline, live, entry, release, marker) {
   verifyTransition(baseline, live, hostingStep, {});
   return entry.lock;
 }
-function hostingConfig() {
-  const config = JSON.parse(git("show", `${productionSha}:firebase.json`)).hosting;
-  check(config.public === "dist" && !config.predeploy && !config.postdeploy && !config.target && !config.site
-    && config.rewrites.every(({ run, function: fn }) => !run && !fn?.pinTag),
-  "Unexpected Hosting targets, hooks or tagged rewrites.");
-  return config;
+const firebaseConfigAt = (sha) => JSON.parse(git("show", `${sha}:firebase.json`));
+
+export function expectedAgendaHosting(before) {
+  const agendaHeaders = before.hosting.headers.find(({ source }) => source === "/agenda");
+  const headers = before.hosting.headers.flatMap((rule) => rule === agendaHeaders
+    ? [rule, ...["/agenda/", "/agenda.html"].map((source) => ({ ...rule, source }))]
+    : [rule]);
+  const rewrites = before.hosting.rewrites.flatMap((rule) => rule.source === "**"
+    ? [...["/agenda", "/agenda/"].map((source) => ({ source, destination: "/agenda.html" })), rule]
+    : [rule]);
+  return { ...before, hosting: { ...before.hosting, headers, rewrites } };
+}
+
+function hostingConfig(head) {
+  const before = firebaseConfigAt(productionSha);
+  const after = firebaseConfigAt(head);
+  check(same(ordered(after), ordered(expectedAgendaHosting(before))),
+    "Only the reviewed agenda Hosting rewrites and headers may differ from Production source.");
+  return after.hosting;
+}
+
+async function normalizedConfig(config, version) {
+  return ordered(await convertConfig({ projectId: project }, {}, {
+    version: `sites/${project}/versions/${version}`, config: { ...config, site: project },
+  }));
+}
+
+export function validIosAcceptance(receipt, plan) {
+  const checks = ["managerIconRetained", "managerIconOpensRoot", "agendaIconOpensAgenda",
+    "identityAndSessionsSeparate", "legacyIconChecked", "safariAndWhatsAppLinksChecked", "checklistHandoffChecked"];
+  return receipt?.state === "PASS" && receipt.device === "physical-iphone"
+    && typeof receipt.iosVersion === "string" && /^\d+(?:\.\d+){0,2}$/.test(receipt.iosVersion)
+    && receipt.sha === plan.sha && receipt.manifestHash === plan.manifestHash
+    && checks.every((key) => receipt.checks?.[key] === true);
 }
 
 async function inspect() {
@@ -128,6 +172,20 @@ async function inspectAssets(manifest) {
   return rows;
 }
 
+async function inspectEntryRoutes(manifest, agendaEntry) {
+  const base = `https://${project}.web.app`;
+  const hashes = new Map(manifest.files.map(({ file, sha256 }) => [file, sha256]));
+  await Promise.all(["/", "/agenda", "/agenda/", "/agenda?inbox=1"].map(async (route) => {
+    const file = agendaEntry && route !== "/" ? "agenda.html" : "index.html";
+    const response = await fetch(base + route, { redirect: "error", signal: AbortSignal.timeout(12_000) });
+    check(response.status === 200 && /text\/html/i.test(response.headers.get("content-type") || "")
+      && /\bno-store\b/i.test(response.headers.get("cache-control") || "")
+      && (route === "/" || response.headers.get("referrer-policy") === "no-referrer")
+      && sha256(Buffer.from(await response.arrayBuffer())) === hashes.get(file),
+    `Unexpected Hosting HTML, redirect or privacy headers at ${route}.`);
+  }));
+}
+
 function filesAt(directory, subdirectory = "") {
   return readdirSync(join(directory, subdirectory), { withFileTypes: true }).flatMap((entry) => {
     const path = join(subdirectory, entry.name);
@@ -141,14 +199,14 @@ async function build(dir, head, a, envDir) {
   const initial = await inspect();
   check(initial.lock === "AVAILABLE" && same(initial.snapshot, a.receipt.snapshot), "Production drift or release lock prevents preparation.");
   const old = await inspectAssets(a.manifest);
+  await inspectEntryRoutes(a.manifest, false);
   const version = initial.snapshot.hosting.version;
   const config = await versionConfig(version);
   const liveChannel = await getChannel("-", project, "live");
   check(liveChannel?.release?.version?.name?.endsWith(`/versions/${version}`), "Live channel version differs.");
-  const normalized = await convertConfig({ projectId: project }, {}, {
-    version: `sites/${project}/versions/${version}`, config: { ...hostingConfig(), site: project },
-  });
-  check(same(ordered(normalized), config), "Normalized candidate Hosting configuration differs from live.");
+  check(same(await normalizedConfig(firebaseConfigAt(productionSha).hosting, version), config),
+    "Normalized Release A Hosting configuration differs from live.");
+  const candidateHostingConfig = await normalizedConfig(hostingConfig(head), version);
   const fields = ["API_KEY", "AUTH_DOMAIN", "PROJECT_ID", "STORAGE_BUCKET", "MESSAGING_SENDER_ID", "APP_ID"];
   const optional = ["VITE_FIREBASE_VAPID_KEY", "VITE_ONESIGNAL_APP_ID", "VITE_CLEANFLOW_ENV_NAVIGATION_EMAILS",
     "VITE_CLEANFLOW_SANDBOX_ORIGIN", "VITE_CLEANFLOW_SANDBOX_PROJECT_ID"];
@@ -169,27 +227,31 @@ async function build(dir, head, a, envDir) {
     VITE_CLEANFLOW_PRIVATE_EMULATOR_ORIGIN: "", VITE_NOTIFICATION_INBOX_MODE: "enabled",
     VITE_AUTOMATIC_OFFERS_MODE: "disabled", VITE_FIREBASE_CLEANER_MESSAGING_APP_ID: "",
   } });
-  const required = old.filter(({ file }) => !/^assets\/index-/.test(file));
+  const required = old.filter(({ file }) => !hostingBundleAsset.test(file));
   for (const { file, bytes } of required) {
     const actual = readFileSync(join(dist, file));
-    if (file === "index.html" || file === "version.json") continue;
+    if (file === "index.html" || file === "version.json" || agendaPublicAssets.has(file)) continue;
     const expected = file === "sw.js" ? Buffer.from(bytes.toString().replaceAll(productionSha, head)) : bytes;
     check(actual.equals(expected), `Unreviewed change to ${file}.`);
+  }
+  for (const file of agendaPublicAssets) {
+    const source = execFileSync("git", ["show", `${head}:public/${file}`], { cwd: root });
+    check(readFileSync(join(dist, file)).equals(source), `Unreviewed change to ${file}.`);
   }
   const marker = json(join(dist, "version.json"));
   check(marker.buildId === head && marker.projectId === project && marker.environment === "production"
     && !marker.deploymentId, "Unexpected build marker or notification variant.");
-  const whitelist = new Set(required.map(({ file }) => file));
+  const whitelist = new Set([...required.map(({ file }) => file), "agenda.html", ...agendaPublicAssets]);
   const inventory = filesAt(dist);
   const fonts = inspectHostingFonts(dist, inventory);
   const files = inventory.map((file) => {
-    check(whitelist.has(file) || fonts.has(file) || /^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file),
+    check(whitelist.has(file) || fonts.has(file) || hostingBundleAsset.test(file),
       `Unexpected Hosting asset ${file}.`);
     return { file, sha256: hash(join(dist, file)) };
   });
-  check(fonts.size === 7, "The seven reviewed Inter subsets are required.");
+  check(fonts.size === 7 && inventory.includes("agenda.html"), "Agenda HTML and the seven reviewed Inter subsets are required.");
   write(join(dir, "manifest.json"), { buildId: head, projectId: project, environment: "production", files });
-  write(join(dir, "production-baseline.json"), { snapshot: initial.snapshot, hostingConfig: config,
+  write(join(dir, "production-baseline.json"), { snapshot: initial.snapshot, hostingConfig: config, candidateHostingConfig,
     priorManifestHash: a.hash, toolchain: versions(), notification: initial.notification });
   console.log(JSON.stringify({ state: "BUILD_READY_REVIEW_PENDING", sha: head, files: files.length, manifestHash: hash(join(dir, "manifest.json")) }));
 }
@@ -200,17 +262,19 @@ function validated(dir, head, a) {
   const baseline = json(join(dir, "production-baseline.json"));
   const dist = join(dir, "assets");
   const inventory = filesAt(dist);
-  check(inspectHostingFonts(dist, inventory).size === 7, "The seven reviewed Inter subsets are required.");
+  check(inspectHostingFonts(dist, inventory).size === 7 && inventory.includes("agenda.html"),
+    "Agenda HTML and the seven reviewed Inter subsets are required.");
   const actual = inventory.map((file) => ({ file, sha256: hash(join(dist, file)) }));
   check(manifest.buildId === head && manifest.projectId === project && manifest.environment === "production"
     && same(actual, manifest.files) && same(baseline.snapshot, a.receipt.snapshot) && baseline.priorManifestHash === a.hash
-    && same(baseline.toolchain, versions()), "Review artifacts, toolchain or baseline differ.");
+    && same(baseline.toolchain, versions()) && baseline.candidateHostingConfig, "Review artifacts, toolchain or baseline differ.");
   const required = ["unit", "security", "hubSecurity", "hostingPreparation", "definitiveFlows", "legacyE2E",
-    "hubE2E", "visualParity", "authenticatedAcceptance", "safariAuthenticated"];
+    "hubE2E", "visualParity", "authenticatedAcceptance", "safariAuthenticated", "agendaEntry"];
   check(evidence.sha === head && required.every((gate) => evidence.checks?.[gate] === "PASS"), "Required release gates are not all PASS.");
   return { manifest, baseline, plan: { sha: head, project, hostingOnly: true, branch, toolchain: versions(),
     manifestHash: hash(join(dir, "manifest.json")), gateHash: hash(join(dir, "gate.json")),
-    baselineHash: hash(join(dir, "production-baseline.json")), hostingConfigHash: sha256(JSON.stringify(baseline.hostingConfig)),
+    baselineHash: hash(join(dir, "production-baseline.json")), hostingConfigHash: sha256(JSON.stringify(baseline.candidateHostingConfig)),
+    rollbackHostingConfigHash: sha256(JSON.stringify(baseline.hostingConfig)), requiresPhysicalIosAcceptance: true,
     rollbackVersion: a.receipt.snapshot.hosting.version, priorManifestHash: a.hash } };
 }
 
@@ -220,8 +284,13 @@ async function apply(action, dir, a, review, approve, exclusive) {
   const marker = `CleanFlow Definitive UI ${planHash}`;
   check(same(json(file), review.plan) && exclusive && approve === `${action}:${planHash}`,
     "The exact reviewed seal and exclusive release authorization are required.");
-  const live = await inspect();
   const rollback = action === "rollback";
+  if (!rollback) {
+    const acceptance = join(dir, "ios-acceptance.json");
+    check(existsSync(acceptance) && validIosAcceptance(json(acceptance), review.plan),
+      "Physical iPhone Home Screen acceptance for this exact build is required.");
+  }
+  const live = await inspect();
   let expected = a.receipt.snapshot;
   let recoveredLock;
   check(same(live.notification, review.baseline.notification), "Production FCM differs from the reviewed starting state.");
@@ -238,8 +307,10 @@ async function apply(action, dir, a, review, approve, exclusive) {
     }
     check(live.lock === "AVAILABLE" && same(live.snapshot, expected), "Production differs from the reviewed starting state.");
     await inspectAssets(rollback ? review.manifest : a.manifest);
+    await inspectEntryRoutes(rollback ? review.manifest : a.manifest, rollback);
   }
-  check(same(await versionConfig(live.snapshot.hosting.version), review.baseline.hostingConfig), "Hosting config drift.");
+  check(same(await versionConfig(live.snapshot.hosting.version),
+    rollback ? review.baseline.candidateHostingConfig : review.baseline.hostingConfig), "Hosting config drift.");
   check(same(await versionConfig(review.plan.rollbackVersion), review.baseline.hostingConfig), "Rollback version config drift.");
   const channel = await getChannel("-", project, "live");
   check(channel?.release?.version?.name?.endsWith(`/versions/${live.snapshot.hosting.version}`), "Live channel version differs.");
@@ -250,7 +321,7 @@ async function apply(action, dir, a, review, approve, exclusive) {
   const journal = join(dir, `${action}-journal.jsonl`);
   writeFileSync(journal, "", { flag: "wx", mode: 0o600 });
   try {
-    write(join(workspace, "firebase.json"), { hosting: hostingConfig() });
+    write(join(workspace, "firebase.json"), { hosting: hostingConfig(review.plan.sha) });
     if (!rollback) for (const { file, sha256: expectedHash } of review.manifest.files) {
       const target = join(workspace, "dist", file);
       mkdirSync(dirname(target), { recursive: true });
@@ -274,9 +345,11 @@ async function apply(action, dir, a, review, approve, exclusive) {
       },
       verifyAssets: async () => {
         await inspectAssets(rollback ? a.manifest : review.manifest);
+        await inspectEntryRoutes(rollback ? a.manifest : review.manifest, !rollback);
         const after = await inspect();
         check(!rollback || after.snapshot.hosting.version === review.plan.rollbackVersion, "Rollback did not restore the exact version.");
-        check(same(await versionConfig(after.snapshot.hosting.version), review.baseline.hostingConfig), "Published Hosting config differs.");
+        check(same(await versionConfig(after.snapshot.hosting.version),
+          rollback ? review.baseline.hostingConfig : review.baseline.candidateHostingConfig), "Published Hosting config differs.");
       },
     });
     write(join(dir, `${action}-receipt.json`), { state: "COMPLETE", planHash, snapshot });

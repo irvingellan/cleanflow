@@ -249,6 +249,23 @@ function cleanflowServiceWorkers(buildInfo) {
   }
 }
 
+function cleanerHubHtmlEntry() {
+  function rewriteAgenda(server) {
+    server.middlewares.use((request, _response, next) => {
+      const pathname = request.url?.split('?')[0]
+      if (['GET', 'HEAD'].includes(request.method) && ['/agenda', '/agenda/'].includes(pathname)) {
+        request.url = '/agenda.html' + request.url.slice(pathname.length)
+      }
+      next()
+    })
+  }
+  return {
+    name: 'cleanflow-cleaner-hub-html-entry',
+    configureServer: rewriteAgenda,
+    configurePreviewServer: rewriteAgenda,
+  }
+}
+
 const packageMetadata = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
 )
@@ -296,9 +313,17 @@ export default defineConfig(({ mode }) => {
       __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__: JSON.stringify(mode === "emulator" ? approvedPrivateEmulatorOrigin : ""),
       __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.deploymentId || buildInfo.buildId),
     },
+    build: {
+      rolldownOptions: {
+        input: {
+          index: path.resolve(import.meta.dirname, 'index.html'),
+          agenda: path.resolve(import.meta.dirname, 'agenda.html'),
+        },
+      },
+    },
     plugins: ["test", "e2e"].includes(mode)
-      ? [react()]
-      : [react(), cleanflowServiceWorkers(buildInfo)],
+      ? [react(), cleanerHubHtmlEntry()]
+      : [react(), cleanerHubHtmlEntry(), cleanflowServiceWorkers(buildInfo)],
     test: {
       environment: "jsdom",
       setupFiles: "./src/test/setup.js",

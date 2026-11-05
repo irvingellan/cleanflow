@@ -85,21 +85,6 @@ function useSystemTheme() {
   return dark ? "dark" : "light";
 }
 
-/** Points Add-to-Home-Screen at the cleaner start page while the Hub is open. */
-function useCleanerManifest(title) {
-  useEffect(() => {
-    const manifest = document.querySelector('link[rel="manifest"]');
-    const previousHref = manifest?.getAttribute("href");
-    const previousTitle = document.title;
-    manifest?.setAttribute("href", "/agenda.webmanifest");
-    document.title = title;
-    return () => {
-      if (manifest && previousHref) manifest.setAttribute("href", previousHref);
-      document.title = previousTitle;
-    };
-  }, [title]);
-}
-
 function useInstallPrompt() {
   const [promptEvent, setPromptEvent] = useState(null);
   useEffect(() => {
@@ -729,7 +714,12 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     role: "CLEANER", sessionKey: active ? session.sessionId : null, service: hubOptions?.inboxService,
   });
   const push = useCleanerNotificationSettings({ session, active, platform, displayMode, language: t.lang });
-  useCleanerManifest(`${t("hb.brand")} · CleanFlow`);
+  const browserTitle = `${t("hb.brand")} · CleanFlow`;
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = browserTitle;
+    return () => { document.title = previousTitle; };
+  }, [browserTitle]);
   const today = localDateKey(new Date());
   const go = (next) => setView((current) => ({ ...next, tab: next.tab || current.tab }));
   useEffect(() => { document.getElementById("hb-main")?.scrollTo?.(0, 0); }, [view.type, view.tab, view.jobId]);

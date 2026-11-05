@@ -8,7 +8,7 @@ import { inspectHostingBuild } from "./prepareHosting.mjs";
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hosting-hygiene-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  for (const file of ["index.html", "sw.js", "firebase-messaging-sw.js"]) fs.writeFileSync(path.join(dir, file), "synthetic");
+  for (const file of ["index.html", "agenda.html", "sw.js", "firebase-messaging-sw.js"]) fs.writeFileSync(path.join(dir, file), "synthetic");
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected" }));
   fs.mkdirSync(path.join(dir, "assets"));
   fs.writeFileSync(path.join(dir, "assets/index-demo.js"), "synthetic");
@@ -55,6 +55,12 @@ test("wrong build SHA, missing public assets and symlinks fail closed", t => {
   assert.throws(() => inspectHostingBuild(dir, "expected", ["icon.png"]), /Missing/);
   fs.symlinkSync(path.join(dir, "index.html"), path.join(dir, "linked.html"));
   assert.throws(() => inspectHostingBuild(dir, "expected", []), /Symlink/);
+});
+
+test("a build missing the agenda entry fails even with valid manager assets", t => {
+  const dir = fixture(t);
+  fs.unlinkSync(path.join(dir, "agenda.html"));
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Missing Hosting file: agenda.html/);
 });
 test("Hosting ignores Finder artifacts even if recreated after preparation", () => {
   const config = JSON.parse(fs.readFileSync(new URL("../firebase.json", import.meta.url)));

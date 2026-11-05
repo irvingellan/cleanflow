@@ -23,7 +23,7 @@ function fixture(t) {
       filter: (source) => !path.basename(source).startsWith("."),
     });
   }
-  for (const file of ["index.html", "package.json", "vite.config.js"]) {
+  for (const file of ["index.html", "agenda.html", "package.json", "vite.config.js"]) {
     fs.copyFileSync(path.join(repository, file), path.join(root, file));
   }
   fs.symlinkSync(path.join(repository, "node_modules"), path.join(root, "node_modules"), "dir");
