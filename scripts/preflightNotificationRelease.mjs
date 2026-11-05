@@ -157,7 +157,7 @@ export async function readPublishedAssets(manifest) {
   return rows;
 }
 
-function checkedWebEnvironment(directory) {
+export function checkedWebEnvironment(directory) {
   // A release uses one explicit, local environment source. Shell VITE overrides
   // could otherwise make the manifest refer to a different Firebase app.
   for (const name of Object.keys(process.env)) if (name.startsWith("VITE_")) delete process.env[name];
