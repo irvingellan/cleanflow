@@ -156,6 +156,27 @@ export function releaseId(name) {
   return match[1];
 }
 
+const hostingInitPaths = ["/__/firebase/init.js", "/__/firebase/init.json"];
+
+export function exactHostingInventory(uploaded, assets, baseline) {
+  return uploaded.size === assets.size + hostingInitPaths.length
+    && [...assets].every(([path, hash]) => uploaded.get(path) === hash)
+    && hostingInitPaths.every((path) => /^[a-f0-9]{64}$/.test(baseline.get(path) || "")
+      && uploaded.get(path) === baseline.get(path));
+}
+
+async function versionFiles(id) {
+  const inventory = await api.get(`/v1beta1/${site}/versions/${id}/files`, {
+    ...readOptions, queryParams: { status: "ACTIVE", pageSize: 1000 },
+  });
+  const files = inventory.body.files;
+  check(inventory.status === 200 && !inventory.body.nextPageToken && Array.isArray(files),
+    "Hosting version inventory is incomplete.");
+  const byPath = new Map(files.map(({ path, hash }) => [path, hash]));
+  check(byPath.size === files.length, "Duplicate Hosting version paths.");
+  return byPath;
+}
+
 async function channelMatches(hosting) {
   const response = await api.get(`/v1beta1/projects/-/${site}/channels/live`, readOptions);
   const release = response.body.release;
@@ -218,16 +239,14 @@ function cloudAdapter(inputs) {
         const finalized = await updateVersion(project, id, {
           status: "FINALIZED", config: review.baseline.candidateHostingConfig,
         });
-        check(finalized.status === "FINALIZED" && Number(finalized.fileCount) === files.length,
-          "Finalized Hosting version file count differs.");
+        check(finalized.status === "FINALIZED", "Hosting version was not finalized.");
         await assertConfig(id, true);
-        const inventory = await api.get(`/v1beta1/${site}/versions/${id}/files`, {
-          ...readOptions, queryParams: { status: "ACTIVE", pageSize: 1000 },
-        });
-        const uploaded = new Map(inventory.body.files?.map(({ path, hash }) => [path, hash]));
-        check(inventory.status === 200 && !inventory.body.nextPageToken && uploaded.size === files.length
-          && files.every((file) => uploaded.get("/" + file) === sha256(gzipSync(readFileSync(join(dist, file)), { level: 9 }))),
-        "Finalized version files differ from the sealed upload.");
+        const expected = new Map(files.map((file) => [
+          "/" + file, sha256(gzipSync(readFileSync(join(dist, file)), { level: 9 })),
+        ]));
+        const [uploaded, baseline] = await Promise.all([versionFiles(id), versionFiles(rollback)]);
+        check(exactHostingInventory(uploaded, expected, baseline),
+          "Finalized version differs from the sealed upload or baseline Firebase init files.");
         return id;
       } finally { rmSync(workspace, { recursive: true, force: true }); }
     },

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { releaseId, validPublicIosAcceptance, validReadiness, versionId } from "./hosting-two-phase.mjs";
+import { exactHostingInventory, releaseId, validPublicIosAcceptance, validReadiness, versionId } from "./hosting-two-phase.mjs";
 
 const now = Date.parse("2026-11-05T02:00:00Z");
 const deadline = now + 15 * 60_000;
@@ -62,4 +62,14 @@ test("public entry acceptance requires the two installed apps and keeps operatio
   assert.equal(validPublicIosAcceptance({ ...smoke, state: "PASS" }, plan), false);
   assert.equal(validPublicIosAcceptance({ ...smoke, checks: { ...smoke.checks, separateInstalledApps: false } }, plan), false);
   assert.equal(validPublicIosAcceptance({ ...smoke, operationalChecks: {} }, plan), false);
+});
+
+test("Firebase-generated init files are accepted only with the exact baseline hashes", () => {
+  const init = new Map([["/__/firebase/init.js", "a".repeat(64)], ["/__/firebase/init.json", "b".repeat(64)]]);
+  const assets = new Map([["/index.html", "c".repeat(64)]]);
+  const uploaded = new Map([...init, ...assets]);
+  assert.equal(exactHostingInventory(uploaded, assets, init), true);
+  assert.equal(exactHostingInventory(new Map([...uploaded, ["/extra", "d".repeat(64)]]), assets, init), false);
+  assert.equal(exactHostingInventory(new Map([...uploaded, ["/__/firebase/init.js", "d".repeat(64)]]), assets, init), false);
+  assert.equal(exactHostingInventory(new Map([...uploaded, ["/index.html", "d".repeat(64)]]), assets, init), false);
 });
