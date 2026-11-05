@@ -26,9 +26,21 @@ export function isCleanerPushPilotApproval(approval, identity, { releaseSha, now
     && (eventAtMs === undefined || (Number.isFinite(eventAtMs) && eventAtMs >= approvedAtMs));
 }
 
+/** A manager turned phone alerts on for this cleaner; events before that stay Inbox-only. */
+export function isCleanerPushEnabledProfile(profile, identity, eventAtMs) {
+  const enabledAtMs = timestampMillis(profile?.pushAlertsEnabledAt);
+  return profile?.pushAlertsEnabled === true && profile.active !== false && !profile.archivedAt
+    && (profile.organizationId == null || profile.organizationId === identity?.organizationId)
+    && Number.isFinite(enabledAtMs) && enabledAtMs <= Date.now()
+    && (eventAtMs === undefined || (Number.isFinite(eventAtMs) && eventAtMs >= enabledAtMs));
+}
+
 export async function approvedCleanerPushPilotDevice(transaction, database, identity, eventAtMs) {
-  const approval = await transaction.get(cleanerPushPilotApprovalReference(database, identity));
+  const [approval, profile] = await Promise.all([
+    transaction.get(cleanerPushPilotApprovalReference(database, identity)),
+    transaction.get(database.doc(`organizations/${identity.organizationId}/cleaners/${identity.cleanerId}`)),
+  ]);
   return isCleanerPushPilotApproval(approval.data(), identity, {
     releaseSha: process.env.CLEANER_PUSH_PILOT_RELEASE, nowMs: Date.now(), eventAtMs,
-  });
+  }) || isCleanerPushEnabledProfile(profile.data(), identity, eventAtMs);
 }

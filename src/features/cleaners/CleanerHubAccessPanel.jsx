@@ -18,6 +18,8 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [alerts, setAlerts] = useState(cleaner.pushAlertsEnabled === true);
+  const [alertsError, setAlertsError] = useState(false);
   const eligible = cleaner.active !== false && !cleaner.archivedAt;
   const url = service.cleanerHubUrl();
 
@@ -30,6 +32,21 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
   }, [cleaner.id, service]);
 
   useEffect(() => { setIssued(null); setAccess(null); load(); }, [load]);
+  useEffect(() => { setAlerts(cleaner.pushAlertsEnabled === true); }, [cleaner.id, cleaner.pushAlertsEnabled]);
+
+  async function toggleAlerts() {
+    const next = !alerts;
+    setBusy("alerts");
+    setAlertsError(false);
+    try {
+      await service.setCleanerPushAlerts(cleaner.id, next);
+      setAlerts(next);
+    } catch {
+      setAlertsError(true);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function issue(additionalDevice = false) {
     setBusy(additionalDevice ? "additional" : "issue");
@@ -115,6 +132,18 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
           </button>
         )}
       </div>
+      {service.setCleanerPushAlerts && eligible && (
+        <div className="cleaner-push-alerts">
+          <label className="cleaner-push-alerts__row">
+            <input type="checkbox" role="switch" checked={alerts} disabled={Boolean(busy)} onChange={toggleAlerts} />
+            <span>
+              <strong>{translate("cleanerHub.alertsTitle")}</strong>
+              <span>{translate(alerts ? "cleanerHub.alertsOn" : "cleanerHub.alertsOff")}</span>
+            </span>
+          </label>
+          {alertsError && <p className="property-history-state property-history-state--error" role="alert">{translate("cleanerHub.alertsError")}</p>}
+        </div>
+      )}
     </section>
   );
 }

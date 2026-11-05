@@ -5,7 +5,7 @@ import {
   deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice,
 } from "./cleanerPushDevices.js";
 import { processCleanerNotification } from "./cleanerPushDelivery.js";
-import { isCleanerPushPilotApproval, resolveCleanerPushMode } from "./cleanerPushPilot.js";
+import { isCleanerPushEnabledProfile, isCleanerPushPilotApproval, resolveCleanerPushMode } from "./cleanerPushPilot.js";
 import { managerFcmTimeoutMs } from "./managerFcmDelivery.js";
 
 const organizationId = "synthetic-org";
@@ -349,4 +349,55 @@ describe("cleaner push pilot test notice", () => {
       vi.unstubAllEnvs();
     }
   });
+});
+
+describe("manager phone-alert switch", () => {
+  it("lets pilot mode deliver to every registered installation of an enabled cleaner, for later events only", async () => {
+    vi.stubEnv("CLEANER_PUSH_PILOT_RELEASE", "c".repeat(40));
+    try {
+      const f = fixture();
+      await register(f);
+      await register(f, otherRegistration, identity(sessionB));
+      const enabledAt = Timestamp.fromMillis(Date.now() - 60_000);
+      f.records.set(cleanerPath, { ...f.records.get(cleanerPath), pushAlertsEnabled: true, pushAlertsEnabledAt: enabledAt });
+      f.records.set(eventPath, { ...f.records.get(eventPath), createdAt: Timestamp.now() });
+      const sendFcm = vi.fn(async (messages) => batch(...messages.map(() => accepted)));
+      await processCleanerNotification({ database: f.database, organizationId, cleanerId, eventId, sendFcm, mode: "pilot" });
+      expect(sendFcm.mock.calls[0][0].map(({ token }) => token).sort()).toEqual([registration.token, otherRegistration.token].sort());
+
+      const old = fixture();
+      await register(old);
+      old.records.set(cleanerPath, { ...old.records.get(cleanerPath), pushAlertsEnabled: true, pushAlertsEnabledAt: Timestamp.now() });
+      old.records.set(eventPath, { ...old.records.get(eventPath), createdAt: Timestamp.fromMillis(Date.now() - 120_000) });
+      const oldSend = vi.fn();
+      await expect(processCleanerNotification({ database: old.database, organizationId, cleanerId, eventId, sendFcm: oldSend, mode: "pilot" }))
+        .resolves.toEqual({ skipped: "NO_ACTIVE_DEVICES" });
+      expect(oldSend).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("is ignored when switched off, without a timestamp, or for an inactive cleaner", () => {
+    const who = { organizationId, cleanerId };
+    const at = Timestamp.fromMillis(Date.now() - 1000);
+    expect(isCleanerPushEnabledProfile({ pushAlertsEnabled: true, pushAlertsEnabledAt: at, organizationId }, who)).toBe(true);
+    expect(isCleanerPushEnabledProfile({ pushAlertsEnabled: false, pushAlertsEnabledAt: at }, who)).toBe(false);
+    expect(isCleanerPushEnabledProfile({ pushAlertsEnabled: true, pushAlertsEnabledAt: null }, who)).toBe(false);
+    expect(isCleanerPushEnabledProfile({ pushAlertsEnabled: true, pushAlertsEnabledAt: at, active: false }, who)).toBe(false);
+    expect(isCleanerPushEnabledProfile({ pushAlertsEnabled: true, pushAlertsEnabledAt: at, organizationId: "other" }, who)).toBe(false);
+  });
+});
+
+it("lets an enabled cleaner enroll in pilot mode without a per-device grant", async () => {
+  vi.stubEnv("CLEANER_PUSH_PILOT_RELEASE", "c".repeat(40));
+  try {
+    const f = fixture();
+    await expect(registerCleanerDevice(f.database, identity(), registration, "pilot")).rejects.toThrow();
+    f.records.set(cleanerPath, { ...f.records.get(cleanerPath), pushAlertsEnabled: true, pushAlertsEnabledAt: Timestamp.fromMillis(Date.now() - 1000) });
+    await expect(registerCleanerDevice(f.database, identity(), registration, "pilot")).resolves.toBeTruthy();
+    expect((await getCleanerDeviceStatus(f.database, identity(), { deviceId: registration.deviceId }, "pilot")).state).not.toBe("pilot-ineligible");
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

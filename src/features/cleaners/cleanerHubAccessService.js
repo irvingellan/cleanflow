@@ -1,6 +1,8 @@
 import { doc, getDocFromServer } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { db, functions } from "../../services/firebase/client.js";
+import { getAuth } from "firebase/auth";
+import { setCleanerPushAlerts as writeCleanerPushAlerts } from "./cleanerService.js";
+import { db, firebaseApp, functions } from "../../services/firebase/client.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -35,4 +37,8 @@ export async function revokeCleanerHubAccess(cleanerId) {
 
 export function cleanerHubUrl(origin = window.location.origin) {
   return `${origin}/agenda`;
+}
+
+export function setCleanerPushAlerts(cleanerId, enabled) {
+  return writeCleanerPushAlerts(cleanerId, enabled, getAuth(firebaseApp).currentUser?.uid);
 }

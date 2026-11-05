@@ -196,6 +196,16 @@ export async function updateCleanerDataProvenance(cleanerId, dataProvenance, act
   return { id: cleanerId, dataProvenance };
 }
 
+/** Manager switch for phone alerts; the cleaner still opts in on her own device. */
+export async function setCleanerPushAlerts(cleanerId, enabled, actorUid) {
+  await updateDoc(cleanerDocument(cleanerId), {
+    pushAlertsEnabled: enabled === true,
+    pushAlertsEnabledAt: enabled === true ? serverTimestamp() : null,
+    pushAlertsUpdatedByUid: actorUid || null,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function archiveCleaner(cleanerId, actorUid) {
   await updateDoc(cleanerDocument(cleanerId), buildArchiveUpdate(actorUid, serverTimestamp()));
   return { id: cleanerId, archivedAt: true };

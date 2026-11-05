@@ -30,6 +30,27 @@ describe("CleanerHubAccessPanel", () => {
     expect(screen.getByText(/works once/)).toBeInTheDocument();
   });
 
+  it("turns phone alerts on and off for one cleaner and reports a failed save", async () => {
+    const fake = { ...service(), setCleanerPushAlerts: vi.fn(async () => {}) };
+    renderPanel({ id: "ana", active: true }, fake);
+    const toggle = await screen.findByRole("switch", { name: /Phone alerts/ });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText(/Her notices stay in the Inbox/)).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(fake.setCleanerPushAlerts).toHaveBeenCalledWith("ana", true);
+    expect(await screen.findByRole("switch", { name: /Phone alerts/ })).toBeChecked();
+    fake.setCleanerPushAlerts.mockRejectedValueOnce(new Error("offline"));
+    await userEvent.click(screen.getByRole("switch", { name: /Phone alerts/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not change phone alerts");
+    expect(screen.getByRole("switch", { name: /Phone alerts/ })).toBeChecked();
+  });
+
+  it("hides phone alerts for an inactive cleaner", async () => {
+    renderPanel({ id: "ana", active: false }, { ...service(), setCleanerPushAlerts: vi.fn() });
+    expect(await screen.findByText(/Only an active cleaner/)).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
   it("ends access only after confirmation", async () => {
     const fake = service({ active: true, linkedAt: "2026-11-01T12:00:00.000Z", revokedAt: null, pendingCodeExpiresAt: null });
     renderPanel({ id: "ana", active: true }, fake);

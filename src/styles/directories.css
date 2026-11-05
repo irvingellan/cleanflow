@@ -223,3 +223,35 @@
     justify-content: flex-start;
   }
 }
+
+/* Cleaner profile: manager switch for phone alerts. */
+.cleaner-push-alerts {
+  margin-top: 16px;
+  border-top: 1px solid var(--cf-divider);
+  padding-top: 14px;
+}
+
+.cleaner-push-alerts__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.cleaner-push-alerts__row input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--cf-brand);
+}
+
+.cleaner-push-alerts__row > span {
+  display: grid;
+  gap: 2px;
+}
+
+.cleaner-push-alerts__row > span > span {
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+}
