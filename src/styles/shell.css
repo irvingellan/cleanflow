@@ -424,8 +424,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  width: auto;
+  height: auto;
   min-height: 40px;
   border: 0;
+  border-radius: var(--cf-radius-sm);
+  font-size: var(--cf-text-sm);
   padding: 0 4px;
   color: var(--cf-text);
   background: transparent;
@@ -478,10 +482,12 @@ body {
   min-width: 0;
 }
 
+/* Anchored beside the navigation, so very wide screens never leave the page
+   floating in the middle of an empty canvas. */
 .cf-main__inner {
   width: 100%;
-  margin: 0 auto;
-  padding: 28px 32px 64px;
+  margin: 0;
+  padding: 28px 40px 64px;
 }
 
 .cf-main--standard .cf-main__inner { max-width: 860px; }

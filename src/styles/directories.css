@@ -81,3 +81,145 @@
   font-size: var(--cf-text-xs);
   font-weight: 700;
 }
+
+/* Row layout: content on the left, one meta cluster (state, provenance) on the right. */
+.client-card,
+.property-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.cleaner-directory-card {
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.35fr) auto;
+}
+
+.directory-row__meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.property-card__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.property-card__address {
+  overflow: hidden;
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-search {
+  margin-bottom: 16px;
+}
+
+.directory-search input {
+  width: 100%;
+  padding-left: 40px;
+}
+
+@media (max-width: 719px) {
+  .cleaner-directory-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .cleaner-directory-card__details {
+    display: none;
+  }
+}
+
+/* Payouts: pending and recent lists use the same bordered row list. */
+.payout-directory,
+.payout-history__list {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-xl);
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-raise);
+  overflow: hidden;
+}
+
+.payout-directory-card,
+.payout-history-item {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--cf-divider);
+  border-radius: 0;
+  padding: 14px 18px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.payout-directory-card:first-child,
+.payout-history-item:first-child {
+  border-top: 0;
+}
+
+.payout-directory-card > div,
+.payout-history-item > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.payout-directory-card > div span,
+.payout-history-item > div:first-child span {
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+}
+
+.payout-directory-card__amount,
+.payout-history-item__amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.payout-history-item__proof {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.payout-history {
+  margin-top: 28px;
+}
+
+.payout-history h3 {
+  margin: 0 0 12px;
+  font-size: var(--cf-text-md);
+}
+
+@media (max-width: 719px) {
+  .payout-directory-card {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 10px;
+  }
+
+  .payout-directory-card .button {
+    grid-column: auto;
+    width: auto;
+    min-height: 36px;
+    padding-inline: 12px;
+  }
+
+  .payout-history-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .payout-history-item__proof {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

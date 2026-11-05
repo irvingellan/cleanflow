@@ -40,6 +40,11 @@ if (!projects.length || projects.some((project) => project !== "chromium")) {
 }
 let code = process.env.DEFINITIVE_UI_SKIP_BUILD ? 0 : await run("./node_modules/.bin/vite", buildArgs);
 if (code !== 0) process.exit(code);
+// Emulator-only developer allowlist (functions/.secret.local is git-ignored).
+if (process.env.DEFINITIVE_UI_DEVELOPER) {
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync("functions/.secret.local", "DEV_CENTER_DEVELOPER_UIDS=synthetic-developer-manager\n", { mode: 0o600 });
+}
 code = await run("./node_modules/.bin/firebase", [
   "emulators:exec", "--config", "firebase.cleaner-hub-e2e.json", "--project", "demo-cleanflow",
   "--only", "auth,firestore,functions,storage,hosting", "--log-verbosity", "QUIET",

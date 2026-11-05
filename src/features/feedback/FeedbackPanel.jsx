@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../../components/Icon.jsx";
 import { appVersion } from "../../appVersion.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { submitFeedback } from "./feedbackService.js";
@@ -92,7 +93,7 @@ export function FeedbackPanel({ screen }) {
         type="button"
         onClick={openPanel}
       >
-        <span aria-hidden="true">💬</span>
+        <Icon name="message" />
         <span>{translate("feedback.action")}</span>
       </button>
 

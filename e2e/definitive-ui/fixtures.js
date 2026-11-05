@@ -51,7 +51,13 @@ const inboxId = (...parts) => createHash("sha256").update(JSON.stringify(parts))
 export async function seedOperation() {
   const run = randomUUID().slice(0, 6);
   const manager = { email: `manager-${run}@example.test`, password: "SyntheticOnly123!" };
-  const user = await auth.createUser({ ...manager, displayName: "Operations Manager", emailVerified: true });
+  // DEFINITIVE_UI_DEVELOPER previews the developer-only screens with a fixed
+  // synthetic UID that run.mjs lists in the emulator-only secret.
+  const developerUid = process.env.DEFINITIVE_UI_DEVELOPER ? "synthetic-developer-manager" : undefined;
+  if (developerUid) await auth.deleteUser(developerUid).catch(() => {});
+  const user = await auth.createUser({
+    ...manager, displayName: "Operations Manager", emailVerified: true, ...(developerUid ? { uid: developerUid } : {}),
+  });
   const now = Timestamp.now();
   const minutesAgo = (minutes) => Timestamp.fromMillis(Date.now() - minutes * 60_000);
   const shared = { organizationId, active: true, dataProvenance: "DEMO", createdAt: now, updatedAt: now };

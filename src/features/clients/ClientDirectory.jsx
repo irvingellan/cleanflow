@@ -1,6 +1,7 @@
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
+import { Icon } from "../../components/Icon.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
 export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSelect, canManageExcluded, showExcluded, onToggleExcluded }) {
@@ -20,18 +21,20 @@ export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSele
 
   return (
     <section aria-labelledby="clients-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.clients")}</p>
+      <header className="cf-page-header directory-heading">
+        <div className="cf-page-header__text">
           <h2 id="clients-title" className="list-title">
             {translate("clients.title")}
           </h2>
         </div>
-        <button className="button button--primary" type="button" onClick={onCreate}>
-          {translate("clients.new")}
-        </button>
-        {canManageExcluded && <button className="button" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
-      </div>
+        <div className="cf-page-header__actions">
+          {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
+          <button className="button button--primary" type="button" onClick={onCreate}>
+            <Icon name="plus" size={18} />
+            {translate("clients.new")}
+          </button>
+        </div>
+      </header>
 
       {sortedClients.length === 0 ? (
         <StateCard message={translate("clients.empty")} />
@@ -49,13 +52,15 @@ export function ClientDirectory({ clients, isLoading, hasError, onCreate, onSele
                 onClick={() => onSelect(client)}
               >
                 <strong>{clientName}</strong>
-                <span className="status-badge">
-                  {client.active === false
-                    ? translate("common.inactive")
-                    : translate("common.active")}
+                <span className="directory-row__meta">
+                  {client.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
+                  <span className="status-badge">
+                    {client.active === false
+                      ? translate("common.inactive")
+                      : translate("common.active")}
+                  </span>
+                  <DataProvenanceBadge record={client} />
                 </span>
-                <DataProvenanceBadge record={client} />
-                {client.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
               </button>
             );
           })}
