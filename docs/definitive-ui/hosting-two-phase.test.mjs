@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { releaseId, validReadiness, versionId } from "./hosting-two-phase.mjs";
+import { releaseId, validPublicIosAcceptance, validReadiness, versionId } from "./hosting-two-phase.mjs";
 
 const now = Date.parse("2026-11-05T02:00:00Z");
 const deadline = now + 15 * 60_000;
@@ -35,4 +35,31 @@ test("Hosting accepts only the exact site and live channel in either Firebase re
   assert.equal(versionId(canonical + "/versions/2aa48a01a2244d34"), "2aa48a01a2244d34");
   assert.throws(() => releaseId(canonical + "/channels/preview/releases/1793827781258000"), /Unexpected live/);
   assert.throws(() => versionId("projects/1234/" + short + "/versions/2aa48a01a2244d34"), /Unexpected Hosting project/);
+});
+
+test("public entry readiness permits a signed-out installation without operational fixtures", () => {
+  const ready = { ...receipt, checks: {
+    exclusiveCliConsoleCi: true, physicalIphoneMirroring: true, signedOutSafari: true, signedOutManagerQaIcon: true,
+  } };
+  assert.equal(validReadiness(ready, receipt.sealHash, now, deadline, "public-entry"), true);
+  assert.equal(validReadiness(ready, receipt.sealHash, now, deadline), false);
+  assert.equal(validReadiness({ ...ready, checks: { ...ready.checks, signedOutManagerQaIcon: false } },
+    receipt.sealHash, now, deadline, "public-entry"), false);
+});
+
+test("public entry acceptance requires the two installed apps and keeps operational checks separate", () => {
+  const plan = { sha: "sha", manifestHash: "manifest" };
+  const smoke = {
+    ...plan, state: "PASS_HOSTING_SMOKE", device: "physical-iphone",
+    checks: {
+      managerOriginalIconRetained: true, managerQaIconOpensRootSignedOut: true,
+      agendaSafariAccessScreen: true, agendaInstallSheetMatchesProduction: true,
+      agendaIconOpensAgendaSignedOut: true, separateInstalledApps: true,
+    },
+    operationalChecks: { authenticatedSessions: "NOT_RUN", legacyIconLaunch: "NOT_RUN", whatsApp: "NOT_RUN", checklist: "NOT_RUN" },
+  };
+  assert.equal(validPublicIosAcceptance(smoke, plan), true);
+  assert.equal(validPublicIosAcceptance({ ...smoke, state: "PASS" }, plan), false);
+  assert.equal(validPublicIosAcceptance({ ...smoke, checks: { ...smoke.checks, separateInstalledApps: false } }, plan), false);
+  assert.equal(validPublicIosAcceptance({ ...smoke, operationalChecks: {} }, plan), false);
 });

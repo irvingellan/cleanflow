@@ -211,6 +211,9 @@ export async function settleHosting(context, io, { acceptance, rollback = false 
   await markedRelease(io, record, snapshot, record.candidateVersion, record.stageMarker, record.candidateRelease);
   await verifyStable(io, record, snapshot, true);
   check(io.now() < deadline, "The physical acceptance window expired during verification.");
-  const complete = await save(io, record, { state: "COMPLETE", observedAt: acceptance.observedAt, snapshot });
+  const complete = await save(io, record, {
+    state: "COMPLETE", physicalReceiptState: acceptance.state,
+    observedAt: acceptance.observedAt, snapshot,
+  });
   return finishUnlock(io, complete);
 }

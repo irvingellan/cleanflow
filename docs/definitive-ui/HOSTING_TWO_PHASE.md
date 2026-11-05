@@ -157,3 +157,34 @@ Se um processo de recuperação também morrer, preserve `recovery-worker.json`.
 Um operador deve comprovar que ambos os processos terminaram antes de arquivar
 esse marcador local e repetir somente a recuperação. Nunca reinicie a etapa de
 publicação para resolver um POST incerto.
+
+## Aceite público sem alteração de dados
+
+Use `--physical-scope public-entry` em todos os comandos para vincular ao selo
+um teste físico das entradas públicas em Production. O escopo padrão `full`
+continua com o contrato de aceite autenticado acima. Ambos usam os mesmos
+gates técnicos, mutex, versão de rollback e verificação do domínio real.
+
+Antes da troca, confirme `exclusiveCliConsoleCi`, `physicalIphoneMirroring`,
+`signedOutSafari` e `signedOutManagerQaIcon` na prontidão. Use Safari privado
+sem sessão e um ícone de teste separado da gerente, criado a partir de `/` sem
+sessão. Verifique a presença do ícone original sem abri-lo. Abrir a gerente
+autenticada pode gravar saúde de notificações ou renovar o registro FCM.
+
+Depois da troca, confirme no aparelho que o ícone de teste da gerente abre
+`/` na tela de login, que o Safari em `/agenda` abre a entrada da cleaner,
+que o diálogo de instalação mostra o ícone e a origem esperados e que o novo
+ícone abre a agenda em modo app, sem sessão. Reconfirme os dois apps distintos
+e a presença do ícone original da gerente. Para distinguir de prévias já
+instaladas, o novo ícone pode receber um rótulo de teste depois de conferido
+o rótulo padrão.
+
+No mesmo recibo vinculado à tentativa use `state: "PASS_HOSTING_SMOKE"`,
+`device: "physical-iphone"` e os campos de binding da seção anterior.
+Registre os checks `managerOriginalIconRetained`,
+`managerQaIconOpensRootSignedOut`, `agendaSafariAccessScreen`,
+`agendaInstallSheetMatchesProduction`, `agendaIconOpensAgendaSignedOut` e
+`separateInstalledApps`. Atestar esses checks encerra a publicação de Hosting.
+Em `operationalChecks`, registre `authenticatedSessions`, `legacyIconLaunch`,
+`whatsApp` e `checklist` como `NOT_RUN`. O recibo deste escopo não é aceite
+autenticado do piloto.

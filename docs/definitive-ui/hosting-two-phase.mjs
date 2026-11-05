@@ -33,9 +33,17 @@ const origin = `https://${project}.web.app`;
 const readOptions = { timeout: 12000, retries: 0, skipLog: { reqBody: true, resBody: true } };
 const candidateSha = "a7cdb66407a07097a3952d1197a6131e8c43f6e0";
 const candidatePlanHash = "9701df75ff04adaa9840231ee0154a9a5840ec846295c8024111a734aa3974d1";
-const readinessChecks = [
+const fullReadinessChecks = [
   "exclusiveCliConsoleCi", "physicalIphoneMirroring", "managerTestSession",
   "cleanerTestSession", "legacyTestShortcut", "safariWhatsAppTestLinks", "authorizedChecklist",
+];
+const publicReadinessChecks = [
+  "exclusiveCliConsoleCi", "physicalIphoneMirroring", "signedOutSafari", "signedOutManagerQaIcon",
+];
+const publicAcceptanceChecks = [
+  "managerOriginalIconRetained", "managerQaIconOpensRootSignedOut",
+  "agendaSafariAccessScreen", "agendaInstallSheetMatchesProduction",
+  "agendaIconOpensAgendaSignedOut", "separateInstalledApps",
 ];
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
 const hash = (path) => sha256(readFileSync(path));
@@ -67,13 +75,23 @@ function saveAtomic(path, value) {
   syncDirectory(dirname(path));
 }
 
-export function validReadiness(receipt, sealHash, now, deadline) {
+export function validReadiness(receipt, sealHash, now, deadline, physicalScope = "full") {
+  const readinessChecks = physicalScope === "public-entry" ? publicReadinessChecks : fullReadinessChecks;
   const confirmed = Date.parse(receipt?.confirmedAt);
   const exclusiveUntil = Date.parse(receipt?.exclusiveUntil);
   return receipt?.sealHash === sealHash && receipt.origin === origin
     && confirmed <= now && now - confirmed <= 30 * 60_000
     && exclusiveUntil >= deadline + 5 * 60_000
     && readinessChecks.every((key) => receipt.checks?.[key] === true);
+}
+
+export function validPublicIosAcceptance(receipt, plan) {
+  return receipt?.state === "PASS_HOSTING_SMOKE" && receipt.device === "physical-iphone"
+    && receipt.sha === plan.sha && receipt.manifestHash === plan.manifestHash
+    && publicAcceptanceChecks.every((key) => receipt.checks?.[key] === true)
+    && ["authenticatedSessions", "legacyIconLaunch", "whatsApp", "checklist"].every(
+      (key) => receipt.operationalChecks?.[key] === "NOT_RUN",
+    );
 }
 
 function checkedDirectory(path) {
@@ -109,10 +127,11 @@ function loadInputs(options) {
   check(config.public === "dist" && !config.rewrites?.some((r) => r.function?.pinTag || r.run?.pinTag),
     "Hosting config unexpectedly pins a backend deployment.");
   const seal = {
-    schema: "cleanflow-hosting-two-phase-v1", toolingSha: git("rev-parse", "HEAD"),
+    schema: "cleanflow-hosting-two-phase-v2", toolingSha: git("rev-parse", "HEAD"),
     sourceSha: head, planHash: candidatePlanHash, manifestHash: review.plan.manifestHash,
     project, origin, scope: "hosting-only", rollbackVersion: review.plan.rollbackVersion,
-    physicalAcceptance: "required-before-complete", operatorDeadlineMinutes: [5, 20],
+    physicalAcceptance: "required-before-complete", physicalScope: options["physical-scope"],
+    operatorDeadlineMinutes: [5, 20],
   };
   return { a, review, config, seal, directory, operation };
 }
@@ -154,7 +173,7 @@ function cloudAdapter(inputs) {
   };
   return {
     now: Date.now,
-    validIosAcceptance,
+    validIosAcceptance: inputs.seal.physicalScope === "public-entry" ? validPublicIosAcceptance : validIosAcceptance,
     readState: () => existsSync(journal) ? json(journal) : null,
     saveState: (record) => saveAtomic(journal, record),
     inspect: async () => {
@@ -295,10 +314,12 @@ async function main() {
   const { values } = parseArgs({ args, options: {
     "candidate-root": { type: "string" }, dir: { type: "string" }, "a-dir": { type: "string" },
     "operation-dir": { type: "string" }, approve: { type: "string" }, "exclusive-window": { type: "boolean" },
-    readiness: { type: "string" }, minutes: { type: "string", default: "15" },
+    readiness: { type: "string" }, "physical-scope": { type: "string", default: "full" },
+    minutes: { type: "string", default: "15" },
   } });
   check(["seal", "preflight", "stage", "recover"].includes(action)
     && ["candidate-root", "dir", "a-dir", "operation-dir"].every((name) => values[name]), "Missing command or required directory.");
+  check(["full", "public-entry"].includes(values["physical-scope"]), "Unknown physical acceptance scope.");
   const inputs = loadInputs(values);
   const sealFile = join(inputs.operation, "operational-seal.json");
   if (action === "seal") {
@@ -330,7 +351,7 @@ async function main() {
   if (action === "preflight") {
     const hosting = await preflight(inputs, io);
     const now = Date.now();
-    const ready = validReadiness(readiness, sealHash, now, now + minutes * 60_000);
+    const ready = validReadiness(readiness, sealHash, now, now + minutes * 60_000, inputs.seal.physicalScope);
     report({ state: ready ? "PREFLIGHT_READY" : "PREFLIGHT_BLOCKED_READINESS", sealHash, hosting });
     if (!ready) process.exitCode = 2;
     return;
@@ -338,7 +359,7 @@ async function main() {
   check(values["exclusive-window"] && values.approve === `stage:${sealHash}`, "The sealed exclusive operation is required.");
   const now = Date.now();
   const deadline = new Date(now + minutes * 60_000).toISOString();
-  check(validReadiness(readiness, sealHash, now, Date.parse(deadline)), "Physical test fixtures and exclusive window are unconfirmed.");
+  check(validReadiness(readiness, sealHash, now, Date.parse(deadline), inputs.seal.physicalScope), "Physical test fixtures and exclusive window are unconfirmed.");
   check(!["state.json", "ios-live-acceptance.json", "rollback-request.json"].some((file) => existsSync(join(inputs.operation, file))),
     "Use a fresh operation directory.");
   await preflight(inputs, io);
