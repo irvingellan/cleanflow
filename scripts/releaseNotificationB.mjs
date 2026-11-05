@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { acquireReleaseLock, assertReleaseLock, notificationProject, productionSnapshot,
   readNotificationProduction, releaseReleaseLock, sha256 } from "./notificationReleaseCloud.mjs";
-import { deployGroups, liveHostingBaseline, releaseBBranch, validReleaseVerification } from "./preflightNotificationRelease.mjs";
+import { deployGroups, effectiveBaselineReceipt, liveHostingBaseline, releaseBBranch, validReleaseVerification } from "./preflightNotificationRelease.mjs";
 import { releaseToolchain, runReleaseSequence, stageReleaseInputs, verifyLiveAssets,
   writeReleaseModes } from "./releaseNotificationA.mjs";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
@@ -21,7 +21,7 @@ const hashFile = (file) => sha256(readFileSync(file));
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 const inboxEndpoints = ["listNotificationInbox", "markNotificationRead", "openNotificationInboxItem"];
 const [register, sender] = deployGroups.enable;
-const transportFunctions = [...deployGroups.prepareB, register, sender];
+export const transportFunctions = [...deployGroups.prepareB, register, sender];
 const functionsStep = (names, cleanerPushMode) => ({
   id: names.join(","),
   only: names.map((name) => `functions:${name}`).join(","),
@@ -87,8 +87,12 @@ export function releaseBSnapshot(report) {
 
 export function verifyBStep(snapshot, step, sha) {
   assertAInbox(snapshot);
-  requireCondition((step.functions || []).every((name) => snapshot.functions[name]?.cleanerPushMode === step.cleanerPushMode
-    && (step.cleanerPushMode !== "pilot" || snapshot.functions[name].cleanerPushPilotRelease === sha)),
+  // releaseBSnapshot records a mode only for transport Functions; it already
+  // rejected any other Function whose effective mode is not disabled.
+  requireCondition((step.functions || []).every((name) => (transportFunctions.includes(name)
+    ? snapshot.functions[name]?.cleanerPushMode === step.cleanerPushMode
+      && (step.cleanerPushMode !== "pilot" || snapshot.functions[name].cleanerPushPilotRelease === sha)
+    : step.cleanerPushMode === "disabled" && Boolean(snapshot.functions[name]))),
     "Targeted Release B Function has an unexpected cleaner push mode.");
 }
 
@@ -127,7 +131,8 @@ function artifact(manifestFile, dist, variant, sha, hash) {
 /** The published Definitive UI Hosting release is B's baseline and rollback build. */
 function readBaseline(uiDirectory, receiptFile) {
   const receiptBytes = readFileSync(receiptFile);
-  const receipt = JSON.parse(receiptBytes);
+  const receipt = effectiveBaselineReceipt(receiptBytes);
+  requireCondition(receipt, "The baseline receipt is neither the original Definitive UI receipt nor a valid reconciliation.");
   const manifestFile = join(uiDirectory, "manifest.json");
   requireCondition(receipt.state === "COMPLETE" && receipt.mutexReleased === true && receipt.project === notificationProject
     && receipt.sha === liveHostingBaseline.sha && receipt.manifestHash === liveHostingBaseline.manifestHash

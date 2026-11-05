@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createECDH } from "node:crypto";
 import test from "node:test";
-import { dedicatedCleanerConfig, validPhysicalVerification, validReleaseVerification, validVapidFingerprint, baselineEvidence, liveHostingBaseline } from "./preflightNotificationRelease.mjs";
+import { dedicatedCleanerConfig, validPhysicalVerification, validReleaseVerification, validVapidFingerprint, baselineEvidence, effectiveBaselineReceipt, liveHostingBaseline } from "./preflightNotificationRelease.mjs";
 
 test("VAPID preflight accepts a canonical public P-256 point and rejects malformed points", () => {
   const ecdh = createECDH("prime256v1");
@@ -65,4 +65,12 @@ test("Release B baseline is only the exact COMPLETE Definitive UI Hosting receip
     assert.equal(baselineEvidence(Buffer.from(JSON.stringify({ ...receipt, ...change })), manifestBytes, manifest), null);
   }
   assert.equal(baselineEvidence(Buffer.from("not json"), manifestBytes, manifest), null);
+});
+
+test("a reconciled baseline must embed the exact original receipt", () => {
+  const forged = { kind: "RELEASE_B_PARTIAL_RECONCILED", lockReleased: true,
+    originalBase64: Buffer.from("{}").toString("base64"), snapshot: { functions: {} } };
+  assert.equal(effectiveBaselineReceipt(Buffer.from(JSON.stringify(forged))), null);
+  assert.equal(effectiveBaselineReceipt(Buffer.from(JSON.stringify({ ...forged, lockReleased: false }))), null);
+  assert.equal(effectiveBaselineReceipt(Buffer.from("not json")), null);
 });

@@ -24,7 +24,37 @@ export const liveHostingBaseline = Object.freeze({
   sha: "a7cdb66407a07097a3952d1197a6131e8c43f6e0",
   manifestHash: "c541289e54f4678802e682308480700a7a108feb632039812d19fb455b1da7cc",
   hostingVersion: "cfa94d1aac3404a2",
+  receiptHash: "394481800e5f747b8483d483484760babb9c54c446fb08efcb283aad7ca27a0c",
 });
+
+const inboxEndpointNames = ["listNotificationInbox", "markNotificationRead", "openNotificationInboxItem"];
+
+/**
+ * The baseline is the original two-phase receipt, or a reconciliation record
+ * written after a stopped Release B attempt. The record embeds the original
+ * bytes and may differ only by advanced, Inbox-enabled Inbox endpoint revisions.
+ */
+export function effectiveBaselineReceipt(bytes) {
+  let record;
+  try { record = JSON.parse(bytes); } catch { return null; }
+  if (sha256(bytes) === liveHostingBaseline.receiptHash) return record;
+  if (record?.kind !== "RELEASE_B_PARTIAL_RECONCILED" || record.lockReleased !== true
+    || typeof record.originalBase64 !== "string") return null;
+  const originalBytes = Buffer.from(record.originalBase64, "base64");
+  if (sha256(originalBytes) !== liveHostingBaseline.receiptHash) return null;
+  const original = JSON.parse(originalBytes);
+  const before = original.snapshot;
+  const after = record.snapshot;
+  if (!after?.functions || ["hosting", "rules", "schedules"].some((part) =>
+    JSON.stringify(before[part]) !== JSON.stringify(after[part]))) return null;
+  const names = [...new Set([...Object.keys(before.functions), ...Object.keys(after.functions)])];
+  const changed = names.filter((name) => JSON.stringify(before.functions[name]) !== JSON.stringify(after.functions[name]));
+  if (!changed.every((name) => inboxEndpointNames.includes(name) && before.functions[name] && after.functions[name]
+    && after.functions[name].revision !== before.functions[name].revision
+    && after.functions[name].inboxMode === "enabled" && after.functions[name].runtimeCompatible === true
+    && after.functions[name].secretBindingHash === before.functions[name].secretBindingHash)) return null;
+  return { ...original, snapshot: after };
+}
 const origin = `https://${notificationProject}.web.app`;
 export const deployGroups = {
   create: [
@@ -96,8 +126,7 @@ export function validPhysicalVerification(receipt, { sha, appId, vapidFingerprin
 }
 
 export function baselineEvidence(receiptBytes, manifestBytes, manifest) {
-  let receipt;
-  try { receipt = JSON.parse(receiptBytes); } catch { return null; }
+  const receipt = effectiveBaselineReceipt(receiptBytes);
   const binding = { receiptHash: sha256(receiptBytes), manifestHash: sha256(manifestBytes) };
   if (receipt?.state !== "COMPLETE" || receipt.mutexReleased !== true || receipt.project !== notificationProject
     || receipt.sha !== liveHostingBaseline.sha || receipt.manifestHash !== liveHostingBaseline.manifestHash

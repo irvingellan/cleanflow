@@ -95,9 +95,11 @@ test("release sequence stops before enrollment on unverified Hosting or target m
         }
         const functions = { ...state.functions };
         for (const name of step.functions) {
-          functions[name] = { ...functions[name], runtimeCompatible: true, revision: "new", hash: "reviewed",
-            cleanerPushMode: driftMode ? "enabled" : step.cleanerPushMode,
-            ...(step.cleanerPushMode === "pilot" ? { cleanerPushPilotRelease: pilotSha } : {}) };
+          // Mirror releaseBSnapshot: only transport Functions carry a mode.
+          functions[name] = step.cleanerPushMode === "pilot"
+            ? { ...functions[name], runtimeCompatible: true, revision: "new", hash: "reviewed",
+              cleanerPushMode: driftMode ? "enabled" : "pilot", cleanerPushPilotRelease: pilotSha }
+            : { ...functions[name], runtimeCompatible: true, revision: "new", hash: "reviewed" };
         }
         state = { ...state, functions };
       },
@@ -111,7 +113,7 @@ test("release sequence stops before enrollment on unverified Hosting or target m
   await assert.rejects(setup({ hosted: false }), /Unverified Hosting/);
   assert.deepEqual(exercised.splice(0), [inbox, prepare, hosting]);
   await assert.rejects(setup({ driftMode: true }), /unexpected cleaner push mode/);
-  assert.deepEqual(exercised.splice(0), [inbox]);
+  assert.deepEqual(exercised.splice(0), [inbox, prepare]);
   await setup();
   assert.deepEqual(exercised, [inbox, prepare, hosting, registration, sender]);
 });
@@ -154,4 +156,11 @@ test("rollback disables both transport Functions and retains Inbox and all four 
   }
   assert.deepEqual(result.rules, initial.rules);
   assert.deepEqual(result.schedules, initial.schedules);
+});
+
+test("the Inbox step verifies against the real Production snapshot shape", () => {
+  const updated = releaseBSnapshot({ ...report, functions: report.functions.map((entry) => (
+    inboxNames.includes(entry.id) ? { ...entry, revision: "updated" } : entry)) });
+  assert.doesNotThrow(() => verifyBStep(updated, releaseBSteps.publish[0], pilotSha));
+  assert.throws(() => verifyBStep(updated, { ...releaseBSteps.publish[0], cleanerPushMode: "pilot" }, pilotSha), /unexpected/);
 });
