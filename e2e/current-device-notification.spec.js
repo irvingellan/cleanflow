@@ -56,6 +56,9 @@ async function openManager(page, { locale = "en", result = "pending" } = {}) {
   await page.getByLabel(labels[locale].email, { exact: true }).fill(e2eManager.email);
   await page.getByLabel(labels[locale].password, { exact: true }).fill(e2eManager.password);
   await page.getByRole("button", { name: labels[locale].signIn, exact: true }).click();
+  // The controls remain mounted for health checks; the definitive shell places
+  // the explicit test action inside the Account menu.
+  await page.locator(".cf-account-button").click();
   const button = page.getByRole("button", { name: labels[locale].test, exact: true });
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();

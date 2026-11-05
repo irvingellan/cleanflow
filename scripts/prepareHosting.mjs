@@ -4,6 +4,38 @@ import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+const bundleAsset = /^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/;
+// Emitted by Vite from @fontsource-variable/inter 5.2.8's wght.css.
+// Pin both the emitted paths and the SHA-256 of the reviewed package bytes.
+const interFonts = new Map([
+  ["assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2", "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd"],
+  ["assets/inter-cyrillic-wght-normal-DqGufNeO.woff2", "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075"],
+  ["assets/inter-greek-ext-wght-normal-DlzME5K_.woff2", "6e9e020a25f9b56d418f2c085b1d3c09725a4da23fe693a5b463064606732190"],
+  ["assets/inter-greek-wght-normal-CkhJZR-_.woff2", "1be3448e292fbf05ffe176fe1e43f135013d50b1e7d324ad1a558f623d3bb6f6"],
+  ["assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2", "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956"],
+  ["assets/inter-latin-wght-normal-Dx4kXJAl.woff2", "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62"],
+  ["assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2", "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2"],
+]);
+const fileHash = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+
+export function inspectHostingFonts(dist, files) {
+  const declared = new Set();
+  for (const file of files.filter((name) => bundleAsset.test(name) && name.endsWith(".css"))) {
+    const css = fs.readFileSync(path.join(dist, file), "utf8");
+    for (const match of css.matchAll(/url\(\s*(["']?)\/(assets\/[^)'"\s]+\.woff2)\1\s*\)/g)) {
+      declared.add(match[2]);
+    }
+  }
+  for (const file of files.filter((name) => /\.woff2$/i.test(name))) {
+    if (!interFonts.has(file) || !declared.has(file)) throw new Error(`Unexpected or undeclared Hosting font: ${file}`);
+    if (fileHash(path.join(dist, file)) !== interFonts.get(file)) throw new Error(`Hosting font hash differs: ${file}`);
+  }
+  for (const file of declared) {
+    if (!files.includes(file)) throw new Error(`Missing declared Hosting font: ${file}`);
+  }
+  return declared;
+}
+
 export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBinding) {
   const files = [];
   function walk(directory, prefix = "") {
@@ -20,11 +52,12 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
     }
   }
   walk(dist);
+  const fonts = inspectHostingFonts(dist, files);
   const required = [...publicFiles, "index.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
   // Builds on the previous source line do not emit the optional cleaner worker.
   const allowed = new Set([...required, "cleaner-messaging-sw.js"]);
   for (const file of files) {
-    if (!allowed.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file)) {
+    if (!allowed.has(file) && !fonts.has(file) && !bundleAsset.test(file)) {
       throw new Error(`Unexpected Hosting file: ${file}`);
     }
     if (file.split("/").some(part => part.startsWith(".")) || /(?:\.tmp|\.temp|\.swp|\.swo|~)$/.test(file)) {
@@ -41,7 +74,7 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
   }
   return files.sort().map(file => ({
     file,
-    sha256: crypto.createHash("sha256").update(fs.readFileSync(path.join(dist, file))).digest("hex"),
+    sha256: fileHash(path.join(dist, file)),
   }));
 }
 

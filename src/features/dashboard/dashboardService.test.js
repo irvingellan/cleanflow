@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const services = vi.hoisted(() => ({
   getDocs: vi.fn(),
+  getDocsFromServer: vi.fn(),
   getCleanerNamesById: vi.fn(),
   getOpenJobIssues: vi.fn(),
   getInterestedJobOffers: vi.fn(),
@@ -11,6 +12,7 @@ const services = vi.hoisted(() => ({
 vi.mock("firebase/firestore", () => ({
   collection: vi.fn(),
   getDocs: services.getDocs,
+  getDocsFromServer: services.getDocsFromServer,
   orderBy: vi.fn(),
   query: vi.fn(),
   Timestamp: { fromDate: vi.fn((date) => date) },
@@ -137,7 +139,7 @@ describe("Dashboard cleaner names across Job schemas", () => {
       [],
       [],
     ]) {
-      services.getDocs.mockResolvedValueOnce(snapshot(records));
+      services.getDocsFromServer.mockResolvedValueOnce(snapshot(records));
     }
     // Mirrors the existing batched name lookup: absent records are simply absent.
     services.getCleanerNamesById.mockImplementation(async (ids) =>
@@ -161,7 +163,7 @@ describe("Dashboard cleaner names across Job schemas", () => {
     expect(summary(dashboard.next48HoursJobs[0], dashboard)).toBe("Cleaner Alpha");
     expect(services.getCleanerNamesById).toHaveBeenCalledTimes(1);
     expect(services.getCleanerNamesById).toHaveBeenCalledWith(expect.arrayContaining(["cleaner-a"]));
-    expect(services.getDocs).toHaveBeenCalledTimes(7);
+    expect(services.getDocsFromServer).toHaveBeenCalledTimes(7);
   });
 
   it("renders current multi-cleaner roster names once each using existing presentation", async () => {
@@ -203,5 +205,18 @@ describe("Dashboard cleaner names across Job schemas", () => {
 
     expect(summary(dashboard.next48HoursJobs[0], dashboard)).toBe("jobs.cleanerAssignedOne:1");
     expect(services.getCleanerNamesById).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects the dashboard load when the server is unavailable even if cached reads could succeed", async () => {
+    services.getDocs.mockResolvedValue({ docs: [], metadata: { fromCache: true } });
+    const unavailable = Object.assign(new Error("Network unavailable"), { code: "unavailable" });
+    services.getDocsFromServer.mockRejectedValue(unavailable);
+    try {
+      await expect(getOperationalDashboard()).rejects.toBe(unavailable);
+      expect(services.getDocs).not.toHaveBeenCalled();
+    } finally {
+      services.getDocs.mockReset();
+      services.getDocsFromServer.mockReset();
+    }
   });
 });

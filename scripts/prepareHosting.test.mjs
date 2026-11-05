@@ -30,6 +30,25 @@ test("unexpected temporary or harness files fail closed", t => {
     fs.unlinkSync(path.join(dir, file));
   }
 });
+test("only the declared, byte-verified Inter asset may enter the manifest", t => {
+  const dir = fixture(t);
+  const file = "assets/inter-latin-wght-normal-Dx4kXJAl.woff2";
+  const css = path.join(dir, "assets/index-demo.css");
+  fs.copyFileSync(new URL("../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2", import.meta.url), path.join(dir, file));
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected|undeclared/);
+  fs.writeFileSync(css, `@font-face{src:url(/${file}) format("woff2")}`);
+  assert.deepEqual(inspectHostingBuild(dir, "expected", []).find(entry => entry.file === file), {
+    file, sha256: "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+  });
+  fs.appendFileSync(path.join(dir, file), "changed");
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /hash/);
+  fs.unlinkSync(path.join(dir, file));
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Missing/);
+  const other = file.replace("Dx4kXJAl", "different");
+  fs.writeFileSync(css, `@font-face{src:url(/${other}) format("woff2")}`);
+  fs.writeFileSync(path.join(dir, other), "unexpected");
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected/);
+});
 test("wrong build SHA, missing public assets and symlinks fail closed", t => {
   const dir = fixture(t);
   assert.throws(() => inspectHostingBuild(dir, "other", []), /build ID/);

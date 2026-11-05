@@ -131,9 +131,10 @@ for (const language of Object.keys(labels)) {
       const topButton = page.getByRole("button", { name: labels[language].top, exact: true });
       await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
       await expect(topButton).toHaveCount(0);
-      await expect(page.locator(".foundation--diagnostics")).toBeVisible();
-      const foundation = await page.locator(".foundation--diagnostics").boundingBox();
-      expect(foundation.width).toBeLessThanOrEqual(1601);
+      const workspace = page.locator(".cf-main--wide .cf-main__inner");
+      await expect(workspace).toBeVisible();
+      const foundation = await workspace.boundingBox();
+      expect(foundation.width).toBeLessThanOrEqual(1241);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
 
       const byPage = diagnostics.locator('section[aria-labelledby="load-diagnostics-by-page"]');
@@ -149,7 +150,8 @@ for (const language of Object.keys(labels)) {
       await writeFile(measurementsPath, JSON.stringify({ language, viewport, foundation, byPage: boxes[0], operations: boxes[1], events: boxes[2], eventsTable: eventsOverflow }, null, 2));
       await testInfo.attach("diagnostics-layout-measurements", { path: measurementsPath, contentType: "application/json" });
       if (viewport.width >= 1440) {
-        expect(foundation.width).toBeGreaterThanOrEqual(Math.min(viewport.width - 48, 1600) - 1);
+        const sidebar = await page.locator(".cf-sidebar").boundingBox();
+        expect(foundation.width).toBeGreaterThanOrEqual(Math.min(viewport.width - sidebar.width, 1240) - 1);
         expect(Math.abs(boxes[0].y - boxes[1].y)).toBeLessThanOrEqual(1);
         expect(boxes[1].x).toBeGreaterThan(boxes[0].x + boxes[0].width);
         expect(boxes[2].width).toBeGreaterThan(boxes[0].width + boxes[1].width);

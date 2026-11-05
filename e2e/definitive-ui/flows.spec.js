@@ -199,10 +199,15 @@ test("8 · cleaner sees every future Job by month, opens one, and nothing privat
 
 test("9 · offline manager never sees a false success", async ({ browser }) => {
   const { context, page } = await managerPage(browser);
-  await context.setOffline(true);
-  await page.getByRole("button", { name: /Atualizar painel/ }).click();
-  await expect(page.getByText(/Não foi possível carregar o painel|Carregando painel/).first()).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("Nenhum item precisa de atenção agora.")).toHaveCount(0);
-  await context.setOffline(false);
-  await context.close();
+  try {
+    const attention = page.getByRole("region", { name: "Precisa de atenção" });
+    await expect(attention.getByRole("button", { name: /Maple Studio/ })).toBeVisible();
+    await context.setOffline(true);
+    await page.getByRole("button", { name: /Atualizar painel/ }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Não foi possível carregar o painel." })).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Nenhum item precisa de atenção agora.")).toHaveCount(0);
+  } finally {
+    await context.setOffline(false);
+    await context.close();
+  }
 });

@@ -26,7 +26,7 @@ test("Dashboard needs-assignment metric preserves its Jobs filter through detail
 
   await expect(page.getByRole("heading", { name: "Cleaning jobs" })).toBeVisible();
   const needsAssignment = page.getByRole("button", {
-    name: "⏰ Needs assignment",
+    name: "Needs assignment", exact: true,
   });
   await expect(needsAssignment).toHaveAttribute("aria-pressed", "true");
 
@@ -65,7 +65,7 @@ test("Jobs completed filter and search persist after opening a Job detail", asyn
   }).click();
   await expect(page.getByRole("heading", { name: "Cleaning jobs" })).toBeVisible();
 
-  const completed = page.getByRole("button", { name: "✅ Completed" });
+  const completed = page.getByRole("button", { name: "Completed", exact: true });
   await completed.click();
   await page.getByRole("searchbox", { name: "Search" }).fill("completed");
   await expect(completed).toHaveAttribute("aria-pressed", "true");
@@ -91,6 +91,7 @@ test("an assigned Job starts safely in the emulator", async ({ page }) => {
   await page
     .getByRole("button", { name: "View E2E Assigned Property" })
     .click();
+  await page.locator(".job-detail-section > summary", { hasText: /^Checklist$/ }).click();
   await expect(page.getByRole("button", { name: "Start cleaning" })).toBeVisible();
 
   await page.getByRole("button", { name: "Start cleaning" }).click();
@@ -103,6 +104,8 @@ test("a v2 Job supports an additive manager roster before work starts", async ({
     name: "Jobs",
   }).click();
   await page.getByRole("button", { name: "View E2E Team Property" }).click();
+  await page.locator(".job-detail-section > summary", { hasText: "Cleaner & assignment" }).click();
+  await page.locator(".job-detail-section > summary", { hasText: "Offers" }).click();
 
   const offers = page.locator(".offer-status-item");
   await expect(
@@ -153,11 +156,12 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
   }).click();
   await page.getByRole("button", { name: "View E2E V2 Offer Property" }).click();
 
-  const quickOfferAction = page.locator(".job-detail__quick-action");
+  const quickOfferAction = page.locator(".job-intents__next");
   await expect(quickOfferAction).toBeVisible();
   expect((await quickOfferAction.boundingBox()).y).toBeLessThan(844);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.getByRole("button", { name: "Offer cleaning to cleaners" }).click();
+  await page.getByRole("button", { name: "Next step: Offer cleaning to cleaners", exact: true }).click();
+  await page.locator(".offers-section").getByRole("button", { name: "Offer cleaning to cleaners", exact: true }).click();
   await page.getByLabel("E2E Team Cleaner A").check();
   await page.getByLabel("E2E Team Cleaner B").check();
   await page.getByRole("button", { name: "Create offers" }).click();
@@ -184,6 +188,7 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
     ),
   );
   await page.getByRole("button", { name: "Refresh offers" }).click();
+  await page.locator(".job-detail-section > summary", { hasText: "Cleaner & assignment" }).click();
 
   await offers
     .filter({ hasText: "E2E Team Cleaner A" })
@@ -248,8 +253,10 @@ test("a manager-created Job keeps optional guest context from a linked Property"
   await page.getByRole("button", { name: "Create cleaning" }).click();
   await expect(page.getByRole("heading", { name: "E2E Client Property" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Service created" })).toHaveCount(0);
-  await expect(page.getByText("E2E Guest")).toBeVisible();
-  await expect(page.getByText("10:00")).toBeVisible();
+  const history = page.locator(".job-detail-section", { has: page.locator("summary", { hasText: "History & administration" }) });
+  await history.locator("summary").click();
+  await expect(history.getByText("E2E Guest")).toBeVisible();
+  await expect(history.getByText("10:00", { exact: true })).toBeVisible();
 });
 
 test("manager fast path creates a Job from Jobs and surfaces its Offer action on mobile", async ({ page }) => {
@@ -260,7 +267,7 @@ test("manager fast path creates a Job from Jobs and surfaces its Offer action on
   await expect(page.getByRole("heading", { name: "Cleaning jobs" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
-  await page.getByRole("button", { name: "New service" }).click();
+  await page.locator(".cf-services").getByRole("button", { name: "New service", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Create cleaning" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Property details" })).toHaveCount(0);
 
@@ -284,10 +291,10 @@ test("manager fast path creates a Job from Jobs and surfaces its Offer action on
   await form.getByRole("textbox", { name: "Notes" }).fill("E2E manager fast path");
   await form.getByRole("button", { name: "Create cleaning" }).click();
 
-  await expect(page.getByText("Job details", { exact: true })).toBeVisible();
+  await expect(page.getByText("Service details", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "E2E Client Property" })).toBeVisible();
-  const offerAction = page.locator(".job-detail__quick-action");
-  await expect(offerAction.getByRole("button", { name: "Offer cleaning to cleaners" })).toBeVisible();
+  const offerAction = page.locator(".job-intents__next");
+  await expect(offerAction.getByRole("button", { name: "Next step: Offer cleaning to cleaners", exact: true })).toBeVisible();
   expect((await offerAction.boundingBox()).y).toBeLessThan(844);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 

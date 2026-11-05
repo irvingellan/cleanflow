@@ -1,6 +1,6 @@
 import {
   collection,
-  getDocs,
+  getDocsFromServer,
   orderBy,
   query,
   Timestamp,
@@ -136,6 +136,7 @@ export async function getOperationalDashboard() {
     localDateKey(addLocalDays(weekStart, index)),
   );
   const jobs = jobsCollection();
+  // An offline cache can be empty or stale. The Home status requires current reads.
   const [
     propertiesSnapshot,
     openJobsSnapshot,
@@ -145,20 +146,20 @@ export async function getOperationalDashboard() {
     weeklyScheduledSnapshot,
     weeklyCompletedSnapshot,
   ] = await Promise.all([
-    getDocs(propertiesCollection()),
-    getDocs(
+    getDocsFromServer(propertiesCollection()),
+    getDocsFromServer(
       query(
         jobs,
         where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
       ),
     ),
-    getDocs(
+    getDocsFromServer(
       query(
         jobs,
         where("operationalStatus", "==", "IN_PROGRESS"),
       ),
     ),
-    getDocs(
+    getDocsFromServer(
       query(
         jobs,
         where("operationalStatus", "in", activeOperationalStatuses),
@@ -167,14 +168,14 @@ export async function getOperationalDashboard() {
         orderBy("scheduledDate", "asc"),
       ),
     ),
-    getDocs(
+    getDocsFromServer(
       query(
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
         orderBy("completedAt", "desc"),
       ),
     ),
-    getDocs(
+    getDocsFromServer(
       query(
         jobs,
         where("scheduledDate", ">=", weekStartDate),
@@ -182,7 +183,7 @@ export async function getOperationalDashboard() {
         orderBy("scheduledDate", "asc"),
       ),
     ),
-    getDocs(
+    getDocsFromServer(
       query(
         jobs,
         where("operationalStatus", "==", "COMPLETED"),

@@ -8,8 +8,10 @@ import { loadEnv } from "vite";
 import {
   acquireReleaseLock, assertReleaseLock, notificationProject, readNotificationProduction, releaseReleaseLock, sha256,
 } from "../../scripts/notificationReleaseCloud.mjs";
-import { productionSnapshot, runReleaseSequence } from "../../scripts/releaseNotificationA.mjs";
+import { productionSnapshot, runReleaseSequence, verifyTransition } from "../../scripts/releaseNotificationA.mjs";
 import { readPublishedAssets, validVapidFingerprint } from "../../scripts/preflightNotificationRelease.mjs";
+import { inspectHostingFonts } from "../../scripts/prepareHosting.mjs";
+import { fileURLToPath } from "node:url";
 
 const root = resolve(import.meta.dirname, "../..");
 const require = createRequire(import.meta.url);
@@ -21,6 +23,14 @@ const project = notificationProject;
 const productionSha = "12f432dd46a6c93e45bfb78ac1993568143c3840";
 const visualSha = "fc6f7467ca834569ca2724c5e36c1da81f0f4357";
 const branch = "codex/definitive-ui-release";
+const extraReleaseFiles = new Set([
+  "scripts/prepareHosting.mjs",
+  "scripts/prepareHosting.test.mjs",
+  "e2e/cleaner-hub/cleaner-hub.spec.js",
+  "e2e/current-device-notification.spec.js",
+  "e2e/jobs-navigation.spec.js",
+  "e2e/load-diagnostics-layout.spec.js",
+]);
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const hash = (file) => sha256(readFileSync(file));
@@ -44,7 +54,8 @@ function checkout() {
     && git("merge-base", visualSha, head) === visualSha && git("merge-base", productionSha, head) === productionSha,
   "Use the clean integrated branch based on the approved Claude and Production commits.");
   const changed = git("diff", "--name-only", productionSha, head).split("\n");
-  check(changed.every((path) => /^(src\/|docs\/|e2e\/definitive-ui\/|DESIGN\.md$|package(?:-lock)?\.json$)/.test(path)),
+  check(changed.every((path) => extraReleaseFiles.has(path)
+    || /^(src\/|docs\/|e2e\/definitive-ui\/|DESIGN\.md$|package(?:-lock)?\.json$)/.test(path)),
     "Candidate changes files outside the Hosting-only scope.");
   check(!git("diff", "--name-only", visualSha, head, "--", "src/index.css", "src/**/*.css", "src/styles", "src/components/shell", "DESIGN.md"),
     "Claude CSS, design contract or shell differs from the approved visual source.");
@@ -75,6 +86,23 @@ async function versionConfig(version) {
     .get(`/v1beta1/sites/${project}/versions/${version}`, { timeout: 12000, skipLog: { resBody: true } });
   check(response.status === 200 && response.body.status === "FINALIZED" && response.body.config, "Hosting version or configuration is unavailable.");
   return ordered(response.body.config);
+}
+
+async function liveRelease(name) {
+  check(name.startsWith(`sites/${project}/releases/`), "Unexpected live Hosting release name.");
+  const response = await new Client({ urlPrefix: "https://firebasehosting.googleapis.com" })
+    .get(`/v1beta1/${name}`, { timeout: 12000, skipLog: { resBody: true } });
+  check(response.status === 200, "Live Hosting release metadata is unavailable.");
+  return response.body;
+}
+
+export function interruptedPublishLock(baseline, live, entry, release, marker) {
+  check(entry?.state === "DEPLOYING" && entry.step === "hosting" && same(entry.snapshot, baseline)
+    && typeof entry.lock === "string" && entry.lock && release.name === live.hosting.release
+    && release.version?.name?.endsWith(`/versions/${live.hosting.version}`) && release.message === marker,
+  "Interrupted publish ownership cannot be established.");
+  verifyTransition(baseline, live, hostingStep, {});
+  return entry.lock;
 }
 function hostingConfig() {
   const config = JSON.parse(git("show", `${productionSha}:firebase.json`)).hosting;
@@ -152,16 +180,14 @@ async function build(dir, head, a, envDir) {
   check(marker.buildId === head && marker.projectId === project && marker.environment === "production"
     && !marker.deploymentId, "Unexpected build marker or notification variant.");
   const whitelist = new Set(required.map(({ file }) => file));
-  const fontDir = dirname(require.resolve("@fontsource-variable/inter/package.json"));
-  const files = filesAt(dist).map((file) => {
-    if (!whitelist.has(file) && !/^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file)) {
-      const font = /^assets\/(inter-[a-z0-9-]+-wght-normal)-[A-Za-z0-9_-]{8,}\.woff2$/.exec(file);
-      check(font && hash(join(dist, file)) === hash(join(fontDir, "files", font[1] + ".woff2")),
-        `Unexpected or unverified Hosting asset ${file}.`);
-    }
+  const inventory = filesAt(dist);
+  const fonts = inspectHostingFonts(dist, inventory);
+  const files = inventory.map((file) => {
+    check(whitelist.has(file) || fonts.has(file) || /^assets\/index-[A-Za-z0-9_-]+\.(js|css)$/.test(file),
+      `Unexpected Hosting asset ${file}.`);
     return { file, sha256: hash(join(dist, file)) };
   });
-  check(files.some(({ file }) => file.endsWith(".woff2")), "The reviewed Inter font is missing.");
+  check(fonts.size === 7, "The seven reviewed Inter subsets are required.");
   write(join(dir, "manifest.json"), { buildId: head, projectId: project, environment: "production", files });
   write(join(dir, "production-baseline.json"), { snapshot: initial.snapshot, hostingConfig: config,
     priorManifestHash: a.hash, toolchain: versions(), notification: initial.notification });
@@ -172,11 +198,15 @@ function validated(dir, head, a) {
   const manifest = json(join(dir, "manifest.json"));
   const evidence = json(join(dir, "gate.json"));
   const baseline = json(join(dir, "production-baseline.json"));
-  const actual = filesAt(join(dir, "assets")).map((file) => ({ file, sha256: hash(join(dir, "assets", file)) }));
+  const dist = join(dir, "assets");
+  const inventory = filesAt(dist);
+  check(inspectHostingFonts(dist, inventory).size === 7, "The seven reviewed Inter subsets are required.");
+  const actual = inventory.map((file) => ({ file, sha256: hash(join(dist, file)) }));
   check(manifest.buildId === head && manifest.projectId === project && manifest.environment === "production"
     && same(actual, manifest.files) && same(baseline.snapshot, a.receipt.snapshot) && baseline.priorManifestHash === a.hash
     && same(baseline.toolchain, versions()), "Review artifacts, toolchain or baseline differ.");
-  const required = ["unit", "security", "hubSecurity", "definitiveFlows", "legacyE2E", "hubE2E", "visualParity", "authenticatedAcceptance"];
+  const required = ["unit", "security", "hubSecurity", "hostingPreparation", "definitiveFlows", "legacyE2E",
+    "hubE2E", "visualParity", "authenticatedAcceptance", "safariAuthenticated"];
   check(evidence.sha === head && required.every((gate) => evidence.checks?.[gate] === "PASS"), "Required release gates are not all PASS.");
   return { manifest, baseline, plan: { sha: head, project, hostingOnly: true, branch, toolchain: versions(),
     manifestHash: hash(join(dir, "manifest.json")), gateHash: hash(join(dir, "gate.json")),
@@ -187,23 +217,34 @@ function validated(dir, head, a) {
 async function apply(action, dir, a, review, approve, exclusive) {
   const file = join(dir, "release-plan.json");
   const planHash = hash(file);
+  const marker = `CleanFlow Definitive UI ${planHash}`;
   check(same(json(file), review.plan) && exclusive && approve === `${action}:${planHash}`,
     "The exact reviewed seal and exclusive release authorization are required.");
   const live = await inspect();
   const rollback = action === "rollback";
-  const receipt = rollback && json(join(dir, "publish-receipt.json"));
-  const expected = rollback ? receipt.snapshot : a.receipt.snapshot;
-  check(live.lock === "AVAILABLE" && same(live.snapshot, expected)
-    && same(live.notification, review.baseline.notification)
-    && (!rollback || (receipt.state === "COMPLETE" && receipt.planHash === planHash)),
-  "Production differs from the reviewed starting state.");
-  await inspectAssets(rollback ? review.manifest : a.manifest);
+  let expected = a.receipt.snapshot;
+  let recoveredLock;
+  check(same(live.notification, review.baseline.notification), "Production FCM differs from the reviewed starting state.");
+  if (rollback && live.lock === "HELD") {
+    const entry = JSON.parse(readFileSync(join(dir, "publish-journal.jsonl"), "utf8").split("\n")[0]);
+    recoveredLock = interruptedPublishLock(expected, live.snapshot, entry, await liveRelease(live.snapshot.hosting.release), marker);
+    await assertReleaseLock(recoveredLock);
+    expected = live.snapshot;
+  } else {
+    if (rollback) {
+      const receipt = json(join(dir, "publish-receipt.json"));
+      check(receipt.state === "COMPLETE" && receipt.planHash === planHash, "Verified publish receipt required.");
+      expected = receipt.snapshot;
+    }
+    check(live.lock === "AVAILABLE" && same(live.snapshot, expected), "Production differs from the reviewed starting state.");
+    await inspectAssets(rollback ? review.manifest : a.manifest);
+  }
   check(same(await versionConfig(live.snapshot.hosting.version), review.baseline.hostingConfig), "Hosting config drift.");
   check(same(await versionConfig(review.plan.rollbackVersion), review.baseline.hostingConfig), "Rollback version config drift.");
   const channel = await getChannel("-", project, "live");
   check(channel?.release?.version?.name?.endsWith(`/versions/${live.snapshot.hosting.version}`), "Live channel version differs.");
   const workspace = mkdtempSync(join(tmpdir(), "cleanflow-definitive-hosting-"));
-  let lock;
+  let lock = recoveredLock;
   let started = false;
   let complete = false;
   const journal = join(dir, `${action}-journal.jsonl`);
@@ -216,7 +257,7 @@ async function apply(action, dir, a, review, approve, exclusive) {
       copyFileSync(join(dir, "assets", file), target);
       check(hash(target) === expectedHash, "Staged asset differs.");
     }
-    lock = await acquireReleaseLock({ action: `definitive-ui-${action}`, sha: review.plan.sha, planHash });
+    lock ??= await acquireReleaseLock({ action: `definitive-ui-${action}`, sha: review.plan.sha, planHash });
     const snapshot = await runReleaseSequence({
       initial: expected, steps: [hostingStep], inspect: async () => {
         const state = await inspect();
@@ -228,7 +269,7 @@ async function apply(action, dir, a, review, approve, exclusive) {
       deploy: () => {
         started = true;
         const args = rollback ? ["hosting:clone", `${project}@${review.plan.rollbackVersion}`, `${project}:live`]
-          : ["deploy", "--only", "hosting", "--config", "firebase.json"];
+          : ["deploy", "--only", "hosting", "--config", "firebase.json", "--message", marker];
         execFileSync(process.execPath, [cli, ...args, "--project", project, "--non-interactive"], { cwd: workspace, stdio: "inherit" });
       },
       verifyAssets: async () => {
@@ -241,12 +282,12 @@ async function apply(action, dir, a, review, approve, exclusive) {
     write(join(dir, `${action}-receipt.json`), { state: "COMPLETE", planHash, snapshot });
     complete = true;
   } finally {
-    try { if (lock && (complete || !started)) await releaseReleaseLock(lock); }
+    try { if (lock && (complete || (!started && !recoveredLock))) await releaseReleaseLock(lock); }
     finally { rmSync(workspace, { recursive: true, force: true }); }
   }
 }
 
-try {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) try {
   const [action, ...args] = process.argv.slice(2);
   const { values } = parseArgs({ args, options: {
     dir: { type: "string" }, "a-dir": { type: "string" }, "env-dir": { type: "string" },

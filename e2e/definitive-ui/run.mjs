@@ -27,11 +27,22 @@ function run(command, args) {
   });
 }
 
-let code = process.env.DEFINITIVE_UI_SKIP_BUILD ? 0 : await run("./node_modules/.bin/vite", ["build", "--mode", "emulator"]);
+const testArgs = process.argv.slice(2);
+const projects = testArgs.flatMap((arg, index) => {
+  if (arg === "--project") return [testArgs[index + 1]];
+  if (arg.startsWith("--project=")) return [arg.slice("--project=".length)];
+  return [];
+});
+const buildArgs = ["build", "--mode", "emulator"];
+// With no project filter, Playwright runs both engines.
+if (!projects.length || projects.some((project) => project !== "chromium")) {
+  buildArgs.push("--config", "e2e/definitive-ui/vite.webkit.config.js");
+}
+let code = process.env.DEFINITIVE_UI_SKIP_BUILD ? 0 : await run("./node_modules/.bin/vite", buildArgs);
 if (code !== 0) process.exit(code);
 code = await run("./node_modules/.bin/firebase", [
   "emulators:exec", "--config", "firebase.cleaner-hub-e2e.json", "--project", "demo-cleanflow",
   "--only", "auth,firestore,functions,storage,hosting", "--log-verbosity", "QUIET",
-  `./node_modules/.bin/playwright test --config=e2e/definitive-ui/playwright.config.js ${process.argv.slice(2).join(" ")}`,
+  `./node_modules/.bin/playwright test --config=e2e/definitive-ui/playwright.config.js ${testArgs.join(" ")}`,
 ]);
 process.exit(code);

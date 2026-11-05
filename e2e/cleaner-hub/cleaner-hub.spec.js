@@ -29,7 +29,7 @@ async function loginManager(page, fixture) {
 async function createService(page, fixture, { propertyId, propertyName, scheduledDate, scheduledStart }) {
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Jobs" }).click();
   await expect(page.getByRole("heading", { name: "Cleaning jobs" })).toBeVisible();
-  await page.getByRole("button", { name: "New service" }).click();
+  await page.getByRole("region", { name: "Cleaning jobs" }).getByRole("button", { name: "New service" }).click();
   const form = page.locator(".cleaning-form");
   await form.getByRole("searchbox").fill(propertyName);
   await form.getByRole("combobox", { name: "Property" }).selectOption(propertyId);
@@ -206,10 +206,10 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     expect((await birchRef.collection("assignments").get()).empty).toBe(true);
     await evidence(page, "release-a-02-manual-many-interested");
 
-    await page.getByRole("button", { name: /^Inbox/ }).click();
+    await page.getByRole("button", { name: /\bInbox\b/ }).click();
     const interestItem = page.getByRole("listitem").filter({ hasText: fixture.birchName })
       .filter({ has: page.getByRole("heading", { name: "Cleaner expressed interest" }) }).first();
-    await interestItem.getByRole("button", { name: "Open", exact: true }).click();
+    await interestItem.getByRole("button", { name: "Review interested cleaners", exact: true }).click();
     const decision = page.getByTestId("interest-decision");
     await expect(decision).toBeFocused();
     await expect(decision.getByRole("button", { name: /^Confirm / })).toHaveCount(2);
@@ -219,7 +219,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     expect((await birchRef.get()).data().firstAcceptClaim).toBeUndefined();
     expect((await birchRef.collection("offers").doc(fixture.cleanerBId).get()).data().status).toBe("INTERESTED");
 
-    await page.getByRole("button", { name: /^Inbox/ }).click();
+    await page.getByRole("button", { name: /\bInbox\b/ }).click();
     const interestEvents = page.getByRole("listitem").filter({ hasText: fixture.birchName })
       .getByRole("heading", { name: "Cleaner expressed interest" });
     await expect(interestEvents).toHaveCount(2);
@@ -371,7 +371,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
         await target.getByRole("button", { name: "Lidos", exact: true }).click();
         await expect(offerHeading).toBeVisible();
       }
-      await inboxOffer.getByRole("button", { name: lang === "pt" ? "Abrir" : "Open", exact: true }).click();
+      await inboxOffer.getByRole("button", { name: lang === "pt" ? "Ver oferta" : "View offer", exact: true }).click();
       await expect(target.getByRole("button", { name: accept })).toBeEnabled();
       await expect(target.getByRole("button", { name: interest })).toHaveCount(0);
     }
@@ -430,7 +430,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await expect(rosterItem).toContainText("Assigned automatically");
     await evidence(page, "86-05-manager-assignment");
 
-    await page.getByRole("button", { name: /^Inbox/ }).click();
+    await page.getByRole("button", { name: /\bInbox\b/ }).click();
     const managerJobItems = page.getByRole("listitem").filter({ hasText: fixture.mapleName });
     await expect(managerJobItems.getByRole("heading", { name: "Automatic assignment confirmed" })).toHaveCount(1);
     await expect(managerJobItems.getByRole("heading", { name: "Cleaner expressed interest" })).toHaveCount(0);
@@ -441,7 +441,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await expect(autoReceipt).toHaveCount(1);
     await evidence(pageA, "85-03-cleaner-confirmation-inbox");
     await managerCall(fixture, "createChecklistRun", { jobId: job.id });
-    await pageA.getByRole("listitem").filter({ has: autoReceipt }).getByRole("button", { name: "Abrir", exact: true }).click();
+    await pageA.getByRole("listitem").filter({ has: autoReceipt }).getByRole("button", { name: "Ver serviço", exact: true }).click();
     await pageA.getByRole("button", { name: "Abrir checklist" }).click();
     await pageA.waitForURL(/\/checklist\?t=/);
     const capability = (await job.collection("checklistRuns").doc("initial").collection("checklistCapabilities").doc("active").get()).data();
