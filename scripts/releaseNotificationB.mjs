@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { acquireReleaseLock, assertReleaseLock, notificationProject, productionSnapshot,
   readNotificationProduction, releaseReleaseLock, sha256 } from "./notificationReleaseCloud.mjs";
-import { deployGroups, publishedReleaseASha, releaseBBranch, validReleaseVerification } from "./preflightNotificationRelease.mjs";
+import { deployGroups, liveHostingBaseline, releaseBBranch, validReleaseVerification } from "./preflightNotificationRelease.mjs";
 import { releaseToolchain, runReleaseSequence, stageReleaseInputs, verifyLiveAssets,
   writeReleaseModes } from "./releaseNotificationA.mjs";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
@@ -32,6 +32,8 @@ const hosting = { id: "hosting", only: "hosting" };
 
 export const releaseBSteps = {
   publish: [
+    // Same Inbox contract plus the read-only PUSH_TEST record; no transport.
+    functionsStep(deployGroups.inboxUpdate, "disabled"),
     functionsStep(deployGroups.prepareB, "pilot"),
     hosting,
     functionsStep([register], "pilot"),
@@ -64,7 +66,7 @@ export function releaseBDeploymentArgs(action, step, before) {
 function assertAInbox(snapshot) {
   requireCondition(inboxEndpoints.every((name) => snapshot?.functions?.[name]?.inboxMode === "enabled")
     && !Object.hasOwn(snapshot.functions, "createAutomaticJobOffers"),
-  "Release B requires the original Inbox-enabled manual-offer Release A.");
+  "Release B requires the Inbox-enabled manual-offer Production baseline.");
 }
 
 export function releaseBSnapshot(report) {
@@ -103,14 +105,12 @@ export function verifiedBReceipt(receipt, { action, sha, planHash, artifactHash,
     && equal(receipt.snapshot, snapshot);
 }
 
-function artifact(directory, variant, sha, hash) {
-  const file = join(directory, `hosting-manifest-${variant}.json`);
-  const manifest = json(file);
-  const manifestHash = hashFile(file);
+function artifact(manifestFile, dist, variant, sha, hash) {
+  const manifest = json(manifestFile);
+  const manifestHash = hashFile(manifestFile);
   requireCondition(fullSha.test(sha) && (!hash || hash === manifestHash)
     && manifest.buildId === sha && manifest.projectId === notificationProject && manifest.environment === "production",
   "Hosting manifest does not match the reviewed SHA or project.");
-  const dist = join(directory, `assets-${variant}`);
   const publicFiles = git("ls-tree", "-r", "--name-only", sha, "--", "public").split("\n")
     .filter(Boolean).map((file) => file.slice(7));
   requireCondition(equal(inspectHostingBuild(dist, sha, publicFiles, manifest, { removeFinderMetadata: false }), manifest.files),
@@ -118,30 +118,31 @@ function artifact(directory, variant, sha, hash) {
   const worker = readFileSync(join(dist, "cleaner-messaging-sw.js"), "utf8");
   const marker = json(join(dist, "version.json"));
   const disabledWorker = "// Cleaner push is disabled for this build.\n";
-  requireCondition(variant === "A" ? !marker.deploymentId && worker === disabledWorker
+  requireCondition(variant === "baseline" ? !marker.deploymentId && worker === disabledWorker
     : marker.deploymentId === `${sha}-cleaner-push` && worker !== disabledWorker,
   "Unexpected PWA release marker or cleaner worker.");
   return { sha, manifest, manifestHash, dist, worker };
 }
 
-function readReleaseA(directory) {
-  const planFile = join(directory, "release-plan.json");
-  const receiptFile = join(directory, "publish-receipt.json");
-  const plan = json(planFile);
-  const receipt = json(receiptFile);
-  const planHash = hashFile(planFile);
-  const receiptHash = hashFile(receiptFile);
-  requireCondition(plan.schema === 1 && plan.project === notificationProject && plan.sha === publishedReleaseASha
-    && digest.test(plan.manifests?.A) && receipt.schema === 1 && receipt.action === "publish"
-    && receipt.state === "COMPLETE" && receipt.planHash === planHash && receipt.sha === plan.sha,
-  "Release A needs its exact completed publication receipt and reviewed plan.");
+/** The published Definitive UI Hosting release is B's baseline and rollback build. */
+function readBaseline(uiDirectory, receiptFile) {
+  const receiptBytes = readFileSync(receiptFile);
+  const receipt = JSON.parse(receiptBytes);
+  const manifestFile = join(uiDirectory, "manifest.json");
+  requireCondition(receipt.state === "COMPLETE" && receipt.mutexReleased === true && receipt.project === notificationProject
+    && receipt.sha === liveHostingBaseline.sha && receipt.manifestHash === liveHostingBaseline.manifestHash
+    && hashFile(manifestFile) === liveHostingBaseline.manifestHash
+    && receipt.candidateVersion === liveHostingBaseline.hostingVersion
+    && receipt.snapshot?.hosting?.version === liveHostingBaseline.hostingVersion,
+  "Release B needs the exact COMPLETE Definitive UI Hosting receipt and its reviewed build.");
   assertAInbox(receipt.snapshot);
   requireCondition(transportFunctions.every((name) => !Object.hasOwn(receipt.snapshot.functions, name)),
-    "The reviewed Release A snapshot already contains cleaner push Functions.");
-  const hostingArtifact = artifact(directory, "A", plan.sha, plan.manifests.A);
+    "The baseline snapshot already contains cleaner push Functions.");
+  const hostingArtifact = artifact(manifestFile, join(uiDirectory, "assets"), "baseline",
+    liveHostingBaseline.sha, liveHostingBaseline.manifestHash);
   return {
     baseline: receipt.snapshot,
-    hashes: { planHash, receiptHash, manifestHash: hostingArtifact.manifestHash },
+    hashes: { receiptHash: sha256(receiptBytes), manifestHash: hostingArtifact.manifestHash },
     artifact: hostingArtifact,
   };
 }
@@ -150,15 +151,16 @@ function reviewedPlan(directory, sha, previous) {
   const preflightFile = join(directory, "preflight-B.json");
   const verificationFile = join(directory, "verification.json");
   const preflight = json(preflightFile);
-  const current = artifact(directory, "B", sha, preflight.manifest?.sha256);
+  const current = artifact(join(directory, "hosting-manifest-B.json"), join(directory, "assets-B"), "B", sha, preflight.manifest?.sha256);
   requireCondition(preflight.status === "DRY_RUN_READY" && preflight.stage === "B" && preflight.sha === sha
     && preflight.manifest?.sha256 === current.manifestHash
     && preflight.cleanerPushMode === "pilot" && preflight.pilotPolicy === "explicit-device-approval"
     && preflight.automaticOffersMode === "disabled"
     && preflight.production?.releaseLock?.state === "AVAILABLE" && preflight.deploymentPerformed === false
+    && equal(preflight.targets?.updateBeforeHosting, deployGroups.inboxUpdate)
     && equal(preflight.targets?.createBeforeHosting, deployGroups.prepareB)
     && equal(preflight.targets?.createAfterHosting, deployGroups.enable)
-    && equal(preflight.releaseA, previous.hashes) && equal(releaseBSnapshot(preflight.production), previous.baseline)
+    && equal(preflight.baseline, previous.hashes) && equal(releaseBSnapshot(preflight.production), previous.baseline)
     && digest.test(preflight.cleanerBinding?.appIdHash) && digest.test(preflight.cleanerBinding?.apiKeyHash)
     && digest.test(preflight.cleanerBinding?.vapidFingerprint)
     && validReleaseVerification(json(verificationFile), sha),
@@ -169,7 +171,7 @@ function reviewedPlan(directory, sha, previous) {
     branch: releaseBBranch,
     sha,
     toolchain: releaseToolchain(),
-    releaseA: previous.hashes,
+    baseline: previous.hashes,
     artifactHash: current.manifestHash,
     cleanerBinding: preflight.cleanerBinding,
     pilotPolicy: preflight.pilotPolicy,
@@ -233,7 +235,7 @@ async function execute(action, directory, plan, current, previous, approval, exc
     "Rollback requires the exact verified completed Release B receipt.");
     checkTransport(live, "publish", plan.sha);
   } else {
-    requireCondition(equal(live, previous.baseline), "Production differs from the sealed Release A baseline.");
+    requireCondition(equal(live, previous.baseline), "Production differs from the sealed Definitive UI baseline.");
     checkBinding(production, plan, current);
   }
   await verifyLiveAssets(action === "publish" ? previous.artifact.manifest : current.manifest);
@@ -257,8 +259,8 @@ async function execute(action, directory, plan, current, previous, approval, exc
   try {
     stageReleaseInputs(plan.sha, actionArtifact, { inboxMode: "enabled", cleanerPushMode: "disabled" }, workspace);
     if (action === "rollback") {
-      // Disable transport with the B source, then restore A assets and Hosting
-      // configuration from the original A Git object.
+      // Disable transport with the B source, then restore the Definitive UI assets and Hosting
+      // configuration from their original Git object.
       const original = execFileSync("git", ["show", `${actionArtifact.sha}:firebase.json`], { cwd: root });
       writeFileSync(join(workspace, "firebase-rollback.json"), original, { flag: "wx", mode: 0o600 });
     }
@@ -307,11 +309,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const [action, ...args] = process.argv.slice(2);
     const { values } = parseArgs({ args, options: {
-      sha: { type: "string" }, dir: { type: "string" }, "a-dir": { type: "string" },
+      sha: { type: "string" }, dir: { type: "string" }, "ui-dir": { type: "string" }, "baseline-receipt": { type: "string" },
       approve: { type: "string" }, "exclusive-window": { type: "boolean" },
     } });
-    requireCondition(["seal", "publish", "rollback"].includes(action) && values.dir && values["a-dir"],
-      "Use seal, publish or rollback with --sha, --dir and --a-dir.");
+    requireCondition(["seal", "publish", "rollback"].includes(action) && values.dir && values["ui-dir"] && values["baseline-receipt"],
+      "Use seal, publish or rollback with --sha, --dir, --ui-dir and --baseline-receipt.");
     requireCondition(fullSha.test(values.sha || "") && git("rev-parse", "HEAD") === values.sha
       && git("branch", "--show-current") === releaseBBranch && realpathSync(process.cwd()) === root
       && !git("status", "--porcelain") && process.versions.node.split(".")[0] === "22",
@@ -322,7 +324,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     const directory = realpathSync(resolve(values.dir));
     requireCondition(relative(root, directory).startsWith(".tmp/"), "Use an ignored release directory under .tmp/.");
-    const previous = readReleaseA(realpathSync(resolve(values["a-dir"])));
+    const previous = readBaseline(realpathSync(resolve(values["ui-dir"])), realpathSync(resolve(values["baseline-receipt"])));
     const { plan, current } = reviewedPlan(directory, values.sha, previous);
     if (action === "seal") {
       const bytes = encode(plan);

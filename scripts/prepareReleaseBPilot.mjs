@@ -11,12 +11,13 @@ const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8"
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
 try {
   const { values } = parseArgs({ options: {
-    "a-dir": { type: "string" }, "env-dir": { type: "string" }, dir: { type: "string" },
+    "ui-dir": { type: "string" }, "baseline-receipt": { type: "string" }, "env-dir": { type: "string" }, dir: { type: "string" },
     verification: { type: "string" }, "vapid-console-sha256": { type: "string" },
   } });
-  const { "a-dir": aDir, "env-dir": envDir, dir, verification, "vapid-console-sha256": fingerprint } = values;
-  if (!aDir || !envDir || !dir || !verification || !/^[a-f0-9]{64}$/.test(fingerprint ?? "")) {
-    fail("Use --a-dir, --env-dir, --dir, --verification and the Console public VAPID fingerprint.");
+  const { "ui-dir": uiDir, "baseline-receipt": baselineReceipt, "env-dir": envDir, dir, verification,
+    "vapid-console-sha256": fingerprint } = values;
+  if (!uiDir || !baselineReceipt || !envDir || !dir || !verification || !/^[a-f0-9]{64}$/.test(fingerprint ?? "")) {
+    fail("Use --ui-dir, --baseline-receipt, --env-dir, --dir, --verification and the Console public VAPID fingerprint.");
   }
   const target = resolve(dir);
   if (!relative(root, target).startsWith(".tmp/")) fail("Use an ignored directory under .tmp.");
@@ -35,8 +36,7 @@ try {
   // Use a temporary report to avoid replacing a sealed preflight.
   const scratch = join(target, "preflight-B-latest.json");
   execFileSync(process.execPath, ["scripts/preflightNotificationRelease.mjs", "--stage", "B", "--sha", sha,
-    "--a-plan", join(aDir, "release-plan.json"), "--a-receipt", join(aDir, "publish-receipt.json"),
-    "--previous-manifest", join(aDir, "hosting-manifest-A.json"), "--env-dir", envDir,
+    "--baseline-receipt", baselineReceipt, "--previous-manifest", join(uiDir, "manifest.json"), "--env-dir", envDir,
     "--verification", join(target, "verification.json"), "--vapid-console-sha256", fingerprint,
     "--report", scratch, "--build"], { cwd: root, stdio: "inherit" });
   const preflight = json(scratch);
@@ -47,7 +47,7 @@ try {
   copyExact(manifest, join(target, "hosting-manifest-B.json"));
   if (!existsSync(join(target, "assets-B"))) cpSync(join(root, "dist"), join(target, "assets-B"), { recursive: true });
   execFileSync(process.execPath, ["scripts/releaseNotificationB.mjs", "seal", "--sha", sha,
-    "--a-dir", aDir, "--dir", target], { cwd: root, stdio: "inherit" });
+    "--ui-dir", uiDir, "--baseline-receipt", baselineReceipt, "--dir", target], { cwd: root, stdio: "inherit" });
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

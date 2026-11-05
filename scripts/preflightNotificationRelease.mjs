@@ -16,8 +16,15 @@ const deployedSha = "a593daf636024d6830bf89c75bd7f6353b4b759f";
 const deployedManifestHash = "ddbc29c2e86ff71e5539acb6551c4679724d323efbad502b457cfdb558c173e5";
 const oldRuleset = "03de7532-ddb1-4f6e-b6d7-137d0717572d";
 export const expectedBranch = "codex/release-a-claude-ux-85";
-export const releaseBBranch = "codex/notification-release-b-85";
+export const releaseBBranch = "claude/cleaner-push-on-definitive-ui";
 export const publishedReleaseASha = "12f432dd46a6c93e45bfb78ac1993568143c3840";
+// Release B is applied over the published Definitive UI Hosting release. Its
+// COMPLETE two-phase receipt is the Production baseline and the rollback build.
+export const liveHostingBaseline = Object.freeze({
+  sha: "a7cdb66407a07097a3952d1197a6131e8c43f6e0",
+  manifestHash: "c541289e54f4678802e682308480700a7a108feb632039812d19fb455b1da7cc",
+  hostingVersion: "cfa94d1aac3404a2",
+});
 const origin = `https://${notificationProject}.web.app`;
 export const deployGroups = {
   create: [
@@ -33,6 +40,8 @@ export const deployGroups = {
   ],
   defer: ["createAutomaticJobOffers", "getCleanerPushDeviceStatus", "deactivateCleanerPushDevice",
     "registerCleanerPushDevice", "notifyCleanerInboxEvent"],
+  // Inbox endpoints learn the PUSH_TEST record before any transport exists.
+  inboxUpdate: ["listNotificationInbox", "markNotificationRead", "openNotificationInboxItem"],
   prepareB: ["getCleanerPushDeviceStatus", "deactivateCleanerPushDevice"],
   enable: ["registerCleanerPushDevice", "notifyCleanerInboxEvent"],
 };
@@ -86,18 +95,17 @@ export function validPhysicalVerification(receipt, { sha, appId, vapidFingerprin
       .every((field) => row[field] === true));
 }
 
-function releaseAEvidence(options, manifestBytes, manifest) {
-  if (!options["a-plan"] || !options["a-receipt"]) return null;
-  const planBytes = readFileSync(resolve(options["a-plan"]));
-  const receiptBytes = readFileSync(resolve(options["a-receipt"]));
-  const plan = JSON.parse(planBytes);
-  const receipt = JSON.parse(receiptBytes);
-  const binding = { planHash: sha256(planBytes), receiptHash: sha256(receiptBytes), manifestHash: sha256(manifestBytes) };
-  if (plan.schema !== 1 || receipt.schema !== 1 || plan.project !== notificationProject
-    || plan.sha !== publishedReleaseASha || receipt.sha !== plan.sha || manifest.buildId !== plan.sha
-    || manifest.projectId !== notificationProject || manifest.environment !== "production"
-    || receipt.action !== "publish" || receipt.state !== "COMPLETE" || receipt.planHash !== binding.planHash
-    || binding.manifestHash !== plan.manifests?.A || !receipt.snapshot) return null;
+export function baselineEvidence(receiptBytes, manifestBytes, manifest) {
+  let receipt;
+  try { receipt = JSON.parse(receiptBytes); } catch { return null; }
+  const binding = { receiptHash: sha256(receiptBytes), manifestHash: sha256(manifestBytes) };
+  if (receipt?.state !== "COMPLETE" || receipt.mutexReleased !== true || receipt.project !== notificationProject
+    || receipt.sha !== liveHostingBaseline.sha || receipt.manifestHash !== liveHostingBaseline.manifestHash
+    || binding.manifestHash !== liveHostingBaseline.manifestHash
+    || receipt.candidateVersion !== liveHostingBaseline.hostingVersion
+    || receipt.snapshot?.hosting?.version !== liveHostingBaseline.hostingVersion
+    || manifest.buildId !== liveHostingBaseline.sha || manifest.projectId !== notificationProject
+    || manifest.environment !== "production" || !receipt.snapshot.functions) return null;
   return { ...binding, snapshot: receipt.snapshot };
 }
 
@@ -186,10 +194,11 @@ async function preflight(options) {
   const vapidFingerprint = validVapidFingerprint(localVapid);
   const previousBytes = readFileSync(resolve(previousManifest));
   const previous = JSON.parse(previousBytes);
-  const releaseA = stage === "B" ? releaseAEvidence(options, previousBytes, previous) : null;
+  const baseline = stage === "B" && options["baseline-receipt"]
+    ? baselineEvidence(readFileSync(resolve(options["baseline-receipt"])), previousBytes, previous) : null;
   check("previousManifest", stage === "A"
     ? previous.buildId === deployedSha && sha256(previousBytes) === deployedManifestHash
-    : releaseA, "Supply the recorded Hub manifest for A, or the exact A plan, COMPLETE publish receipt and manifest for B.");
+    : baseline, "Supply the recorded Hub manifest for A, or the COMPLETE Definitive UI Hosting receipt and its manifest for B.");
 
   // SDK discovery imports declarations only, under a demo identity.
   process.env.GCLOUD_PROJECT = "demo-cleanflow";
@@ -237,14 +246,14 @@ async function preflight(options) {
   if (stage === "B") {
     const version = staticAssets.find((row) => row.file === "version.json" && row.matched)?.bytes;
     const versionInfo = version && JSON.parse(version);
-    check("releaseALive", oldCleanerWorker?.toString() === "// Cleaner push is disabled for this build.\n"
-      && versionInfo?.buildId === publishedReleaseASha && !versionInfo.deploymentId,
-    "Release B requires the live Inbox-enabled Release A build and its disabled cleaner worker.");
-    let matchesReleaseA = false;
+    check("baselineLive", oldCleanerWorker?.toString() === "// Cleaner push is disabled for this build.\n"
+      && versionInfo?.buildId === liveHostingBaseline.sha && !versionInfo.deploymentId,
+    "Release B requires the live Definitive UI build and its disabled cleaner worker.");
+    let matchesBaseline = false;
     try {
-      matchesReleaseA = Boolean(releaseA && JSON.stringify(productionSnapshot(cloud)) === JSON.stringify(releaseA.snapshot));
+      matchesBaseline = Boolean(baseline && JSON.stringify(productionSnapshot(cloud)) === JSON.stringify(baseline.snapshot));
     } catch { /* incomplete inventory fails closed */ }
-    check("releaseADrift", matchesReleaseA, "Live Hosting, Rules, schedules or Functions differ from the COMPLETE Release A receipt.");
+    check("baselineDrift", matchesBaseline, "Live Hosting, Rules, schedules or Functions differ from the COMPLETE Definitive UI receipt.");
     check("dedicatedCleanerApp", cleaner, "A distinct registered Web app with the same project, sender and public API binding is required.");
     check("consoleVapidAttestation", vapidFingerprint && options["vapid-console-sha256"] === vapidFingerprint,
       "Compare the public VAPID key fingerprint from Firebase Console before Release B.");
@@ -255,7 +264,7 @@ async function preflight(options) {
 
   let manifest = null;
   const buildGates = ["worktree", "runtime", "previousManifest", "managerFirebaseBinding", "managerVapid"];
-  if (stage === "B") buildGates.push("previousManifest", "releaseALive", "releaseADrift", "dedicatedCleanerApp", "consoleVapidAttestation");
+  if (stage === "B") buildGates.push("previousManifest", "baselineLive", "baselineDrift", "dedicatedCleanerApp", "consoleVapidAttestation");
   if (build && buildGates.every((name) => checks[name])) {
     if (stage === "B") {
       env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID = cleaner.appId;
@@ -322,7 +331,7 @@ async function preflight(options) {
     status: blockers.length ? "BLOCKED" : "DRY_RUN_READY",
     stage, sha, branch, compatibility, sdkVersion, messagingVersion, checks, blockers, manifest,
     ...(stage === "B" ? {
-      releaseA: releaseA && { planHash: releaseA.planHash, receiptHash: releaseA.receiptHash, manifestHash: releaseA.manifestHash },
+      baseline: baseline && { receiptHash: baseline.receiptHash, manifestHash: baseline.manifestHash },
       cleanerBinding: cleaner && vapidFingerprint
         ? { appIdHash: sha256(cleaner.appId), apiKeyHash: sha256(cleaner.apiKey), vapidFingerprint } : null,
       managerVapidFingerprint: vapidFingerprint,
@@ -332,7 +341,8 @@ async function preflight(options) {
     } : {}),
     production: cloud || null, publicHostingFiles: { matched: staticMatches, total: staticAssets.length },
     targets: stage === "A" ? { rules: ["firestore.rules"], hosting: true, functions: { create: deployGroups.create, update: deployGroups.update } }
-      : { rules: [], hosting: true, createBeforeHosting: deployGroups.prepareB, createAfterHosting: deployGroups.enable },
+      : { rules: [], hosting: true, updateBeforeHosting: deployGroups.inboxUpdate,
+        createBeforeHosting: deployGroups.prepareB, createAfterHosting: deployGroups.enable },
     automaticOffersMode: "disabled",
     cleanerPushMode: stage === "A" ? "disabled" : "pilot",
     relevantSourceFiles: git("diff", "--name-only", `${deployedSha}..HEAD`, "--",
@@ -351,7 +361,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       stage: { type: "string" }, sha: { type: "string" }, "env-dir": { type: "string" },
       "previous-manifest": { type: "string" }, verification: { type: "string" },
       "pilot-manifest": { type: "string" },
-      "a-plan": { type: "string" }, "a-receipt": { type: "string" },
+      "baseline-receipt": { type: "string" },
       "vapid-console-sha256": { type: "string" }, "physical-verification": { type: "string" }, report: { type: "string" },
       build: { type: "boolean" }, compatibility: { type: "boolean" },
     } });

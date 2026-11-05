@@ -23,11 +23,11 @@ const memberMask = ["organizationId", "cleanerId", "role", "active", "sessionId"
 const profileMask = ["organizationId", "active", "archivedAt"];
 const identityKeys = ["organizationId", "cleanerId", "uid", "sessionId", "deviceId", "releaseSha"];
 
-class PilotError extends Error {}
+export class PilotError extends Error {}
 const requireCondition = (condition, message) => { if (!condition) throw new PilotError(message); };
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-function parseRecord(bytes) {
+export function parseRecord(bytes) {
   try {
     const record = JSON.parse(bytes);
     if (record && typeof record === "object" && !Array.isArray(record)) return record;
@@ -77,7 +77,7 @@ function requestIdentity(bytes, releaseSha, nowMs) {
   };
 }
 
-function reviewedRelease(planBytes, receipt, sourceSha) {
+export function reviewedRelease(planBytes, receipt, sourceSha) {
   const plan = parseRecord(planBytes);
   requireCondition(plan.schema === 1 && plan.project === notificationProject && plan.branch === releaseBBranch
     && fullSha.test(sourceSha ?? "") && plan.sha === sourceSha && digest.test(plan.artifactHash ?? "")
@@ -91,7 +91,7 @@ function reviewedRelease(planBytes, receipt, sourceSha) {
   return { plan, receiptIdentity };
 }
 
-function verifyRelease({ plan, receiptIdentity }, receipt, live) {
+export function verifyRelease({ plan, receiptIdentity }, receipt, live) {
   let snapshot;
   try { snapshot = releaseBSnapshot(live.report); } catch {
     throw new PilotError("Live Production Release B inventory is incomplete or drifted.");
@@ -202,7 +202,7 @@ export async function approveCleanerPushPilot({
   return { state: created ? "GRANTED" : "ALREADY_GRANTED", requestHash, expiresAt };
 }
 
-function firestoreAccess() {
+export function firestoreAccess() {
   const require = createRequire(import.meta.url);
   const { getAccessToken } = require("firebase-tools/lib/apiv2");
   async function query(path, body) {
@@ -229,6 +229,11 @@ function firestoreAccess() {
     return response.body;
   }
   const post = (action, body) => query(`${documents}:${action}`, body);
+  async function runQuery(parent, structuredQuery) {
+    const response = await query(`${parent}:runQuery`, { structuredQuery });
+    requireCondition(response.status === 200 && Array.isArray(response.body), "Required pilot metadata could not be queried.");
+    return response.body.filter((row) => row.document).map((row) => row.document);
+  }
   async function writeTransaction(operation) {
     const begun = await post("beginTransaction", { options: { readWrite: {} } });
     const transaction = begun.body?.transaction;
@@ -253,7 +258,7 @@ function firestoreAccess() {
       }
     }
   }
-  return { readDocument, writeTransaction };
+  return { readDocument, writeTransaction, runQuery };
 }
 
 async function runCli() {

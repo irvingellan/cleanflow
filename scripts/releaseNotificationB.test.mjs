@@ -24,8 +24,9 @@ const report = {
 const baseline = releaseBSnapshot(report);
 const pilotSha = "c".repeat(40);
 
-test("publishes four exact transport Functions and keeps the sender last", () => {
+test("updates the Inbox first, publishes four exact transport Functions and keeps the sender last", () => {
   assert.deepEqual(releaseBSteps.publish.map((step) => step.only), [
+    "functions:listNotificationInbox,functions:markNotificationRead,functions:openNotificationInboxItem",
     "functions:getCleanerPushDeviceStatus,functions:deactivateCleanerPushDevice",
     "hosting",
     "functions:registerCleanerPushDevice",
@@ -36,7 +37,8 @@ test("publishes four exact transport Functions and keeps the sender last", () =>
     "functions:registerCleanerPushDevice",
     "hosting",
   ]);
-  assert.ok(releaseBSteps.publish.filter((step) => step.functions).every((step) => step.cleanerPushMode === "pilot"));
+  assert.equal(releaseBSteps.publish[0].cleanerPushMode, "disabled");
+  assert.ok(releaseBSteps.publish.slice(1).filter((step) => step.functions).every((step) => step.cleanerPushMode === "pilot"));
   assert.ok(releaseBSteps.rollback.filter((step) => step.functions).every((step) => step.cleanerPushMode === "disabled"));
   assert.deepEqual(releaseBDeploymentArgs("rollback", releaseBSteps.rollback.at(-1), baseline).slice(-3),
     ["--config", "firebase-rollback.json", "--non-interactive"]);
@@ -93,8 +95,9 @@ test("release sequence stops before enrollment on unverified Hosting or target m
         }
         const functions = { ...state.functions };
         for (const name of step.functions) {
-          functions[name] = { runtimeCompatible: true, revision: "new", hash: "reviewed",
-            cleanerPushMode: driftMode ? "enabled" : step.cleanerPushMode, cleanerPushPilotRelease: pilotSha };
+          functions[name] = { ...functions[name], runtimeCompatible: true, revision: "new", hash: "reviewed",
+            cleanerPushMode: driftMode ? "enabled" : step.cleanerPushMode,
+            ...(step.cleanerPushMode === "pilot" ? { cleanerPushPilotRelease: pilotSha } : {}) };
         }
         state = { ...state, functions };
       },
@@ -104,17 +107,17 @@ test("release sequence stops before enrollment on unverified Hosting or target m
       },
     });
   };
-  const [prepare, hosting, registration, sender] = releaseBSteps.publish.map((step) => step.id);
+  const [inbox, prepare, hosting, registration, sender] = releaseBSteps.publish.map((step) => step.id);
   await assert.rejects(setup({ hosted: false }), /Unverified Hosting/);
-  assert.deepEqual(exercised.splice(0), [prepare, hosting]);
+  assert.deepEqual(exercised.splice(0), [inbox, prepare, hosting]);
   await assert.rejects(setup({ driftMode: true }), /unexpected cleaner push mode/);
-  assert.deepEqual(exercised.splice(0), [prepare]);
+  assert.deepEqual(exercised.splice(0), [inbox]);
   await setup();
-  assert.deepEqual(exercised, [prepare, hosting, registration, sender]);
+  assert.deepEqual(exercised, [inbox, prepare, hosting, registration, sender]);
 });
 
 test("rollback disables both transport Functions and retains Inbox and all four Functions", async () => {
-  const transport = releaseBSteps.publish.flatMap((step) => step.functions || []);
+  const transport = releaseBSteps.publish.slice(1).flatMap((step) => step.functions || []);
   const initial = {
     ...baseline,
     hosting: { version: "B", release: "live-B" },

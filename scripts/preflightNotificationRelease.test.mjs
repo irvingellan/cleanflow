@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createECDH } from "node:crypto";
 import test from "node:test";
-import { dedicatedCleanerConfig, validPhysicalVerification, validReleaseVerification, validVapidFingerprint } from "./preflightNotificationRelease.mjs";
+import { dedicatedCleanerConfig, validPhysicalVerification, validReleaseVerification, validVapidFingerprint, baselineEvidence, liveHostingBaseline } from "./preflightNotificationRelease.mjs";
 
 test("VAPID preflight accepts a canonical public P-256 point and rejects malformed points", () => {
   const ecdh = createECDH("prime256v1");
@@ -48,4 +48,21 @@ test("Release B requires observed physical delivery for both roles bound to the 
   assert.equal(validPhysicalVerification({ ...receipt, observations: observations.map((row) => ({ ...row, displayed: false })) }, identity), false);
   assert.equal(validPhysicalVerification(receipt, { ...identity, hostingManifestSha256: "c".repeat(64) }), false);
   assert.equal(validPhysicalVerification(receipt, { ...identity, pilotManifestSha256: "c".repeat(64) }), false);
+});
+
+test("Release B baseline is only the exact COMPLETE Definitive UI Hosting receipt", () => {
+  const manifest = { buildId: liveHostingBaseline.sha, projectId: "clean-flow-prototipo", environment: "production", files: [] };
+  const manifestBytes = Buffer.from(JSON.stringify(manifest));
+  const receipt = {
+    state: "COMPLETE", mutexReleased: true, project: "clean-flow-prototipo", sha: liveHostingBaseline.sha,
+    manifestHash: liveHostingBaseline.manifestHash, candidateVersion: liveHostingBaseline.hostingVersion,
+    snapshot: { hosting: { version: liveHostingBaseline.hostingVersion }, functions: {} },
+  };
+  // Synthetic manifest bytes cannot reproduce the reviewed manifest hash.
+  assert.equal(baselineEvidence(Buffer.from(JSON.stringify(receipt)), manifestBytes, manifest), null);
+  for (const change of [{ state: "STAGED" }, { mutexReleased: false }, { sha: "f".repeat(40) },
+    { candidateVersion: "2aa48a01a2244d34" }, { snapshot: { hosting: { version: "2aa48a01a2244d34" }, functions: {} } }]) {
+    assert.equal(baselineEvidence(Buffer.from(JSON.stringify({ ...receipt, ...change })), manifestBytes, manifest), null);
+  }
+  assert.equal(baselineEvidence(Buffer.from("not json"), manifestBytes, manifest), null);
 });
