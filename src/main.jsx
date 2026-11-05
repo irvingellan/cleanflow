@@ -9,6 +9,7 @@ import './styles/workspace.css'
 import './styles/services.css'
 import './styles/checklist.css'
 import './styles/directories.css'
+import './styles/devcenter.css'
 import { TranslationProvider } from './i18n/translations.js'
 import { EnvironmentBanner } from './components/EnvironmentBanner.jsx'
 

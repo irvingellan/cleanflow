@@ -2,6 +2,7 @@ import { useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
+import { Icon } from "../../components/Icon.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { preferredLanguageLabel } from "./cleanerPresentation.js";
 import { filterCleanersByName } from "./cleanerSearch.js";
@@ -42,32 +43,36 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
 
   return (
     <section aria-labelledby="cleaners-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.cleaners")}</p>
+      <header className="cf-page-header directory-heading">
+        <div className="cf-page-header__text">
           <h2 id="cleaners-title" className="list-title">
             {translate("cleaners.title")}
           </h2>
         </div>
-        <button className="button button--primary" type="button" onClick={onCreate}>
-          {translate("cleaners.new")}
-        </button>
-        {canManageExcluded && <button className="button" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
-      </div>
+        <div className="cf-page-header__actions">
+          {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
+          <button className="button button--primary" type="button" onClick={onCreate}>
+            <Icon name="plus" size={18} />
+            {translate("cleaners.new")}
+          </button>
+        </div>
+      </header>
 
       {sortedCleaners.length === 0 ? (
         <StateCard message={translate("cleaners.empty")} />
       ) : (
         <>
-          <div className="cleaner-name-search">
-            <label htmlFor="cleaner-directory-search">{translate("cleaners.search")}</label>
+          <label className="job-filters__search directory-search">
+            <Icon name="search" size={18} className="job-filters__search-icon" />
             <input
               id="cleaner-directory-search"
               type="search"
+              aria-label={translate("cleaners.search")}
+              placeholder={translate("cleaners.search")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-          </div>
+          </label>
           {filteredCleaners.length === 0 ? (
             <StateCard message={translate("cleaners.searchNoResults")} />
           ) : (
@@ -95,13 +100,15 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
                       {preferredLanguageLabel(cleaner.preferredLanguage, translate)}
                     </span>
                   </span>
-                  <span className="status-badge cleaner-directory-card__status-badge">
-                    {cleaner.active === false
-                      ? translate("common.inactive")
-                      : translate("common.active")}
+                  <span className="directory-row__meta">
+                    {cleaner.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
+                    <span className="status-badge cleaner-directory-card__status-badge">
+                      {cleaner.active === false
+                        ? translate("common.inactive")
+                        : translate("common.active")}
+                    </span>
+                    <DataProvenanceBadge record={cleaner} />
                   </span>
-                  <DataProvenanceBadge record={cleaner} />
-                  {cleaner.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
                 </button>
               ))}
             </div>

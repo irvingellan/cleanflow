@@ -8,7 +8,7 @@ export const releaseNotes = [
     },
     changes: [
       {
-        icon: "⚡",
+        icon: "spark",
         text: {
           en: "CleanFlow now updates reliably without reinstalling the app.",
           pt: "O CleanFlow agora atualiza de forma confiável sem reinstalar o app.",
@@ -16,7 +16,7 @@ export const releaseNotes = [
         },
       },
       {
-        icon: "🔎",
+        icon: "search",
         text: {
           en: "Services are easier to search and filter.",
           pt: "Os serviços estão mais fáceis de buscar e filtrar.",
@@ -24,7 +24,7 @@ export const releaseNotes = [
         },
       },
       {
-        icon: "💵",
+        icon: "dollar",
         text: {
           en: "Cleaner payments can be tracked, with an optional payment proof.",
           pt: "Os pagamentos das cleaners podem ser acompanhados, com comprovante opcional.",
@@ -32,7 +32,7 @@ export const releaseNotes = [
         },
       },
       {
-        icon: "📷",
+        icon: "camera",
         text: {
           en: "On mobile, payment proof can be taken with the camera or selected from existing images.",
           pt: "No celular, o comprovante pode ser fotografado ou escolhido entre imagens existentes.",

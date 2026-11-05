@@ -1,0 +1,163 @@
+/* Dev Center: developer-only tools, restated in the definitive system. */
+.dev-center {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 64px;
+}
+
+.dev-center .cf-page-header {
+  margin-bottom: 0;
+}
+
+.dev-center__results:empty {
+  display: none;
+}
+
+.dev-center__results {
+  display: grid;
+  gap: 8px;
+}
+
+.dev-center__environment {
+  border: 1px solid var(--cf-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--cf-text-secondary);
+  background: var(--cf-surface-subtle);
+  font-size: var(--cf-text-xs);
+  font-weight: 700;
+}
+
+.dev-center__environment--production {
+  border-color: var(--cf-warning-border);
+  color: var(--cf-warning-text);
+  background: var(--cf-warning-bg);
+}
+
+.dev-center__block .cf-block__header {
+  flex-wrap: wrap;
+}
+
+.dev-center__rows {
+  display: grid;
+}
+
+.dev-center__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border-top: 1px solid var(--cf-divider);
+  padding: 14px 18px;
+}
+
+.dev-center__row h4 {
+  margin: 0;
+  font-size: var(--cf-text-md);
+}
+
+.dev-center__row p {
+  margin: 2px 0 0;
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+}
+
+/* Notification Lab */
+.dev-center__diagnostics {
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-xl);
+  padding: 20px;
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-raise);
+}
+
+.dev-center__diagnostics h3,
+.dev-center__diagnostics h4 {
+  margin: 0;
+}
+
+.dev-center__diagnostics-note,
+.dev-center__diagnostics > p {
+  margin: 0;
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+}
+
+.dev-center__diagnostics-grid {
+  gap: 20px;
+}
+
+.dev-center__diagnostics-grid h4 {
+  margin-bottom: 10px;
+  font-size: var(--cf-text-sm);
+}
+
+.dev-center__diagnostics-list li {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 2px 16px;
+  border: 1px solid var(--cf-divider);
+  border-radius: var(--cf-radius-md);
+  padding: 12px 14px;
+  background: var(--cf-surface-subtle);
+}
+
+.dev-center__diagnostics-list li > strong {
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
+}
+
+.dev-center__diagnostics-list span {
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.dev-center__lab-block {
+  border: 1px solid var(--cf-divider);
+  border-radius: var(--cf-radius-md);
+  background: var(--cf-surface-subtle);
+}
+
+@media (max-width: 719px) {
+  .dev-center__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dev-center__diagnostics-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dev-center__diagnostics {
+  width: 100%;
+  min-width: 0;
+}
+
+.dev-center__diagnostics-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dev-center__diagnostics-header h3 {
+  font-size: var(--cf-text-lg);
+}
+
+.dev-center__diagnostics-header h4 {
+  font-size: var(--cf-text-md);
+}
+
+.dev-center__diagnostics-header p {
+  margin: 4px 0 0;
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+}
+
+.dev-center__diagnostics p,
+.dev-center__diagnostics dd,
+.dev-center__diagnostics dt {
+  font-size: var(--cf-text-sm);
+}

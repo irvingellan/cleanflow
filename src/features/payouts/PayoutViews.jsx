@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Icon } from "../../components/Icon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { validatePayoutProofFile } from "./payoutProofService.js";
@@ -15,13 +16,23 @@ function paymentMethodLabel(paymentMethod, translate) {
   }[paymentMethod] || translate("common.notProvided");
 }
 
-function PayoutProofSourcePicker({ disabled, onSelect }) {
+function PayoutProofSourcePicker({ disabled, onSelect, compact = false }) {
   const { translate } = useTranslation();
 
   function handleSelection(event) {
     onSelect(event);
     // Allow choosing the same image again after a validation or upload retry.
     event.target.value = "";
+  }
+
+  if (compact) {
+    // Phones offer camera or library from one image picker.
+    return (
+      <label className="button button--small proof-source-picker__compact">
+        <input className="visually-hidden" type="file" accept="image/*" disabled={disabled} onChange={handleSelection} />
+        <Icon name="plus" size={16} /> {translate("payouts.attachProof")}
+      </label>
+    );
   }
 
   return (
@@ -35,7 +46,7 @@ function PayoutProofSourcePicker({ disabled, onSelect }) {
           disabled={disabled}
           onChange={handleSelection}
         />
-        📷 {translate("payouts.takePhoto")}
+        <Icon name="camera" /> {translate("payouts.takePhoto")}
       </label>
       <label className="button">
         <input
@@ -45,7 +56,7 @@ function PayoutProofSourcePicker({ disabled, onSelect }) {
           disabled={disabled}
           onChange={handleSelection}
         />
-        🖼️ {translate("payouts.chooseImage")}
+        <Icon name="image" /> {translate("payouts.chooseImage")}
       </label>
     </div>
   );
@@ -69,24 +80,24 @@ export function PayoutDirectory({
 
   return (
     <section aria-labelledby="payouts-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.payouts")}</p>
+      <header className="cf-page-header directory-heading">
+        <div className="cf-page-header__text">
           <h2 id="payouts-title" className="list-title">
             {translate("payouts.title")}
           </h2>
+          <p className="cf-page-context">{translate("weeklyClose.entryDescription")}</p>
         </div>
-        <button className="button" type="button" disabled={isLoading} onClick={onRefresh}>
-          {translate("payouts.refresh")}
-        </button>
-      </div>
-
-      <div className="directory-heading">
-        <p className="property-history-state">{translate("weeklyClose.entryDescription")}</p>
-        <button className="button button--secondary" type="button" onClick={onWeeklyClose}>
-          {translate("weeklyClose.entry")}
-        </button>
-      </div>
+        <div className="cf-page-header__actions">
+          <button className="button button--small" type="button" disabled={isLoading} onClick={onRefresh}>
+            <Icon name="refresh" size={16} />
+            {translate("payouts.refresh")}
+          </button>
+          <button className="button button--small" type="button" onClick={onWeeklyClose}>
+            <Icon name="calendar" size={16} />
+            {translate("weeklyClose.entry")}
+          </button>
+        </div>
+      </header>
 
       {paidSummary && (
         <p className="payout-success" role="status">
@@ -218,12 +229,12 @@ function PayoutHistoryItem({ payout, onUploadProof, onOpenProof, onRefresh, form
         {hasProof ? (
           <>
             <span className="status-badge">{translate("payouts.proofAttached")}</span>
-            <button className="button" type="button" onClick={viewProof}>
+            <button className="button button--small" type="button" onClick={viewProof}>
               {translate("payouts.viewProof")}
             </button>
           </>
         ) : (
-          <PayoutProofSourcePicker disabled={isUploading} onSelect={selectProof} />
+          <PayoutProofSourcePicker compact disabled={isUploading} onSelect={selectProof} />
         )}
         {isUploading && <span>{translate("payouts.uploadingProof", { percent: uploadProgress })}</span>}
         {!hasProof && selectedFileName && (
@@ -371,10 +382,10 @@ export function PayoutReview({
   return (
     <section className="panel" aria-labelledby="payout-review-title">
       <button className="back-button" type="button" onClick={onBack}>
-        ← {translate("payouts.backToPayouts")}
+        <Icon name="arrowL" size={16} />
+        {translate("payouts.backToPayouts")}
       </button>
 
-      <p className="eyebrow">{translate("payouts.title")}</p>
       <h2 id="payout-review-title" className="panel__title">
         {cleaner.name || translate("common.notProvided")}
       </h2>

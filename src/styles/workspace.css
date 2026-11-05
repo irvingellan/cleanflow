@@ -51,6 +51,16 @@
 }
 
 @media (max-width: 719px) {
+  /* Override the legacy stacked directory heading: title first, actions below. */
+  .cf-page-header {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .cf-page-header__text {
+    flex: 1 1 100%;
+  }
+
   .cf-page-title,
   .cf-page-header .list-title,
   .cf-page-header .panel__title {

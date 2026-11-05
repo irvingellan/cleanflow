@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../../components/Icon.jsx";
 import { appVersion } from "../../appVersion.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { releaseNotes } from "./releaseNotes.js";
@@ -59,7 +60,7 @@ export function WhatsNewPanel() {
           : translate("releases.action")}
         onClick={openPanel}
       >
-        <span aria-hidden="true">✨</span>
+        <Icon name="spark" />
         <span>{translate("releases.action")}</span>
         {hasUnseenRelease && (
           <span className="whats-new-trigger__indicator" aria-hidden="true" />
@@ -92,7 +93,7 @@ export function WhatsNewPanel() {
                   <ul>
                     {release.changes.map((change) => (
                       <li key={change.text.en}>
-                        <span aria-hidden="true">{change.icon}</span>
+                        <Icon name={change.icon} />
                         <span>{change.text[language] || change.text.en}</span>
                       </li>
                     ))}

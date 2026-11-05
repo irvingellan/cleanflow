@@ -2,6 +2,7 @@ import { useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
+import { Icon } from "../../components/Icon.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 
 export function PropertyDirectory({ properties, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded }) {
@@ -25,33 +26,36 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
 
   return (
     <section aria-labelledby="properties-title">
-      <div className="directory-heading">
-        <div>
-          <p className="eyebrow">{translate("navigation.properties")}</p>
+      <header className="cf-page-header directory-heading">
+        <div className="cf-page-header__text">
           <h2 id="properties-title" className="list-title">
             {translate("properties.title")}
           </h2>
         </div>
-        <button className="button button--primary" type="button" onClick={onCreate}>
-          {translate("properties.new")}
-        </button>
-        {canManageExcluded && <button className="button" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
-      </div>
+        <div className="cf-page-header__actions">
+          {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
+          <button className="button button--primary" type="button" onClick={onCreate}>
+            <Icon name="plus" size={18} />
+            {translate("properties.new")}
+          </button>
+        </div>
+      </header>
 
       {properties.length === 0 ? (
         <StateCard message={translate("properties.empty")} />
       ) : (
         <>
-          <div className="cleaner-name-search">
-            <label htmlFor="property-directory-search">{translate("properties.search")}</label>
+          <label className="job-filters__search directory-search">
+            <Icon name="search" size={18} className="job-filters__search-icon" />
             <input
               id="property-directory-search"
               type="search"
-              value={search}
+              aria-label={translate("properties.search")}
               placeholder={translate("properties.searchPlaceholder")}
+              value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-          </div>
+          </label>
           {filteredProperties.length === 0 ? (
             <StateCard message={translate("properties.noMatchingSearch")} />
           ) : (
@@ -67,14 +71,16 @@ export function PropertyDirectory({ properties, isLoading, hasError, onSelect, o
                     aria-label={translate("properties.view", { property: propertyName })}
                     onClick={() => onSelect(property)}
                   >
-                    <span className="property-card__title">{propertyName}</span>
-
-                    <span className="property-card__label">
-                      <span className="status-dot" aria-hidden="true" />
-                      {translate("common.property")}
+                    <span className="property-card__text">
+                      <span className="property-card__title">{propertyName}</span>
+                      {property.address && property.address.trim() !== propertyName.trim() && (
+                        <span className="property-card__address">{property.address}</span>
+                      )}
                     </span>
-                    <DataProvenanceBadge record={property} />
-                    {property.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
+                    <span className="directory-row__meta">
+                      {property.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
+                      <DataProvenanceBadge record={property} />
+                    </span>
                   </button>
                 );
               })}

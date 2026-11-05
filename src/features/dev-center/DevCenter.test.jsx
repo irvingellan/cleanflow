@@ -95,7 +95,7 @@ describe("DevCenter action states", () => {
     const onPreviewReminder = vi.fn();
     render(buildDevCenter({ environment: "production", onPreviewReminder }));
 
-    screen.getAllByRole("button", { name: "Generate" }).forEach((button) => expect(button).toBeDisabled());
+    expect(screen.queryAllByRole("button", { name: "Generate" })).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Preview today" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Preview tomorrow" })).toBeEnabled();
     expect(screen.getByText("Current data — read only.")).toBeInTheDocument();
@@ -117,15 +117,16 @@ describe("DevCenter action states", () => {
     expect(onGenerate).toHaveBeenCalledExactlyOnceWith("quick", { resetBaseline: true });
   });
 
-  it.each(["production", "unknown"])("blocks generate, clear and reset on %s", environment => {
+  it.each(["production", "unknown"])("shows no generate, clear or reset control on %s", environment => {
     render(buildDevCenter({ environment }));
-    screen.getAllByRole("button", { name: "Generate" }).forEach(button => expect(button).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Clear demo data" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reset test data to Quick Demo" })).toBeDisabled();
+    expect(screen.queryAllByRole("button", { name: "Generate" })).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Clear demo data" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset test data to Quick Demo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Demo data" })).toBeVisible();
   });
 
   it("never grants mutation UI solely because the environment is Sandbox", () => {
     render(buildDevCenter({ environment: "sandbox", authorized: false }));
-    screen.getAllByRole("button", { name: "Generate" }).forEach(button => expect(button).toBeDisabled());
+    expect(screen.queryAllByRole("button", { name: "Generate" })).toHaveLength(0);
   });
 });

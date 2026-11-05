@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../../components/Icon.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import {
   enablePushNotifications,
@@ -208,7 +209,7 @@ export function NotificationControl({ userId }) {
         title={translate(status.label)}
         onClick={enableNotifications}
       >
-        <span aria-hidden="true">🔔</span>
+        <Icon name="bell" />
         <span className="notification-control__label">{translate(status.label)}</span>
       </button>
       <button
@@ -218,7 +219,7 @@ export function NotificationControl({ userId }) {
         aria-busy={isTesting}
         onClick={testNotifications}
       >
-        <span aria-hidden="true">🔔</span>
+        <Icon name="bell" />
         <span>{translate(isTesting ? "notifications.currentDeviceTesting" : "notifications.currentDeviceTest")}</span>
       </button>
       {resultLabel && (
