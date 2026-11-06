@@ -1268,7 +1268,7 @@ test("active manager creates one default DRAFT Checklist Run and a retry returns
   assert.equal(runs.size, 1);
   const run = runs.docs[0].data();
   assert.equal(run.status, "DRAFT");
-  assert.deepEqual(run.evidencePolicy, { version: 2, maxPhotos: 20, maxTotalBytes: 50 * 1024 * 1024 });
+  assert.deepEqual(run.evidencePolicy, { version: 2, maxPhotos: 60, maxTotalBytes: 120 * 1024 * 1024 });
   assert.equal(run.definitionVersion, 1);
   assert.equal(run.resolvedDefinition.sections.flatMap((section) => section.items).length, 28);
   assert.equal(run.createdByUid, "manager");
