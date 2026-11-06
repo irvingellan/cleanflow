@@ -86,6 +86,13 @@ export function updateStepsFor(previousHasTest, previousSnapshot = null) {
   };
 }
 export const updateSteps = updateStepsFor(false);
+
+/** Runtime modes for one step: only a pilot step carries the pilot release SHA. */
+export function stepReleaseModes(step, sha) {
+  return step.cleanerPushMode === "pilot"
+    ? { inboxMode: "enabled", cleanerPushMode: "pilot", pilotRelease: sha }
+    : { inboxMode: "enabled", cleanerPushMode: step.cleanerPushMode };
+}
 /** Server configuration an update must never change: Rules, indexes and Hosting/Functions config. */
 export const lockedServerPaths = ["firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json"];
 /** Earlier push-only updates were limited to these server files. */
@@ -343,7 +350,7 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
         record(state, id, snapshot);
       },
       deploy(step) {
-        if (step.cleanerPushMode) writeReleaseModes(workspace, { inboxMode: "enabled", cleanerPushMode: step.cleanerPushMode, pilotRelease: target.sha });
+        if (step.cleanerPushMode) writeReleaseModes(workspace, stepReleaseModes(step, target.sha));
         changed = true;
         const cli = join(root, "node_modules/firebase-tools/lib/bin/firebase.js");
         const run = spawnSync(process.execPath, [cli, ...deploymentArgs(step, [...plan.steps.publish, ...plan.steps.rollback])],

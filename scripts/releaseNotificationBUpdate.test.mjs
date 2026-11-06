@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runReleaseSequence, verifyTransition } from "./releaseNotificationA.mjs";
+import { runReleaseSequence, verifyTransition, writeReleaseModes } from "./releaseNotificationA.mjs";
 import { transportFunctions, verifyBStep } from "./releaseNotificationB.mjs";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  checkPushTestFunction, checkTransportRelease, deploymentArgs, previousVariant, serverScopeChanges, updateSteps, updateStepsFor,
+  checkPushTestFunction, checkTransportRelease, deploymentArgs, stepReleaseModes, previousVariant, serverScopeChanges, updateSteps, updateStepsFor,
 } from "./releaseNotificationBUpdate.mjs";
 
 const oldSha = "a".repeat(40);
@@ -167,4 +167,17 @@ test("an operations update may change Functions source but never Rules, indexes 
   assert.ok(scope.allowed, scope.changed.join(","));
   assert.ok(!scope.changed.some((file) => ["firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json"].includes(file)));
   assert.equal(serverScopeChanges("c3e957b73969a0e7e69fc4693e946469e0348e61", "HEAD").allowed, false);
+});
+
+test("every reviewed operations step writes valid runtime modes", () => {
+  const sha = "a".repeat(40);
+  const snapshot = { functions: { publicOffer: {}, cleanerPushTest: {}, sendTodayExecutionReminder: {} } };
+  const plan = updateStepsFor(true, snapshot);
+  for (const step of [...plan.publish, ...plan.rollback].filter((candidate) => candidate.cleanerPushMode)) {
+    const workspace = mkdtempSync(join(tmpdir(), "modes-"));
+    mkdirSync(join(workspace, "functions"));
+    assert.doesNotThrow(() => writeReleaseModes(workspace, stepReleaseModes(step, sha), "wx"), step.id);
+  }
+  assert.deepEqual(stepReleaseModes({ cleanerPushMode: "disabled" }, sha), { inboxMode: "enabled", cleanerPushMode: "disabled" });
+  assert.equal(stepReleaseModes({ cleanerPushMode: "pilot" }, sha).pilotRelease, sha);
 });
