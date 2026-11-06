@@ -99,6 +99,7 @@ import {
   downloadPublicClientReportPhoto,
   getClientReportCapabilityForManager,
   issueClientReportForManager,
+  updateClientReportForManager,
   loadPublicClientReport,
   revokeClientReportForManager,
   setReportPhotoVisibilityForManager,
@@ -1029,6 +1030,18 @@ export const createClientReport = onCall(
     await requireOrganizationManager(db, request, organizationId);
     const jobId = request.data?.jobId;
     if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
+    // The same callable changes how the active link presents the report, or
+    // records that the manager sent it herself; nothing is sent from here.
+    if (request.data?.update === true) {
+      return updateClientReportForManager(db, {
+        organizationId,
+        jobId,
+        runId: initialChecklistRunId,
+        actorUid: request.auth.uid,
+        presentation: request.data?.presentation,
+        markSent: request.data?.markSent,
+      });
+    }
     const token = newChecklistCapabilityToken();
     return issueClientReportForManager(db, {
       organizationId,
@@ -1038,6 +1051,7 @@ export const createClientReport = onCall(
       token,
       tokenHash: hashToken(token),
       replaceExisting: request.data?.replaceExisting === true,
+      presentation: request.data?.presentation,
     });
   },
 );

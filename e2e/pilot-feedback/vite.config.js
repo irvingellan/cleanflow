@@ -44,6 +44,7 @@ export default defineConfig({
         if (source.startsWith("firebase/")) return stubId;
         if (source.endsWith("/services/firebase/client.js")) return path.join(here, "providerClient.js");
         if (source.endsWith("checklistCapabilityService.js")) return path.join(here, "syntheticChecklistApi.js");
+        if (source.endsWith("/clientReportService.js")) return path.join(here, "syntheticClientReportApi.js");
         return null;
       },
       load(id) {

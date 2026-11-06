@@ -423,7 +423,7 @@ export function ChecklistRunDetail({
       )}
 
       <div id="checklist-manager-actions">
-        {isReadyForReview && <ClientReportControls jobId={job.id} />}
+        {isReadyForReview && <ClientReportControls jobId={job.id} job={job} />}
 
         {canSubmitForReview && (
           <section className="checklist-run__section checklist-run__submit" aria-labelledby="checklist-submit-title" data-testid="checklist-submit-for-review">

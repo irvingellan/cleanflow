@@ -3,6 +3,7 @@ import {
   collection,
   deleteField,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -33,6 +34,16 @@ export async function getClients({ includeArchived = false } = {}) {
     ...clientDocument.data(),
     id: clientDocument.id,
   })), includeArchived);
+}
+
+/** Name and contact of one client, for sending a report from the manager's own apps. */
+export async function getClientContact(clientId) {
+  if (typeof clientId !== "string" || !clientId) return null;
+  const snapshot = await getDoc(clientDocument(clientId));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  const text = (value) => (typeof value === "string" ? value.trim() : "");
+  return { name: text(data.name), email: text(data.email), phone: text(data.phone) };
 }
 
 export async function getActiveClients() {

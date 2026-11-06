@@ -11,6 +11,7 @@ vi.mock("./clientReportService.js", () => ({
   getClientReportCapability,
   createClientReport,
   revokeClientReport: vi.fn(),
+  updateClientReport: vi.fn(),
 }));
 
 afterEach(() => vi.unstubAllGlobals());
@@ -337,7 +338,7 @@ describe("ChecklistRunDetail", () => {
     expect(screen.getAllByText("Hand soap").length).toBeGreaterThan(1);
     expect(screen.getAllByText("Needs restock").length).toBeGreaterThan(1);
     fireEvent.click(await screen.findByRole("button", { name: "Create client report" }));
-    await waitFor(() => expect(createClientReport).toHaveBeenCalledWith("job-1", { replaceExisting: false }));
+    await waitFor(() => expect(createClientReport).toHaveBeenCalledWith("job-1", expect.objectContaining({ replaceExisting: false })));
     expect(await screen.findByRole("link", { name: "Open report" })).toHaveAttribute(
       "href", "https://cleanflow.example/client-report?t=one-time-token",
     );

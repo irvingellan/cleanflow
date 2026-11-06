@@ -67,6 +67,8 @@ describe("client report projection", () => {
       inventoryItems: [{ labelKey: "checklistPreview.handSoap", answer: "NEEDS_RESTOCK" }],
       issueNotes: "A bulb needs replacement.",
       generalNotes: "The cleaning is ready.",
+      managerNote: "",
+      summary: { tasksDone: 1, tasksNotApplicable: 0, tasksTotal: 1, photoCount: 1, restockCount: 1 },
       hasPhoto: true,
     });
     const serialized = JSON.stringify(report);
@@ -113,5 +115,61 @@ describe("FB07 report photo visibility", () => {
     expect(report.evidence.map((photo) => photo.evidenceId)).toEqual(["photo-aaaaaaaa", "photo-cccccccc"]);
     expect([...reportHiddenEvidenceIds(run)]).toEqual(["photo-bbbbbbbb"]);
     expect(projectClientReport({ ...run, reportHiddenEvidence: { "photo-aaaaaaaa": { hidden: true }, "photo-bbbbbbbb": { hidden: true }, "photo-cccccccc": { hidden: true } } }, null, { photos }).hasPhoto).toBe(false);
+  });
+});
+
+describe("client report presentation", () => {
+  const draft = {
+    revision: 2,
+    checklistAnswers: { "bathroom-sanitize": "DONE" },
+    inventoryAnswers: { "hand-soap": "HIGH" },
+    issueNotes: "Internal remark about the lockbox.",
+    generalNotes: "All good.",
+  };
+
+  it("adds the manager note and can leave the cleaner's notes out", async () => {
+    const report = projectClientReport(frozenRun(), draft, null, { managerNote: "  Thank you!  ", includeCleanerNotes: false });
+    expect(report.managerNote).toBe("Thank you!");
+    expect(report.issueNotes).toBe("");
+    expect(report.generalNotes).toBe("");
+    expect(JSON.stringify(report)).not.toContain("lockbox");
+    expect(report.summary).toEqual({ tasksDone: 1, tasksNotApplicable: 0, tasksTotal: 1, photoCount: 0, restockCount: 0 });
+  });
+
+  it("rejects an invalid presentation", async () => {
+    const { normalizeClientReportPresentation, clientReportNoteMaximum } = await import("./clientReportService.js");
+    expect(normalizeClientReportPresentation({})).toEqual({ managerNote: "", includeCleanerNotes: true });
+    expect(() => normalizeClientReportPresentation({ managerNote: "x".repeat(clientReportNoteMaximum + 1) })).toThrow();
+    expect(() => normalizeClientReportPresentation({ includeCleanerNotes: "no" })).toThrow();
+    expect(() => normalizeClientReportPresentation([])).toThrow();
+  });
+
+  it("updates the active link's presentation and sent log without a new token", async () => {
+    const { updateClientReportForManager } = await import("./clientReportService.js");
+    const stored = { status: "ACTIVE", tokenHash: "a".repeat(64), expiresAt: Timestamp.fromMillis(Date.now() + 60_000) };
+    const writes = [];
+    const ref = { collection: () => ({ doc: () => ref }) };
+    const database = {
+      collection: ref.collection,
+      doc: () => ref,
+      runTransaction: async (callback) => callback({
+        get: async () => ({ exists: true, data: () => stored }),
+        update: (_, changes) => writes.push(changes),
+      }),
+    };
+    const result = await updateClientReportForManager(database, {
+      organizationId: "org", jobId: "job-1", actorUid: "manager", presentation: { managerNote: "Hi", includeCleanerNotes: false },
+      markSent: { channel: "WHATSAPP" },
+    });
+    expect(result.capability.presentation).toEqual({ managerNote: "Hi", includeCleanerNotes: false });
+    expect(result.capability.lastSent.channel).toBe("WHATSAPP");
+    expect(writes[0].presentation).toEqual({ managerNote: "Hi", includeCleanerNotes: false });
+    expect(writes[0].lastSent.byUid).toBe("manager");
+    expect(JSON.stringify(result)).not.toContain("a".repeat(64));
+    await expect(updateClientReportForManager(database, { organizationId: "org", jobId: "job-1", actorUid: "manager", markSent: { channel: "SMS" } }))
+      .rejects.toThrow();
+    stored.status = "REVOKED";
+    await expect(updateClientReportForManager(database, { organizationId: "org", jobId: "job-1", actorUid: "manager", markSent: { channel: "EMAIL" } }))
+      .rejects.toThrow("An active report link is required.");
   });
 });

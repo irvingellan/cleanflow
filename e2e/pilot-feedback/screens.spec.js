@@ -76,3 +76,27 @@ test("FB06 checklist — example photo requirement list", async ({ page }, testI
   await showGallery(page);
   await shot(page, testInfo, "fb06-checklist-requirements");
 });
+
+test("Client report — public page for the client", async ({ page }, testInfo) => {
+  await page.goto("/?screen=report&lang=pt");
+  await page.getByRole("heading", { name: "Relatório de limpeza" }).waitFor();
+  await shot(page, testInfo, "report-client-top");
+  await shot(page, testInfo, "report-client-full", { fullPage: true });
+  await page.getByRole("button", { name: "Abrir foto 2" }).click();
+  await page.getByRole("dialog").waitFor();
+  await shot(page, testInfo, "report-client-photo-viewer");
+});
+
+test("Client report — manager prepares and sends", async ({ page }, testInfo) => {
+  await page.goto("/?screen=report-manager&lang=pt");
+  const note = page.getByLabel("Mensagem para o cliente (opcional)");
+  await note.fill("Tudo pronto para a chegada de sexta. Deixamos toalhas extras no armário do corredor.");
+  await shot(page, testInfo, "report-manager-prepare", { fullPage: true });
+  await page.getByRole("button", { name: "Criar relatório para o cliente" }).click();
+  await page.getByTestId("client-report-send").waitFor();
+  await shot(page, testInfo, "report-manager-send", { fullPage: true });
+  await page.getByRole("button", { name: "Copiar link do relatório" }).click().catch(() => {});
+  await page.getByRole("button", { name: "Sim, marcar como enviado" }).click();
+  await page.getByText(/enviado em/).waitFor();
+  await shot(page, testInfo, "report-manager-sent", { fullPage: true });
+});

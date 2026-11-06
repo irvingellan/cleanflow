@@ -12,6 +12,35 @@ const initialRunId = "initial";
 const tokenHashPattern = /^[a-f0-9]{64}$/;
 const checklistAnswers = new Set(["UNANSWERED", "DONE", "NOT_APPLICABLE"]);
 const inventoryAnswers = new Set(["UNANSWERED", "LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"]);
+export const clientReportNoteMaximum = 1000;
+export const clientReportSentChannels = Object.freeze(["WHATSAPP", "EMAIL", "OTHER"]);
+
+/**
+ * How the manager presents one report link: an optional note to the client
+ * and whether the cleaner's own notes are included. Stored on the link, never
+ * on the checklist evidence.
+ */
+export function normalizeClientReportPresentation(value = {}) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Report presentation is invalid.");
+  }
+  const note = value.managerNote ?? "";
+  if (typeof note !== "string" || note.length > clientReportNoteMaximum) {
+    throw new HttpsError("invalid-argument", "Report note is invalid.");
+  }
+  if (value.includeCleanerNotes !== undefined && typeof value.includeCleanerNotes !== "boolean") {
+    throw new HttpsError("invalid-argument", "Report presentation is invalid.");
+  }
+  return { managerNote: note.trim(), includeCleanerNotes: value.includeCleanerNotes !== false };
+}
+
+function storedPresentation(capability) {
+  try {
+    return normalizeClientReportPresentation(capability?.presentation || {});
+  } catch {
+    return { managerNote: "", includeCleanerNotes: true };
+  }
+}
 
 function runReference(database, organizationId, jobId, runId) {
   return database.doc(`organizations/${organizationId}/jobs/${jobId}/checklistRuns/${runId}`);
@@ -56,7 +85,20 @@ export function reportHiddenEvidenceIds(run) {
   return new Set(hidden && typeof hidden === "object" ? Object.keys(hidden).filter((id) => hidden[id]?.hidden === true) : []);
 }
 
-export function projectClientReport(run, draft, evidence) {
+/** Counts the client reads first: tasks done, photos and supplies that need attention. */
+export function clientReportSummary(sections, inventoryItems, photoCount) {
+  const items = sections.flatMap((section) => section.items);
+  return {
+    tasksDone: items.filter((item) => item.answer === "DONE").length,
+    tasksNotApplicable: items.filter((item) => item.answer === "NOT_APPLICABLE").length,
+    tasksTotal: items.length,
+    photoCount,
+    restockCount: inventoryItems.filter((item) => item.answer === "NEEDS_RESTOCK" || item.answer === "LOW").length,
+  };
+}
+
+export function projectClientReport(run, draft, evidence, presentationInput = {}) {
+  const presentation = normalizeClientReportPresentation(presentationInput);
   if (run?.status !== "READY_FOR_REVIEW") {
     throw new HttpsError("failed-precondition", "A checklist ready for review is required.");
   }
@@ -65,6 +107,21 @@ export function projectClientReport(run, draft, evidence) {
     throw new HttpsError("failed-precondition", "The saved checklist revision is unavailable.");
   }
   const definition = run.resolvedDefinition || {};
+  const sections = (Array.isArray(definition.sections) ? definition.sections : []).map((section) => ({
+    ...(typeof section?.title === "string" && section.title.trim() ? { title: section.title.trim() } : {}),
+    ...(typeof section?.titleKey === "string" && section.titleKey.trim() ? { titleKey: section.titleKey.trim() } : {}),
+    items: (Array.isArray(section?.items) ? section.items : []).map((item) => ({
+      ...visibleLabel(item),
+      answer: validAnswer(normalizedDraft.checklistAnswers?.[item.id], checklistAnswers),
+    })),
+  }));
+  const inventoryItems = (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => ({
+    ...visibleLabel(item),
+    answer: validAnswer(normalizedDraft.inventoryAnswers?.[item.id], inventoryAnswers),
+  }));
+  const galleryPhotos = run.evidencePolicy?.version === 2 ? visiblePhotos(run, evidence) : null;
+  const hasPhoto = galleryPhotos ? galleryPhotos.length > 0
+    : evidence?.status === "SAVED" && evidence.requirementId === pilotChecklistPhotoRequirementId;
   return {
     titleKey: "clientReport.title",
     propertyName: typeof run.propertySnapshot?.propertyName === "string"
@@ -73,23 +130,14 @@ export function projectClientReport(run, draft, evidence) {
     serviceDate: /^\d{4}-\d{2}-\d{2}$/.test(run.jobSnapshot?.scheduledDate || "")
       ? run.jobSnapshot.scheduledDate
       : null,
-    sections: (Array.isArray(definition.sections) ? definition.sections : []).map((section) => ({
-      ...(typeof section?.title === "string" && section.title.trim() ? { title: section.title.trim() } : {}),
-      ...(typeof section?.titleKey === "string" && section.titleKey.trim() ? { titleKey: section.titleKey.trim() } : {}),
-      items: (Array.isArray(section?.items) ? section.items : []).map((item) => ({
-        ...visibleLabel(item),
-        answer: validAnswer(normalizedDraft.checklistAnswers?.[item.id], checklistAnswers),
-      })),
-    })),
-    inventoryItems: (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => ({
-      ...visibleLabel(item),
-      answer: validAnswer(normalizedDraft.inventoryAnswers?.[item.id], inventoryAnswers),
-    })),
-    issueNotes: normalizedDraft.issueNotes || "",
-    generalNotes: normalizedDraft.generalNotes || "",
-    hasPhoto: run.evidencePolicy?.version === 2 ? visiblePhotos(run, evidence).length > 0
-      : evidence?.status === "SAVED" && evidence.requirementId === pilotChecklistPhotoRequirementId,
-    ...(run.evidencePolicy?.version === 2 ? { evidence: projectChecklistEvidenceGallery(visiblePhotos(run, evidence)) } : {}),
+    sections,
+    inventoryItems,
+    issueNotes: presentation.includeCleanerNotes ? normalizedDraft.issueNotes || "" : "",
+    generalNotes: presentation.includeCleanerNotes ? normalizedDraft.generalNotes || "" : "",
+    managerNote: presentation.managerNote,
+    summary: clientReportSummary(sections, inventoryItems, galleryPhotos ? galleryPhotos.length : hasPhoto ? 1 : 0),
+    hasPhoto,
+    ...(galleryPhotos ? { evidence: projectChecklistEvidenceGallery(galleryPhotos) } : {}),
   };
 }
 
@@ -112,7 +160,46 @@ function projectCapability(capability, now) {
     state: clientReportCapabilityState(capability, now),
     expiresAt: toIso(capability.expiresAt),
     issuedAt: toIso(capability.createdAt),
+    presentation: storedPresentation(capability),
+    ...(clientReportSentChannels.includes(capability.lastSent?.channel)
+      ? { lastSent: { channel: capability.lastSent.channel, at: toIso(capability.lastSent.at) } } : {}),
   };
+}
+
+/**
+ * Changes how the active link presents the report, or records that the
+ * manager sent it (the manager sends it herself; nothing is sent from here).
+ * The link and token stay the same.
+ */
+export async function updateClientReportForManager(database, {
+  organizationId, jobId, runId = initialRunId, actorUid, presentation, markSent, now = new Date(),
+}) {
+  if (!validPathId(jobId) || !validPathId(runId) || typeof actorUid !== "string" || !actorUid
+    || (presentation === undefined && markSent === undefined)
+    || (markSent !== undefined && !clientReportSentChannels.includes(markSent?.channel))) {
+    throw new HttpsError("invalid-argument", "Report request is invalid.");
+  }
+  const next = presentation === undefined ? null : normalizeClientReportPresentation(presentation);
+  const capabilityRef = capabilityReference(database, organizationId, jobId, runId);
+  return database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(capabilityRef);
+    const capability = snapshot.exists ? snapshot.data() : null;
+    if (clientReportCapabilityState(capability, now) !== "ACTIVE") {
+      throw new HttpsError("failed-precondition", "An active report link is required.");
+    }
+    const changes = {
+      ...(next ? { presentation: next, presentationUpdatedAt: FieldValue.serverTimestamp(), presentationUpdatedByUid: actorUid } : {}),
+      ...(markSent ? { lastSent: { channel: markSent.channel, at: FieldValue.serverTimestamp(), byUid: actorUid } } : {}),
+    };
+    transaction.update(capabilityRef, changes);
+    return {
+      capability: projectCapability({
+        ...capability,
+        ...(next ? { presentation: next } : {}),
+        ...(markSent ? { lastSent: { channel: markSent.channel, at: Timestamp.fromDate(now) } } : {}),
+      }, now),
+    };
+  });
 }
 
 function validateReportableRun(run, draft) {
@@ -137,8 +224,9 @@ export async function getClientReportCapabilityForManager(database, {
 
 export async function issueClientReportForManager(database, {
   organizationId, jobId, runId = initialRunId, actorUid, token, tokenHash,
-  replaceExisting = false, now = new Date(),
+  replaceExisting = false, presentation, now = new Date(),
 }) {
+  const requestedPresentation = presentation === undefined ? null : normalizeClientReportPresentation(presentation);
   if (!validPathId(jobId) || !validPathId(runId) || typeof actorUid !== "string"
     || typeof token !== "string" || !tokenHashPattern.test(tokenHash || "")
     || createHash("sha256").update(token).digest("hex") !== tokenHash) {
@@ -192,6 +280,8 @@ export async function issueClientReportForManager(database, {
       createdByUid: actorUid,
       createdAt: FieldValue.serverTimestamp(),
       expiresAt,
+      // A replaced link keeps the manager's note and choice unless new ones are given.
+      presentation: requestedPresentation || storedPresentation(currentCapability),
     };
     transaction.set(capabilityRef, capability);
     transaction.create(newLookupRef, { organizationId, jobId, runId, status: "ACTIVE", expiresAt });
@@ -248,7 +338,8 @@ async function resolvePublicClientReport(database, { organizationId, tokenHash, 
   }
   const gallery = run.data().evidencePolicy?.version === 2
     ? (await runRef.collection("evidenceState").doc("current").get()).data() : null;
-  const report = projectClientReport(run.data(), draftData, gallery || (evidence.exists ? evidence.data() : null));
+  const report = projectClientReport(run.data(), draftData, gallery || (evidence.exists ? evidence.data() : null),
+    storedPresentation(capabilityData));
   return { report, run: run.data(), evidence: evidence.exists ? evidence.data() : null, gallery, location: lookup };
 }
 

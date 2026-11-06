@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { JobDetail } from "../../src/features/jobs/JobDetail.jsx";
 import { CleanerHubApp } from "../../src/features/cleaner-hub/CleanerHubApp.jsx";
 import { PublicChecklistPage } from "../../src/features/checklists/PublicChecklistPage.jsx";
+import { PublicClientReportPage } from "../../src/features/checklists/PublicClientReportPage.jsx";
+import { ClientReportControls } from "../../src/features/checklists/ClientReportControls.jsx";
 import { TranslationProvider } from "../../src/i18n/translations.js";
 import { hubEntries, managerCleaners, managerScenarios, submittedEntry } from "./fixtures.js";
 import "../../src/index.css";
@@ -88,7 +90,18 @@ const inboxService = {
 };
 const hubOptions = { service: hubService(), inboxService };
 
+const reportJob = { id: "synthetic-report", clientId: "client-1", clientName: "Cliente Exemplo", propertyName: "Casa Jasmim (exemplo)", scheduledDate: "2026-11-20" };
+const reportContact = async () => ({ name: "Dana Exemplo", phone: "(555) 010-2030", email: "dana@example.com" });
+
+function ReportManager() {
+  return <main className="app-shell"><section className="foundation"><div className="panel">
+    <ClientReportControls jobId={reportJob.id} job={reportJob} getContact={reportContact} />
+  </div></section></main>;
+}
+
 function App() {
+  if (screen === "report") return <><Strip /><PublicClientReportPage token="synthetic-token" /></>;
+  if (screen === "report-manager") return <><Strip /><ReportManager /></>;
   if (screen === "hub") return <><Strip /><CleanerHubApp hubOptions={hubOptions} /></>;
   if (screen === "checklist") return <><Strip /><PublicChecklistPage token="synthetic-checklist" /></>;
   return <><Strip /><Manager /></>;

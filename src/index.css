@@ -2794,6 +2794,336 @@ h1 {
   margin: 0;
 }
 
+/* Client report: manager panel */
+.client-report-controls__form,
+.client-report-controls__send,
+.client-report-controls__manage {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.client-report-controls__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.client-report-controls__field textarea,
+.client-report-controls__field select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-weight: 400;
+}
+
+.client-report-controls__field--inline {
+  grid-template-columns: auto minmax(0, 12rem);
+  align-items: center;
+  justify-content: start;
+}
+
+.client-report-controls__toggle {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.client-report-controls__toggle input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.client-report-controls__toggle > span {
+  display: grid;
+  gap: 2px;
+}
+
+.client-report-controls__toggle > span > span {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.client-report-controls__send {
+  border: 1px solid var(--color-selected-border);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--color-selected-bg);
+}
+
+.client-report-controls__send-title {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+
+.client-report-controls__message,
+.client-report-controls__saved-note {
+  margin: 0;
+  border-left: 3px solid var(--color-border-strong);
+  padding: 4px 0 4px 10px;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.client-report-controls__state {
+  color: var(--color-text-secondary);
+}
+
+.client-report-controls,
+.client-report-controls > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.client-report-controls .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.client-report-controls a.button {
+  text-decoration: none;
+}
+
+@media (max-width: 520px) {
+  .client-report-controls__send .button-row,
+  .client-report-controls__manage .button-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .client-report-controls .button-row .button {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .client-report-controls__field--inline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Client report: public page */
+.client-report__header {
+  align-items: flex-start;
+}
+
+.client-report__header-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.client-report__badge {
+  display: inline-block;
+  margin: 0 0 6px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--color-selected-bg);
+  color: var(--color-brand-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.client-report__property {
+  margin: 2px 0 0;
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
+.client-report__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.client-report__summary > div {
+  display: grid;
+  align-content: space-between;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--color-surface-subtle);
+  min-width: 0;
+}
+
+.client-report__summary dt {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+}
+
+.client-report__summary dd {
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.client-report__summary > div.is-attention {
+  border-color: var(--color-warning-text);
+  background: var(--color-status-warning-bg);
+}
+
+.client-report__note {
+  display: grid;
+  gap: 6px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--color-selected-bg);
+}
+
+.client-report__note h2,
+.client-report__attention h3,
+.client-report__task-group h3 {
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 0.95rem;
+}
+
+.client-report__note p {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.client-report__attention {
+  border-left: 3px solid var(--color-warning-text);
+  padding-left: 12px;
+}
+
+.client-report__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.client-report__section .client-report__gallery li {
+  display: block;
+  border: 0;
+  padding: 0;
+}
+
+.client-report__thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface-muted);
+  cursor: zoom-in;
+}
+
+.client-report__thumb:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.client-report__thumb-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.client-report__tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.client-report__tasks {
+  display: grid;
+  gap: 16px;
+}
+
+.client-report__tasks[hidden] {
+  display: none;
+}
+
+.client-report__task-group {
+  display: grid;
+  gap: 6px;
+}
+
+.client-report-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: rgb(10 14 12 / 0.94);
+  color: #fff;
+}
+
+.client-report-viewer__bar,
+.client-report-viewer__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.client-report-viewer__stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.client-report-viewer__image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+@media (max-width: 520px) {
+  .client-report__header {
+    flex-direction: column;
+  }
+
+  .client-report__header-actions {
+    justify-items: start;
+  }
+
+  .client-report__summary dd {
+    font-size: 1.15rem;
+  }
+}
+
+@media print {
+  .client-report__print,
+  .client-report__toggle,
+  .public-checklist__language,
+  .client-report-viewer {
+    display: none !important;
+  }
+
+  .client-report__tasks[hidden] {
+    display: grid !important;
+  }
+
+  .client-report__gallery {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .client-report__thumb,
+  .client-report__summary > div,
+  .client-report__task-group {
+    break-inside: avoid;
+  }
+}
+
 .checklist-public-page {
   display: grid;
   justify-items: center;

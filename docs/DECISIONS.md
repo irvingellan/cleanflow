@@ -1066,3 +1066,26 @@ recipients, other cleaners, revoked sessions and other organizations are denied.
 Nothing is written to push, Inbox, URLs, logs or projections.
 **Open decision for the operations manager:** the time window (conservative
 default above).
+
+## DEC-051 — Client report presentation and manager-sent delivery
+
+**Context:** the manager asked to "conclude the checklist and generate a report
+for my client". The report link existed but showed a long item list, forwarded
+the cleaner's notes verbatim and gave no way to send it or know it was sent.
+**Decision:**
+- The public report leads with a summary (tasks done, photos, supplies to
+  restock), an optional manager note, points of attention (cleaner issue notes
+  and low/restock supplies) and a photo grid with a full-screen viewer. The
+  full task list is one tap away and always printed.
+- Presentation lives on the report link
+  (`clientReportCapabilities/active.presentation`: `managerNote` ≤ 1000 chars,
+  `includeCleanerNotes`, default true). Changing it keeps the same link.
+- CleanFlow never sends the report. The manager opens her own WhatsApp
+  (`wa.me`, 10-digit numbers treated as US) or email (`mailto:`) with a short
+  message in the chosen language, addressed to the client on file, and then
+  confirms "mark as sent" (`lastSent {channel, at, byUid}`). Opening an app does
+  not count as sent.
+- No new Cloud Function: `createClientReport` accepts `presentation` and an
+  `update: true` mode for presentation changes and the sent log.
+**Not included:** automatic email/SMS delivery (would need a paid provider and
+client consent), business branding, link lifetime change (still 7 days).

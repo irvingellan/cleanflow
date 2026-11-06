@@ -25,14 +25,22 @@ export async function getClientReportCapability(jobId) {
   return result.data?.capability || { state: "NONE" };
 }
 
-export async function createClientReport(jobId, { replaceExisting = false } = {}) {
-  const result = await createReportCall({ jobId, replaceExisting });
+export async function createClientReport(jobId, { replaceExisting = false, presentation } = {}) {
+  const result = await createReportCall({ jobId, replaceExisting, ...(presentation ? { presentation } : {}) });
   const data = result.data || {};
   return {
     capability: data.capability || { state: "NONE" },
     created: data.created === true,
     ...(typeof data.token === "string" ? { url: reportUrl(data.token) } : {}),
   };
+}
+
+/** Changes the active link's note/notes choice, or records that the manager sent it. Same link. */
+export async function updateClientReport(jobId, { presentation, markSent } = {}) {
+  const result = await createReportCall({
+    jobId, update: true, ...(presentation ? { presentation } : {}), ...(markSent ? { markSent } : {}),
+  });
+  return result.data?.capability || { state: "NONE" };
 }
 
 export async function revokeClientReport(jobId) {
