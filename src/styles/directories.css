@@ -273,3 +273,124 @@
     padding-left: 0;
   }
 }
+
+/* FB07 / FB01: per-property checklist template and shared access. */
+.property-checklist,
+.property-access {
+  margin-top: 20px;
+}
+
+.property-checklist__section {
+  margin: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--cf-divider);
+  padding: 12px 0 0;
+}
+
+.property-checklist__section legend {
+  padding: 0;
+  font-weight: 700;
+}
+
+.property-checklist__section ul,
+.property-checklist__preview ul {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.property-checklist__section li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.property-checklist__section li.is-hidden input[type="text"] {
+  text-decoration: line-through;
+  color: var(--cf-text-muted);
+}
+
+.property-checklist__section input[type="text"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.property-checklist__move {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.property-checklist__move .button {
+  min-width: 32px;
+  padding: 0 8px;
+}
+
+.property-checklist__optional {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+  white-space: nowrap;
+}
+
+.property-checklist__note {
+  color: var(--cf-text-muted);
+  font-size: var(--cf-text-xs);
+}
+
+.property-checklist__instructions,
+.property-access__field {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.property-checklist__instructions textarea,
+.property-access__field input,
+.property-access__field textarea {
+  width: 100%;
+}
+
+.property-checklist__preview h4 {
+  margin: 14px 0 4px;
+}
+
+.property-checklist__preview li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.property-checklist__preview small {
+  color: var(--cf-text-muted);
+  font-size: var(--cf-text-xs);
+}
+
+.property-checklist__box {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--cf-border-strong);
+  border-radius: 4px;
+}
+
+.property-access__form {
+  display: grid;
+  gap: 4px;
+}
+
+@media (max-width: 640px) {
+  .property-checklist__section li {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .property-checklist__optional,
+  .property-checklist__section li > .button--text,
+  .property-checklist__note {
+    grid-column: 2;
+  }
+}

@@ -663,6 +663,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     savePropertyEdit,
     linkClient,
     saveDataProvenance: savePropertyDataProvenance,
+    saveChecklistSettings: savePropertyChecklistSettings,
+    saveCleanerAccess: savePropertyCleanerAccess,
     archive: archivePropertyRecord,
     restore: restorePropertyRecord,
   } = propertiesController;
@@ -1201,6 +1203,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onArchive={async () => { await archivePropertyRecord(selectedProperty); showProperties(); }}
             onRestore={() => restorePropertyRecord(selectedProperty)}
             onViewAllUpcoming={() => showJobsForProperty(selectedProperty)}
+            onSaveChecklistSettings={(settings) => savePropertyChecklistSettings(selectedProperty, settings)}
+            onSaveCleanerAccess={(access) => savePropertyCleanerAccess(selectedProperty, access)}
           />
         )}
 

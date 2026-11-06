@@ -5,6 +5,8 @@ import {
   getProperties,
   linkPropertyToClient,
   updateProperty,
+  updatePropertyChecklistSettings,
+  updatePropertyCleanerAccess,
   updatePropertyDataProvenance,
   restoreProperty,
 } from "./propertyService.js";
@@ -102,6 +104,25 @@ export function usePropertiesController({ actorUid, includeArchived = false }) {
     return updatedProperty;
   }
 
+  function replaceProperty(property, propertyUpdate) {
+    const updatedProperty = { ...property, ...propertyUpdate };
+    setSelectedProperty(updatedProperty);
+    setProperties((currentProperties) => currentProperties.map((currentProperty) =>
+      currentProperty.id === updatedProperty.id ? updatedProperty : currentProperty,
+    ));
+    return updatedProperty;
+  }
+
+  /** FB07: per-Property checklist template for checklists created afterwards. */
+  async function saveChecklistSettings(property, checklistSettings) {
+    return replaceProperty(property, await updatePropertyChecklistSettings(property.id, checklistSettings));
+  }
+
+  /** FB01: access details shared with the assigned cleaner. */
+  async function saveCleanerAccess(property, access) {
+    return replaceProperty(property, await updatePropertyCleanerAccess(property.id, access, actorUid));
+  }
+
   async function archive(property) {
     await archiveProperty(property.id, actorUid);
     setProperties((current) => current.filter((item) => item.id !== property.id));
@@ -122,6 +143,8 @@ export function usePropertiesController({ actorUid, includeArchived = false }) {
     savePropertyEdit,
     linkClient,
     saveDataProvenance,
+    saveChecklistSettings,
+    saveCleanerAccess,
     archive,
     restore,
   };

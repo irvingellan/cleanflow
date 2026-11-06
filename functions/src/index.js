@@ -36,6 +36,7 @@ import {
 import { processChecklistReviewNotification } from "./checklistReviewNotifications.js";
 import { requireOrganizationManager } from "./managerAuthorization.js";
 import { syncCleanerAgendaForJob } from "./cleanerAgenda.js";
+import { loadCleanerJobAccess } from "./cleanerJobAccess.js";
 import { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } from "./cleanerNotificationEvents.js";
 import { createManagerReminderInboxItem, inboxEventId, managerInboxCollection } from "./notificationInboxEvents.js";
 import { changeNotificationInboxItemForRequest, listNotificationInboxForRequest } from "./notificationInbox.js";
@@ -1633,6 +1634,15 @@ export const openMyChecklist = onCall(
       organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, runId: initialChecklistRunId,
       newToken: newChecklistCapabilityToken, hashToken,
     });
+  },
+);
+
+/** FB01: access details the manager shared, for the cleaner on the Job only. */
+export const getMyJobAccess = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const { cleanerId } = await requireActiveCleaner(db, request, organizationId);
+    return loadCleanerJobAccess(db, { organizationId, cleanerId, jobId: request.data?.jobId });
   },
 );
 

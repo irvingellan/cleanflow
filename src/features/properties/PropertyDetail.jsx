@@ -11,6 +11,8 @@ import {
   hasValue,
 } from "../../lib/presentation.js";
 import { getPropertyJobHistory } from "../jobs/jobService.js";
+import { PropertyChecklistEditor } from "./PropertyChecklistEditor.jsx";
+import { PropertyCleanerAccess } from "./PropertyCleanerAccess.jsx";
 
 export function PropertyDetail({
   property,
@@ -24,6 +26,8 @@ export function PropertyDetail({
   onRestore,
   canRestore,
   onViewAllUpcoming,
+  onSaveChecklistSettings,
+  onSaveCleanerAccess,
 }) {
   const { language, translate } = useTranslation();
   const propertyName = property.name || translate("properties.unnamed");
@@ -97,6 +101,9 @@ export function PropertyDetail({
           {translate("properties.createCleaning")}
         </button>
       </div>
+
+      {onSaveCleanerAccess && <PropertyCleanerAccess property={property} onSave={onSaveCleanerAccess} />}
+      {onSaveChecklistSettings && <PropertyChecklistEditor property={property} onSave={onSaveChecklistSettings} />}
 
       <PropertyOperationalHistory
         propertyId={property.id}

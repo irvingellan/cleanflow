@@ -129,6 +129,13 @@ export async function reconnectAgenda() {
   }
 }
 
+/** FB01: shared access details for a Job this cleaner is on. Never stored. */
+export async function getMyJobAccess(jobId) {
+  const { functions } = cleanerHubFirebase();
+  const { data } = await httpsCallable(functions, "getMyJobAccess")({ jobId });
+  return data;
+}
+
 export async function openMyChecklist(jobId) {
   const { functions } = cleanerHubFirebase();
   const { data } = await httpsCallable(functions, "openMyChecklist")({ jobId });

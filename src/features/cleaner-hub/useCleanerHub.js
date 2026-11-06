@@ -230,6 +230,6 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     respondToOffer: service.respondToMyOffer,
     // Release A does not authorize private Property fields or an access window.
     // Keep the prepared UI disconnected until that server contract is approved.
-    loadJobAccess: null,
+    loadJobAccess: service.getMyJobAccess || null,
   };
 }

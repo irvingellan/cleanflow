@@ -1036,3 +1036,33 @@ add another cleaner explicitly ("Add as another cleaner" raises the count).
 - Removing an Assignment or raising the count reopens the remaining invitations.
 - Automatic (#86) Offers keep their own claim/close contract; this rule applies
   only to manual Offers.
+
+---
+
+## DEC-050 — Per-Property checklist template edits and shared cleaner access
+
+Date: 2026-11-06
+Status: Accepted for the pilot (FB07, FB06, FB01); implemented on `claude/operations-evolution`, not yet published
+
+**Checklist template (FB07/FB06).** A manager edits a Property's checklist from
+the Property screen. `checklistSettings.itemOverrides` renames, hides, reorders or
+makes a standard item optional (optional = "Not applicable" allowed, which the
+existing submission rule already accepts); additional items, inventory items
+(rename/hide) and "photos to take" (`requiredPhotoTypes`) use the existing
+settings. Edits apply only to Runs created afterwards: every Run already freezes
+`propertyChecklistSettingsSnapshot` and `resolvedDefinition`, so work in progress,
+under review or completed is never rewritten. The required-photo item keeps its
+evidence contract and can only be renamed. Typed labels are shown as written in
+every language.
+
+**Shared access (FB01).** Only `Property.cleanerAccess` fields the manager fills
+in on purpose (door, gate, lockbox, parking, Wi-Fi, alarm, note), plus the address
+and cleaner instructions, are shared, and only when `cleanerAccess.shared` is on.
+Internal fields (`keyCodeInfo`, `accessInstructions`, `additionalNotes`) are never
+read by the cleaner path. `getMyJobAccess` returns them to the authenticated
+cleaner currently on the Job roster, for an ASSIGNED Job from the day before
+through the service day (Los Angeles time), and while IN_PROGRESS. Offer-only
+recipients, other cleaners, revoked sessions and other organizations are denied.
+Nothing is written to push, Inbox, URLs, logs or projections.
+**Open decision for the operations manager:** the time window (conservative
+default above).

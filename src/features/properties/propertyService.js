@@ -106,6 +106,22 @@ export async function updatePropertyChecklistSettings(propertyId, checklistSetti
   return { id: propertyId, checklistSettings: normalizedSettings };
 }
 
+const cleanerAccessFields = ["door", "gate", "lockbox", "parking", "wifi", "alarm", "note"];
+
+/** FB01: the access details a manager deliberately shares with the assigned cleaner. */
+export async function updatePropertyCleanerAccess(propertyId, access, actorUid) {
+  const cleanerAccess = {
+    shared: access?.shared === true,
+    ...Object.fromEntries(cleanerAccessFields.map((field) => [
+      field, typeof access?.[field] === "string" ? access[field].trim().slice(0, 400) : "",
+    ])),
+    updatedAt: serverTimestamp(),
+    ...(typeof actorUid === "string" && actorUid ? { updatedByUid: actorUid } : {}),
+  };
+  await updateDoc(propertyDocument(propertyId), { cleanerAccess });
+  return { id: propertyId, cleanerAccess: { ...cleanerAccess, updatedAt: null } };
+}
+
 export async function updateProperty(propertyId, {
   name,
   client,

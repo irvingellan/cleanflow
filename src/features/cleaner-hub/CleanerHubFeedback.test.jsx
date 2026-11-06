@@ -153,20 +153,21 @@ describe("FB01 — access information and reduced repetition", () => {
     expect(record).toHaveTextContent("Situação");
   });
 
-  it("keeps private access disconnected even when a service offers the future callable", async () => {
+  it("shows the access the manager shared, read from the server only when the cleaner opens her Job", async () => {
     const getMyJobAccess = vi.fn(async () => ({
       state: "available", address: "100 Example Lane, Demo City",
-      items: [{ kind: "door", value: "SHOULD-NOT-SHOW" }],
-      houseInstructions: "SHOULD-NOT-SHOW",
+      items: [{ kind: "door", value: "FICTITIOUS-1234" }],
+      houseInstructions: "Leave the towels folded.",
     }));
     const { service, handlers } = fakeService({ getMyJobAccess });
     render(<CleanerHubApp hubOptions={{ service }} />);
     act(() => handlers.agenda({ entries: assigned, fromCache: false }));
-    await userEvent.click(document.querySelector('[data-job-id="j1"]'));
-    expect(document.querySelector(".hb-access")).toHaveAttribute("data-access-state", "unsupported");
     expect(getMyJobAccess).not.toHaveBeenCalled();
-    expect(screen.queryByText("100 Example Lane, Demo City")).toBeNull();
-    expect(screen.queryByText("SHOULD-NOT-SHOW")).toBeNull();
+    await userEvent.click(document.querySelector('[data-job-id="j1"]'));
+    expect(getMyJobAccess).toHaveBeenCalledWith("j1");
+    expect(await screen.findByText("100 Example Lane, Demo City")).toBeVisible();
+    expect(screen.getByText("FICTITIOUS-1234")).toBeVisible();
+    expect(document.querySelector(".hb-access")).toHaveAttribute("data-access-state", "available");
   });
 
   it("does not request access data for a completed Job", async () => {
@@ -177,7 +178,7 @@ describe("FB01 — access information and reduced repetition", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Concluídas/ }));
     await userEvent.click(document.querySelector('[data-job-id="j1"]'));
     expect(getMyJobAccess).not.toHaveBeenCalled();
-    expect(document.querySelector(".hb-access")).toHaveAttribute("data-access-state", "unsupported");
+    expect(document.querySelector(".hb-access")).toHaveAttribute("data-access-state", "closed");
   });
 });
 

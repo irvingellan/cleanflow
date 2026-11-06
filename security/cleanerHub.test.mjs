@@ -30,6 +30,7 @@ const {
   listNotificationInbox,
   openMyChecklist,
   redeemCleanerAccessCode,
+  getMyJobAccess,
   rescheduleJob,
   respondToMyOffer,
   revokeCleanerHubAccess,
@@ -510,24 +511,50 @@ test("FB09: a manager decision closes one invitation, keeps the answer, and reop
   assert.equal((await requestPublicOffer("GET", tokens["cleaner-b"])).code, 200);
 });
 
+async function assignedEntry(cleanerId) {
+  return (await agendaFor(cleanerId)).find((item) => item.kind === "ASSIGNED");
+}
 test("FB04: the assigned cleaner's agenda shows the checklist state from creation to review", async () => {
   await createJob("job-cl");
   await link("cleaner-a");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-cl", cleanerId: "cleaner-a" }));
   await sync("job-cl");
-  assert.deepEqual((await agendaFor("cleaner-a"))[0].checklist, { status: "NONE", started: false });
+  assert.deepEqual((await assignedEntry("cleaner-a")).checklist, { status: "NONE", started: false });
   await createChecklistRun.run(managerRequest({ jobId: "job-cl" }));
   await sync("job-cl");
-  assert.deepEqual((await agendaFor("cleaner-a"))[0].checklist, { status: "DRAFT", started: false });
+  assert.deepEqual((await assignedEntry("cleaner-a")).checklist, { status: "DRAFT", started: false });
   // The first saved answer marks it started (the real trigger runs on creation).
   await admin.doc(`${root}/jobs/job-cl/checklistRuns/initial/drafts/current`).set({ revision: 1, checklistAnswers: {} });
   await sync("job-cl");
-  assert.deepEqual((await agendaFor("cleaner-a"))[0].checklist, { status: "DRAFT", started: true });
+  assert.deepEqual((await assignedEntry("cleaner-a")).checklist, { status: "DRAFT", started: true });
   await admin.doc(`${root}/jobs/job-cl/checklistRuns/initial`).update({ status: "READY_FOR_REVIEW" });
   await sync("job-cl");
-  const entry = (await agendaFor("cleaner-a"))[0];
+  const entry = (await assignedEntry("cleaner-a"));
   assert.deepEqual(entry.checklist, { status: "READY_FOR_REVIEW", started: false });
   assert.doesNotMatch(JSON.stringify(entry), /private-door-code|private-access/);
+});
+
+test("FB01: only the signed-in cleaner on the Job reads shared access, never internal fields", async () => {
+  await createJob("job-access", { scheduledDate: dateKey(0) });
+  await admin.doc(`${root}/properties/property`).update({ cleanerAccess: { shared: true, door: "synthetic-door-1234" }, address: "1 Example Way" });
+  await link("cleaner-a");
+  await link("cleaner-b");
+  // Offer-only recipient and unassigned cleaners are denied.
+  await admin.doc(`${root}/jobs/job-access/offers/cleaner-b`).set({ cleanerId: "cleaner-b", status: "PENDING" });
+  assert.deepEqual(await getMyJobAccess.run(cleanerRequest(uidB, { jobId: "job-access" })), { state: "denied" });
+  await assignCleanerDirectly.run(managerRequest({ jobId: "job-access", cleanerId: "cleaner-a" }));
+  const shared = await getMyJobAccess.run(cleanerRequest(uidA, { jobId: "job-access" }));
+  assert.equal(shared.state, "available");
+  assert.deepEqual(shared.items, [{ kind: "door", value: "synthetic-door-1234" }]);
+  assert.doesNotMatch(JSON.stringify(shared), /private-door-code|private-access/);
+  assert.deepEqual(await getMyJobAccess.run(cleanerRequest(uidB, { jobId: "job-access" })), { state: "denied" });
+  await assert.rejects(getMyJobAccess.run(managerRequest({ jobId: "job-access" })), { code: "permission-denied" });
+  await assert.rejects(getMyJobAccess.run({ auth: null, data: { jobId: "job-access" } }), { code: "unauthenticated" });
+  // Cleaners still cannot read the Property document directly.
+  await assertFails(cleanerDb(uidA).doc(`${root}/properties/property`).get());
+  // Revoking her Hub access ends the read.
+  await revokeCleanerHubAccess.run(managerRequest({ cleanerId: "cleaner-a" }));
+  await assert.rejects(getMyJobAccess.run(cleanerRequest(uidA, { jobId: "job-access" })), { code: "permission-denied" });
 });
 
 test("checklist opens through existing capability rules for the assigned cleaner only", async () => {
