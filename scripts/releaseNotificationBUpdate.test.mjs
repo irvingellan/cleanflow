@@ -208,3 +208,16 @@ test("an operations attempt that changed nothing only releases the mutex", async
   const drifted = { ...live, hosting: { version: "X", release: "X" } };
   assert.throws(() => partialReconciliation({ attemptBytes: attempt, attemptPlanBytes: plan, previousReceipt, live: drifted }));
 });
+
+test("a Function already outside the managed runtime set may be redeployed, but none may regress", () => {
+  const step = { id: "operations:2", functions: ["submitFeedback", "publicOffer"] };
+  const base = { ...live, functions: { ...live.functions,
+    submitFeedback: { revision: "a1", hash: "h", secretBindingHash: "s", runtimeCompatible: false },
+    publicOffer: { revision: "b1", hash: "h", secretBindingHash: "e", runtimeCompatible: true } } };
+  const after = (feedback, offer) => ({ ...base, functions: { ...base.functions,
+    submitFeedback: { ...base.functions.submitFeedback, revision: "a2", ...feedback },
+    publicOffer: { ...base.functions.publicOffer, revision: "b2", ...offer } } });
+  assert.doesNotThrow(() => verifyTransition(base, after({}, {}), step, { inboxMode: "enabled" }));
+  assert.throws(() => verifyTransition(base, after({}, { runtimeCompatible: false }), step, { inboxMode: "enabled" }), /runtime configuration/);
+  assert.throws(() => verifyTransition(base, after({ secretBindingHash: "x" }, {}), step, { inboxMode: "enabled" }), /runtime configuration/);
+});

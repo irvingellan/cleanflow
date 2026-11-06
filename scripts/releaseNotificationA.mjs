@@ -66,8 +66,12 @@ export function verifyTransition(before, after, step, { rulesHash, inboxMode }) 
     }
     requireCondition(result && result.revision !== before.functions[name]?.revision,
       "A reviewed Function is absent or did not advance its revision.");
-    requireCondition(result.runtimeCompatible && (!before.functions[name]
-      || result.secretBindingHash === before.functions[name].secretBindingHash),
+    // A Function that was already outside the managed runtime set before (for
+    // example submitFeedback with its own GitHub secret) may stay that way, but
+    // nothing may regress and new Functions must be fully compatible.
+    const previous = before.functions[name];
+    requireCondition((result.runtimeCompatible || previous?.runtimeCompatible === false) && (!previous
+      || result.secretBindingHash === previous.secretBindingHash),
     "A targeted Function changed its reviewed runtime configuration or secret bindings.");
     requireCondition(!recoveryEndpoints.includes(name) || result.inboxMode === inboxMode,
       "An Inbox endpoint has an unexpected effective mode.");
