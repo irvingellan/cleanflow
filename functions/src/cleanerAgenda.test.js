@@ -62,11 +62,16 @@ describe("cleaner agenda projection", () => {
       { cleanerId: "gia", status: "PENDING", publicOfferExpiresAt: { toMillis: () => NaN } },
       { cleanerId: "ana", status: "INTERESTED", publicOfferExpiresAt: future },
     ];
-    const entries = computeAgendaEntries({ organizationId: "o", jobId: "j", job: job({ operationalStatus: "OFFERED", assignedCleanerIds: ["ana"] }), offers, now });
+    const entries = computeAgendaEntries({ organizationId: "o", jobId: "j", job: job({ operationalStatus: "OFFERED", assignedCleanerIds: ["ana"], requiredCleanerCount: 3 }), offers, now });
     expect([...entries.entries()].map(([id, entry]) => [id, entry.kind, entry.offerStatus, entry.offeredCompensation])).toEqual([
       ["ana", "ASSIGNED", null, null],
       ["bia", "OFFER", "PENDING", 140],
       ["cris", "OFFER", "INTERESTED", null],
+    ]);
+    // FB08: with the default single spot filled, the live invites read as taken.
+    const filled = computeAgendaEntries({ organizationId: "o", jobId: "j", job: job({ operationalStatus: "ASSIGNED", assignedCleanerIds: ["ana"] }), offers, now });
+    expect([...filled.entries()].map(([id, entry]) => [id, entry.kind, entry.offerStatus])).toEqual([
+      ["ana", "ASSIGNED", null], ["bia", "OFFER", "ALREADY_TAKEN"], ["cris", "OFFER", "ALREADY_TAKEN"],
     ]);
     expect(entries.get("bia").offerExpiresAtMs).toBe(future.toMillis());
     expect(sameEntry(entries.get("bia"), { ...entries.get("bia"), offerExpiresAtMs: future.toMillis() + 1 })).toBe(false);

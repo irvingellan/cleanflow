@@ -148,14 +148,22 @@ describe("sequential bounded photo gallery", () => {
     expect(result.current.local[0].requirementId).toBe("living-belongings");
   });
 
-  it("caps retained selection bytes and count without starting rejected native decodes", async () => {
+  it("caps the selection by photo count, not by the size of the phone's original files", async () => {
     const held = deferred(); const { result } = setup({ checklist: { ...checklist, evidencePolicy: { version: 2, maxPhotos: 4 } }, optimize: async () => held.promise });
     act(() => result.current.append([file(20 * 1024 * 1024), file(20 * 1024 * 1024), file(11 * 1024 * 1024)]));
-    expect(result.current.local).toHaveLength(2);
-    expect(result.current.error).toBe("checklist_photo_queue_limit");
+    expect(result.current.local).toHaveLength(3);
+    expect(result.current.error).toBeNull();
     act(() => result.current.append([file(), file(), file()]));
     expect(result.current.local).toHaveLength(4);
     expect(result.current.error).toBe("checklist_photo_limit");
+  });
+
+  it("FB05: queues a 20-photo selection of 3 MB originals that used to stop at 16", async () => {
+    const held = deferred(); const { result } = setup({ checklist: { ...checklist, evidencePolicy: { version: 2, maxPhotos: 60 } }, optimize: async () => held.promise });
+    const phonePhoto = () => file(Math.round(3.1 * 1024 * 1024));
+    act(() => result.current.append(Array.from({ length: 20 }, phonePhoto)));
+    expect(result.current.local).toHaveLength(20);
+    expect(result.current.error).toBeNull();
   });
 
   it("aborts disposed optimization and never uploads its late result into another token", async () => {

@@ -94,8 +94,11 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
       if (!editable(state)) return;
       state.error = null;
       for (const file of Array.from(files)) {
-        const retained = state.local.reduce((sum, p) => sum + (p.blob?.size || p.file?.size || 0), 0);
-        if (state.saved.length + state.local.length >= Math.min(20, options.current.checklist.evidencePolicy.maxPhotos)) { state.error = "checklist_photo_limit"; break; }
+        // FB05: a selected File is a lazy handle to the phone's file; only an
+        // optimized photo waiting to upload holds memory. Counting original
+        // sizes stopped a 16-photo selection at the 50 MB queue limit.
+        const retained = state.local.reduce((sum, p) => sum + (p.blob?.size || 0), 0);
+        if (state.saved.length + state.local.length >= Math.min(60, options.current.checklist.evidencePolicy.maxPhotos)) { state.error = "checklist_photo_limit"; break; }
         if (file.size > sourceByteLimit) { state.error = "checklist_photo_source_too_large"; continue; }
         if (retained + file.size > retainedByteLimit) { state.error = "checklist_photo_queue_limit"; break; }
         const occupied = [...state.saved, ...state.local].some((p) => p.requirementId === requiredPurpose);

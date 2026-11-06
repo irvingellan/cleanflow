@@ -45,9 +45,11 @@ function fixture(policy = { version: 2, maxPhotos: 20, maxTotalBytes: 50 * 1024 
 
 describe("V2 multi-photo evidence", () => {
   it("freezes configurable defaults and rejects excessive trusted policy", () => {
-    expect(createChecklistEvidencePolicy()).toEqual({ version: 2, maxPhotos: 20, maxTotalBytes: 50 * 1024 * 1024 });
-    expect(() => createChecklistEvidencePolicy({ maxPhotos: 21 })).toThrow();
-    expect(() => createChecklistEvidencePolicy({ maxTotalBytes: 101 * 1024 * 1024 })).toThrow();
+    expect(createChecklistEvidencePolicy()).toEqual({ version: 2, maxPhotos: 60, maxTotalBytes: 120 * 1024 * 1024 });
+    // Runs created before FB05 keep a valid 20-photo / 50 MB policy.
+    expect(createChecklistEvidencePolicy({ maxPhotos: 20, maxTotalBytes: 50 * 1024 * 1024 })).toEqual({ version: 2, maxPhotos: 20, maxTotalBytes: 50 * 1024 * 1024 });
+    expect(() => createChecklistEvidencePolicy({ maxPhotos: 61 })).toThrow();
+    expect(() => createChecklistEvidencePolicy({ maxTotalBytes: 151 * 1024 * 1024 })).toThrow();
   });
   it("appends safe opaque stable identities and returns the complete gallery on duplicate", async () => {
     const f = fixture();
@@ -101,7 +103,7 @@ describe("V2 multi-photo evidence", () => {
   });
   it("caps content and removal history even when all saved photos have been removed", async () => {
     const f = fixture();
-    f.records.set(`${root}/evidenceState/current`, { photos: [], pending: [], contentCount: 100 });
+    f.records.set(`${root}/evidenceState/current`, { photos: [], pending: [], contentCount: 150 });
     await expect(f.upload()).rejects.toMatchObject({ code: "resource-exhausted" });
     expect(f.objects.size).toBe(0);
   });

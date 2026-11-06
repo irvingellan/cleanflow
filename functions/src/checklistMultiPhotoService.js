@@ -11,7 +11,8 @@ export const checklistUploadLeaseMilliseconds = 2 * 60 * 1000;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const mutationPattern = /^[A-Za-z0-9_-]{1,128}$/;
 const emptyState = () => ({ photos: [], pending: [], contentCount: 0, revision: 0 });
-export const maximumChecklistContentHistory = 100;
+// Saved, removed and failed contents of one Run; leaves room for corrections at 60 photos.
+export const maximumChecklistContentHistory = 150;
 const stateRef = initial => initial.runRef.collection("evidenceState").doc("current");
 const identityRef = (initial, hash) => initial.runRef.collection("evidenceContent").doc(hash);
 const aliasRef = initial => initial.runRef.collection("evidence").doc(pilotChecklistPhotoRequirementId);

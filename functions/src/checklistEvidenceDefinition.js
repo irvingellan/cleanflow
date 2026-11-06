@@ -1,9 +1,15 @@
 export const pilotChecklistPhotoRequirementId = "living-belongings";
 export const maximumChecklistEvidenceSizeBytes = 5 * 1024 * 1024;
 export const additionalChecklistPhotoRequirementId = "additional";
-export function createChecklistEvidencePolicy({ maxPhotos = 20, maxTotalBytes = 50 * 1024 * 1024 } = {}) {
-  if (!Number.isInteger(maxPhotos) || maxPhotos < 1 || maxPhotos > 20
-    || !Number.isInteger(maxTotalBytes) || maxTotalBytes < 1 || maxTotalBytes > 100 * 1024 * 1024) {
+// FB05/FB06: some cleanings need 40–50 photos. New Runs get room for 60
+// optimized photos (about 0.5–1.5 MB each at 1920 px). Existing Runs keep the
+// policy they were created with (20 photos / 50 MB).
+export const defaultChecklistMaxPhotos = 60;
+export const defaultChecklistMaxTotalBytes = 120 * 1024 * 1024;
+export const maximumChecklistPolicyPhotos = 60;
+export function createChecklistEvidencePolicy({ maxPhotos = defaultChecklistMaxPhotos, maxTotalBytes = defaultChecklistMaxTotalBytes } = {}) {
+  if (!Number.isInteger(maxPhotos) || maxPhotos < 1 || maxPhotos > maximumChecklistPolicyPhotos
+    || !Number.isInteger(maxTotalBytes) || maxTotalBytes < 1 || maxTotalBytes > 150 * 1024 * 1024) {
     throw new Error("Invalid server checklist evidence policy.");
   }
   return { version: 2, maxPhotos, maxTotalBytes };

@@ -117,6 +117,8 @@ describe("committed manager operational notification events", () => {
 
   it("a legacy Offer without a cleaner ID still responds safely using anonymous notification copy", async () => {
     const database = fixture({ offer: { cleanerId: undefined } });
+    // A second spot keeps this legacy invite answerable on the filled fixture Job.
+    database.documents.set(jobPath, { ...database.documents.get(jobPath), requiredCleanerCount: 2 });
     await respond(database);
     const sendFcm = vi.fn().mockResolvedValue(batch(accepted()));
     await process(database, interestId, { sendFcm });
