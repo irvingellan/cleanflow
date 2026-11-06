@@ -366,6 +366,7 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
         const cli = join(root, "node_modules/firebase-tools/lib/bin/firebase.js");
         const run = spawnSync(process.execPath, [cli, ...deploymentArgs(step, [...plan.steps.publish, ...plan.steps.rollback])],
           { cwd: workspace, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+        if (run.status !== 0) console.error(`${run.stdout || ""}\n${run.stderr || ""}`.split("\n").slice(-40).join("\n"));
         requireCondition(run.status === 0, `Deploy failed in update step ${step.id}. Lock retained for reconciliation.`);
       },
       verifyAssets: () => verifyLiveAssets(target.manifest),
