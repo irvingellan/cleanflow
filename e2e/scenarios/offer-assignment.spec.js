@@ -143,8 +143,8 @@ test("offer-assignment", async ({ page, browser }, testInfo) => {
       const cardB = offerCard(page, fixture.cleanerBName);
       await expect(cardA).toContainText("Interested");
       await expect(cardB).toContainText("Not available");
-      await expect(cardB.getByRole("button", { name: "Assign" })).toHaveCount(0);
-      await cardA.getByRole("button", { name: "Assign" }).click();
+      await expect(cardB.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
+      await cardA.getByRole("button", { name: "Confirm", exact: true }).click();
       await expect(page.getByText("1 cleaner assigned")).toBeVisible();
 
       const [job, assignments, offerA, offerB] = await Promise.all([

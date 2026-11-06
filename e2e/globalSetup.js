@@ -187,6 +187,7 @@ export default async function seedE2eFixtures() {
         operationalStatus: "OFFERED",
         offeredAt: now,
         assignedCleanerIds: [],
+        requiredCleanerCount: 2,
         checklistContextRevision: 0,
       },
     ],

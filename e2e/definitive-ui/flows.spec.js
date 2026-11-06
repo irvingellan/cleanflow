@@ -119,8 +119,8 @@ test("3 · two cleaners are interested; the manager confirms one, interest never
   await expect(decision.getByRole("button", { name: "Confirmar Bia Lima" })).toBeVisible();
   await run.tap(decision.getByRole("button", { name: "Confirmar Carla Mendes" }));
   await expect.poll(async () => (await jobRef.get()).data().assignedCleanerIds, { timeout: 20_000 }).toEqual([fixture.jobId("carla")]);
-  // Team Jobs stay possible (same rule as the Offers "Assign" button): the confirmed
-  // cleaner leaves the decision list; any other interested cleaner remains a choice.
+  // FB08/FB09: the only spot is filled, so the other interested cleaner leaves the
+  // open decisions (a team Job keeps them while spots remain).
   await expect(page.getByRole("button", { name: "Confirmar Carla Mendes" })).toHaveCount(0);
   run.save();
   await context.close();

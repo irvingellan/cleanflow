@@ -109,11 +109,11 @@ test("a v2 Job supports an additive manager roster before work starts", async ({
 
   const offers = page.locator(".offer-status-item");
   await expect(
-    offers.filter({ hasText: "E2E Team Cleaner C" }).getByRole("button", { name: "Assign" }),
+    offers.filter({ hasText: "E2E Team Cleaner C" }).getByRole("button", { name: "Confirm", exact: true }),
   ).toHaveCount(0);
-  await offers.filter({ hasText: "E2E Team Cleaner A" }).getByRole("button", { name: "Assign" }).click();
+  await offers.filter({ hasText: "E2E Team Cleaner A" }).getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(page.getByText("1 cleaner assigned")).toBeVisible();
-  await offers.filter({ hasText: "E2E Team Cleaner B" }).getByRole("button", { name: "Assign" }).click();
+  await offers.filter({ hasText: "E2E Team Cleaner B" }).getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(page.getByText("2 cleaners assigned")).toBeVisible();
 
   const roster = page.locator(".assignment-roster");
@@ -192,12 +192,12 @@ test("a v2 Job can offer, collect interest, and assign multiple cleaners before 
 
   await offers
     .filter({ hasText: "E2E Team Cleaner A" })
-    .getByRole("button", { name: "Assign" })
+    .getByRole("button", { name: "Confirm", exact: true })
     .click();
   await expect(page.getByText("1 cleaner assigned")).toBeVisible();
   await offers
     .filter({ hasText: "E2E Team Cleaner B" })
-    .getByRole("button", { name: "Assign" })
+    .getByRole("button", { name: "Confirm", exact: true })
     .click();
   await expect(page.getByText("2 cleaners assigned")).toBeVisible();
 

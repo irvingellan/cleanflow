@@ -164,7 +164,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
       await card.getByRole("button", { name: "Create public link" }).click();
       await expect(card.getByRole("link", { name: "Open public cleaner offer" })).toBeVisible();
     }
-    await expect(offerCards.getByRole("button", { name: "Assign", exact: true })).toHaveCount(0);
+    await expect(offerCards.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
     await expect(page.getByTestId("interest-decision")).toHaveCount(0);
     await evidence(page, "release-a-00-manual-zero-interested");
 
@@ -177,8 +177,8 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await expect(pageA.locator(".hb-facts")).toContainText("Você tem interesse · a gerente decide");
     await evidence(pageA, "03-offer-interested");
     await page.getByRole("button", { name: "Refresh offers" }).click();
-    await expect(offerA.getByRole("button", { name: "Assign", exact: true })).toBeVisible();
-    await expect(offerB.getByRole("button", { name: "Assign", exact: true })).toHaveCount(0);
+    await expect(offerA.getByRole("button", { name: "Confirm", exact: true })).toBeVisible();
+    await expect(offerB.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
     const firstInterest = (await birchRef.get()).data();
     expect([firstInterest.operationalStatus, firstInterest.assignedCleanerIds]).toEqual(["OFFERED", []]);
     expect((await birchRef.collection("offers").doc(fixture.cleanerAId).get()).data().status).toBe("INTERESTED");
@@ -199,7 +199,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await pageB.getByRole("button", { name: /^Schedule/ }).click();
     await pageB.getByRole("button", { name: /^Scheduled/ }).click();
     await page.getByRole("button", { name: "Refresh offers" }).click();
-    await expect(offerCards.getByRole("button", { name: "Assign", exact: true })).toHaveCount(2);
+    await expect(offerCards.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(2);
     const multipleInterests = (await birchRef.get()).data();
     expect([multipleInterests.operationalStatus, multipleInterests.assignedCleanerIds]).toEqual(["OFFERED", []]);
     expect(multipleInterests.offerDistributionMode).toBeUndefined();
