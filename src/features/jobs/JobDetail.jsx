@@ -2,6 +2,7 @@ import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx
 import { useEffect, useRef, useState } from "react";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
+import { cleanerReminderState } from "./cleanerReminderLog.js";
 import {
   isJobFilled, manualOfferAvailability, maxCleanersPerJob, offerManagerDecisions, requiredCleanerCount, rosterCleanerIds,
 } from "./offerSlots.js";
@@ -102,6 +103,7 @@ export function JobDetail({
   onDecideOffer,
   onReopenOffer,
   onSetCleanerSpots,
+  onMarkReminderSent,
   onAssignCleanerDirectly,
   onRemoveAssignment,
   onReplaceAssignment,
@@ -128,6 +130,7 @@ export function JobDetail({
   const [assignmentError, setAssignmentError] = useState(null);
   const [decidingOfferId, setDecidingOfferId] = useState(null);
   const [isSavingSpots, setIsSavingSpots] = useState(false);
+  const [reminderLogState, setReminderLogState] = useState(null);
   const [isDirectAssignmentOpen, setIsDirectAssignmentOpen] = useState(false);
   const [directCleanerSearch, setDirectCleanerSearch] = useState("");
   const [directCleanerId, setDirectCleanerId] = useState("");
@@ -1656,6 +1659,26 @@ export function JobDetail({
                 : translate("jobs.reminderCopyNow")}
             </button>
           </div>
+          {onMarkReminderSent && reminderCleanerStillAssigned && reminderPreview.cleanerId !== "legacy-assigned-cleaner" && (() => {
+            const logged = cleanerReminderState(job, reminderPreview.cleanerId);
+            const sentAt = logged.state === "sent" ? formatCreatedAt(logged.sentAt, language) : null;
+            return <div className="job-reminder-preview__log" data-testid="reminder-log">
+              <p className={logged.state === "sent" ? "form-success" : "form-hint"} role="status">
+                {logged.state === "sent"
+                  ? translate(sentAt ? "jobs.reminderLoggedAt" : "jobs.reminderLogged", { time: sentAt })
+                  : translate(logged.stale ? "jobs.reminderStale" : "jobs.reminderNotLogged")}
+              </p>
+              <button className="button" type="button" disabled={reminderLogState === "saving"} onClick={async () => {
+                setReminderLogState("saving");
+                try { await onMarkReminderSent(reminderPreview.cleanerId); setReminderLogState(null); }
+                catch { setReminderLogState("error"); }
+              }}>
+                {translate(reminderLogState === "saving" ? "jobs.reminderLogging"
+                  : logged.state === "sent" ? "jobs.reminderLogAgain" : "jobs.reminderMarkSent")}
+              </button>
+              {reminderLogState === "error" && <p className="form-error" role="alert">{translate("jobs.reminderLogError")}</p>}
+            </div>;
+          })()}
           {reminderReadyToSend && !reminderWhatsAppUrl && (
             <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
           )}

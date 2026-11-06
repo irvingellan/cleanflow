@@ -1,4 +1,5 @@
 import { isJobFilled, manualOfferAvailability } from "../jobs/offerSlots.js";
+import { jobReminderState } from "../jobs/cleanerReminderLog.js";
 import { Icon } from "../../components/Icon.jsx";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
@@ -420,6 +421,9 @@ function DashboardNextJob({ job, cleanerNamesById, offers, onOpen }) {
           )}
         </span>
         <span className="visually-hidden">{schedule}</span>
+        {jobReminderState(job) && <span className={`dashboard-next-item__reminder is-${jobReminderState(job)}`}>
+          {translate(jobReminderState(job) === "sent" ? "dashboard.reminderSent" : "dashboard.reminderPending")}
+        </span>}
         {/* Dashboard Offers are filtered: empty cannot prove no Offer history. */}
         <CompactServiceLifecycle job={job} offers={offers?.length ? offers : undefined} descriptionId={`dashboard-lifecycle-${job.id}`} />
       </span>

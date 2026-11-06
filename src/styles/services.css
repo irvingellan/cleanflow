@@ -794,3 +794,31 @@
   gap: 4px 10px;
   margin: 4px 0;
 }
+
+/* Section 12: reminder sent / pending. */
+.job-reminder-preview__log {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  margin-top: 12px;
+  border-top: 1px solid var(--cf-divider);
+  padding-top: 12px;
+}
+
+.dashboard-next-item__reminder {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: var(--cf-text-xs);
+  font-weight: 600;
+}
+
+.dashboard-next-item__reminder.is-sent {
+  color: var(--cf-success-text);
+  background: var(--cf-success-bg);
+}
+
+.dashboard-next-item__reminder.is-pending {
+  color: var(--cf-text-secondary);
+  background: var(--cf-surface-sunken);
+}

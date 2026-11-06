@@ -26,6 +26,7 @@ import {
   setRequiredCleanerCount,
 } from "./assignmentService.js";
 import { isAutomaticOfferJob } from "./automaticOffers.js";
+import { markCleanerReminderSent } from "./cleanerReminderLog.js";
 import { isAssignmentAwareJob } from "./jobCompatibility.js";
 import {
   assignCleanerToJob,
@@ -558,6 +559,13 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     if (selectedJobIdRef.current === selectedJob.id) await refreshOffers();
   }
 
+  async function markReminderSent(cleanerId) {
+    await updateJob(async (job) => {
+      await markCleanerReminderSent(job.id, cleanerId, actorUid);
+      return getJobById(job.id);
+    });
+  }
+
   async function setCleanerSpots(count) {
     await updateJob((job) => setRequiredCleanerCount(job.id, count));
   }
@@ -735,6 +743,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     },
     actions: {
       setCleanerSpots,
+      markReminderSent,
       assignCleaner,
       assignCleanerDirectly,
       removeCleanerAssignment,

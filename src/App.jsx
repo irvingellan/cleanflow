@@ -563,6 +563,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     },
     actions: {
       setCleanerSpots,
+      markReminderSent,
       assignCleaner,
       assignCleanerDirectly,
       removeCleanerAssignment,
@@ -1494,6 +1495,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onDecideOffer={decideCleanerOffer}
             onReopenOffer={reopenCleanerOffer}
             onSetCleanerSpots={setCleanerSpots}
+            onMarkReminderSent={markReminderSent}
             onAssignCleanerDirectly={assignCleanerDirectly}
             onRemoveAssignment={removeCleanerAssignment}
             onReplaceAssignment={replaceCleanerAssignment}
