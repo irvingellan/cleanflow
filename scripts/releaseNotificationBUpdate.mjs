@@ -49,11 +49,14 @@ export const operationsAdditions = [
   "syncCleanerAgendaOnChecklistRunWrite", "syncCleanerAgendaOnChecklistStart",
 ];
 
-const functionsStep = (names, cleanerPushMode) => ({
+const functionsStep = (names, cleanerPushMode, { force = false } = {}) => ({
   id: `operations:${names.length}`,
   only: names.map((name) => `functions:${name}`).join(","),
   functions: names,
   cleanerPushMode,
+  // Creating a Firestore trigger with a retry policy needs --force; only the
+  // reviewed step that creates the new agenda triggers carries it.
+  ...(force ? { force: true } : {}),
 });
 
 /** Every non-push, non-scheduled Function of a release, so the whole server moves to one source. */
@@ -77,7 +80,7 @@ export function updateStepsFor(previousHasTest, previousSnapshot = null) {
   const removed = [...added, ...(previousHasTest ? [] : [pushTestFunction])];
   const pushRollback = previousHasTest ? push : [statusStep, ...laterSteps];
   return {
-    publish: [functionsStep(operationsFunctions(previousSnapshot, { includeAdditions: true }), "disabled"), ...push],
+    publish: [functionsStep(operationsFunctions(previousSnapshot, { includeAdditions: true }), "disabled", { force: added.length > 0 }), ...push],
     rollback: [
       ...(removed.length ? [{ id: `delete:${removed.join(",")}`, delete: removed }] : []),
       functionsStep(operationsFunctions(previousSnapshot, { includeAdditions: false }), "disabled"),
@@ -107,7 +110,8 @@ export function deploymentArgs(step, reviewedSteps = null) {
   if (step.delete) {
     return ["functions:delete", ...step.delete, "--region", "us-central1", "--project", notificationProject, "--force", "--non-interactive"];
   }
-  return ["deploy", "--only", step.only, "--project", notificationProject, "--config", "firebase.json", "--non-interactive"];
+  return ["deploy", "--only", step.only, "--project", notificationProject, "--config", "firebase.json", "--non-interactive",
+    ...(step.force === true ? ["--force"] : [])];
 }
 
 /** The test Function is bound to the release when present, and absent when the release predates it. */

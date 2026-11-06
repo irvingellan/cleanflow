@@ -182,6 +182,16 @@ test("every reviewed operations step writes valid runtime modes", () => {
   assert.equal(stepReleaseModes({ cleanerPushMode: "pilot" }, sha).pilotRelease, sha);
 });
 
+test("only the operations step that creates Functions deploys with --force", () => {
+  const snapshot = { functions: { publicOffer: {}, cleanerPushTest: {}, sendTodayExecutionReminder: {} } };
+  const plan = updateStepsFor(true, snapshot);
+  const reviewed = [...plan.publish, ...plan.rollback];
+  const forced = reviewed.filter((step) => !step.delete && deploymentArgs(step, reviewed).includes("--force"));
+  assert.deepEqual(forced, [plan.publish[0]]);
+  assert.ok(plan.publish[0].functions.includes("syncCleanerAgendaOnChecklistStart"));
+  assert.throws(() => deploymentArgs({ ...plan.rollback[1], force: true }, reviewed), /Unreviewed/);
+});
+
 test("an operations attempt that changed nothing only releases the mutex", async () => {
   const { partialReconciliation } = await import("./releaseNotificationBUpdate.mjs");
   const { sha256 } = await import("./notificationReleaseCloud.mjs");
