@@ -1,8 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
-import { projectChecklistDraftForRead } from "./checklistDraftService.js";
-import { createChecklistEvidencePolicy, pilotChecklistPhotoRequirementId, projectChecklistEvidence, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
+import { checklistDraftReviewRequirements, projectChecklistDraftForRead } from "./checklistDraftService.js";
+import { createChecklistEvidencePolicy, isPilotChecklistPhotoRequirement, pilotChecklistPhotoRequirementId, projectChecklistEvidence, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
 
 export const initialChecklistRunId = "initial";
 
@@ -214,5 +214,58 @@ export async function approveChecklistRunForManager(database, { organizationId, 
     });
 
     return { completed: true, operationalStatus: "COMPLETED" };
+  });
+}
+
+/**
+ * Section 8: the cleaner filled everything but never tapped "Send for review".
+ * The manager may send it on her behalf with exactly the cleaner's rules
+ * (every required item answered, the required photo saved, no photo still
+ * uploading) and the revision she is looking at. The transition is recorded
+ * as the manager's; it does not approve the Run or complete the Job.
+ */
+export async function submitChecklistRunForManager(database, { organizationId, jobId, actorUid, baseRevision, now = () => Date.now() }) {
+  if (typeof actorUid !== "string" || !actorUid || !Number.isInteger(baseRevision) || baseRevision < 0) {
+    throw new HttpsError("invalid-argument", "Checklist review request is invalid.");
+  }
+  const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
+  const runReference = jobReference.collection("checklistRuns").doc(initialChecklistRunId);
+  return database.runTransaction(async (transaction) => {
+    const [jobSnapshot, runSnapshot, draftSnapshot, aliasSnapshot, stateSnapshot] = await Promise.all([
+      transaction.get(jobReference), transaction.get(runReference),
+      transaction.get(runReference.collection("drafts").doc("current")),
+      transaction.get(runReference.collection("evidence").doc(pilotChecklistPhotoRequirementId)),
+      transaction.get(runReference.collection("evidenceState").doc("current")),
+    ]);
+    if (!jobSnapshot.exists || !runSnapshot.exists) throw new HttpsError("not-found", "Checklist Run not found.");
+    const job = jobSnapshot.data();
+    const run = runSnapshot.data();
+    if (run.status === "READY_FOR_REVIEW") return { submitted: false, status: "READY_FOR_REVIEW" };
+    if (run.status !== "DRAFT" || job.archivedAt || !["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus)) {
+      throw new HttpsError("failed-precondition", "Checklist Run cannot be sent for review.");
+    }
+    const { draft, missingChecklistCount, missingInventoryCount } =
+      checklistDraftReviewRequirements(run, draftSnapshot.exists ? draftSnapshot.data() : null);
+    if (draft.revision !== baseRevision) throw new HttpsError("aborted", "Checklist draft changed. Refresh and review again.");
+    const photoSaved = run.evidencePolicy?.version === 2
+      ? (stateSnapshot.data()?.photos || []).some((photo) => photo.requirementId === pilotChecklistPhotoRequirementId)
+      : aliasSnapshot.data()?.status === "SAVED";
+    const missingPhotoCount = isPilotChecklistPhotoRequirement(run, pilotChecklistPhotoRequirementId) && !photoSaved ? 1 : 0;
+    const pendingPhotoCount = (stateSnapshot.data()?.pending || [])
+      .filter((photo) => photo.status === "RESERVED" && photo.leaseExpiresAt > now()).length;
+    if (missingChecklistCount || missingInventoryCount || missingPhotoCount || pendingPhotoCount) {
+      throw new HttpsError("failed-precondition", "Checklist requirements are incomplete.", {
+        reason: "checklist-requirements-missing", missingChecklistCount, missingInventoryCount, missingPhotoCount,
+        ...(pendingPhotoCount ? { pendingPhotoCount } : {}),
+      });
+    }
+    transaction.update(runReference, {
+      status: "READY_FOR_REVIEW",
+      readyForReviewAt: FieldValue.serverTimestamp(),
+      readyForReviewDraftRevision: draft.revision,
+      readyForReviewByRole: "MANAGER",
+      readyForReviewByUid: actorUid,
+    });
+    return { submitted: true, status: "READY_FOR_REVIEW" };
   });
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createChecklistRun as createChecklistRunRequest,
   approveChecklistRun as approveChecklistRunRequest,
+  submitChecklistRunForReview as submitChecklistRunForReviewRequest,
   completeJobWithoutChecklist as completeJobWithoutChecklistRequest,
   abandonChecklistRunAndCompleteJob as abandonChecklistRunAndCompleteJobRequest,
   getChecklistRun,
@@ -430,6 +431,12 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     });
   }
 
+  async function submitChecklistRunForReview(baseRevision) {
+    if (!selectedJob) return;
+    await submitChecklistRunForReviewRequest(selectedJob.id, baseRevision);
+    await refreshChecklistRun(selectedJob);
+  }
+
   async function abandonChecklistRunAndCompleteJob() {
     const updatedJob = await updateJob(async (job) => {
       await abandonChecklistRunAndCompleteJobRequest(job.id);
@@ -735,6 +742,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       startCleaning,
       completeCleaning,
       approveChecklistRun,
+      submitChecklistRunForReview,
       abandonChecklistRunAndCompleteJob,
       saveJobPrices,
       saveJobDetails,

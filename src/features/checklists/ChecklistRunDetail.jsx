@@ -113,6 +113,7 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence, sele
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
   loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete, onAbandonAndComplete,
+  onSubmitForReview,
 }) {
   const { language, translate } = useTranslation();
   const [selectedEvidence, setSelectedEvidence] = useState(null);
@@ -151,6 +152,31 @@ export function ChecklistRunDetail({
   const issueNotes = draft?.issueNotes?.trim() || "";
   const generalNotes = draft?.generalNotes?.trim() || "";
   const hasCleanerNotes = Boolean(issueNotes || generalNotes);
+  // Section 8: say exactly what keeps a draft from being sent for review.
+  const missingRequiredPhoto = (checklistRun.sections || []).some((section) => (section.items || [])
+    .some((item) => item.id === "living-belongings"))
+    && !evidence.some((item) => item.requirementId === "living-belongings");
+  const blockers = isDraft ? [
+    ...attention.unansweredItems.map((item) => ({ id: item.id, label: item.label })),
+    ...(missingRequiredPhoto ? [{ id: "photo", label: translate("checklists.blockerRequiredPhoto") }] : []),
+  ] : [];
+  const canSubmitForReview = isDraft && typeof onSubmitForReview === "function"
+    && !job.archivedAt && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus) && Number.isInteger(draft?.revision);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+
+  async function submitForReview() {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmitForReview(draft.revision);
+    } catch (error) {
+      setSubmitError(error?.code === "functions/aborted" || error?.code === "aborted"
+        ? "checklists.submitForReviewChanged" : "checklists.submitForReviewError");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function approveAndComplete() {
     setIsCompleting(true);
@@ -375,6 +401,22 @@ export function ChecklistRunDetail({
 
       <div id="checklist-manager-actions">
         {isReadyForReview && <ClientReportControls jobId={job.id} />}
+
+        {canSubmitForReview && (
+          <section className="checklist-run__section checklist-run__submit" aria-labelledby="checklist-submit-title" data-testid="checklist-submit-for-review">
+            <h3 id="checklist-submit-title">{translate("checklists.submitForReviewTitle")}</h3>
+            {blockers.length === 0 ? <>
+              <p>{translate("checklists.submitForReviewReady")}</p>
+              <button className="button button--primary" type="button" disabled={isSubmitting} onClick={submitForReview}>
+                {translate(isSubmitting ? "checklists.submittingForReview" : "checklists.submitForReview")}
+              </button>
+            </> : <>
+              <p>{translate("checklists.submitForReviewBlocked", { count: blockers.length })}</p>
+              <ul className="checklist-run__blockers">{blockers.map((item) => <li key={item.id}>{item.label}</li>)}</ul>
+            </>}
+            {submitError && <p className="form-error" role="alert">{translate(submitError)}</p>}
+          </section>
+        )}
 
         {canAbandonAndComplete && (
           <section className="checklist-run__section" aria-labelledby="checklist-abandon-title">

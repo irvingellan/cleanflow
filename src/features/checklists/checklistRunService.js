@@ -23,6 +23,12 @@ export async function approveChecklistRun(jobId) {
   return result.data;
 }
 
+/** The manager sends a filled draft for review when the cleaner did not (section 8). */
+export async function submitChecklistRunForReview(jobId, baseRevision) {
+  const result = await httpsCallable(functions, "submitChecklistRunForReview")({ jobId, baseRevision });
+  return result.data;
+}
+
 export async function completeJobWithoutChecklist(jobId) {
   const result = await completeJobWithoutChecklistCall({ jobId });
   return result.data;

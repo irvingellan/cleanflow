@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { ChecklistRunDetail } from "./ChecklistRunDetail.jsx";
@@ -341,5 +341,33 @@ describe("ChecklistRunDetail", () => {
     expect(await screen.findByRole("link", { name: "Open report" })).toHaveAttribute(
       "href", "https://cleanflow.example/client-report?t=one-time-token",
     );
+  });
+});
+
+describe("section 8 — what keeps a draft from review", () => {
+  const job = { id: "job-s8", operationalStatus: "ASSIGNED", propertyName: "Example House" };
+  const run = (answers) => ({
+    status: "DRAFT", checklistItemCount: 2, inventoryItemCount: 0, requiredPhotoCount: 0, inventoryItems: [], evidence: [],
+    sections: [{ id: "s", title: "Rooms", items: [{ id: "a", label: "Beds made", answer: answers[0] }, { id: "b", label: "Trash out", answer: answers[1] }] }],
+    draft: { revision: 2, progress: {} },
+  });
+  const renderRun = (checklistRun, onSubmitForReview) => render(<TranslationProvider>
+    <ChecklistRunDetail job={job} checklistRun={checklistRun} onRefresh={() => {}} onBack={() => {}}
+      onAbandonAndComplete={async () => {}} onSubmitForReview={onSubmitForReview} />
+  </TranslationProvider>);
+
+  it("names each missing item instead of offering only abandon", () => {
+    renderRun(run(["DONE", "UNANSWERED"]), vi.fn());
+    const block = screen.getByTestId("checklist-submit-for-review");
+    expect(block).toHaveTextContent("It cannot be sent yet. Still missing (1):");
+    expect(block).toHaveTextContent("Trash out");
+    expect(within(block).queryByRole("button")).toBeNull();
+  });
+
+  it("sends a complete draft for review with the revision the manager saw", async () => {
+    const onSubmitForReview = vi.fn(async () => {});
+    renderRun(run(["DONE", "DONE"]), onSubmitForReview);
+    fireEvent.click(screen.getByRole("button", { name: "Send for review on her behalf" }));
+    await waitFor(() => expect(onSubmitForReview).toHaveBeenCalledWith(2));
   });
 });

@@ -34,6 +34,7 @@ const {
   rescheduleJob,
   respondToMyOffer,
   revokeCleanerHubAccess,
+  submitChecklistRunForReview,
 } = functionsIndex;
 const { syncCleanerAgendaForJob } = await import("../functions/src/cleanerAgenda.js");
 const { cleanerAccountUid, hashCleanerAccessCode } = await import("../functions/src/cleanerHubAccess.js");
@@ -555,6 +556,35 @@ test("FB01: only the signed-in cleaner on the Job reads shared access, never int
   // Revoking her Hub access ends the read.
   await revokeCleanerHubAccess.run(managerRequest({ cleanerId: "cleaner-a" }));
   await assert.rejects(getMyJobAccess.run(cleanerRequest(uidA, { jobId: "job-access" })), { code: "permission-denied" });
+});
+
+test("section 8: the manager sends a complete draft for review on the cleaner's behalf, never an incomplete one", async () => {
+  await createJob("job-review");
+  await link("cleaner-a");
+  await assignCleanerDirectly.run(managerRequest({ jobId: "job-review", cleanerId: "cleaner-a" }));
+  await createChecklistRun.run(managerRequest({ jobId: "job-review" }));
+  const runPath = `${root}/jobs/job-review/checklistRuns/initial`;
+  const run = (await admin.doc(runPath).get()).data();
+  const itemIds = run.resolvedDefinition.sections.flatMap((section) => section.items.map((item) => item.id));
+  const inventoryIds = run.resolvedDefinition.inventoryItems.map((item) => item.id);
+  const draft = (answers) => admin.doc(`${runPath}/drafts/current`).set({
+    revision: 4, issueNotes: "", generalNotes: "",
+    checklistAnswers: Object.fromEntries(itemIds.map((id, index) => [id, answers || index ? "DONE" : "UNANSWERED"])),
+    inventoryAnswers: Object.fromEntries(inventoryIds.map((id) => [id, "HIGH"])),
+  });
+  await draft();
+  await assert.rejects(submitChecklistRunForReview.run(managerRequest({ jobId: "job-review", baseRevision: 4 })),
+    (error) => error.code === "failed-precondition" && error.details.missingChecklistCount === 1 && error.details.missingPhotoCount === 1);
+  await draft(true);
+  await admin.doc(`${runPath}/evidenceState/current`).set({ photos: [{ requirementId: "living-belongings", evidenceId: "e1", status: "SAVED" }], pending: [] });
+  await assert.rejects(submitChecklistRunForReview.run(managerRequest({ jobId: "job-review", baseRevision: 3 })), { code: "aborted" });
+  await assert.rejects(submitChecklistRunForReview.run(cleanerRequest(uidA, { jobId: "job-review", baseRevision: 4 })), { code: "permission-denied" });
+  assert.deepEqual(await submitChecklistRunForReview.run(managerRequest({ jobId: "job-review", baseRevision: 4 })), { submitted: true, status: "READY_FOR_REVIEW" });
+  const after = (await admin.doc(runPath).get()).data();
+  assert.deepEqual([after.status, after.readyForReviewByRole, after.readyForReviewByUid, after.readyForReviewDraftRevision], ["READY_FOR_REVIEW", "MANAGER", "manager", 4]);
+  // Repeating is harmless and the Job is not completed by this step.
+  assert.deepEqual(await submitChecklistRunForReview.run(managerRequest({ jobId: "job-review", baseRevision: 4 })), { submitted: false, status: "READY_FOR_REVIEW" });
+  assert.equal((await admin.doc(`${root}/jobs/job-review`).get()).data().operationalStatus, "ASSIGNED");
 });
 
 test("checklist opens through existing capability rules for the assigned cleaner only", async () => {

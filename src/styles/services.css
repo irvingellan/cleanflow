@@ -777,3 +777,12 @@
   font-size: var(--cf-text-xs);
   line-height: 1.3;
 }
+
+/* Section 8: what keeps a draft checklist from being sent for review. */
+.checklist-run__blockers {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--cf-text-secondary);
+}

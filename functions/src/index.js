@@ -61,6 +61,7 @@ import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import {
   createChecklistRunForManager,
   approveChecklistRunForManager,
+  submitChecklistRunForManager,
   getChecklistRunForManager,
   initialChecklistRunId,
   validChecklistRunJobId,
@@ -801,6 +802,18 @@ export const getChecklistRun = onCall(
     return {
       run: await getChecklistRunForManager(db, { organizationId, jobId }),
     };
+  },
+);
+
+export const submitChecklistRunForReview = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
+    return submitChecklistRunForManager(db, {
+      organizationId, jobId, actorUid: request.auth.uid, baseRevision: request.data?.baseRevision,
+    });
   },
 );
 
