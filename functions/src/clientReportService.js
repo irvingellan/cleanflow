@@ -50,6 +50,12 @@ function visibleLabel(item) {
 }
 
 /** Strict client-facing projection from the frozen Run and locked saved draft only. */
+/** FB07: photos the manager excluded from the client presentation. Evidence is never deleted. */
+export function reportHiddenEvidenceIds(run) {
+  const hidden = run?.reportHiddenEvidence;
+  return new Set(hidden && typeof hidden === "object" ? Object.keys(hidden).filter((id) => hidden[id]?.hidden === true) : []);
+}
+
 export function projectClientReport(run, draft, evidence) {
   if (run?.status !== "READY_FOR_REVIEW") {
     throw new HttpsError("failed-precondition", "A checklist ready for review is required.");
@@ -81,10 +87,15 @@ export function projectClientReport(run, draft, evidence) {
     })),
     issueNotes: normalizedDraft.issueNotes || "",
     generalNotes: normalizedDraft.generalNotes || "",
-    hasPhoto: run.evidencePolicy?.version === 2 ? (evidence?.photos?.length || 0) > 0
+    hasPhoto: run.evidencePolicy?.version === 2 ? visiblePhotos(run, evidence).length > 0
       : evidence?.status === "SAVED" && evidence.requirementId === pilotChecklistPhotoRequirementId,
-    ...(run.evidencePolicy?.version === 2 ? { evidence: projectChecklistEvidenceGallery(evidence?.photos) } : {}),
+    ...(run.evidencePolicy?.version === 2 ? { evidence: projectChecklistEvidenceGallery(visiblePhotos(run, evidence)) } : {}),
   };
+}
+
+function visiblePhotos(run, evidence) {
+  const hidden = reportHiddenEvidenceIds(run);
+  return (evidence?.photos || []).filter((photo) => !hidden.has(photo?.evidenceId));
 }
 
 export function clientReportCapabilityState(capability, now = new Date()) {
@@ -252,10 +263,37 @@ export async function downloadPublicClientReportPhoto(database, {
   const result = await resolvePublicClientReport(database, { organizationId, tokenHash, now });
   if (result.run.evidencePolicy?.version === 2) {
     const photo = selectMultiPhotoEvidence(result.gallery, { evidenceId });
-    if (!photo) throw new HttpsError("not-found", "Report photo not found.");
+    if (!photo || reportHiddenEvidenceIds(result.run).has(photo.evidenceId)) throw new HttpsError("not-found", "Report photo not found.");
     return downloadSavedChecklistEvidence(result.run, photo, { storage });
   }
   if (evidenceId !== undefined) throw new HttpsError("not-found", "Report photo not found.");
   if (!result.report.hasPhoto || !result.evidence) throw new HttpsError("not-found", "Report photo not found.");
   return downloadSavedChecklistEvidence(result.run, result.evidence, { storage });
+}
+
+/**
+ * The manager hides (or shows again) one saved photo in the client report,
+ * with a reason. The photo, its author and time stay in the checklist evidence.
+ */
+export async function setReportPhotoVisibilityForManager(database, { organizationId, jobId, evidenceId, hidden, reason, actorUid }) {
+  if (typeof evidenceId !== "string" || !/^[A-Za-z0-9-]{8,64}$/.test(evidenceId) || typeof hidden !== "boolean"
+    || typeof actorUid !== "string" || !actorUid || (reason !== undefined && (typeof reason !== "string" || reason.length > 300))) {
+    throw new HttpsError("invalid-argument", "Report photo request is invalid.");
+  }
+  const runRef = database.doc(`organizations/${organizationId}/jobs/${jobId}/checklistRuns/initial`);
+  return database.runTransaction(async (transaction) => {
+    const [runSnapshot, stateSnapshot] = await Promise.all([
+      transaction.get(runRef), transaction.get(runRef.collection("evidenceState").doc("current")),
+    ]);
+    if (!runSnapshot.exists || runSnapshot.data().evidencePolicy?.version !== 2
+      || !(stateSnapshot.data()?.photos || []).some((photo) => photo.evidenceId === evidenceId)) {
+      throw new HttpsError("not-found", "Checklist photo not found.");
+    }
+    transaction.update(runRef, {
+      [`reportHiddenEvidence.${evidenceId}`]: {
+        hidden, reason: typeof reason === "string" ? reason.trim() : "", byUid: actorUid, at: FieldValue.serverTimestamp(),
+      },
+    });
+    return { evidenceId, hidden };
+  });
 }

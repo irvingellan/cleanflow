@@ -101,6 +101,7 @@ import {
   issueClientReportForManager,
   loadPublicClientReport,
   revokeClientReportForManager,
+  setReportPhotoVisibilityForManager,
 } from "./clientReportService.js";
 import {
   calculateManagerReminder,
@@ -1006,6 +1007,19 @@ export const getClientReportCapability = onCall(
         organizationId, jobId, runId: initialChecklistRunId,
       }),
     };
+  },
+);
+
+export const setReportPhotoVisibility = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
+    return setReportPhotoVisibilityForManager(db, {
+      organizationId, jobId, evidenceId: request.data?.evidenceId, hidden: request.data?.hidden,
+      reason: request.data?.reason, actorUid: request.auth.uid,
+    });
   },
 );
 

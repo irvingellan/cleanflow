@@ -89,7 +89,14 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
     readyForReviewAt: toIsoTimestamp(run?.readyForReviewAt),
     abandonedAt: toIsoTimestamp(run?.abandonedAt),
     draft: draftProjection,
-    evidence: run?.evidencePolicy?.version === 2 ? projectChecklistEvidenceGallery(evidence?.photos) : projectChecklistEvidence(evidence),
+    evidence: run?.evidencePolicy?.version === 2
+      ? projectChecklistEvidenceGallery(evidence?.photos).map((photo) => {
+        const hidden = run?.reportHiddenEvidence?.[photo.evidenceId];
+        return hidden?.hidden === true
+          ? { ...photo, hiddenFromReport: true, hiddenFromReportReason: typeof hidden.reason === "string" ? hidden.reason : "" }
+          : photo;
+      })
+      : projectChecklistEvidence(evidence),
   };
 }
 

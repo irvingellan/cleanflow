@@ -3,7 +3,7 @@ import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
-import { getChecklistEvidence } from "./checklistRunService.js";
+import { getChecklistEvidence, setReportPhotoVisibility } from "./checklistRunService.js";
 import { ClientReportControls } from "./ClientReportControls.jsx";
 
 function checklistLabel(item, translate) {
@@ -113,7 +113,7 @@ function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence, sele
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
   loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete, onAbandonAndComplete,
-  onSubmitForReview,
+  onSubmitForReview, setPhotoVisibility = setReportPhotoVisibility,
 }) {
   const { language, translate } = useTranslation();
   const [selectedEvidence, setSelectedEvidence] = useState(null);
@@ -163,6 +163,22 @@ export function ChecklistRunDetail({
   const canSubmitForReview = isDraft && typeof onSubmitForReview === "function"
     && !job.archivedAt && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus) && Number.isInteger(draft?.revision);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hiddenOverrides, setHiddenOverrides] = useState({});
+  const [photoVisibilityError, setPhotoVisibilityError] = useState(false);
+
+  // FB07: hiding keeps the evidence; the client report no longer shows it.
+  async function togglePhotoInReport(item) {
+    const hidden = !(hiddenOverrides[item.evidenceId] ?? item.hiddenFromReport === true);
+    const reason = hidden ? window.prompt(translate("checklists.hidePhotoReason")) : "";
+    if (hidden && reason === null) return;
+    setPhotoVisibilityError(false);
+    try {
+      await setPhotoVisibility(job.id, item.evidenceId, hidden, (reason || "").slice(0, 300));
+      setHiddenOverrides((current) => ({ ...current, [item.evidenceId]: hidden }));
+    } catch {
+      setPhotoVisibilityError(true);
+    }
+  }
   const [submitError, setSubmitError] = useState(null);
 
   async function submitForReview() {
@@ -384,6 +400,7 @@ export function ChecklistRunDetail({
       {evidence.length > 0 && (
         <section className="checklist-run__section" aria-labelledby="checklist-evidence-title">
           <h3 id="checklist-evidence-title">{translate("checklists.savedEvidence")}</h3>
+          {photoVisibilityError && <p className="form-error" role="alert">{translate("checklists.photoVisibilityError")}</p>}
           {evidence.map((item) => (
             <div className="checklist-run__evidence" key={item.evidenceId || item.requirementId}>
               <p>{translate("checklists.photoForRequirement", {
@@ -391,6 +408,12 @@ export function ChecklistRunDetail({
                   ? translate("checklistPreview.livingBelongings")
                   : translate("checklists.additionalPhoto"),
               })}</p>
+              {item.evidenceId && <p className="checklist-run__report-visibility">
+                {(hiddenOverrides[item.evidenceId] ?? item.hiddenFromReport === true) && <span className="status-badge is-closed">{translate("checklists.hiddenFromReport")}</span>}
+                <button className="button button--text" type="button" onClick={() => togglePhotoInReport(item)}>
+                  {translate((hiddenOverrides[item.evidenceId] ?? item.hiddenFromReport === true) ? "checklists.showInReport" : "checklists.hideFromReport")}
+                </button>
+              </p>}
               <ChecklistEvidencePhoto jobId={job.id} evidence={item} translate={translate} loadEvidence={loadEvidence}
                 selected={selectedEvidence === `${job.id}:${item.evidenceId || item.requirementId}`}
                 onSelect={() => setSelectedEvidence((current) => current === `${job.id}:${item.evidenceId || item.requirementId}` ? null : `${job.id}:${item.evidenceId || item.requirementId}`)} />

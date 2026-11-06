@@ -786,3 +786,11 @@
   padding-left: 18px;
   color: var(--cf-text-secondary);
 }
+
+.checklist-run__report-visibility {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 4px 0;
+}

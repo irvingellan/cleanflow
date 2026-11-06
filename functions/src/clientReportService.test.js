@@ -99,3 +99,19 @@ describe("client report projection", () => {
     expect(clientReportCapabilityState({ status: "REPLACED" })).toBe("REPLACED");
   });
 });
+
+describe("FB07 report photo visibility", () => {
+  it("leaves hidden photos out of the client report while the evidence stays", async () => {
+    const { projectClientReport, reportHiddenEvidenceIds } = await import("./clientReportService.js");
+    const run = {
+      status: "READY_FOR_REVIEW", readyForReviewDraftRevision: 0, evidencePolicy: { version: 2, maxPhotos: 60, maxTotalBytes: 1 },
+      resolvedDefinition: { sections: [], inventoryItems: [] },
+      reportHiddenEvidence: { "photo-bbbbbbbb": { hidden: true, reason: "wrong house" }, "photo-cccccccc": { hidden: false } },
+    };
+    const photos = ["photo-aaaaaaaa", "photo-bbbbbbbb", "photo-cccccccc"].map((evidenceId) => ({ evidenceId, status: "SAVED", requirementId: "additional", contentType: "image/jpeg", sizeBytes: 10 }));
+    const report = projectClientReport(run, null, { photos });
+    expect(report.evidence.map((photo) => photo.evidenceId)).toEqual(["photo-aaaaaaaa", "photo-cccccccc"]);
+    expect([...reportHiddenEvidenceIds(run)]).toEqual(["photo-bbbbbbbb"]);
+    expect(projectClientReport({ ...run, reportHiddenEvidence: { "photo-aaaaaaaa": { hidden: true }, "photo-bbbbbbbb": { hidden: true }, "photo-cccccccc": { hidden: true } } }, null, { photos }).hasPhoto).toBe(false);
+  });
+});

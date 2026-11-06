@@ -29,6 +29,12 @@ export async function submitChecklistRunForReview(jobId, baseRevision) {
   return result.data;
 }
 
+/** FB07: hide one saved photo from the client report (or show it again). It stays as evidence. */
+export async function setReportPhotoVisibility(jobId, evidenceId, hidden, reason = "") {
+  const result = await httpsCallable(functions, "setReportPhotoVisibility")({ jobId, evidenceId, hidden, reason });
+  return result.data;
+}
+
 export async function completeJobWithoutChecklist(jobId) {
   const result = await completeJobWithoutChecklistCall({ jobId });
   return result.data;
