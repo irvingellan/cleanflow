@@ -174,8 +174,8 @@ test("manager service with checklist reaches saved review, report, and completio
       const reportPage = await reportContext.newPage();
       await reportPage.goto(reportUrl);
       await expect(reportPage.getByRole("heading", { name: "Cleaning report" })).toBeVisible();
-      await expect(reportPage.locator(".client-report__photo")).toBeVisible();
-      await expect.poll(() => reportPage.locator(".client-report__photo")
+      await expect(reportPage.locator(".client-report__thumb-image")).toBeVisible();
+      await expect.poll(() => reportPage.locator(".client-report__thumb-image")
         .evaluate((photo) => photo.naturalWidth)).toBeGreaterThan(0);
       expect((await runRef.collection("clientReportCapabilities").doc("active").get()).data())
         .toMatchObject({ status: "ACTIVE" });
