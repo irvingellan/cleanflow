@@ -2,6 +2,9 @@ import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx
 import { useEffect, useRef, useState } from "react";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
+import {
+  isJobFilled, manualOfferAvailability, maxCleanersPerJob, offerManagerDecisions, requiredCleanerCount, rosterCleanerIds,
+} from "./offerSlots.js";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
 import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
 import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
@@ -96,6 +99,9 @@ export function JobDetail({
   onCreatePublicOfferLink,
   onRevokeAutomaticOffer,
   onAssignCleaner,
+  onDecideOffer,
+  onReopenOffer,
+  onSetCleanerSpots,
   onAssignCleanerDirectly,
   onRemoveAssignment,
   onReplaceAssignment,
@@ -120,6 +126,8 @@ export function JobDetail({
   const [resolvedCleanerLanguages, setResolvedCleanerLanguages] = useState({});
   const [assigningCleanerId, setAssigningCleanerId] = useState(null);
   const [assignmentError, setAssignmentError] = useState(null);
+  const [decidingOfferId, setDecidingOfferId] = useState(null);
+  const [isSavingSpots, setIsSavingSpots] = useState(false);
   const [isDirectAssignmentOpen, setIsDirectAssignmentOpen] = useState(false);
   const [directCleanerSearch, setDirectCleanerSearch] = useState("");
   const [directCleanerId, setDirectCleanerId] = useState("");
@@ -315,6 +323,7 @@ export function JobDetail({
   const eligibleReplacementOffers = sortedOffers.filter(
     (offer) =>
       offer.status === "INTERESTED" &&
+      !offer.managerDecision &&
       offer.cleanerId &&
       !assignedCleanerIds.includes(offer.cleanerId),
   );
@@ -768,20 +777,68 @@ export function JobDetail({
     }
   }
 
-  async function assignCleaner(offer) {
+  async function assignCleaner(offer, options) {
     setAssigningCleanerId(offer.cleanerId);
     setAssignmentError(null);
 
     try {
-      await onAssignCleaner(offer);
+      await (options ? onAssignCleaner(offer, options) : onAssignCleaner(offer));
     } catch (error) {
       setAssignmentError(
         error.code === "job-already-assigned"
           ? translate("offers.alreadyAssigned")
-          : translate("offers.assignmentError"),
+          : error.code === "job-filled"
+            ? translate("offers.jobFilled")
+            : translate("offers.assignmentError"),
       );
     } finally {
       setAssigningCleanerId(null);
+    }
+  }
+
+  // FB09: explicit manager decisions about one invitation. Each one is
+  // reversible with "Reopen", so a single click is enough.
+  async function decideOffer(offer, decision) {
+    if (!onDecideOffer) return;
+    setDecidingOfferId(offer.id);
+    setAssignmentError(null);
+    try {
+      await onDecideOffer(offer, decision);
+    } catch {
+      setAssignmentError(translate("offers.decisionError"));
+    } finally {
+      setDecidingOfferId(null);
+    }
+  }
+
+  async function reopenOffer(offer) {
+    if (!onReopenOffer) return;
+    setDecidingOfferId(offer.id);
+    setAssignmentError(null);
+    try {
+      await onReopenOffer(offer);
+    } catch {
+      setAssignmentError(translate("offers.decisionError"));
+    } finally {
+      setDecidingOfferId(null);
+    }
+  }
+
+  async function addCleanerSpotAndAssign(offer) {
+    if (!window.confirm(translate("offers.addSpotConfirm", { count: requiredCleanerCount(job) + 1 }))) return;
+    await assignCleaner(offer, { addSpot: true });
+  }
+
+  async function changeCleanerSpots(count) {
+    if (!onSetCleanerSpots || isSavingSpots) return;
+    setIsSavingSpots(true);
+    setAssignmentError(null);
+    try {
+      await onSetCleanerSpots(count);
+    } catch {
+      setAssignmentError(translate("offers.spotsError"));
+    } finally {
+      setIsSavingSpots(false);
     }
   }
 
@@ -1100,7 +1157,9 @@ export function JobDetail({
         respondedAt={(offer) => formatCreatedAt(offer.respondedAt, language)}
         assigningCleanerId={assigningCleanerId}
         error={assignmentError}
-        onConfirm={assignCleaner}
+        onConfirm={(offer) => assignCleaner(offer)}
+        decidingOfferId={decidingOfferId}
+        onDecline={onDecideOffer ? (offer) => decideOffer(offer, offerManagerDecisions.notSelected) : null}
         onSeeAllOffers={() => focusIntentSection(offersSectionRef)}
         onAssignManually={canDirectAssign ? () => chooseJobIntent("assignment") : null}
       />}
@@ -1792,6 +1851,26 @@ export function JobDetail({
           </div>
         </div>
 
+        {isAssignmentAware && !automaticOfferJob && sortedOffers.length > 0 && (
+          <div className="offer-spots" data-testid="offer-spots">
+            <span>{translate(isJobFilled(job) ? "offers.spotsFilled" : "offers.spotsOpen", {
+              filled: rosterCleanerIds(job).length, total: requiredCleanerCount(job),
+            })}</span>
+            {onSetCleanerSpots && canEditRoster && (
+              <span className="offer-spots__stepper" role="group" aria-label={translate("offers.spotsLabel")}>
+                <button className="button" type="button" aria-label={translate("offers.spotsLess")}
+                  disabled={isSavingSpots || requiredCleanerCount(job) <= Math.max(1, rosterCleanerIds(job).length)}
+                  onClick={() => changeCleanerSpots(requiredCleanerCount(job) - 1)}>−</button>
+                <span className="offer-spots__count" aria-live="polite">{requiredCleanerCount(job)}</span>
+                <button className="button" type="button" aria-label={translate("offers.spotsMore")}
+                  disabled={isSavingSpots || requiredCleanerCount(job) >= maxCleanersPerJob}
+                  onClick={() => changeCleanerSpots(requiredCleanerCount(job) + 1)}>+</button>
+                <span>{translate("offers.spotsLabel")}</span>
+              </span>
+            )}
+          </div>
+        )}
+
         {offersCreatedCount !== null && (
           <p className="offers-section__success" role="status">
             {translate(automaticOfferJob ? "offers.automaticCreated" : "offers.createdReadyToShare", { count: offersCreatedCount })}
@@ -1825,12 +1904,21 @@ export function JobDetail({
                 translate("common.notProvided"),
               );
               const automaticStatus = automaticOfferDisplayStatus(job, offer);
+              // FB08/FB09: derived availability of a manual invitation.
+              const availability = automaticOfferJob ? null : manualOfferAvailability(job, offer);
+              const isOpenOffer = availability === "open";
+              const manualStatus = availability === "closed"
+                ? offer.managerDecision
+                : availability === "filled" && ["PENDING", "INTERESTED"].includes(offer.status) ? "FILLED" : null;
               const canCreatePublicLink = automaticOfferJob
                 ? automaticStatus === "AWAITING_ACCEPTANCE"
-                : offer.status === "PENDING" &&
+                : isOpenOffer && offer.status === "PENDING" &&
                 (!isAssignmentAware
                   ? job.operationalStatus === "OFFERED"
                   : ["OFFERED", "ASSIGNED"].includes(job.operationalStatus));
+              const canDecideOffer = Boolean(onDecideOffer) && isAssignmentAware && canEditRoster && isOpenOffer;
+              const canReopenOffer = Boolean(onReopenOffer) && isAssignmentAware && canEditRoster
+                && availability === "closed" && !isJobFilled(job);
               const compensationSuggestion = getOfferCompensationSuggestion(job, offer);
               const isEditingOfferCompensation = editingOfferCompensationFor === offer.id;
               const offerMessage = offerMessageFor(offer, offerCleanerName);
@@ -1849,9 +1937,12 @@ export function JobDetail({
                       </span>
                     )}
                   </div>
-                  <span className="status-badge">
+                  <span className={`status-badge${manualStatus ? " is-closed" : ""}`}>
                     {translate(
                       {
+                        FILLED: "offers.spotFilled",
+                        NOT_SELECTED: "offers.notSelected",
+                        WITHDRAWN: "offers.withdrawn",
                         PENDING: "status.pending",
                         INTERESTED: "status.interested",
                         DECLINED: "status.declined",
@@ -1859,7 +1950,7 @@ export function JobDetail({
                         AWAITING_ACCEPTANCE: "offers.waitingForAcceptance",
                         UNAVAILABLE: "offers.unavailable",
                         EXPIRED: "offers.expired",
-                      }[automaticStatus ?? offer.status] || "common.notProvided",
+                      }[automaticStatus ?? manualStatus ?? offer.status] || "common.notProvided",
                     )}
                   </span>
                   {canManageOffers && (
@@ -1884,19 +1975,48 @@ export function JobDetail({
                           {translate("offers.revoke")}
                         </button>
                       )}
-                      {!automaticOfferJob && offer.status === "INTERESTED" &&
+                      {!automaticOfferJob && offer.status === "INTERESTED" && isOpenOffer &&
                         (isAssignmentAware
                           ? canEditRoster && !assignedCleanerIds.includes(offer.cleanerId)
                           : !isAssigned) && (
                         <button
                           className="button button--primary"
                           type="button"
-                          disabled={assigningCleanerId !== null}
+                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
                           onClick={() => assignCleaner(offer)}
                         >
                           {assigningCleanerId === offer.cleanerId
                             ? translate("offers.assigning")
                             : translate("offers.assign")}
+                        </button>
+                      )}
+                      {canDecideOffer && offer.status === "INTERESTED" && (
+                        <button className="button button--text" type="button"
+                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
+                          onClick={() => decideOffer(offer, offerManagerDecisions.notSelected)}>
+                          {decidingOfferId === offer.id ? translate("offers.deciding") : translate("offers.notSelect")}
+                        </button>
+                      )}
+                      {canDecideOffer && offer.status === "PENDING" && (
+                        <button className="button button--text" type="button"
+                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
+                          onClick={() => decideOffer(offer, offerManagerDecisions.withdrawn)}>
+                          {decidingOfferId === offer.id ? translate("offers.deciding") : translate("offers.withdraw")}
+                        </button>
+                      )}
+                      {manualStatus === "FILLED" && offer.status === "INTERESTED" && isAssignmentAware && canEditRoster
+                        && rosterCleanerIds(job).length < maxCleanersPerJob && (
+                        <button className="button button--text" type="button"
+                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
+                          onClick={() => addCleanerSpotAndAssign(offer)}>
+                          {translate("offers.addSpotAndAssign")}
+                        </button>
+                      )}
+                      {canReopenOffer && (
+                        <button className="button button--text" type="button"
+                          disabled={decidingOfferId !== null}
+                          onClick={() => reopenOffer(offer)}>
+                          {decidingOfferId === offer.id ? translate("offers.deciding") : translate("offers.reopen")}
                         </button>
                       )}
                     </div>

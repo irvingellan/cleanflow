@@ -558,8 +558,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
       recordOffersCreated,
       createCleanerOfferLink,
       revokeCleanerOffer,
+      decideCleanerOffer,
+      reopenCleanerOffer,
     },
     actions: {
+      setCleanerSpots,
       assignCleaner,
       assignCleanerDirectly,
       removeCleanerAssignment,
@@ -1483,6 +1486,9 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             onCreatePublicOfferLink={createCleanerOfferLink}
             onRevokeAutomaticOffer={revokeCleanerOffer}
             onAssignCleaner={assignCleaner}
+            onDecideOffer={decideCleanerOffer}
+            onReopenOffer={reopenCleanerOffer}
+            onSetCleanerSpots={setCleanerSpots}
             onAssignCleanerDirectly={assignCleanerDirectly}
             onRemoveAssignment={removeCleanerAssignment}
             onReplaceAssignment={replaceCleanerAssignment}

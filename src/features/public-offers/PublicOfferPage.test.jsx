@@ -56,7 +56,7 @@ describe("Public automatic offer", () => {
   it("shows why a taken offer link is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "offer_already_taken" }, { status: 410 })));
     render(<TranslationProvider><App /></TranslationProvider>);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unavailable — this job has already been accepted.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unavailable — this job has already been filled.");
     expect(screen.queryByRole("link", { name: "Sign in to My schedule" })).toBeNull();
   });
 });

@@ -115,13 +115,14 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
     const state = publicOfferState(offer, job, now);
     if (state !== "available" && state !== "already-taken") continue;
     const closed = state === "already-taken";
-    // A former invite recipient is not entitled to learn later Job changes.
-    const details = closed ? {
+    // A former automatic invite recipient is not entitled to learn later Job
+    // changes. A manual Offer has no snapshot; it keeps the details she had.
+    const details = closed && automatic ? {
       operationalStatus: "OFFERED",
       propertyName: offer.offeredPropertyName,
       scheduledDate: offer.offeredScheduledDate,
       scheduledStart: offer.offeredScheduledStart,
-    } : job;
+    } : closed ? { ...job, operationalStatus: "OFFERED" } : job;
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, details),
       kind: agendaKinds.offer,

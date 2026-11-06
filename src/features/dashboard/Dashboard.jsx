@@ -1,3 +1,4 @@
+import { isJobFilled, manualOfferAvailability } from "../jobs/offerSlots.js";
 import { Icon } from "../../components/Icon.jsx";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
@@ -56,17 +57,22 @@ export function Dashboard({
   const next48HoursJobs = dashboardData?.next48HoursJobs || [];
   const recentlyCompletedJobs = dashboardData?.recentlyCompletedJobs || [];
   const weeklySummary = dashboardData?.weeklySummary;
+  // FB08/FB09: an interested answer is an open decision only while a spot is
+  // free and the manager has not closed that invitation.
+  const openInterest = (job) => (offersByJob[job.id] || []).filter(
+    (offer) => offer.status === "INTERESTED" && manualOfferAvailability(job, offer) === "open",
+  );
   const offeredJobsWithInterest = attentionJobs.filter(
     (job) =>
-      job.operationalStatus === "OFFERED" &&
+      (job.operationalStatus === "OFFERED" || (job.operationalStatus === "ASSIGNED" && !isJobFilled(job))) &&
       !job.assignedCleanerId &&
-      (offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED"),
+      openInterest(job).length > 0,
   );
   const offeredJobsAwaitingResponse = attentionJobs.filter(
     (job) =>
       job.operationalStatus === "OFFERED" &&
       !job.assignedCleanerId &&
-      !(offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED") &&
+      openInterest(job).length === 0 &&
       pendingOffersByJob[job.id],
   );
   const jobsNeedingAssignment = attentionJobs.filter(
@@ -74,7 +80,7 @@ export function Dashboard({
       job.operationalStatus === "UNASSIGNED" ||
       (job.operationalStatus === "OFFERED" &&
         !job.assignedCleanerId &&
-        !(offersByJob[job.id] || []).some((offer) => offer.status === "INTERESTED") &&
+        openInterest(job).length === 0 &&
         !pendingOffersByJob[job.id]),
   );
   const buildAssignmentAttentionItem = (job, isUrgent = false) => ({
@@ -103,8 +109,7 @@ export function Dashboard({
   const priorityGroups = [
     urgentAssignmentItems,
     sortByScheduledDate(offeredJobsWithInterest).map((job) => {
-      const interestedNames = (offersByJob[job.id] || [])
-        .filter((offer) => offer.status === "INTERESTED")
+      const interestedNames = openInterest(job)
         .map((offer) =>
           currentCleanerName(
             offer.cleanerId,

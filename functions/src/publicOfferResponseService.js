@@ -3,6 +3,7 @@ import {
   automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob, isAutomaticOfferRecord,
 } from "./firstAcceptWins.js";
 import { buildManagerDirectAssignmentData } from "./managerDirectAssignmentService.js";
+import { manualOfferAvailability } from "./offerSlots.js";
 import {
   createManagerOperationalNotification, managerOfferNotificationGeneration,
   managerOperationalNotificationCollection, managerOperationalNotificationEventId,
@@ -19,8 +20,13 @@ export function canUsePublicOffer(job) {
 export function publicOfferState(offer, job, now) {
   if (isAutomaticOfferRecord(offer, job)) return automaticOfferState(offer, job, now);
   if (!offer.publicOfferExpiresAt?.toMillis || offer.publicOfferExpiresAt.toMillis() <= now.getTime()) return "expired";
-  return canUsePublicOffer(job) && ["PENDING", "INTERESTED", "DECLINED"].includes(offer.status)
-    ? "available" : "unavailable";
+  if (!canUsePublicOffer(job) || !["PENDING", "INTERESTED", "DECLINED"].includes(offer.status)) return "unavailable";
+  // FB08: once every spot is filled, other recipients see an unavailable
+  // opportunity. A manager decision closes one invitation explicitly.
+  const availability = manualOfferAvailability(job, offer);
+  if (availability === "closed") return "unavailable";
+  if (availability === "filled") return "already-taken";
+  return "available";
 }
 
 export function respondToPublicOffer(database, options) {

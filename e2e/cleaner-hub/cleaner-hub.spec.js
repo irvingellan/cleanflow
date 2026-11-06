@@ -392,7 +392,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     const confirmed = pageA.getByText("Serviço confirmado para você.").or(pageA.getByText("Confirmada para você"));
     await expect(confirmed.first()).toBeVisible();
     await evidence(pageA, "86-02-server-confirmed");
-    const unavailable = "Unavailable — this job has already been accepted.";
+    const unavailable = "Unavailable — this job has already been filled.";
     await expect(pageB.getByText(unavailable)).toBeVisible();
     await expect(pageB.getByRole("button", { name: "Accept job" })).toHaveCount(0);
     await expect(pageB.locator("body")).not.toContainText(fixture.cleanerAName);
@@ -411,7 +411,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await expect(pageB.locator(`[data-job-id="${job.id}"]`)).toContainText(unavailable);
 
     await publicPage.reload();
-    await expect(publicPage.getByText(/already been accepted/i)).toBeVisible();
+    await expect(publicPage.getByText(/already been filled/i)).toBeVisible();
     await expect(publicPage.locator("body")).not.toContainText(fixture.cleanerAName);
 
     const jobData = (await job.get()).data();

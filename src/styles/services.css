@@ -579,6 +579,57 @@
   width: 100%;
 }
 
+/* Confirm and decline sit under the cleaner; decline is the quieter action. */
+.interest-decision__list li > .interest-decision__actions {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 2px;
+  justify-items: stretch;
+}
+
+.interest-decision__actions > .button:not(.button--text) {
+  width: 100%;
+}
+
+.interest-decision__actions > .button--text {
+  justify-self: start;
+}
+
+/* FB09: spots and per-offer decisions in the Offers section. */
+.offer-spots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  color: var(--cf-text-secondary);
+  font-size: var(--cf-text-sm);
+}
+
+.offer-spots__stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.offer-spots__stepper .button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.offer-spots__count {
+  min-width: 2ch;
+  color: var(--cf-text);
+  font-weight: 700;
+  text-align: center;
+}
+
+.offer-status-item .status-badge.is-closed {
+  color: var(--cf-text-muted);
+  background: var(--cf-surface-sunken);
+}
+
 .interest-decision__list .status-badge {
   display: none;
 }

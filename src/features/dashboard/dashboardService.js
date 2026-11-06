@@ -1,3 +1,4 @@
+import { isJobFilled, requiredCleanerCount } from "../jobs/offerSlots.js";
 import {
   collection,
   getDocsFromServer,
@@ -220,8 +221,10 @@ export async function getOperationalDashboard() {
     openJobs.slice(0, attentionJobLimit),
     next48HoursJobs,
   );
+  // A team Job with a spot still open keeps its answers in view (FB08).
   const offeredAttentionJobs = attentionJobs.filter(
-    (job) => job.operationalStatus === "OFFERED",
+    (job) => job.operationalStatus === "OFFERED"
+      || (job.operationalStatus === "ASSIGNED" && requiredCleanerCount(job) > 1 && !isJobFilled(job)),
   );
   const issueCandidateJobs = uniqueJobs([
     ...inProgressJobs.slice(0, issueCandidateJobLimit),

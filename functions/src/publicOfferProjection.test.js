@@ -82,6 +82,7 @@ describe("public offer projection", () => {
   it("uses the v2 per-Offer snapshot and excludes Job prices, margin, and team fields", () => {
     const snapshotted = publicOfferResult({
       ...availableOffer(),
+      cleanerId: "cleaner-a",
       status: "INTERESTED",
       offeredCompensation: 125,
     }, {
@@ -169,5 +170,16 @@ describe("public offer projection", () => {
         operationalStatus: "IN_PROGRESS",
       }),
     ).toEqual({ state: "unavailable" });
+  });
+
+  it("FB08: a filled manual Job closes other invitations without naming who was chosen", () => {
+    const job = { schemaVersion: 2, operationalStatus: "ASSIGNED", assignedCleanerIds: ["private-chosen-id"], propertyName: "House" };
+    expect(publicOfferResult({ ...availableOffer(), cleanerId: "other" }, job)).toEqual({ state: "already-taken" });
+    expect(publicOfferResult({ ...availableOffer(), cleanerId: "private-chosen-id" }, job).state).toBe("available");
+    expect(publicOfferResult({ ...availableOffer(), cleanerId: "other" }, { ...job, requiredCleanerCount: 2 }).state).toBe("available");
+    expect(publicOfferResult({ ...availableOffer(), cleanerId: "other", managerDecision: "WITHDRAWN" },
+      { ...job, requiredCleanerCount: 2 })).toEqual({ state: "unavailable" });
+    expect(publicOfferResult({ ...availableOffer(), cleanerId: "other" }, { ...job, operationalStatus: "IN_PROGRESS" }))
+      .toEqual({ state: "unavailable" });
   });
 });

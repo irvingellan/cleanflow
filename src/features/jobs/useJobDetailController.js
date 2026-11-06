@@ -13,13 +13,16 @@ import {
 } from "../checklists/checklistCapabilityService.js";
 import { getCleaners } from "../cleaners/cleanerService.js";
 import { getJobIssues, resolveIssue } from "../issues/issueService.js";
-import { createPublicOfferLink, getJobOffers, revokeAutomaticOffer } from "./jobOfferService.js";
+import {
+  closeOfferByManager, createPublicOfferLink, getJobOffers, reopenOfferByManager, revokeAutomaticOffer,
+} from "./jobOfferService.js";
 import {
   assignInterestedCleaner,
   assignCleanerDirectly as assignCleanerDirectlyRequest,
   getJobAssignments,
   removeAssignment,
   replaceAssignment,
+  setRequiredCleanerCount,
 } from "./assignmentService.js";
 import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { isAssignmentAwareJob } from "./jobCompatibility.js";
@@ -357,10 +360,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }
   }
 
-  async function assignCleaner(offer) {
+  async function assignCleaner(offer, options = {}) {
     const updatedJob = await updateJob((job) =>
       isAssignmentAwareJob(job)
-        ? assignInterestedCleaner(job.id, offer.id)
+        ? assignInterestedCleaner(job.id, offer.id, options)
         : assignCleanerToJob(job.id, {
           id: offer.cleanerId,
           name: offer.cleanerName,
@@ -536,6 +539,22 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     });
   }
 
+  async function decideCleanerOffer(offer, decision) {
+    if (!selectedJob) return;
+    await closeOfferByManager({ jobId: selectedJob.id, offerId: offer.id, decision, actorUid });
+    if (selectedJobIdRef.current === selectedJob.id) await refreshOffers();
+  }
+
+  async function reopenCleanerOffer(offer) {
+    if (!selectedJob) return;
+    await reopenOfferByManager({ jobId: selectedJob.id, offerId: offer.id, actorUid });
+    if (selectedJobIdRef.current === selectedJob.id) await refreshOffers();
+  }
+
+  async function setCleanerSpots(count) {
+    await updateJob((job) => setRequiredCleanerCount(job.id, count));
+  }
+
   async function revokeCleanerOffer(offerId) {
     if (!selectedJob) return;
     await revokeAutomaticOffer({ jobId: selectedJob.id, offerId });
@@ -704,8 +723,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       recordOffersCreated,
       createCleanerOfferLink,
       revokeCleanerOffer,
+      decideCleanerOffer,
+      reopenCleanerOffer,
     },
     actions: {
+      setCleanerSpots,
       assignCleaner,
       assignCleanerDirectly,
       removeCleanerAssignment,

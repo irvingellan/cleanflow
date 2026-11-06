@@ -121,7 +121,7 @@ const M = {
   "hb.offers.note": ["Responder “Tenho interesse” não reserva o serviço.", "Answering “I'm interested” does not book the job.", "Responder “Me interesa” no reserva el servicio."],
   "hb.offers.autoNote": ["O serviço fica com a primeira cleaner que tiver o aceite confirmado.", "The job goes to the first cleaner whose acceptance is confirmed.", "El servicio se asigna a la primera cleaner cuya aceptación se confirme."],
   "hb.offer.autoPending": ["Aguardando o primeiro aceite", "Waiting for the first acceptance", "Esperando la primera aceptación"],
-  "hb.offer.ALREADY_TAKEN": ["Indisponível — este serviço já foi aceito.", "Unavailable — this job has already been accepted.", "No disponible — este servicio ya fue aceptado."],
+  "hb.offer.ALREADY_TAKEN": ["Indisponível — a vaga deste serviço já foi preenchida.", "Unavailable — this job has already been filled.", "No disponible — este servicio ya fue cubierto."],
   "hb.offer.accept": ["Aceitar serviço", "Accept job", "Aceptar servicio"],
   "hb.offer.assigned": ["Serviço confirmado para você.", "Job confirmed for you.", "Servicio confirmado para ti."],
   "hb.offer.onlineRequired": ["Conecte-se à internet para responder a esta oferta.", "Connect to the internet to respond to this offer.", "Conéctate a internet para responder a esta oferta."],

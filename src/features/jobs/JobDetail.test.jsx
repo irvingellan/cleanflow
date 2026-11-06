@@ -1434,7 +1434,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.queryByText("Scheduled time")).not.toBeInTheDocument();
   });
 
-  it("shows a v2 team roster and keeps multiple interested offers assignable", () => {
+  it("shows a v2 team roster and adds another interested cleaner only through an explicit extra spot", async () => {
     const onAssignCleaner = vi.fn();
     renderExpanded(
       <TranslationProvider>
@@ -1486,8 +1486,15 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByTestId("assignment-acknowledgment-assignment-a")).toHaveTextContent("Awaiting confirmation");
     expect(screen.getByText("A link response does not verify who is holding or using the link.")).toBeVisible();
     expect(screen.queryByText("Assigned cleaner")).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
-    expect(onAssignCleaner).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-b" }));
+    // FB08: one spot (the default) is filled, so the other answer is not an open decision.
+    expect(screen.getByTestId("offer-spots")).toHaveTextContent("1 of 1 cleaners confirmed — job filled");
+    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+    expect(screen.getByText("Spot filled")).toBeVisible();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole("button", { name: "Add as another cleaner" }));
+    expect(confirm).toHaveBeenCalledWith("Add another spot? This job will need 2 cleaners.");
+    await waitFor(() => expect(onAssignCleaner).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-b" }), { addSpot: true }));
+    confirm.mockRestore();
   });
 
   it("shows a cleaner acknowledgment as confirmed only on its matching Assignment", () => {

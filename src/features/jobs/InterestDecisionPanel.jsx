@@ -1,5 +1,6 @@
 import { useTranslation } from "../../i18n/translations.js";
 import { isAutomaticOfferJob } from "./automaticOffers.js";
+import { manualOfferAvailability } from "./offerSlots.js";
 
 // FB03 (Pilot feedback 2026-11-04). When cleaners answered "interested",
 // the manager's decision is shown first instead of a generic "Assign cleaner".
@@ -18,13 +19,15 @@ export function decidableInterestedOffers({
   if (!canManageOffers || isLoadingOffers || hasOffersError || job?.archivedAt) return [];
   // An automatic (#86) batch awards on first acceptance: no second approval.
   if (isAutomaticOfferJob(job)) return [];
+  // FB09: a closed or no-longer-possible answer is history, not an open decision.
   return offers.filter((offer) => offer.status === "INTERESTED" && offer.cleanerId
+    && manualOfferAvailability(job, offer) === "open"
     && (isAssignmentAware ? canEditRoster && !assignedCleanerIds.includes(offer.cleanerId) : !isAssigned));
 }
 
 export function InterestDecisionPanel({
-  ref, offers, cleanerName, respondedAt, assigningCleanerId, error,
-  onConfirm, onSeeAllOffers, onAssignManually,
+  ref, offers, cleanerName, respondedAt, assigningCleanerId, decidingOfferId = null, error,
+  onConfirm, onDecline, onSeeAllOffers, onAssignManually,
 }) {
   const { translate } = useTranslation();
   const single = offers.length === 1;
@@ -42,10 +45,16 @@ export function InterestDecisionPanel({
             <span className="status-badge">{translate("status.interested")}</span>
             {time && <span className="interest-decision__time">{translate("interest.responded", { time })}</span>}
           </div>
-          <button className={`button${single ? " button--primary" : ""}`} type="button"
-            disabled={assigningCleanerId !== null} onClick={() => onConfirm(offer)}>
-            {assigningCleanerId === offer.cleanerId ? translate("offers.assigning") : translate("interest.confirm", { name })}
-          </button>
+          <div className="interest-decision__actions">
+            <button className={`button${single ? " button--primary" : ""}`} type="button"
+              disabled={assigningCleanerId !== null || decidingOfferId !== null} onClick={() => onConfirm(offer)}>
+              {assigningCleanerId === offer.cleanerId ? translate("offers.assigning") : translate("interest.confirm", { name })}
+            </button>
+            {onDecline && <button className="button button--text" type="button"
+              disabled={assigningCleanerId !== null || decidingOfferId !== null} onClick={() => onDecline(offer)}>
+              {decidingOfferId === offer.id ? translate("offers.deciding") : translate("offers.notSelect")}
+            </button>}
+          </div>
         </li>;
       })}
     </ul>

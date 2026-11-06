@@ -398,6 +398,118 @@ test("offers stay separate: interest is recorded through the existing Offer serv
   assert.equal((await agendaFor("cleaner-a")).length, 0);
 });
 
+async function manualOffers(jobId, cleanerIds, extra = {}) {
+  const tokens = {};
+  for (const cleanerId of cleanerIds) {
+    const token = randomBytes(32).toString("base64url");
+    tokens[cleanerId] = token;
+    await admin.doc(`${root}/jobs/${jobId}/offers/${cleanerId}`).set({
+      jobId, cleanerId, cleanerName: cleanerId, status: "PENDING", offeredCompensation: 140,
+      publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+      publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 86400000), ...extra,
+    });
+  }
+  return tokens;
+}
+// Mirrors assignInterestedCleaner / removeAssignment through manager Rules.
+async function managerConfirms(jobId, cleanerId) {
+  const managerDb = environment.authenticatedContext("manager", { firebase: { sign_in_provider: "password" } }).firestore();
+  const job = (await admin.doc(`${root}/jobs/${jobId}`).get()).data();
+  const batch = managerDb.batch();
+  batch.set(managerDb.doc(`${root}/jobs/${jobId}/assignments/assign-${cleanerId}`), {
+    schemaVersion: 1, organizationId: org, jobId, cleanerId, cleanerNameSnapshot: cleanerId, source: "OFFER",
+    sourceOfferId: cleanerId, isActive: true, executionStatus: "ASSIGNED", createdAt: new Date(), assignedAt: new Date(),
+  });
+  batch.update(managerDb.doc(`${root}/jobs/${jobId}`), {
+    assignedCleanerIds: [...job.assignedCleanerIds, cleanerId], operationalStatus: "ASSIGNED",
+    checklistContextRevision: job.checklistContextRevision + 1,
+  });
+  await assertSucceeds(batch.commit());
+}
+
+test("FB08: one spot filled closes the other invitations for links, open tabs and the agenda, without rewriting answers", async () => {
+  await createJob("job-fill", { operationalStatus: "OFFERED" });
+  const tokens = await manualOffers("job-fill", ["cleaner-a", "cleaner-b", "cleaner-c"]);
+  await link("cleaner-a");
+  await link("cleaner-b");
+  // Both express interest; the second one's tab stays open on the page.
+  assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidA, { jobId: "job-fill", status: "INTERESTED" })), { state: "answered", status: "INTERESTED" });
+  assert.equal((await requestPublicOffer("POST", tokens["cleaner-b"], { status: "INTERESTED" })).code, 200);
+  const openTab = await requestPublicOffer("GET", tokens["cleaner-c"]);
+  assert.equal(openTab.code, 200);
+
+  await managerConfirms("job-fill", "cleaner-a");
+  await sync("job-fill");
+
+  // The assigned cleaner keeps her link; the others see a filled spot.
+  assert.equal((await requestPublicOffer("GET", tokens["cleaner-a"])).code, 200);
+  for (const cleanerId of ["cleaner-b", "cleaner-c"]) {
+    const page = await requestPublicOffer("GET", tokens[cleanerId]);
+    assert.equal(page.code, 410);
+    assert.equal(page.body.error, "offer_already_taken");
+    assert.doesNotMatch(JSON.stringify(page.body), /cleaner-a|Ana|140/);
+  }
+  // The tab opened before the assignment cannot record a response now.
+  const late = await requestPublicOffer("POST", tokens["cleaner-c"], { status: "INTERESTED" });
+  assert.equal(late.code, 410);
+  assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidB, { jobId: "job-fill", status: "DECLINED" })), { state: "already-taken", status: null });
+  // History is preserved: answers were not rewritten.
+  const statuses = Object.fromEntries((await admin.collection(`${root}/jobs/job-fill/offers`).get()).docs.map((d) => [d.id, d.data().status]));
+  assert.deepEqual(statuses, { "cleaner-a": "INTERESTED", "cleaner-b": "INTERESTED", "cleaner-c": "PENDING" });
+  const agendaB = await agendaFor("cleaner-b");
+  assert.deepEqual(agendaB.map((item) => [item.kind, item.offerStatus]), [["OFFER", "ALREADY_TAKEN"]]);
+  assert.doesNotMatch(JSON.stringify(agendaB), /cleaner-a|private-manager-note/);
+  assert.equal((await admin.collection(`${root}/jobs/job-fill/assignments`).get()).size, 1);
+
+  // Removing the assignment reopens the spot for the remaining invitations.
+  const managerDb = environment.authenticatedContext("manager", { firebase: { sign_in_provider: "password" } }).firestore();
+  const job = (await admin.doc(`${root}/jobs/job-fill`).get()).data();
+  const batch = managerDb.batch();
+  batch.update(managerDb.doc(`${root}/jobs/job-fill/assignments/assign-cleaner-a`), { isActive: false, removedAt: new Date(), removedByUid: "manager" });
+  batch.update(managerDb.doc(`${root}/jobs/job-fill`), { assignedCleanerIds: [], operationalStatus: "OFFERED", checklistContextRevision: job.checklistContextRevision + 1 });
+  await assertSucceeds(batch.commit());
+  assert.equal((await requestPublicOffer("GET", tokens["cleaner-b"])).code, 200);
+});
+
+test("FB08: a Job with two spots keeps the second spot open, then closes the rest", async () => {
+  await createJob("job-team", { operationalStatus: "OFFERED", requiredCleanerCount: 2 });
+  const tokens = await manualOffers("job-team", ["cleaner-a", "cleaner-b", "cleaner-c"]);
+  await managerConfirms("job-team", "cleaner-a");
+  assert.equal((await requestPublicOffer("GET", tokens["cleaner-b"])).code, 200);
+  assert.equal((await requestPublicOffer("POST", tokens["cleaner-b"], { status: "INTERESTED" })).code, 200);
+  await managerConfirms("job-team", "cleaner-b");
+  assert.equal((await requestPublicOffer("GET", tokens["cleaner-c"])).body.error, "offer_already_taken");
+  assert.equal((await requestPublicOffer("GET", tokens["cleaner-b"])).code, 200);
+});
+
+test("FB09: a manager decision closes one invitation, keeps the answer, and reopens explicitly", async () => {
+  await createJob("job-decide", { operationalStatus: "OFFERED" });
+  const tokens = await manualOffers("job-decide", ["cleaner-a", "cleaner-b"]);
+  assert.equal((await requestPublicOffer("POST", tokens["cleaner-b"], { status: "INTERESTED" })).code, 200);
+  const managerDb = environment.authenticatedContext("manager", { firebase: { sign_in_provider: "password" } }).firestore();
+  await assertSucceeds(managerDb.doc(`${root}/jobs/job-decide/offers/cleaner-b`).update({
+    managerDecision: "NOT_SELECTED", managerDecisionAt: serverTimestamp(), managerDecisionByUid: "manager",
+  }));
+  await assertSucceeds(managerDb.doc(`${root}/jobs/job-decide/offers/cleaner-a`).update({
+    managerDecision: "WITHDRAWN", managerDecisionAt: serverTimestamp(), managerDecisionByUid: "manager",
+  }));
+  for (const cleanerId of ["cleaner-a", "cleaner-b"]) {
+    const page = await requestPublicOffer("GET", tokens[cleanerId]);
+    assert.equal(page.body.error, "offer_unavailable");
+  }
+  assert.equal((await requestPublicOffer("POST", tokens["cleaner-a"], { status: "INTERESTED" })).code, 410);
+  assert.equal((await admin.doc(`${root}/jobs/job-decide/offers/cleaner-b`).get()).data().status, "INTERESTED");
+  await sync("job-decide");
+  assert.equal((await agendaFor("cleaner-b")).length, 0);
+  // A cleaner cannot write manager decisions.
+  await link("cleaner-b");
+  await assertFails(cleanerDb(uidB).doc(`${root}/jobs/job-decide/offers/cleaner-b`).update({ managerDecision: null }));
+  await assertSucceeds(managerDb.doc(`${root}/jobs/job-decide/offers/cleaner-b`).update({
+    managerDecision: null, managerReopenedAt: serverTimestamp(), managerReopenedByUid: "manager",
+  }));
+  assert.equal((await requestPublicOffer("GET", tokens["cleaner-b"])).code, 200);
+});
+
 test("checklist opens through existing capability rules for the assigned cleaner only", async () => {
   await createJob("job-a");
   await link("cleaner-a");

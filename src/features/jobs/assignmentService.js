@@ -17,6 +17,7 @@ import {
 } from "./jobCompatibility.js";
 import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { buildAssignmentChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
+import { isJobFilled, managerDecisionOf, maxCleanersPerJob, requiredCleanerCount } from "./offerSlots.js";
 
 const organizationId = "cleanflow-demo";
 const assignmentSchemaVersion = 1;
@@ -65,6 +66,7 @@ export function canAssignInterestedOffer(job, offer) {
     canEditAssignmentRoster(job) &&
     !isAutomaticOfferJob(job) &&
     offer?.status === "INTERESTED" &&
+    !managerDecisionOf(offer) &&
     typeof offer.cleanerId === "string" &&
     Boolean(offer.cleanerId.trim()) &&
     !getAssignedCleanerIds(job).includes(offer.cleanerId)
@@ -159,7 +161,12 @@ export async function getJobAssignments(jobId) {
     .sort((first, second) => first.id.localeCompare(second.id));
 }
 
-export async function assignInterestedCleaner(jobId, offerId) {
+/**
+ * Confirms an interested cleaner. When every spot is already filled the
+ * manager must ask for one more spot explicitly (`addSpot`), so a stale screen
+ * or a double click cannot put an extra cleaner on a single-cleaner Job.
+ */
+export async function assignInterestedCleaner(jobId, offerId, { addSpot = false } = {}) {
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, offerId);
   const newAssignmentReference = doc(assignmentsCollection(jobId));
@@ -180,11 +187,19 @@ export async function assignInterestedCleaner(jobId, offerId) {
     if (!canAssignInterestedOffer(job, offer)) {
       throw assignmentError("cleaner-already-assigned", "This cleaner is already assigned.", job);
     }
+    if (isJobFilled(job) && !addSpot) {
+      throw assignmentError("job-filled", "Every spot on this Job is already filled.", job);
+    }
+    if (addSpot && assignedCleanerIds.length + 1 > maxCleanersPerJob) {
+      throw assignmentError("too-many-cleaners", "This Job already has the maximum number of cleaners.", job);
+    }
 
     transaction.set(newAssignmentReference, buildAssignmentCreateData(job, offer));
     const jobUpdate = {
       assignedCleanerIds: [...assignedCleanerIds, offer.cleanerId],
       operationalStatus: "ASSIGNED",
+      ...(addSpot && assignedCleanerIds.length + 1 > requiredCleanerCount(job)
+        ? { requiredCleanerCount: assignedCleanerIds.length + 1 } : {}),
     };
     transaction.update(jobReference, {
       ...jobUpdate,
@@ -305,4 +320,28 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
   });
 
   return jobFromSnapshot(await getDoc(jobReference));
+}
+
+/** Number of cleaners a manual Job needs. It can never drop below the current roster. */
+export async function setRequiredCleanerCount(jobId, count) {
+  const jobReference = jobDocument(jobId);
+  await runTransaction(db, async (transaction) => {
+    const job = assertRosterEditableOrOpen(await transaction.get(jobReference));
+    if (!Number.isInteger(count) || count < 1 || count > maxCleanersPerJob
+      || count < getAssignedCleanerIds(job).length) {
+      throw assignmentError("invalid-spot-count", "The number of cleaners is not valid for this Job.", job);
+    }
+    transaction.update(jobReference, { requiredCleanerCount: count });
+  });
+  return jobFromSnapshot(await getDoc(jobReference));
+}
+
+function assertRosterEditableOrOpen(snapshot) {
+  if (!snapshot.exists()) throw assignmentError("job-not-found", "Job not found.");
+  const job = jobFromSnapshot(snapshot);
+  if (!isAssignmentAwareJob(job) || isAutomaticOfferJob(job) || job.archivedAt
+    || !["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus)) {
+    throw assignmentError("assignment-roster-locked", "Cleaner spots cannot be changed for this Job.", job);
+  }
+  return job;
 }

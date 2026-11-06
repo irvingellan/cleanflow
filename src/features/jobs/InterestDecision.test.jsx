@@ -139,3 +139,52 @@ describe("FB03 — interested cleaner decision", () => {
     expect(decidableInterestedOffers({ ...base, canManageOffers: false, job: {}, isAssignmentAware: false })).toHaveLength(0);
   });
 });
+
+describe("FB08/FB09 — closing answers and invitations", () => {
+  it("declines one interested cleaner from the decision panel without assigning anyone", async () => {
+    const { onAssignCleaner, rerenderJob } = renderJob({ offers: [interested("ana", "Ana Demo"), interested("bia", "Bia Demo")] });
+    const onDecideOffer = vi.fn(async () => {});
+    rerenderJob({ onDecideOffer, onReopenOffer: vi.fn(), onSetCleanerSpots: vi.fn() });
+    const panel = screen.getByTestId("interest-decision");
+    fireEvent.click(within(panel).getAllByRole("button", { name: "Decline interest" })[1]);
+    await vi.waitFor(() => expect(onDecideOffer).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-bia" }), "NOT_SELECTED"));
+    expect(onAssignCleaner).not.toHaveBeenCalled();
+  });
+
+  it("after the only spot is filled, the other answer leaves the open decisions but stays in the history", () => {
+    renderJob({ status: "ASSIGNED", job: { assignedCleanerIds: ["ana"] },
+      offers: [interested("ana", "Ana Demo"), interested("bia", "Bia Demo"), pending("cris", "Cris Demo")],
+      assignments: [{ id: "a1", cleanerId: "ana", isActive: true }] });
+    expect(screen.queryByTestId("interest-decision")).toBeNull();
+    expect(screen.getAllByText("Spot filled")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Create public link" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Decline interest" })).toBeNull();
+  });
+
+  it("withdraws an unanswered invite and reopens a closed one", async () => {
+    const { rerenderJob } = renderJob({ offers: [pending("cris", "Cris Demo"), { ...interested("bia", "Bia Demo"), managerDecision: "NOT_SELECTED" }] });
+    const onDecideOffer = vi.fn(async () => {});
+    const onReopenOffer = vi.fn(async () => {});
+    rerenderJob({ onDecideOffer, onReopenOffer, onSetCleanerSpots: vi.fn() });
+    expect(screen.getByText("Interest declined")).toBeInTheDocument();
+    expect(screen.queryByTestId("interest-decision")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw invite" }));
+    await vi.waitFor(() => expect(onDecideOffer).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-cris" }), "WITHDRAWN"));
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Reopen" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
+    await vi.waitFor(() => expect(onReopenOffer).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-bia" })));
+  });
+
+  it("changes the number of spots but never below the confirmed cleaners", async () => {
+    const onSetCleanerSpots = vi.fn(async () => {});
+    const { rerenderJob } = renderJob({ status: "ASSIGNED", job: { assignedCleanerIds: ["ana"] }, offers: [interested("ana", "Ana Demo"), interested("bia", "Bia Demo")], assignments: [{ id: "a1", cleanerId: "ana", isActive: true }] });
+    rerenderJob({ onSetCleanerSpots, onDecideOffer: vi.fn(), onReopenOffer: vi.fn() });
+    expect(screen.getByRole("button", { name: "One cleaner fewer" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "One more cleaner" }));
+    await vi.waitFor(() => expect(onSetCleanerSpots).toHaveBeenCalledWith(2));
+    rerenderJob({ job: { id: "job-fb03", schemaVersion: 2, propertyName: "Example Cottage", scheduledDate: "2026-11-20", operationalStatus: "ASSIGNED", assignedCleanerIds: ["ana"], requiredCleanerCount: 2 },
+      onSetCleanerSpots, onDecideOffer: vi.fn(), onReopenOffer: vi.fn() });
+    expect(screen.getByTestId("offer-spots")).toHaveTextContent("1 of 2 cleaners confirmed");
+    expect(within(screen.getByTestId("interest-decision")).getByRole("button", { name: "Confirm Bia Demo" })).toBeVisible();
+  });
+});

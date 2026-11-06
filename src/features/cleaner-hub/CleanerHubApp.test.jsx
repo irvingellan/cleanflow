@@ -199,7 +199,7 @@ describe("CleanerHubApp (live data boundary)", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
     await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
     await userEvent.click(screen.getByRole("button", { name: "Aceitar serviço" }));
-    expect(screen.getByText("Indisponível — este serviço já foi aceito.")).toHaveAttribute("role", "status");
+    expect(screen.getByText("Indisponível — a vaga deste serviço já foi preenchida.")).toHaveAttribute("role", "status");
     expect(screen.queryByRole("button", { name: "Aceitar serviço" })).toBeNull();
 
     act(() => handlers.agenda({ entries: [{ ...automaticOffer, offerStatus: "ALREADY_TAKEN", jobStatus: "ASSIGNED" }], fromCache: false }));

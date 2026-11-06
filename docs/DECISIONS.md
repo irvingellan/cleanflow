@@ -1007,3 +1007,32 @@ linked cleaner sessions. Default cleaner FCM dispatch to disabled pending a
 separate messaging app configuration and authorized physical pilot. Treat
 ambiguous outcomes as unknown and retain the durable event without resending.
 See [Notifications V1](NOTIFICATIONS_V1_85.md).
+
+---
+
+## DEC-049 — Manual Offers close when every spot is filled (non-blocking spot count)
+
+Date: 2026-11-06
+Status: Accepted for the pilot (FB08/FB09); implemented on `claude/operations-evolution`, not yet published
+
+The design partner reported that, after confirming one interested cleaner for a
+single-cleaner Job, the other cleaner's link still looked available and her answer
+stayed as an open decision with only "Confirm".
+
+An Assignment-aware Job may carry `requiredCleanerCount` (integer 1–10; missing
+means 1). It is a **non-blocking** count: it never gates starting or completing
+the Job, unlike the rejected hard team gate in DEC-039, and a manager can always
+add another cleaner explicitly ("Add as another cleaner" raises the count).
+
+- When the roster reaches the count, every other manual invitation is derived as
+  unavailable for its recipient: the public link answers `offer_already_taken`,
+  an open tab cannot record a response (the server transaction re-checks), and
+  Minha agenda shows the invite as filled. The winner is never named.
+- Cleaner answers are never rewritten. The manager's explicit decisions are stored
+  beside the answer: `managerDecision` `NOT_SELECTED` (decline an interested
+  cleaner) or `WITHDRAWN` (withdraw an unanswered invite), with
+  `managerDecisionAt`/`managerDecisionByUid`. "Reopen" clears the decision and
+  keeps the previous one in `previousManagerDecision*` fields.
+- Removing an Assignment or raising the count reopens the remaining invitations.
+- Automatic (#86) Offers keep their own claim/close contract; this rule applies
+  only to manual Offers.

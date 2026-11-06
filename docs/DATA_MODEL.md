@@ -201,6 +201,15 @@ for manager withdrawal. Job-level claim and close metadata are authoritative.
 An unavailable competitor state is derived for the recipient without rewriting
 their response. See [the persisted contract](FIRST_ACCEPT_WINS_V1.md).
 
+**Manual spots (DEC-049):** an Assignment-aware Job may carry
+`requiredCleanerCount` (1–10, missing = 1). Once the roster reaches it, other
+manual Offers are unavailable to their recipients without rewriting their
+response. A manager decision on one Offer is stored as `managerDecision`
+(`NOT_SELECTED` or `WITHDRAWN`) with `managerDecisionAt` and
+`managerDecisionByUid`; reopening keeps the previous decision in
+`previousManagerDecision`, `previousManagerDecisionAt` and
+`previousManagerDecisionByUid`.
+
 An Offer may carry only the safe proposed compensation relevant to its
 recipient. That proposed amount is not an Assignment payout or a record of
 payment. It must not expose client charges, profit, other cleaner compensation,

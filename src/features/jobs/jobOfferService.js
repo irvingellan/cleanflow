@@ -14,6 +14,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
 import { automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
+import { managerDecisionOf, offerManagerDecisions, rosterCleanerIds } from "./offerSlots.js";
 import {
   canManageAssignmentAwareOffers,
   isAssignmentAwareJob,
@@ -101,14 +102,15 @@ export async function getInterestedJobOffers(jobId) {
 }
 
 export async function getPendingJobOffers(jobId) {
+  // A withdrawn invite is no longer awaiting a reply (FB09).
   const snapshot = await getDocs(
-    query(offersCollection(jobId), where("status", "==", "PENDING"), limit(1)),
+    query(offersCollection(jobId), where("status", "==", "PENDING"), limit(10)),
   );
 
   return snapshot.docs.map((offerDocumentSnapshot) => ({
     ...offerDocumentSnapshot.data(),
     id: offerDocumentSnapshot.id,
-  }));
+  })).filter((offer) => !managerDecisionOf(offer)).slice(0, 1);
 }
 
 export async function respondToJobOffer({ jobId, cleanerId, status }) {
@@ -246,5 +248,62 @@ export async function revokeAutomaticOffer({ jobId, offerId }) {
       throw new Error("This offer is no longer available.");
     }
     transaction.update(offerReference, { status: "REVOKED", revokedAt: serverTimestamp() });
+  });
+}
+
+function offerDecisionError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+/**
+ * FB09: the manager closes one manual invitation. WITHDRAWN applies to an
+ * unanswered invite, NOT_SELECTED to an interested cleaner who is not chosen.
+ * The cleaner's own answer is kept; the decision is stored beside it.
+ */
+export async function closeOfferByManager({ jobId, offerId, decision, actorUid }) {
+  const expectedStatus = { [offerManagerDecisions.withdrawn]: "PENDING", [offerManagerDecisions.notSelected]: "INTERESTED" }[decision];
+  if (!expectedStatus || typeof actorUid !== "string" || !actorUid) {
+    throw offerDecisionError("invalid-offer-decision", "This offer decision is not valid.");
+  }
+  const jobReference = jobDocument(jobId);
+  const offerReference = offerDocument(jobId, offerId);
+  await runTransaction(db, async (transaction) => {
+    const [jobSnapshot, offerSnapshot] = await Promise.all([transaction.get(jobReference), transaction.get(offerReference)]);
+    if (!jobSnapshot.exists() || !offerSnapshot.exists()) throw offerDecisionError("offer-not-found", "Offer not found.");
+    const job = jobFromSnapshot(jobSnapshot);
+    const offer = offerSnapshot.data();
+    if (isAutomaticOfferJob(job) || managerDecisionOf(offer) || offer.status !== expectedStatus
+      || rosterCleanerIds(job).includes(offer.cleanerId)) {
+      throw offerDecisionError("offer-changed", "This offer changed. Refresh and try again.");
+    }
+    transaction.update(offerReference, {
+      managerDecision: decision, managerDecisionAt: serverTimestamp(), managerDecisionByUid: actorUid,
+    });
+  });
+}
+
+/** Reopens a closed manual invitation; the earlier decision stays on the record. */
+export async function reopenOfferByManager({ jobId, offerId, actorUid }) {
+  if (typeof actorUid !== "string" || !actorUid) throw offerDecisionError("invalid-offer-decision", "This offer decision is not valid.");
+  const jobReference = jobDocument(jobId);
+  const offerReference = offerDocument(jobId, offerId);
+  await runTransaction(db, async (transaction) => {
+    const [jobSnapshot, offerSnapshot] = await Promise.all([transaction.get(jobReference), transaction.get(offerReference)]);
+    if (!jobSnapshot.exists() || !offerSnapshot.exists()) throw offerDecisionError("offer-not-found", "Offer not found.");
+    const job = jobFromSnapshot(jobSnapshot);
+    const offer = offerSnapshot.data();
+    if (isAutomaticOfferJob(job) || !managerDecisionOf(offer) || job.archivedAt
+      || !["OFFERED", "ASSIGNED"].includes(job.operationalStatus)) {
+      throw offerDecisionError("offer-changed", "This offer changed. Refresh and try again.");
+    }
+    transaction.update(offerReference, {
+      managerDecision: null,
+      previousManagerDecision: offer.managerDecision,
+      previousManagerDecisionAt: offer.managerDecisionAt ?? null,
+      previousManagerDecisionByUid: offer.managerDecisionByUid ?? null,
+      managerReopenedAt: serverTimestamp(), managerReopenedByUid: actorUid,
+    });
   });
 }
