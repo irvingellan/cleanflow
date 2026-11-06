@@ -19,7 +19,11 @@ import { inspectHostingBuild } from "./prepareHosting.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 /** Reviewed update branches, in publication order. */
-export const updateBranches = ["claude/cleaner-push-update", "claude/cleaner-push-rebind", "claude/cleaner-push-test-button"];
+export const updateBranches = [
+  "claude/cleaner-push-update", "claude/cleaner-push-rebind", "claude/cleaner-push-test-button", "claude/operations-evolution",
+];
+/** Branches whose update moves the operations Functions too. */
+export const operationsBranches = ["claude/operations-evolution"];
 const fullSha = /^[a-f0-9]{40}$/;
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const encode = (value) => JSON.stringify(value, null, 2) + "\n";
@@ -37,20 +41,61 @@ withTest.id = withTest.functions.join(",");
 withTest.only = withTest.functions.map((name) => `functions:${name}`).join(",");
 const removeTest = { id: `delete:${pushTestFunction}`, delete: [pushTestFunction] };
 
-/** Reviewed steps; a rollback removes the test Function when the previous release lacked it. */
-export function updateStepsFor(previousHasTest) {
-  const publish = [withTest, ...laterSteps];
-  return { publish, rollback: previousHasTest ? publish : [removeTest, statusStep, ...laterSteps] };
+/** Scheduled reminders keep their deployment and Cloud Scheduler jobs. */
+export const scheduleFunctions = ["sendTodayExecutionReminder", "sendTomorrowPlanningReminder"];
+/** Functions the operations update (FB01–FB09) adds; a rollback to an earlier release removes them. */
+export const operationsAdditions = [
+  "getMyJobAccess", "setReportPhotoVisibility", "submitChecklistRunForReview",
+  "syncCleanerAgendaOnChecklistRunWrite", "syncCleanerAgendaOnChecklistStart",
+];
+
+const functionsStep = (names, cleanerPushMode) => ({
+  id: `operations:${names.length}`,
+  only: names.map((name) => `functions:${name}`).join(","),
+  functions: names,
+  cleanerPushMode,
+});
+
+/** Every non-push, non-scheduled Function of a release, so the whole server moves to one source. */
+export function operationsFunctions(snapshot, { includeAdditions }) {
+  const push = new Set([...transportFunctions, pushTestFunction, ...scheduleFunctions]);
+  const names = Object.keys(snapshot?.functions || {}).filter((name) => !push.has(name));
+  return [...new Set([...names, ...(includeAdditions ? operationsAdditions : [])])].sort();
+}
+
+/**
+ * Reviewed steps. Without a previous snapshot only the push Functions move
+ * (the earlier updates). With one, every operations Function moves first, and
+ * a rollback first removes the Functions the previous release did not have.
+ */
+export function updateStepsFor(previousHasTest, previousSnapshot = null) {
+  const push = [withTest, ...laterSteps];
+  if (!previousSnapshot) {
+    return { publish: push, rollback: previousHasTest ? push : [removeTest, statusStep, ...laterSteps] };
+  }
+  const added = operationsAdditions.filter((name) => !Object.hasOwn(previousSnapshot.functions, name));
+  const removed = [...added, ...(previousHasTest ? [] : [pushTestFunction])];
+  const pushRollback = previousHasTest ? push : [statusStep, ...laterSteps];
+  return {
+    publish: [functionsStep(operationsFunctions(previousSnapshot, { includeAdditions: true }), "disabled"), ...push],
+    rollback: [
+      ...(removed.length ? [{ id: `delete:${removed.join(",")}`, delete: removed }] : []),
+      functionsStep(operationsFunctions(previousSnapshot, { includeAdditions: false }), "disabled"),
+      ...pushRollback,
+    ],
+  };
 }
 export const updateSteps = updateStepsFor(false);
-/** Source files an update may change outside the client bundle. */
+/** Server configuration an update must never change: Rules, indexes and Hosting/Functions config. */
+export const lockedServerPaths = ["firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json"];
+/** Earlier push-only updates were limited to these server files. */
 export const allowedServerPaths = [
   "functions/src/cleanerPushPilot.js", "functions/src/cleanerPushDevices.js", "functions/src/cleanerPush.test.js",
   "functions/src/cleanerPushDelivery.js", "functions/src/cleanerPushTest.js", "functions/src/index.js",
 ];
 
-export function deploymentArgs(step) {
-  const reviewed = [...updateStepsFor(true).publish, ...updateStepsFor(false).rollback];
+export function deploymentArgs(step, reviewedSteps = null) {
+  const reviewed = reviewedSteps || [...updateStepsFor(true).publish, ...updateStepsFor(false).rollback];
   requireCondition(reviewed.some((candidate) => equal(candidate, step)), "Unreviewed update step.");
   if (step.delete) {
     return ["functions:delete", ...step.delete, "--region", "us-central1", "--project", notificationProject, "--force", "--non-interactive"];
@@ -71,11 +116,20 @@ export function checkTransportRelease(snapshot, sha) {
     && snapshot.functions[name].cleanerPushPilotRelease === sha), "Cleaner push Functions are not all bound to the expected release.");
 }
 
-/** Only the pilot check and its tests may differ in Functions; Rules and Hosting config must not. */
-export function serverScopeChanges(previousSha, sha) {
+/**
+ * Server files changed since the previous release. A push-only update may change
+ * only `allowedServerPaths`; an operations update may change Functions source
+ * but never Rules, indexes or deployment configuration.
+ */
+export function serverScopeChanges(previousSha, sha, { operations = false } = {}) {
   const changed = git("diff", "--name-only", `${previousSha}..${sha}`, "--",
-    "functions", "firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json").split("\n").filter(Boolean);
-  return { changed, allowed: changed.every((file) => allowedServerPaths.includes(file)) };
+    "functions", ...lockedServerPaths).split("\n").filter(Boolean);
+  return {
+    changed,
+    allowed: operations
+      ? changed.every((file) => file.startsWith("functions/src/") && !lockedServerPaths.includes(file))
+      : changed.every((file) => allowedServerPaths.includes(file)),
+  };
 }
 
 function artifact(manifestFile, dist, sha, hash) {
@@ -178,7 +232,8 @@ async function prepare({ directory, previousDir, envDir, verification, baselineF
   const previous = readPrevious(previousDir);
   const baseline = readBaseline(baselineFile, previous);
   requireCondition(validReleaseVerification(json(verification), sha), "The test receipt must pass for this exact SHA.");
-  const scope = serverScopeChanges(previous.plan.sha, sha);
+  const operations = operationsBranches.includes(git("branch", "--show-current"));
+  const scope = serverScopeChanges(previous.plan.sha, sha, { operations });
   requireCondition(scope.allowed, `Server-side change outside the reviewed update scope: ${scope.changed.join(", ")}`);
   const production = await readNotificationProduction("B");
   const live = releaseBSnapshot(production.report);
@@ -211,7 +266,8 @@ async function prepare({ directory, previousDir, envDir, verification, baselineF
     toolchain: releaseToolchain(), artifactHash: build.manifestHash,
     previous: { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash, artifactHash: previous.plan.artifactHash },
     cleanerBinding: previous.plan.cleanerBinding, serverChanges: scope.changed,
-    evidence: { verification: hashFile(verification) }, previousHasTest, baseline: baseline?.hash ?? null, steps: updateStepsFor(previousHasTest),
+    evidence: { verification: hashFile(verification) }, previousHasTest, baseline: baseline?.hash ?? null, operations,
+    steps: updateStepsFor(previousHasTest, operations ? previous.receipt.snapshot : null),
   };
   const bytes = encode(plan);
   writeFileSync(join(directory, "release-plan-U.json"), bytes, { flag: "wx", mode: 0o600 });
@@ -233,7 +289,10 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
     artifactHash: previous.plan.artifactHash }), "The previous publication differs from the sealed plan.");
   const current = artifact(join(directory, "hosting-manifest-U.json"), join(directory, "assets-U"), plan.sha, plan.artifactHash);
   const previousHasTest = Object.hasOwn(previous.receipt.snapshot.functions, pushTestFunction);
-  requireCondition(plan.previousHasTest === previousHasTest && equal(plan.steps, updateStepsFor(previousHasTest)),
+  const operations = plan.operations === true;
+  requireCondition(operations === operationsBranches.includes(plan.branch), "The sealed plan's scope does not match its branch.");
+  requireCondition(plan.previousHasTest === previousHasTest
+    && equal(plan.steps, updateStepsFor(previousHasTest, operations ? previous.receipt.snapshot : null)),
     "The sealed steps differ from the reviewed update steps.");
   const steps = plan.steps[action];
   const target = action === "publish" ? current : previous.build;
@@ -287,7 +346,8 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
         if (step.cleanerPushMode) writeReleaseModes(workspace, { inboxMode: "enabled", cleanerPushMode: step.cleanerPushMode, pilotRelease: target.sha });
         changed = true;
         const cli = join(root, "node_modules/firebase-tools/lib/bin/firebase.js");
-        const run = spawnSync(process.execPath, [cli, ...deploymentArgs(step)], { cwd: workspace, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+        const run = spawnSync(process.execPath, [cli, ...deploymentArgs(step, [...plan.steps.publish, ...plan.steps.rollback])],
+          { cwd: workspace, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
         requireCondition(run.status === 0, `Deploy failed in update step ${step.id}. Lock retained for reconciliation.`);
       },
       verifyAssets: () => verifyLiveAssets(target.manifest),

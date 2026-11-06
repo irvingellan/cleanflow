@@ -85,7 +85,7 @@ test("an update chains from either the original B publication or an earlier upda
 });
 
 test("the rebind update only changes device registration on the server", () => {
-  const scope = serverScopeChanges("be914086655dab7337c79e55e40a4f0f3e95e742", "HEAD");
+  const scope = serverScopeChanges("be914086655dab7337c79e55e40a4f0f3e95e742", "c3e957b73969a0e7e69fc4693e946469e0348e61");
   assert.ok(scope.allowed, scope.changed.join(","));
 });
 
@@ -132,4 +132,39 @@ test("reconciles an attempt that stopped right after its reviewed first step", a
   assert.throws(() => partialReconciliation({ attemptBytes: attempt({ step: "hosting" }), attemptPlanBytes: plan, previousReceipt, live: partial }), /first step/);
   const drifted = { ...partial, hosting: { version: "X", release: "X" } };
   assert.throws(() => partialReconciliation({ attemptBytes: attempt(), attemptPlanBytes: plan, previousReceipt, live: drifted }), /hosting/);
+});
+
+test("an operations update moves every non-push Function and its rollback removes the new ones", async () => {
+  const { operationsAdditions, operationsFunctions, scheduleFunctions } = await import("./releaseNotificationBUpdate.mjs");
+  const previous = { ...live, functions: {
+    ...live.functions, cleanerPushTest: fn("pilot", oldSha), publicOffer: fn(), respondToMyOffer: fn(),
+    sendTodayExecutionReminder: fn(), sendTomorrowPlanningReminder: fn(),
+  } };
+  const steps = updateStepsFor(true, previous);
+  const [operations, ...push] = steps.publish;
+  assert.equal(operations.cleanerPushMode, "disabled");
+  assert.deepEqual(operations.functions, operationsFunctions(previous, { includeAdditions: true }));
+  for (const name of [...transportFunctions, "cleanerPushTest", ...scheduleFunctions]) assert.ok(!operations.functions.includes(name), name);
+  for (const name of ["publicOffer", "respondToMyOffer", "listNotificationInbox", ...operationsAdditions]) assert.ok(operations.functions.includes(name), name);
+  assert.deepEqual(push, updateStepsFor(true).publish);
+  const [removal, rollbackOperations] = steps.rollback;
+  assert.deepEqual(removal.delete, operationsAdditions);
+  assert.ok(!rollbackOperations.functions.some((name) => operationsAdditions.includes(name)));
+  assert.deepEqual(deploymentArgs(removal, steps.rollback).slice(0, 2), ["functions:delete", operationsAdditions[0]]);
+  assert.throws(() => deploymentArgs(removal), /Unreviewed/);
+
+  // A publish that created the new Functions verifies; a rollback that leaves one behind does not.
+  const published = { ...previous, functions: { ...previous.functions } };
+  for (const name of operations.functions) published.functions[name] = { ...(published.functions[name] || fn()), revision: "r2" };
+  assert.doesNotThrow(() => verifyTransition(previous, published, operations, { inboxMode: "enabled" }));
+  const partial = { ...published, functions: { ...published.functions } };
+  for (const name of operationsAdditions.slice(1)) delete partial.functions[name];
+  assert.throws(() => verifyTransition(published, partial, removal, { inboxMode: "enabled" }), /Unexpected/);
+});
+
+test("an operations update may change Functions source but never Rules, indexes or deploy config", () => {
+  const scope = serverScopeChanges("c3e957b73969a0e7e69fc4693e946469e0348e61", "HEAD", { operations: true });
+  assert.ok(scope.allowed, scope.changed.join(","));
+  assert.ok(!scope.changed.some((file) => ["firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json"].includes(file)));
+  assert.equal(serverScopeChanges("c3e957b73969a0e7e69fc4693e946469e0348e61", "HEAD").allowed, false);
 });
