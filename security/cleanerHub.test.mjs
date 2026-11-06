@@ -510,6 +510,26 @@ test("FB09: a manager decision closes one invitation, keeps the answer, and reop
   assert.equal((await requestPublicOffer("GET", tokens["cleaner-b"])).code, 200);
 });
 
+test("FB04: the assigned cleaner's agenda shows the checklist state from creation to review", async () => {
+  await createJob("job-cl");
+  await link("cleaner-a");
+  await assignCleanerDirectly.run(managerRequest({ jobId: "job-cl", cleanerId: "cleaner-a" }));
+  await sync("job-cl");
+  assert.deepEqual((await agendaFor("cleaner-a"))[0].checklist, { status: "NONE", started: false });
+  await createChecklistRun.run(managerRequest({ jobId: "job-cl" }));
+  await sync("job-cl");
+  assert.deepEqual((await agendaFor("cleaner-a"))[0].checklist, { status: "DRAFT", started: false });
+  // The first saved answer marks it started (the real trigger runs on creation).
+  await admin.doc(`${root}/jobs/job-cl/checklistRuns/initial/drafts/current`).set({ revision: 1, checklistAnswers: {} });
+  await sync("job-cl");
+  assert.deepEqual((await agendaFor("cleaner-a"))[0].checklist, { status: "DRAFT", started: true });
+  await admin.doc(`${root}/jobs/job-cl/checklistRuns/initial`).update({ status: "READY_FOR_REVIEW" });
+  await sync("job-cl");
+  const entry = (await agendaFor("cleaner-a"))[0];
+  assert.deepEqual(entry.checklist, { status: "READY_FOR_REVIEW", started: false });
+  assert.doesNotMatch(JSON.stringify(entry), /private-door-code|private-access/);
+});
+
 test("checklist opens through existing capability rules for the assigned cleaner only", async () => {
   await createJob("job-a");
   await link("cleaner-a");

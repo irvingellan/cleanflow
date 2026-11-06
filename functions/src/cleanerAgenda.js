@@ -87,7 +87,21 @@ function baseEntry(organizationId, jobId, cleanerId, job) {
  * Pure projection: which cleaners may see this Job, and what they may see.
  * @returns {Map<string, object>} cleanerId -> entry (without server timestamps)
  */
-export function computeAgendaEntries({ organizationId, jobId, job, offers = [], assignments = [], now = new Date() }) {
+const checklistStatuses = ["DRAFT", "READY_FOR_REVIEW", "ABANDONED"];
+
+/**
+ * FB04: the state of the Job's checklist as the cleaner should see it. Only
+ * server-known Run statuses; "started" means answers or photos were saved.
+ */
+export function checklistAgendaSummary({ run = null, draft = null, evidenceState = null } = {}) {
+  if (!run || !checklistStatuses.includes(run.status)) return { status: "NONE", started: false };
+  const savedAnswers = Number.isInteger(draft?.revision) && draft.revision > 0;
+  const savedPhotos = Array.isArray(evidenceState?.photos) && evidenceState.photos.length > 0;
+  return { status: run.status, started: run.status === "DRAFT" && (savedAnswers || savedPhotos) };
+}
+
+export function computeAgendaEntries({ organizationId, jobId, job, offers = [], assignments = [], now = new Date(), checklist = null }) {
+  const checklistSummary = checklist || { status: "NONE", started: false };
   const entries = new Map();
   if (!job || job.archivedAt) return entries;
   const roster = rosterCleanerIds(job);
@@ -99,6 +113,9 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
       acknowledged: Boolean(assignment?.cleanerAcknowledgedAt),
       offerStatus: null,
       offeredCompensation: null,
+      checklist: { ...checklistSummary },
+      checklistStatus: checklistSummary.status,
+      checklistStarted: checklistSummary.started,
     });
   }
   for (const offer of offers) {
@@ -143,7 +160,7 @@ export function agendaEntryId(cleanerId, jobId) {
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offerExpiresAtMs",
-  "offerDistributionMode",
+  "offerDistributionMode", "checklistStatus", "checklistStarted",
 ];
 
 export function sameEntry(previous, next) {
@@ -209,11 +226,15 @@ export async function syncCleanerAgendaForJob(database, {
   const agenda = organization.collection(cleanerAgendaCollection);
 
   return database.runTransaction(async (transaction) => {
-    const [jobSnapshot, offersSnapshot, assignmentsSnapshot, existingSnapshot] = await Promise.all([
+    const runRef = jobRef.collection("checklistRuns").doc("initial");
+    const [jobSnapshot, offersSnapshot, assignmentsSnapshot, existingSnapshot, runSnapshot, draftSnapshot, evidenceSnapshot] = await Promise.all([
       transaction.get(jobRef),
       transaction.get(jobRef.collection("offers")),
       transaction.get(jobRef.collection("assignments").where("isActive", "==", true)),
       transaction.get(agenda.where("jobId", "==", jobId)),
+      transaction.get(runRef),
+      transaction.get(runRef.collection("drafts").doc("current")),
+      transaction.get(runRef.collection("evidenceState").doc("current")),
     ]);
     const job = jobSnapshot.exists ? jobSnapshot.data() : null;
     const current = typeof now === "function" ? now() : now;
@@ -224,6 +245,11 @@ export async function syncCleanerAgendaForJob(database, {
       offers: offersSnapshot.docs.map((snapshot) => snapshot.data()),
       assignments: assignmentsSnapshot.docs.map((snapshot) => snapshot.data()),
       now: current,
+      checklist: checklistAgendaSummary({
+        run: runSnapshot.exists ? runSnapshot.data() : null,
+        draft: draftSnapshot.exists ? draftSnapshot.data() : null,
+        evidenceState: evidenceSnapshot.exists ? evidenceSnapshot.data() : null,
+      }),
     });
     const previous = new Map();
     const previousRefs = new Map();

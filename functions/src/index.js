@@ -1796,3 +1796,19 @@ export const syncCleanerAgendaOnOfferWrite = cleanerAgendaTrigger(
   "organizations/{orgId}/jobs/{jobId}/offers/{offerId}", recordCleanerOfferInboxEvent,
   { deferInitialAutomaticOfferSync: true },
 );
+// FB04: the cleaner's card shows the checklist state. A Run status change
+// (created, sent for review, closed) and the first saved answer or photo
+// re-project the agenda; later saves do not.
+export const syncCleanerAgendaOnChecklistRunWrite = cleanerAgendaTrigger(
+  "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}",
+);
+export const syncCleanerAgendaOnChecklistStart = onDocumentCreated(
+  {
+    document: "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}/{progressCollection}/current",
+    region: "us-central1", retry: true, timeoutSeconds: 60,
+  },
+  async (event) => {
+    if (!["drafts", "evidenceState"].includes(event.params.progressCollection)) return;
+    await syncCleanerAgendaForJob(db, { organizationId: event.params.orgId, jobId: event.params.jobId });
+  },
+);

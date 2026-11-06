@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeAgendaEntries,
   offeredCompensationFor,
+  checklistAgendaSummary,
   planAgendaChanges,
   rosterCleanerIds,
   sameEntry,
@@ -36,6 +37,7 @@ describe("cleaner agenda projection", () => {
       organizationId: "org", cleanerId: "ana", jobId: "j1", jobStatus: "ASSIGNED",
       scheduledDate: "2026-11-06", scheduledStart: "10:30", propertyName: "Maple Example House",
       scheduleRevision: 2, kind: "ASSIGNED", acknowledged: true, offerStatus: null, offeredCompensation: null,
+      checklist: { status: "NONE", started: false }, checklistStatus: "NONE", checklistStarted: false,
     });
     expect(JSON.stringify([...entries.values()])).not.toMatch(/250|150|private/);
   });
@@ -129,5 +131,21 @@ describe("cleaner agenda projection", () => {
     expect(sameEntry({ ...entry, syncedAt: "x" }, entry)).toBe(true);
     expect(sameEntry({ ...entry, scheduledStart: "11:00" }, entry)).toBe(false);
     expect(sameEntry(undefined, entry)).toBe(false);
+  });
+
+  it("FB04: carries the Job's checklist state on assigned entries only", () => {
+    expect(checklistAgendaSummary()).toEqual({ status: "NONE", started: false });
+    expect(checklistAgendaSummary({ run: { status: "DRAFT" } })).toEqual({ status: "DRAFT", started: false });
+    expect(checklistAgendaSummary({ run: { status: "DRAFT" }, draft: { revision: 3 } })).toEqual({ status: "DRAFT", started: true });
+    expect(checklistAgendaSummary({ run: { status: "DRAFT" }, evidenceState: { photos: [{}] } })).toEqual({ status: "DRAFT", started: true });
+    expect(checklistAgendaSummary({ run: { status: "READY_FOR_REVIEW" }, draft: { revision: 9 } })).toEqual({ status: "READY_FOR_REVIEW", started: false });
+    expect(checklistAgendaSummary({ run: { status: "SOMETHING_ELSE" } })).toEqual({ status: "NONE", started: false });
+    const checklist = { status: "DRAFT", started: true };
+    const entries = computeAgendaEntries({ organizationId: "o", jobId: "j", checklist, now,
+      job: job({ operationalStatus: "ASSIGNED", assignedCleanerIds: ["ana"], requiredCleanerCount: 2 }),
+      offers: [{ cleanerId: "bia", status: "PENDING", publicOfferExpiresAt: future }] });
+    expect(entries.get("ana")).toMatchObject({ checklist, checklistStatus: "DRAFT", checklistStarted: true });
+    expect(entries.get("bia")).not.toHaveProperty("checklist");
+    expect(sameEntry(entries.get("ana"), { ...entries.get("ana"), checklistStarted: false })).toBe(false);
   });
 });
