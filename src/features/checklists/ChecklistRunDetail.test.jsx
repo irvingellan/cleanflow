@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { ChecklistRunDetail } from "./ChecklistRunDetail.jsx";
@@ -45,20 +45,41 @@ function renderChecklistRun(runOverrides = {}) {
 }
 
 describe("ChecklistRunDetail", () => {
-  it("represents twenty saved photos and fetches only the explicitly selected opaque identity", async () => {
-    const loadEvidence = vi.fn().mockResolvedValue(new Blob(["abc"], { type: "image/jpeg" }));
-    const revoke = vi.fn(); let n = 0;
-    vi.stubGlobal("URL", { ...URL, createObjectURL: () => `blob:photo-${++n}`, revokeObjectURL: revoke });
+  it("shows twenty photos as a grid, loads only what is near the screen and opens a swipeable viewer", async () => {
+    const pending = [];
+    const loadEvidence = vi.fn(() => new Promise((resolve) => pending.push(resolve)));
+    let n = 0;
+    vi.stubGlobal("URL", { ...URL, createObjectURL: () => `blob:photo-${++n}`, revokeObjectURL: vi.fn() });
+    const observed = [];
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback) { this.callback = callback; }
+      observe(element) { observed.push({ element, callback: this.callback }); }
+      disconnect() {}
+    });
     render(<TranslationProvider><ChecklistRunDetail job={{ id: "job-1" }} checklistRun={{ id: "initial", status: "DRAFT", evidence: Array.from({ length: 20 }, (_, i) => ({ evidenceId: `opaque-${i}`, requirementId: i ? "additional" : "living-belongings" })) }} loadEvidence={loadEvidence} /></TranslationProvider>);
-    const buttons = screen.getAllByRole("button", { name: "View photo" });
-    expect(buttons).toHaveLength(20);
+    const tiles = screen.getAllByRole("button", { name: /^Open photo \d+:/ });
+    expect(tiles).toHaveLength(20);
     expect(loadEvidence).not.toHaveBeenCalled();
-    fireEvent.click(buttons[10]);
-    expect(await screen.findByRole("img")).toHaveAttribute("src", "blob:photo-1");
-    expect(loadEvidence).toHaveBeenCalledWith("job-1", "additional", "opaque-10");
-    fireEvent.click(buttons[11]);
-    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(1));
-    expect(revoke).toHaveBeenCalledWith("blob:photo-1");
+
+    // The first five tiles come near the screen: at most three load at once.
+    act(() => observed.slice(0, 5).forEach(({ element, callback }) => callback([{ isIntersecting: true, target: element }])));
+    expect(loadEvidence).toHaveBeenCalledTimes(3);
+
+    // Opening photo 11 puts it (and its neighbours) ahead of the queue.
+    fireEvent.click(tiles[10]);
+    expect(screen.getByRole("dialog", { name: "Photo 11 of 20" })).toBeVisible();
+    await act(async () => { pending.splice(0).forEach((resolve) => resolve(new Blob(["x"], { type: "image/jpeg" }))); });
+    expect(loadEvidence.mock.calls.slice(3, 6).map((call) => call[2])).toEqual(["opaque-9", "opaque-11", "opaque-10"]);
+    await act(async () => { pending.splice(0).forEach((resolve) => resolve(new Blob(["x"], { type: "image/jpeg" }))); });
+    expect(screen.getByAltText("Saved checklist photo")).toHaveAttribute("src", expect.stringMatching(/^blob:photo-/));
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByRole("dialog", { name: "Photo 12 of 20" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Next photo" }));
+    expect(screen.getByRole("dialog", { name: "Photo 13 of 20" })).toBeVisible();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(new Set(loadEvidence.mock.calls.map((call) => call[2])).size).toBe(loadEvidence.mock.calls.length);
   });
   it("shows the cleaner from the existing Assignment snapshot, with a localized unassigned fallback", () => {
     const { rerender } = render(
@@ -287,8 +308,7 @@ describe("ChecklistRunDetail", () => {
 
     expect(screen.getByText("Sink")).toBeVisible();
     expect(screen.getByText("Done")).toBeVisible();
-    expect(loadEvidence).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "View photo" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Open photo 1:/ }));
     expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:abandoned-photo");
     expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
   });
@@ -309,8 +329,7 @@ describe("ChecklistRunDetail", () => {
     );
 
     expect(await screen.findByText("Saved evidence")).toBeVisible();
-    expect(loadEvidence).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "View photo" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Open photo 1:/ }));
     expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
     expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:manager-photo");
   });

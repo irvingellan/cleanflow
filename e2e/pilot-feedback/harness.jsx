@@ -6,6 +6,8 @@ import { CleanerHubApp } from "../../src/features/cleaner-hub/CleanerHubApp.jsx"
 import { PublicChecklistPage } from "../../src/features/checklists/PublicChecklistPage.jsx";
 import { PublicClientReportPage } from "../../src/features/checklists/PublicClientReportPage.jsx";
 import { ClientReportControls } from "../../src/features/checklists/ClientReportControls.jsx";
+import { ChecklistRunDetail } from "../../src/features/checklists/ChecklistRunDetail.jsx";
+import { JobsPage, createJobListFilters } from "../../src/features/jobs/JobsPage.jsx";
 import { TranslationProvider } from "../../src/i18n/translations.js";
 import { hubEntries, managerCleaners, managerScenarios, submittedEntry } from "./fixtures.js";
 import "../../src/index.css";
@@ -99,7 +101,41 @@ function ReportManager() {
   </div></section></main>;
 }
 
+const photoColors = ["#cfe0d6", "#d9e3ec", "#eadfcf", "#e1d9ea", "#d4e6e4", "#e8d6d6", "#dfe6cf", "#d6dbe8"];
+async function syntheticEvidence(_jobId, _requirementId, evidenceId) {
+  const index = Number(String(evidenceId || "photo-1").split("-").pop()) - 1;
+  await wait(150 + (index % 4) * 120);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200"><rect width="900" height="1200" fill="${photoColors[index % photoColors.length]}"/><text x="450" y="610" font-family="sans-serif" font-size="56" text-anchor="middle" fill="#41524a">${lang === "pt" ? "Foto fictícia" : "Sample photo"} ${index + 1}</text></svg>`;
+  return new Blob([svg], { type: "image/svg+xml" });
+}
+
+function ChecklistManager() {
+  const count = Number(params.get("photos") || 24);
+  const evidence = Array.from({ length: count }, (_, i) => ({ evidenceId: `photo-${i + 1}`, requirementId: i ? "additional" : "living-belongings", hiddenFromReport: i === 3 }));
+  const run = { id: "initial", status: "READY_FOR_REVIEW", property: { name: "Casa Jasmim (exemplo)" }, checklistItemCount: 9, inventoryItemCount: 3, evidence,
+    draft: { revision: 2, lastSavedAt: null, checklistAnswers: {}, inventoryAnswers: {}, issueNotes: "", generalNotes: "" } };
+  return <main className="app-shell"><section className="foundation"><ChecklistRunDetail job={{ ...reportJob, clientId: undefined, id: "synthetic-checklist-job", operationalStatus: "COMPLETED" }}
+    checklistRun={run} loadEvidence={syntheticEvidence} setPhotoVisibility={async () => {}} onBack={noop} onRefresh={noop} /></section></main>;
+}
+
+const listJobs = [
+  ["a", "Casa Jasmim (exemplo)", "2026-11-20", "COMPLETED"], ["b", "Casa Bromélia (exemplo)", "2026-11-19", "COMPLETED"],
+  ["c", "Loft Ipê (exemplo)", "2026-11-21", "IN_PROGRESS"], ["d", "Studio Acácia (exemplo)", "2026-11-22", "ASSIGNED"],
+  ["e", "Casa Hibisco (exemplo)", "2026-11-18", "COMPLETED"],
+].map(([id, propertyName, scheduledDate, operationalStatus]) => ({ id: `job-${id}`, propertyName, clientName: "Cliente Exemplo", scheduledDate, scheduledStart: "10:00", operationalStatus, dataProvenance: "DEMO", assignedCleanerIds: [] }));
+const listCounts = { "job-a": { photoCount: 42 }, "job-b": { photoCount: 0 }, "job-c": { photoCount: 7 }, "job-e": { photoCount: 18 } };
+
+function Services() {
+  const [filters, setFilters] = useState(createJobListFilters({ withPhotos: params.get("withPhotos") === "1" }));
+  return <main className="app-shell"><section className="foundation"><JobsPage jobs={listJobs} isLoading={false} hasError={false} onSelect={noop} onCreate={noop}
+    filters={filters} cleaners={[]} properties={[]} onFiltersChange={(changes) => setFilters((current) => ({ ...current, ...changes }))}
+    onClearFilters={() => setFilters(createJobListFilters())} hasMore={false} isLoadingMore={false} onLoadMore={noop}
+    loadPhotoCounts={async () => { await wait(200); return listCounts; }} /></section></main>;
+}
+
 function App() {
+  if (screen === "checklist-manager") return <><Strip /><ChecklistManager /></>;
+  if (screen === "services") return <><Strip /><Services /></>;
   if (screen === "report") return <><Strip /><PublicClientReportPage token="synthetic-token" /></>;
   if (screen === "report-manager") return <><Strip /><ReportManager /></>;
   if (screen === "hub") return <><Strip /><CleanerHubApp hubOptions={hubOptions} /></>;

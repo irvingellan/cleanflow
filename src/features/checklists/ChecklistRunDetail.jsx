@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { getChecklistEvidence, setReportPhotoVisibility } from "./checklistRunService.js";
 import { ClientReportControls } from "./ClientReportControls.jsx";
+import { ChecklistPhotoGrid } from "./ChecklistPhotoGrid.jsx";
 
 function checklistLabel(item, translate) {
   return item?.label || translate(item?.labelKey || item?.id || "checklists.itemCount");
@@ -78,37 +79,6 @@ function AttentionNames({ title, items, emptyMessage, translate }) {
   );
 }
 
-function ChecklistEvidencePhoto({ jobId, evidence, translate, loadEvidence, selected, onSelect }) {
-  const [url, setUrl] = useState(null);
-  const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    let objectUrl = null;
-    setUrl(null);
-    setHasError(false);
-    if (!selected) return;
-    (evidence.evidenceId ? loadEvidence(jobId, evidence.requirementId, evidence.evidenceId) : loadEvidence(jobId, evidence.requirementId))
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        if (active) setUrl(objectUrl);
-        else URL.revokeObjectURL(objectUrl);
-      })
-      .catch(() => {
-        if (active) setHasError(true);
-      });
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [evidence.requirementId, evidence.evidenceId, selected, jobId, loadEvidence]);
-
-  if (!selected) return <button className="button button--secondary checklist-photo-view" type="button" onClick={onSelect}>{translate("checklists.viewPhoto")}</button>;
-  if (hasError) return <p className="checklist-run__evidence-error">{translate("checklists.photoUnavailable")}</p>;
-  if (!url) return <p className="checklist-run__evidence-loading">{translate("checklists.photoLoading")}</p>;
-  return <><button className="button button--secondary checklist-photo-view" type="button" onClick={onSelect}>{translate("checklists.hidePhoto")}</button><img className="checklist-run__evidence-photo" src={url} alt={translate("checklists.savedPhoto")} loading="lazy" /></>;
-}
-
 /** Displays the server-projected manager summary, never a raw Property or Run. */
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
@@ -116,7 +86,6 @@ export function ChecklistRunDetail({
   onSubmitForReview, setPhotoVisibility = setReportPhotoVisibility,
 }) {
   const { language, translate } = useTranslation();
-  const [selectedEvidence, setSelectedEvidence] = useState(null);
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
   const requiredPhotoCount = Number.isInteger(checklistRun.requiredPhotoCount)
@@ -401,24 +370,18 @@ export function ChecklistRunDetail({
         <section className="checklist-run__section" aria-labelledby="checklist-evidence-title">
           <h3 id="checklist-evidence-title">{translate("checklists.savedEvidence")}</h3>
           {photoVisibilityError && <p className="form-error" role="alert">{translate("checklists.photoVisibilityError")}</p>}
-          {evidence.map((item) => (
-            <div className="checklist-run__evidence" key={item.evidenceId || item.requirementId}>
-              <p>{translate("checklists.photoForRequirement", {
-                requirement: item.requirementId === "living-belongings"
-                  ? translate("checklistPreview.livingBelongings")
-                  : translate("checklists.additionalPhoto"),
-              })}</p>
-              {item.evidenceId && <p className="checklist-run__report-visibility">
-                {(hiddenOverrides[item.evidenceId] ?? item.hiddenFromReport === true) && <span className="status-badge is-closed">{translate("checklists.hiddenFromReport")}</span>}
-                <button className="button button--text" type="button" onClick={() => togglePhotoInReport(item)}>
-                  {translate((hiddenOverrides[item.evidenceId] ?? item.hiddenFromReport === true) ? "checklists.showInReport" : "checklists.hideFromReport")}
-                </button>
-              </p>}
-              <ChecklistEvidencePhoto jobId={job.id} evidence={item} translate={translate} loadEvidence={loadEvidence}
-                selected={selectedEvidence === `${job.id}:${item.evidenceId || item.requirementId}`}
-                onSelect={() => setSelectedEvidence((current) => current === `${job.id}:${item.evidenceId || item.requirementId}` ? null : `${job.id}:${item.evidenceId || item.requirementId}`)} />
-            </div>
-          ))}
+          <p className="cf-block__subtitle">{translate("photoViewer.gridHint", { count: evidence.length })}</p>
+          <ChecklistPhotoGrid
+            jobId={job.id}
+            evidence={evidence}
+            loadEvidence={loadEvidence}
+            translate={translate}
+            isHidden={(item) => Boolean(item.evidenceId) && (hiddenOverrides[item.evidenceId] ?? item.hiddenFromReport === true)}
+            onToggleReport={togglePhotoInReport}
+            requirementLabel={(item) => (item.requirementId === "living-belongings"
+              ? translate("checklistPreview.livingBelongings")
+              : translate("checklists.additionalPhoto"))}
+          />
         </section>
       )}
 

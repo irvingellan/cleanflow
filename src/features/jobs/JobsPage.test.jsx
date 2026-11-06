@@ -51,7 +51,7 @@ const jobs = [
 
 afterEach(() => vi.restoreAllMocks());
 
-function JobsPageHarness({ initialFilters = createJobListFilters() }) {
+function JobsPageHarness({ initialFilters = createJobListFilters(), loadPhotoCounts = vi.fn().mockResolvedValue({}) }) {
   const [filters, setFilters] = useState(initialFilters);
 
   return (
@@ -74,10 +74,29 @@ function JobsPageHarness({ initialFilters = createJobListFilters() }) {
         hasMore={false}
         isLoadingMore={false}
         onLoadMore={vi.fn()}
+        loadPhotoCounts={loadPhotoCounts}
       />
     </TranslationProvider>
   );
 }
+
+describe("JobsPage photos", () => {
+  it("asks only for services that can have photos, shows the count and filters by it", async () => {
+    const loadPhotoCounts = vi.fn().mockResolvedValue({ "job-completed-recent": { photoCount: 12 }, "job-completed-earlier": { photoCount: 0 } });
+    const user = userEvent.setup();
+    render(<JobsPageHarness loadPhotoCounts={loadPhotoCounts} />);
+
+    expect(await screen.findByText("12 photos")).toBeInTheDocument();
+    expect(loadPhotoCounts).toHaveBeenCalledTimes(1);
+    expect(loadPhotoCounts.mock.calls[0][0].sort()).toEqual(["job-completed-earlier", "job-completed-recent"]);
+    expect(screen.getAllByRole("button", { name: /^View / })).toHaveLength(4);
+
+    await user.click(screen.getByRole("button", { name: "With photos" }));
+    const rows = screen.getAllByRole("button", { name: /^View / });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("data-job-id", "job-completed-recent");
+  });
+});
 
 describe("dashboardJobListFilters", () => {
   it("maps Dashboard metric presets to the existing Jobs filters", () => {

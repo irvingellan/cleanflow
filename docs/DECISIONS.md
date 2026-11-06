@@ -1089,3 +1089,20 @@ the cleaner's notes verbatim and gave no way to send it or know it was sent.
   `update: true` mode for presentation changes and the sent log.
 **Not included:** automatic email/SMS delivery (would need a paid provider and
 client consent), business branding, link lifetime change (still 7 days).
+
+## DEC-052 — Photo grid, shared viewer and photo counts in the services list
+
+**Context:** the manager had to open checklist photos one at a time (opening one
+closed the other) and searched service by service to find one with photos.
+**Decision:**
+- Manager checklist photos show as a thumbnail grid. A photo loads when its
+  tile comes near the screen, at most three at a time, once per visit, and is
+  released when the screen closes. No thumbnails are generated or stored.
+- One full-screen viewer (`PhotoLightbox`) serves the manager checklist and the
+  client report: swipe, arrow keys, counter, neighbours preloaded. Hiding a
+  photo from the client report is also available inside the viewer.
+- New read-only callable `getJobPhotoCounts` (manager only, ≤100 Jobs per call)
+  returns photo counts and checklist status, never photos or paths. The services
+  list asks only for in-progress and completed services, reuses completed counts
+  for the session, shows a camera count on each row and a "With photos" filter
+  over the services already loaded.

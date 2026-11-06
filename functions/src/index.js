@@ -38,6 +38,7 @@ import { requireOrganizationManager } from "./managerAuthorization.js";
 import { syncCleanerAgendaForJob } from "./cleanerAgenda.js";
 import { loadCleanerJobAccess } from "./cleanerJobAccess.js";
 import { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } from "./cleanerNotificationEvents.js";
+import { loadJobPhotoCounts, validPhotoCountRequest } from "./jobPhotoCounts.js";
 import { createManagerReminderInboxItem, inboxEventId, managerInboxCollection } from "./notificationInboxEvents.js";
 import { changeNotificationInboxItemForRequest, listNotificationInboxForRequest } from "./notificationInbox.js";
 import { deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice } from "./cleanerPushDevices.js";
@@ -973,6 +974,17 @@ export const revokeChecklistCapability = onCall(
         actorUid: request.auth.uid,
       }),
     };
+  },
+);
+
+// Services list: how many checklist photos each Job has (counts only).
+export const getJobPhotoCounts = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobIds = request.data?.jobIds;
+    if (!validPhotoCountRequest(jobIds)) throw new HttpsError("invalid-argument", "Photo count request is invalid.");
+    return loadJobPhotoCounts(db, { organizationId, jobIds });
   },
 );
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useJobPhotoCounts } from "./jobPhotoCountService.js";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { Icon } from "../../components/Icon.jsx";
 import { DataProvenanceBadge } from "../../components/DataProvenanceBadge.jsx";
@@ -56,6 +57,7 @@ export function JobsPage({
   onToggleExcluded,
   variant = "page",
   selectedJobId = null,
+  loadPhotoCounts,
 }) {
   const { language, translate } = useTranslation();
   const isPane = variant === "pane";
@@ -69,6 +71,9 @@ export function JobsPage({
     () => Object.fromEntries(cleaners.map((cleaner) => [cleaner.id, cleaner.name])),
     [cleaners],
   );
+  const { counts: photoCounts, isLoading: isLoadingPhotoCounts } = useJobPhotoCounts(jobs, loadPhotoCounts);
+  // The list order only depends on photo counts while the "With photos" filter is on.
+  const photoFilterCounts = filters.withPhotos ? photoCounts : null;
   const normalizedSearch = filters.search.trim().toLocaleLowerCase(language);
   const sortedJobs = useMemo(
     () =>
@@ -96,8 +101,10 @@ export function JobsPage({
             .toLocaleLowerCase(language)
             .includes(normalizedSearch);
         })
+        .filter((job) => !photoFilterCounts || photoFilterCounts[job.id] > 0)
         .sort(sortJobWorklist),
     [
+      photoFilterCounts,
       filters.cleanerId,
       filters.clientId,
       filters.propertyId,
@@ -246,6 +253,14 @@ export function JobsPage({
             >
               <Icon name="checkCircle" size={16} />{translate("jobs.filterCompleted")}
             </button>
+            <button
+              className={`job-filter-chip${filters.withPhotos ? " job-filter-chip--active" : ""}`}
+              type="button"
+              aria-pressed={Boolean(filters.withPhotos)}
+              onClick={() => onFiltersChange({ withPhotos: !filters.withPhotos })}
+            >
+              <Icon name="camera" size={16} />{translate("jobs.filterWithPhotos")}
+            </button>
           </div>
           <div className="job-filters__utility-actions">
             <button
@@ -363,6 +378,12 @@ export function JobsPage({
       {isLoading && (
         <StateCard message={translate("jobs.loading")} status="status" />
       )}
+      {!isLoading && filters.withPhotos && isLoadingPhotoCounts && (
+        <p className="job-list__context" role="status">{translate("jobs.lookingForPhotos")}</p>
+      )}
+      {!isLoading && filters.withPhotos && hasMore && (
+        <p className="job-list__context">{translate("jobs.withPhotosLoadedOnly")}</p>
+      )}
       {!isLoading && hasError && (
         <StateCard
           message={translate("jobs.error")}
@@ -450,6 +471,13 @@ export function JobsPage({
                 </span>
                 <CompactServiceLifecycle job={job} descriptionId={`jobs-lifecycle-${job.id}`} />
                 <span className="job-card__secondary">
+                  {photoCounts[job.id] > 0 && (
+                    <span className="job-card__photos" title={translate("jobs.photoCount", { count: photoCounts[job.id] })}>
+                      <Icon name="camera" size={14} />
+                      <span aria-hidden="true">{photoCounts[job.id]}</span>
+                      <span className="visually-hidden">{translate("jobs.photoCount", { count: photoCounts[job.id] })}</span>
+                    </span>
+                  )}
                   <span className="job-card__provenance"><DataProvenanceBadge record={job} /></span>
                   {job.archivedAt && <span className="record-archive-badge">{translate("archive.excluded")}</span>}
                 </span>

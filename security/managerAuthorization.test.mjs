@@ -31,6 +31,7 @@ const {
   getChecklistRun,
   getChecklistCapability,
   getChecklistEvidence,
+  getJobPhotoCounts,
   getClientReportCapability,
   createClientReport,
   revokeClientReport,
@@ -1556,6 +1557,11 @@ test("V2 multiple photos persist privately, survive refresh, remove safely, and 
   assert.equal((await publicChecklistSave({ ...remove, evidenceId: first.body.evidenceId, mutationId: "late-remove" })).code, 410);
   const manager = await getChecklistRun.run(request("manager", { jobId: "job" }));
   assert.equal(manager.run.evidence.length, 2);
+  // Services list: counts only, manager only.
+  const counts = await getJobPhotoCounts.run(request("manager", { jobIds: ["job", "job-without-checklist"] }));
+  assert.deepEqual(counts, { counts: { job: { photoCount: 2, checklistStatus: "READY_FOR_REVIEW" } } });
+  await assert.rejects(getJobPhotoCounts.run(request("cleaner", { jobIds: ["job"] })), { code: "permission-denied" });
+  await assert.rejects(getJobPhotoCounts.run(request("manager", { jobIds: "job" })), { code: "invalid-argument" });
   const reportLink = await createClientReport.run(request("manager", { jobId: "job" }));
   const report = await publicClientReportGet(reportLink.token);
   assert.equal(report.code, 200);

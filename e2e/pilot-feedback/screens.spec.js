@@ -100,3 +100,26 @@ test("Client report — manager prepares and sends", async ({ page }, testInfo) 
   await page.getByText(/enviado em/).waitFor();
   await shot(page, testInfo, "report-manager-sent", { fullPage: true });
 });
+
+test("Photos — manager checklist grid and viewer", async ({ page }, testInfo) => {
+  await page.goto("/?screen=checklist-manager&lang=pt");
+  const grid = page.locator(".photo-grid");
+  await grid.scrollIntoViewIfNeeded();
+  await page.locator(".photo-grid__tile img").nth(5).waitFor();
+  await page.waitForTimeout(400);
+  await shot(page, testInfo, "photos-grid");
+  await page.getByRole("button", { name: /^Abrir foto 4:/ }).click();
+  await page.locator(".photo-lightbox__image.is-loaded").waitFor();
+  await page.waitForTimeout(400);
+  await shot(page, testInfo, "photos-viewer");
+  await page.keyboard.press("ArrowRight");
+  await page.getByRole("dialog", { name: "Foto 5 de 24" }).waitFor();
+});
+
+test("Photos — services list with photo counts", async ({ page }, testInfo) => {
+  await page.goto("/?screen=services&lang=pt");
+  await page.getByText("42").first().waitFor();
+  await shot(page, testInfo, "services-photo-counts");
+  await page.getByRole("button", { name: "Com fotos" }).click();
+  await shot(page, testInfo, "services-with-photos");
+});

@@ -3054,39 +3054,6 @@ h1 {
   gap: 6px;
 }
 
-.client-report-viewer {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
-  background: rgb(10 14 12 / 0.94);
-  color: #fff;
-}
-
-.client-report-viewer__bar,
-.client-report-viewer__nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.client-report-viewer__stage {
-  display: grid;
-  place-items: center;
-  min-height: 0;
-}
-
-.client-report-viewer__image {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 8px;
-}
-
 @media (max-width: 520px) {
   .client-report__header {
     flex-direction: column;
@@ -3105,7 +3072,7 @@ h1 {
   .client-report__print,
   .client-report__toggle,
   .public-checklist__language,
-  .client-report-viewer {
+  .photo-lightbox {
     display: none !important;
   }
 
@@ -4612,3 +4579,219 @@ h1 {
 .interest-decision__secondary .button--text { min-height: 44px; }
 .interest-decision__secondary > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
 .interest-decision__secondary small { color: var(--color-text-secondary); }
+
+/* Photo grid (manager checklist) */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.photo-grid__tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface-muted);
+  cursor: zoom-in;
+}
+
+.photo-grid__tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: photo-fade-in 180ms ease-out;
+}
+
+.photo-grid__tile:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.photo-grid__tile.is-hidden-from-report img {
+  opacity: 0.45;
+}
+
+.photo-grid__skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, var(--color-border) 30%, var(--color-surface-subtle) 50%, var(--color-border) 70%);
+  opacity: 0.6;
+  background-size: 200% 100%;
+  animation: photo-shimmer 1.2s linear infinite;
+}
+
+.photo-grid__error {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 4px;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.photo-grid__badge {
+  position: absolute;
+  inset: auto 4px 4px;
+  border-radius: 6px;
+  padding: 2px 4px;
+  background: rgb(0 0 0 / 0.65);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Full-screen photo viewer (manager checklist and client report) */
+.photo-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: rgb(8 12 10 / 0.96);
+  color: #fff;
+  animation: photo-fade-in 150ms ease-out;
+}
+
+.photo-lightbox__bar,
+.photo-lightbox__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.photo-lightbox__counter {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.photo-lightbox__close,
+.photo-lightbox__action {
+  min-height: 40px;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 999px;
+  padding: 0 16px;
+  background: rgb(255 255 255 / 0.08);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photo-lightbox__close:focus-visible,
+.photo-lightbox__action:focus-visible,
+.photo-lightbox__arrow:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.photo-lightbox__stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.photo-lightbox__image {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.photo-lightbox__image.is-loaded {
+  opacity: 1;
+}
+
+.photo-lightbox__spinner {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgb(255 255 255 / 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: photo-spin 0.8s linear infinite;
+}
+
+.photo-lightbox__error {
+  margin: 0;
+  color: rgb(255 255 255 / 0.8);
+}
+
+.photo-lightbox__arrow {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.photo-lightbox__arrow.is-previous { left: 4px; }
+.photo-lightbox__arrow.is-next { right: 4px; }
+
+.photo-lightbox__caption {
+  color: rgb(255 255 255 / 0.85);
+  overflow-wrap: anywhere;
+}
+
+.photo-lightbox__hint {
+  margin: 0;
+  color: rgb(255 255 255 / 0.6);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+@keyframes photo-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes photo-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes photo-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-grid__tile img,
+  .photo-grid__skeleton,
+  .photo-lightbox,
+  .photo-lightbox__spinner {
+    animation: none;
+  }
+
+  .photo-lightbox__image {
+    transition: none;
+  }
+}
+
+/* Services list: photo count */
+.job-card__photos {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--color-selected-bg);
+  color: var(--color-brand-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

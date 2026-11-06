@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { PhotoLightbox } from "../../components/PhotoLightbox.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
@@ -25,39 +26,6 @@ function ReportPhoto({ token, translate, evidenceId, className = "client-report_
   );
 }
 
-function PhotoViewer({ token, photos, index, onClose, onMove, translate }) {
-  const closeRef = useRef(null);
-  useEffect(() => {
-    closeRef.current?.focus();
-    const onKey = (event) => {
-      if (event.key === "Escape") onClose();
-      if (event.key === "ArrowRight") onMove(1);
-      if (event.key === "ArrowLeft") onMove(-1);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onMove]);
-  const photo = photos[index];
-  return (
-    <div className="client-report-viewer" role="dialog" aria-modal="true" aria-label={translate("clientReport.photoOf", { index: index + 1, count: photos.length })}>
-      <div className="client-report-viewer__bar">
-        <span>{translate("clientReport.photoOf", { index: index + 1, count: photos.length })}</span>
-        <button ref={closeRef} className="button" type="button" onClick={onClose}>{translate("clientReport.close")}</button>
-      </div>
-      <div className="client-report-viewer__stage">
-        <ReportPhoto key={photo?.evidenceId || "single"} token={token} translate={translate} evidenceId={photo?.evidenceId}
-          className="client-report-viewer__image" loading="eager" />
-      </div>
-      {photos.length > 1 && (
-        <div className="client-report-viewer__nav">
-          <button className="button" type="button" onClick={() => onMove(-1)}>{translate("clientReport.previous")}</button>
-          <button className="button" type="button" onClick={() => onMove(1)}>{translate("clientReport.next")}</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Public, read-only report projection. All content is fetched from the server's frozen Run data. */
 export function PublicClientReportPage({ token }) {
   const { language, setLanguage, translate } = useTranslation();
@@ -67,6 +35,9 @@ export function PublicClientReportPage({ token }) {
   const [attempt, setAttempt] = useState(0);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(null);
+  const closeViewer = useCallback(() => setViewerIndex(null), []);
+  const evidenceIds = report?.evidence?.map((item) => item.evidenceId) || [undefined];
+  const photoSrc = useCallback((index) => publicClientReportPhotoUrl(token, evidenceIds[index]), [token, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let current = true;
@@ -109,7 +80,6 @@ export function PublicClientReportPage({ token }) {
   const photos = report.evidence?.length > 0 ? report.evidence : report.hasPhoto ? [{ evidenceId: undefined }] : [];
   const summary = report.summary;
   const restock = (report.inventoryItems || []).filter((item) => restockAnswers.has(item.answer));
-  const moveViewer = (step) => setViewerIndex((value) => (value + step + photos.length) % photos.length);
 
   return (
     <main className="public-offer-page checklist-public-page client-report-page">
@@ -243,8 +213,8 @@ export function PublicClientReportPage({ token }) {
         )}
       </article>
       {viewerIndex !== null && photos[viewerIndex] && (
-        <PhotoViewer token={token} photos={photos} index={viewerIndex} translate={translate}
-          onClose={() => setViewerIndex(null)} onMove={moveViewer} />
+        <PhotoLightbox count={photos.length} index={viewerIndex} getSrc={photoSrc} onIndexChange={setViewerIndex}
+          onClose={closeViewer} translate={translate} alt={translate("clientReport.savedEvidence")} />
       )}
     </main>
   );

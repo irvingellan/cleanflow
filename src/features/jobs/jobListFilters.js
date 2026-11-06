@@ -7,6 +7,7 @@ export function createJobListFilters(overrides = {}) {
     clientId: "",
     clientName: "",
     search: "",
+    withPhotos: false,
     ...overrides,
   };
 }
