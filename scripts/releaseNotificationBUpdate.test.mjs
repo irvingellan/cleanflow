@@ -181,3 +181,20 @@ test("every reviewed operations step writes valid runtime modes", () => {
   assert.deepEqual(stepReleaseModes({ cleanerPushMode: "disabled" }, sha), { inboxMode: "enabled", cleanerPushMode: "disabled" });
   assert.equal(stepReleaseModes({ cleanerPushMode: "pilot" }, sha).pilotRelease, sha);
 });
+
+test("an operations attempt that changed nothing only releases the mutex", async () => {
+  const { partialReconciliation } = await import("./releaseNotificationBUpdate.mjs");
+  const { sha256 } = await import("./notificationReleaseCloud.mjs");
+  const previousReceipt = { sha: oldSha, snapshot: live };
+  const steps = updateStepsFor(false, live);
+  const plan = Buffer.from(JSON.stringify({ sha: newSha, steps, operations: true, previousHasTest: false, previous: { sha: oldSha } }));
+  const attempt = Buffer.from(JSON.stringify({
+    schema: 1, action: "publish", sha: newSha, planHash: sha256(plan), step: steps.publish[0].id, state: "DEPLOYING",
+    snapshot: live, lockUpdateTime: "2026-11-06T00:00:00Z",
+  }));
+  const { record, lockUpdateTime } = partialReconciliation({ attemptBytes: attempt, attemptPlanBytes: plan, previousReceipt, live });
+  assert.equal(record.unchanged, true);
+  assert.equal(lockUpdateTime, "2026-11-06T00:00:00Z");
+  const drifted = { ...live, hosting: { version: "X", release: "X" } };
+  assert.throws(() => partialReconciliation({ attemptBytes: attempt, attemptPlanBytes: plan, previousReceipt, live: drifted }));
+});

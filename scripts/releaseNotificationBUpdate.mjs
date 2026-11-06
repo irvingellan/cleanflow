@@ -194,8 +194,15 @@ export function partialReconciliation({ attemptBytes, attemptPlanBytes, previous
     && ["DEPLOYING", "VERIFIED"].includes(attempt.state) && equal(attempt.snapshot, previousReceipt.snapshot)
     && typeof attempt.lockUpdateTime === "string",
   "Only an attempt stopped at its first step on the previous release can be reconciled.");
-  requireCondition(equal(attemptPlan.steps, updateStepsFor(false)) && attemptPlan.previous?.sha === previousReceipt.sha,
+  const reviewedSteps = attemptPlan.operations === true
+    ? updateStepsFor(Boolean(attemptPlan.previousHasTest), previousReceipt.snapshot)
+    : updateStepsFor(false);
+  requireCondition(equal(attemptPlan.steps, reviewedSteps) && attemptPlan.previous?.sha === previousReceipt.sha,
     "The stopped attempt is not a reviewed update of the previous release.");
+  if (equal(live, previousReceipt.snapshot)) {
+    // The first step failed before changing anything: only the mutex is released.
+    return { record: { unchanged: true, stoppedStep: first.id, snapshot: live }, lockUpdateTime: attempt.lockUpdateTime };
+  }
   verifyTransition(previousReceipt.snapshot, live, first, { inboxMode: "enabled" });
   verifyBStep(live, first, attempt.sha);
   return {
@@ -394,8 +401,12 @@ async function reconcile({ directory, previousDir, out, approval }) {
   const after = await readNotificationProduction("B");
   requireCondition(after.report.releaseLock?.state === "AVAILABLE" && equal(releaseBSnapshot(after.report), record.snapshot),
     "Production changed while the mutex was released. Inspect before continuing.");
-  writeFileSync(out, encode(record), { flag: "wx", mode: 0o600 });
   renameSync(attemptFile, join(directory, `publish-receipt-U.stopped-${Date.now()}.json`));
+  if (record.unchanged) {
+    console.log(JSON.stringify({ state: "RECONCILED_UNCHANGED", stoppedStep: record.stoppedStep }));
+    return;
+  }
+  writeFileSync(out, encode(record), { flag: "wx", mode: 0o600 });
   console.log(JSON.stringify({ state: "RECONCILED", baseline: out, baselineHash: hashFile(out) }));
 }
 
