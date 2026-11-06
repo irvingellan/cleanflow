@@ -228,7 +228,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
   await test.step("12. Cleaner A opens the existing checklist for her own Job", async () => {
     await managerCall(fixture, "createChecklistRun", { jobId: mapleRef.id });
     await pageA.locator(`[data-job-id="${mapleRef.id}"]`).click();
-    await pageA.getByRole("button", { name: "Abrir checklist" }).click();
+    await pageA.getByRole("button", { name: /^(Abrir|Começar|Continuar) checklist$/ }).click();
     await pageA.waitForURL(/\/checklist\?t=/);
     await expect(pageA.locator("h1, h2").first()).toBeVisible();
     const capability = (await mapleRef.collection("checklistRuns").doc("initial").collection("checklistCapabilities").doc("active").get()).data();
@@ -249,7 +249,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
 
   await test.step("8. Removing the Assignment revokes the Job from her agenda", async () => {
     await pageA.locator(`[data-job-id="${mapleRef.id}"]`).click();
-    await expect(pageA.getByRole("button", { name: "Abrir checklist" })).toBeVisible();
+    await expect(pageA.getByRole("button", { name: /^(Abrir|Começar|Continuar) checklist$/ })).toBeVisible();
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Jobs" }).click();
     await page.getByRole("button", { name: new RegExp(fixture.mapleName) }).first().click();
     await page.locator("details.job-detail-section > summary", { hasText: "Cleaner & assignment" }).click();
@@ -442,7 +442,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await evidence(pageA, "85-03-cleaner-confirmation-inbox");
     await managerCall(fixture, "createChecklistRun", { jobId: job.id });
     await pageA.getByRole("listitem").filter({ has: autoReceipt }).getByRole("button", { name: "Ver serviço", exact: true }).click();
-    await pageA.getByRole("button", { name: "Abrir checklist" }).click();
+    await pageA.getByRole("button", { name: /^(Abrir|Começar|Continuar) checklist$/ }).click();
     await pageA.waitForURL(/\/checklist\?t=/);
     const capability = (await job.collection("checklistRuns").doc("initial").collection("checklistCapabilities").doc("active").get()).data();
     expect(capability.cleanerId).toBe(fixture.cleanerAId);
