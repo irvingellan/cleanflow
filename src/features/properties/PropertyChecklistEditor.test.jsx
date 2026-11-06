@@ -14,11 +14,12 @@ describe("FB07 property checklist editor", () => {
     expect(screen.getByText(/0 change\(s\) from the standard checklist/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Edit checklist" }));
     expect(screen.getByText(/A checklist already created, in progress or under review keeps its own version/)).toBeVisible();
+    fireEvent.click(screen.getByText("Bedrooms & linens"));
     const bedrooms = screen.getByRole("group", { name: "Bedrooms & linens" });
     const [first] = within(bedrooms).getAllByRole("textbox", { name: "Item text" });
     fireEvent.change(first, { target: { value: "Trocar toda a roupa de cama" } });
     fireEvent.click(within(bedrooms).getAllByRole("button", { name: "Remove" })[1]);
-    fireEvent.click(within(bedrooms).getAllByRole("checkbox", { name: /Optional/ })[2]);
+    fireEvent.click(within(bedrooms).getAllByRole("checkbox", { name: /^Optional:/ })[2]);
     fireEvent.click(within(bedrooms).getByRole("button", { name: "Add item" }));
     const added = within(bedrooms).getAllByRole("textbox", { name: "Item text" }).at(-1);
     fireEvent.change(added, { target: { value: "Travesseiros extras" } });
@@ -44,7 +45,7 @@ describe("FB07 property checklist editor", () => {
     const onSave = vi.fn();
     renderIn(<PropertyChecklistEditor property={{ id: "p", checklistSettings: {} }} onSave={onSave} />);
     fireEvent.click(screen.getByRole("button", { name: "Edit checklist" }));
-    expect(screen.getByText("Required photo item: you can change its text.")).toBeVisible();
+    expect(screen.getByText("Required photo item: you can change its text.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onSave).not.toHaveBeenCalled();
   });

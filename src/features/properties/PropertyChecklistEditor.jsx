@@ -171,8 +171,10 @@ export function PropertyChecklistEditor({ property, onSave }) {
         <ul>{previewDefinition.requiredPhotoTypes.map((photo) => <li key={photo.id}><span>{photo.label}</span></li>)}</ul>
       </div>}
     </div> : <>
-      {draft.sections.map((section, sectionIndex) => <fieldset key={section.id} className="property-checklist__section">
-        <legend>{translate(section.titleKey)}</legend>
+      <p className="cf-block__subtitle">{translate("propertyChecklist.optionalHelp")}</p>
+      {draft.sections.map((section, sectionIndex) => <details key={section.id} className="property-checklist__section">
+        <summary>{translate(section.titleKey)} <span>{translate("propertyChecklist.sectionCount", { count: section.rows.filter((row) => !row.hidden).length })}</span></summary>
+        <div role="group" aria-label={translate(section.titleKey)}>
         <ul>
           {section.rows.map((row, rowIndex) => <li key={row.id} className={row.hidden ? "is-hidden" : ""}>
             <span className="property-checklist__move">
@@ -189,31 +191,36 @@ export function PropertyChecklistEditor({ property, onSave }) {
               aria-label={translate("propertyChecklist.itemText")}
               placeholder={row.labelKey ? translate(row.labelKey) : translate("propertyChecklist.newItemPlaceholder")}
               onChange={(event) => update((next) => { next.sections[sectionIndex].rows[rowIndex].label = event.target.value; return next; })} />
-            {row.requiresPhoto
-              ? <small className="property-checklist__note">{translate("propertyChecklist.requiredPhotoNote")}</small>
-              : <label className="property-checklist__optional">
-                <input type="checkbox" checked={row.optional} disabled={row.hidden}
-                  onChange={(event) => update((next) => { next.sections[sectionIndex].rows[rowIndex].optional = event.target.checked; return next; })} />
-                {translate("propertyChecklist.optional")}
-              </label>}
-            {!row.requiresPhoto && <button className="button button--text" type="button"
-              onClick={() => update((next) => {
-                const rows = next.sections[sectionIndex].rows;
-                if (row.standard) rows[rowIndex].hidden = !row.hidden; else rows.splice(rowIndex, 1);
-                return next;
-              })}>
-              {translate(row.standard ? (row.hidden ? "propertyChecklist.restore" : "propertyChecklist.remove") : "propertyChecklist.delete")}
-            </button>}
+            <span className="property-checklist__row-actions">
+              {row.requiresPhoto
+                ? <small className="property-checklist__note">{translate("propertyChecklist.requiredPhotoNote")}</small>
+                : <label className="property-checklist__optional">
+                  <input type="checkbox" checked={row.optional} disabled={row.hidden}
+                    aria-label={translate("propertyChecklist.optionalFor", { item: rowLabel(row) })}
+                    onChange={(event) => update((next) => { next.sections[sectionIndex].rows[rowIndex].optional = event.target.checked; return next; })} />
+                  {translate("propertyChecklist.optional")}
+                </label>}
+              {!row.requiresPhoto && <button className="button button--text" type="button"
+                onClick={() => update((next) => {
+                  const rows = next.sections[sectionIndex].rows;
+                  if (row.standard) rows[rowIndex].hidden = !row.hidden; else rows.splice(rowIndex, 1);
+                  return next;
+                })}>
+                {translate(row.standard ? (row.hidden ? "propertyChecklist.restore" : "propertyChecklist.remove") : "propertyChecklist.delete")}
+              </button>}
+            </span>
           </li>)}
         </ul>
         <button className="button button--text" type="button" onClick={() => update((next) => {
           next.sections[sectionIndex].rows.push({ id: slug(`${section.id}-${Date.now().toString(36)}`, allIds()), standard: false, label: "", hidden: false, optional: false, defaultOptional: false, requiresPhoto: false });
           return next;
         })}>{translate("propertyChecklist.addItem")}</button>
-      </fieldset>)}
+        </div>
+      </details>)}
 
-      <fieldset className="property-checklist__section">
-        <legend>{translate("propertyChecklist.inventoryTitle")}</legend>
+      <details className="property-checklist__section">
+        <summary>{translate("propertyChecklist.inventoryTitle")} <span>{translate("propertyChecklist.sectionCount", { count: draft.inventory.filter((item) => !item.hidden).length })}</span></summary>
+        <div role="group" aria-label={translate("propertyChecklist.inventoryTitle")}>
         <ul>{draft.inventory.map((item, index) => <li key={item.id} className={item.hidden ? "is-hidden" : ""}>
           <input type="text" value={item.label} maxLength={120} disabled={item.hidden} aria-label={translate("propertyChecklist.itemText")}
             placeholder={item.labelKey ? translate(item.labelKey) : translate("propertyChecklist.newItemPlaceholder")}
@@ -227,10 +234,12 @@ export function PropertyChecklistEditor({ property, onSave }) {
           next.inventory.push({ id: slug(`supply-${Date.now().toString(36)}`, new Set(next.inventory.map((item) => item.id))), standard: false, label: "", hidden: false });
           return next;
         })}>{translate("propertyChecklist.addItem")}</button>
-      </fieldset>
+        </div>
+      </details>
 
-      <fieldset className="property-checklist__section">
-        <legend>{translate("propertyChecklist.photosTitle")}</legend>
+      <details className="property-checklist__section" open>
+        <summary>{translate("propertyChecklist.photosTitle")} <span>{translate("propertyChecklist.sectionCount", { count: draft.photos.length })}</span></summary>
+        <div role="group" aria-label={translate("propertyChecklist.photosTitle")}>
         <p className="cf-block__subtitle">{translate("propertyChecklist.photosHelp")}</p>
         <ul>{draft.photos.map((photo, index) => <li key={photo.id}>
           <input type="text" value={photo.label} maxLength={120} aria-label={translate("propertyChecklist.photoText")}
@@ -244,7 +253,8 @@ export function PropertyChecklistEditor({ property, onSave }) {
           next.photos.push({ id: slug(`photo-${Date.now().toString(36)}`, new Set(next.photos.map((photo) => photo.id))), label: "" });
           return next;
         })}>{translate("propertyChecklist.addPhoto")}</button>
-      </fieldset>
+        </div>
+      </details>
 
       <label className="property-checklist__instructions">
         <span>{translate("propertyChecklist.instructions")}</span>
