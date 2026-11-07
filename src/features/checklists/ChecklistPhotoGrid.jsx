@@ -7,6 +7,8 @@ export function evidenceKey(item) {
   return item.evidenceId || item.requirementId;
 }
 
+const entryKey = (item, variant) => `${evidenceKey(item)}|${variant}`;
+
 /**
  * Loads saved checklist photos on demand: at most three at a time, each one
  * once per visit, released when the screen closes. The grid asks for a photo
@@ -31,12 +33,10 @@ export function useChecklistPhotoLoader(jobId, loadEvidence) {
   const pump = useCallback(() => {
     const current = state.current;
     while (current?.alive && current.active < maximumParallelLoads && current.queue.length) {
-      const { key, item } = current.queue.shift();
+      const { key, item, variant } = current.queue.shift();
       current.active += 1;
       setEntries((value) => ({ ...value, [key]: { status: "loading" } }));
-      const load = item.evidenceId
-        ? loadEvidence(jobId, item.requirementId, item.evidenceId)
-        : loadEvidence(jobId, item.requirementId);
+      const load = loadEvidence(jobId, item.requirementId, item.evidenceId, { variant });
       Promise.resolve(load).then((blob) => {
         if (!current.alive) return;
         const url = URL.createObjectURL(blob);
@@ -53,18 +53,18 @@ export function useChecklistPhotoLoader(jobId, loadEvidence) {
     }
   }, [jobId, loadEvidence]);
 
-  const request = useCallback((item, { first = false } = {}) => {
+  const request = useCallback((item, { first = false, variant = "full" } = {}) => {
     const current = state.current;
     if (!current?.alive || !item) return;
-    const key = evidenceKey(item);
+    const key = entryKey(item, variant);
     if (current.requested.has(key)) {
       const queued = current.queue.findIndex((entry) => entry.key === key);
       if (first && queued > 0) current.queue.unshift(...current.queue.splice(queued, 1));
       return;
     }
     current.requested.add(key);
-    if (first) current.queue.unshift({ key, item });
-    else current.queue.push({ key, item });
+    if (first) current.queue.unshift({ key, item, variant });
+    else current.queue.push({ key, item, variant });
     pump();
   }, [pump]);
 
@@ -76,12 +76,12 @@ function PhotoTile({ item, entry, request, onOpen, label, translate, hidden }) {
   useEffect(() => {
     const element = ref.current;
     if (!element || typeof IntersectionObserver === "undefined") {
-      request(item);
+      request(item, { variant: "thumbnail" });
       return undefined;
     }
     const observer = new IntersectionObserver((records) => {
       if (records.some((record) => record.isIntersecting)) {
-        request(item);
+        request(item, { variant: "thumbnail" });
         observer.disconnect();
       }
     }, { rootMargin: "300px 0px" });
@@ -108,9 +108,14 @@ export function ChecklistPhotoGrid({ jobId, evidence, loadEvidence, translate, i
   const [openIndex, setOpenIndex] = useState(null);
   const getSrc = useCallback((index) => {
     const item = evidence[index];
-    return item ? entries[evidenceKey(item)]?.url || null : null;
+    return item ? entries[entryKey(item, "full")]?.url || null : null;
   }, [entries, evidence]);
-  const onNeed = useCallback((index) => request(evidence[index], { first: true }), [evidence, request]);
+  // The small preview shows at once while the full photo loads.
+  const getPlaceholderSrc = useCallback((index) => {
+    const item = evidence[index];
+    return item ? entries[entryKey(item, "thumbnail")]?.url || null : null;
+  }, [entries, evidence]);
+  const onNeed = useCallback((index) => request(evidence[index], { first: true, variant: "full" }), [evidence, request]);
   const close = useCallback(() => setOpenIndex(null), []);
 
   return (
@@ -118,7 +123,7 @@ export function ChecklistPhotoGrid({ jobId, evidence, loadEvidence, translate, i
       <ul className="photo-grid">
         {evidence.map((item, index) => (
           <li key={evidenceKey(item)}>
-            <PhotoTile item={item} entry={entries[evidenceKey(item)]} request={request} translate={translate}
+            <PhotoTile item={item} entry={entries[entryKey(item, "thumbnail")]} request={request} translate={translate}
               hidden={isHidden?.(item)} onOpen={() => setOpenIndex(index)}
               label={translate("photoViewer.openPhoto", { index: index + 1, label: requirementLabel(item) })} />
           </li>
@@ -129,6 +134,7 @@ export function ChecklistPhotoGrid({ jobId, evidence, loadEvidence, translate, i
           count={evidence.length}
           index={openIndex}
           getSrc={getSrc}
+          getPlaceholderSrc={getPlaceholderSrc}
           onNeed={onNeed}
           onIndexChange={setOpenIndex}
           onClose={close}

@@ -1004,6 +1004,7 @@ export const getChecklistEvidence = onCall(
       runId: initialChecklistRunId,
       requirementId,
       evidenceId,
+      variant: request.data?.variant === "thumbnail" ? "thumbnail" : undefined,
     });
     return { contentType: evidence.contentType, base64: evidence.bytes.toString("base64") };
   },
@@ -1625,7 +1626,10 @@ export const publicClientReport = onRequest(
     try {
       const tokenHash = hashToken(token);
       if (request.query.photo === "1") {
-        const photo = await downloadPublicClientReportPhoto(db, { organizationId, tokenHash, evidenceId: request.query.evidenceId });
+        const photo = await downloadPublicClientReportPhoto(db, {
+          organizationId, tokenHash, evidenceId: request.query.evidenceId,
+          variant: request.query.thumb === "1" ? "thumbnail" : undefined,
+        });
         configureResponse(response);
         response.set("Content-Type", photo.contentType);
         response.set("Content-Disposition", "inline");

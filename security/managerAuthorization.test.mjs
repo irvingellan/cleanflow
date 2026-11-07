@@ -1569,6 +1569,14 @@ test("V2 multiple photos persist privately, survive refresh, remove safely, and 
   const reportPhoto = await publicClientReportGet(reportLink.token, { photo: "1", evidenceId: third.body.evidenceId });
   assert.equal(reportPhoto.code, 200);
   assert.deepEqual(reportPhoto.body, syntheticChecklistPng(3));
+  // Thumbnails follow the same authorization; a non-JPEG photo is served as is.
+  const reportThumb = await publicClientReportGet(reportLink.token, { photo: "1", evidenceId: third.body.evidenceId, thumb: "1" });
+  assert.equal(reportThumb.code, 200);
+  assert.deepEqual(reportThumb.body, syntheticChecklistPng(3));
+  assert.equal((await publicClientReportGet("x".repeat(43), { photo: "1", evidenceId: third.body.evidenceId, thumb: "1" })).code, 404);
+  const managerThumb = await getChecklistEvidence.run(request("manager", { jobId: "job", evidenceId: third.body.evidenceId, variant: "thumbnail" }));
+  assert.deepEqual(Buffer.from(managerThumb.base64, "base64"), syntheticChecklistPng(3));
+  await assert.rejects(getChecklistEvidence.run(request("cleaner", { jobId: "job", evidenceId: third.body.evidenceId, variant: "thumbnail" })), { code: "permission-denied" });
   const evidenceState = (await admin.doc(`${root}/jobs/job/checklistRuns/initial/evidenceState/current`).get()).data();
   assert.equal(evidenceState.pending.length, 0);
   for (const photo of evidenceState.photos) await assertFails(account("manager").storage().ref(photo.storagePath).getDownloadURL());

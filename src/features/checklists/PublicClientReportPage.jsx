@@ -11,13 +11,13 @@ function textFor(entry, translate) {
 
 const restockAnswers = new Set(["NEEDS_RESTOCK", "LOW"]);
 
-function ReportPhoto({ token, translate, evidenceId, className = "client-report__photo", loading = "lazy" }) {
+function ReportPhoto({ token, translate, evidenceId, className = "client-report__photo", loading = "lazy", thumbnail = false }) {
   const [hasError, setHasError] = useState(false);
   if (hasError) return <p className="client-report__photo-error">{translate("clientReport.photoUnavailable")}</p>;
   return (
     <img
       className={className}
-      src={publicClientReportPhotoUrl(token, evidenceId)}
+      src={publicClientReportPhotoUrl(token, evidenceId, { thumbnail })}
       loading={loading}
       decoding="async"
       alt={translate("clientReport.savedEvidence")}
@@ -39,6 +39,7 @@ export function PublicClientReportPage({ token }) {
   const closeViewer = useCallback(() => setViewerIndex(null), []);
   const evidenceIds = report?.evidence?.map((item) => item.evidenceId) || [undefined];
   const photoSrc = useCallback((index) => publicClientReportPhotoUrl(token, evidenceIds[index]), [token, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const photoPlaceholder = useCallback((index) => publicClientReportPhotoUrl(token, evidenceIds[index], { thumbnail: true }), [token, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let current = true;
@@ -157,7 +158,7 @@ export function PublicClientReportPage({ token }) {
                 <li key={item.evidenceId || "single"}>
                   <button type="button" className="client-report__thumb" onClick={() => setViewerIndex(index)}
                     aria-label={translate("clientReport.openPhoto", { index: index + 1 })}>
-                    <ReportPhoto token={token} translate={translate} evidenceId={item.evidenceId} className="client-report__thumb-image" />
+                    <ReportPhoto token={token} translate={translate} evidenceId={item.evidenceId} className="client-report__thumb-image" thumbnail />
                   </button>
                 </li>
               ))}
@@ -214,7 +215,7 @@ export function PublicClientReportPage({ token }) {
         )}
       </article>
       {viewerIndex !== null && photos[viewerIndex] && (
-        <PhotoLightbox count={photos.length} index={viewerIndex} getSrc={photoSrc} onIndexChange={setViewerIndex}
+        <PhotoLightbox count={photos.length} index={viewerIndex} getSrc={photoSrc} getPlaceholderSrc={photoPlaceholder} onIndexChange={setViewerIndex}
           onClose={closeViewer} translate={translate} alt={translate("clientReport.savedEvidence")} />
       )}
     </main>

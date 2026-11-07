@@ -9,13 +9,14 @@ const swipeThreshold = 50;
  * `onNeed(index)` asks the owner to load that photo (current and neighbours).
  */
 export function PhotoLightbox({
-  count, index, getSrc, onNeed, onIndexChange, onClose, translate, alt, renderActions,
+  count, index, getSrc, getPlaceholderSrc, onNeed, onIndexChange, onClose, translate, alt, renderActions,
 }) {
   const closeRef = useRef(null);
   const pointer = useRef(null);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const src = getSrc(index);
+  const placeholder = getPlaceholderSrc?.(index) || null;
 
   const move = useCallback((step) => onIndexChange((index + step + count) % count), [count, index, onIndexChange]);
 
@@ -75,6 +76,9 @@ export function PhotoLightbox({
       </div>
       <div className="photo-lightbox__stage" onPointerDown={onPointerDown} onPointerUp={onPointerUp}
         onPointerCancel={() => { pointer.current = null; }}>
+        {placeholder && !loaded && !failed && (
+          <img className="photo-lightbox__placeholder" src={placeholder} alt="" aria-hidden="true" draggable={false} />
+        )}
         {src && !failed && (
           <img key={src} className={loaded ? "photo-lightbox__image is-loaded" : "photo-lightbox__image"} src={src} alt={alt}
             decoding="async" draggable={false} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />

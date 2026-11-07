@@ -349,17 +349,17 @@ export async function loadPublicClientReport(database, options) {
 }
 
 export async function downloadPublicClientReportPhoto(database, {
-  organizationId, tokenHash, evidenceId, now = new Date(), storage,
+  organizationId, tokenHash, evidenceId, variant, now = new Date(), storage,
 }) {
   const result = await resolvePublicClientReport(database, { organizationId, tokenHash, now });
   if (result.run.evidencePolicy?.version === 2) {
     const photo = selectMultiPhotoEvidence(result.gallery, { evidenceId });
     if (!photo || reportHiddenEvidenceIds(result.run).has(photo.evidenceId)) throw new HttpsError("not-found", "Report photo not found.");
-    return downloadSavedChecklistEvidence(result.run, photo, { storage });
+    return downloadSavedChecklistEvidence(result.run, photo, { storage, variant });
   }
   if (evidenceId !== undefined) throw new HttpsError("not-found", "Report photo not found.");
   if (!result.report.hasPhoto || !result.evidence) throw new HttpsError("not-found", "Report photo not found.");
-  return downloadSavedChecklistEvidence(result.run, result.evidence, { storage });
+  return downloadSavedChecklistEvidence(result.run, result.evidence, { storage, variant });
 }
 
 /**

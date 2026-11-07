@@ -221,3 +221,13 @@ test("a Function already outside the managed runtime set may be redeployed, but 
   assert.throws(() => verifyTransition(base, after({}, { runtimeCompatible: false }), step, { inboxMode: "enabled" }), /runtime configuration/);
   assert.throws(() => verifyTransition(base, after({ secretBindingHash: "x" }, {}), step, { inboxMode: "enabled" }), /runtime configuration/);
 });
+
+test("an operations update may only add reviewed, exact server dependencies", async () => {
+  const { dependencyChangesReviewed } = await import("./releaseNotificationBUpdate.mjs");
+  const base = { "firebase-admin": "^13.0.0" };
+  assert.equal(dependencyChangesReviewed(base, { ...base, "jpeg-js": "0.4.4" }), true);
+  assert.equal(dependencyChangesReviewed(base, { ...base, "jpeg-js": "^0.4.4" }), false);
+  assert.equal(dependencyChangesReviewed(base, { ...base, sharp: "0.33.5" }), false);
+  assert.equal(dependencyChangesReviewed(base, { "firebase-admin": "^14.0.0" }), false);
+  assert.equal(dependencyChangesReviewed(base, base), true);
+});

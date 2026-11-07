@@ -3,6 +3,7 @@ import { getStorage } from "firebase-admin/storage";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { checklistCapabilityState } from "./checklistCapabilityService.js";
+import { makeJpegThumbnail } from "./checklistThumbnail.js";
 import { loadMultiPhotoEvidence, uploadMultiPhotoEvidence, selectMultiPhotoEvidence } from "./checklistMultiPhotoService.js";
 import {
   isPilotChecklistPhotoRequirement,
@@ -299,9 +300,31 @@ function assertStoredEvidence(run, evidence, requirementId) {
 }
 
 /** Downloads bytes only after a server-side caller has resolved the exact saved evidence record. */
-export async function downloadSavedChecklistEvidence(run, evidence, { storage = getStorage() } = {}) {
+/** Cache object for one exact stored photo generation (manager and client report grids). */
+export function checklistThumbnailPath(evidence) {
+  const key = createHash("sha256").update(`${evidence.storagePath}#${evidence.generation ?? ""}`).digest("hex");
+  return `checklistThumbnails/v1/${key}.jpg`;
+}
+
+export async function downloadSavedChecklistEvidence(run, evidence, { storage = getStorage(), variant } = {}) {
   assertStoredEvidence(run, evidence, pilotChecklistPhotoRequirementId);
-  const [bytes] = await storage.bucket().file(evidence.storagePath, evidence.generation ? { generation: evidence.generation } : undefined).download();
+  const bucket = storage.bucket();
+  const original = () => bucket.file(evidence.storagePath, evidence.generation ? { generation: evidence.generation } : undefined).download();
+  if (variant === "thumbnail") {
+    const cached = bucket.file(checklistThumbnailPath(evidence));
+    try {
+      const [bytes] = await cached.download();
+      return { bytes, contentType: "image/jpeg", variant: "thumbnail" };
+    } catch {
+      // Not generated yet: build it once from the saved photo.
+    }
+    const [full] = await original();
+    const small = makeJpegThumbnail(full);
+    if (!small) return { bytes: full, contentType: evidence.contentType };
+    await cached.save(small, { contentType: "image/jpeg", resumable: false }).catch(() => {});
+    return { bytes: small, contentType: "image/jpeg", variant: "thumbnail" };
+  }
+  const [bytes] = await original();
   return { bytes, contentType: evidence.contentType };
 }
 
@@ -323,7 +346,7 @@ export async function downloadPublicChecklistEvidence(database, {
 }
 
 export async function downloadManagerChecklistEvidence(database, {
-  organizationId, jobId, runId, requirementId, evidenceId, storage = getStorage(),
+  organizationId, jobId, runId, requirementId, evidenceId, variant, storage = getStorage(),
 }) {
   const runRef = runReference(database, organizationId, jobId, runId);
   const evidenceRef = evidenceReference(database, organizationId, jobId, runId, pilotChecklistPhotoRequirementId);
@@ -334,10 +357,10 @@ export async function downloadManagerChecklistEvidence(database, {
     const state = (await runRef.collection("evidenceState").doc("current").get()).data();
     const photo = selectMultiPhotoEvidence(state, { evidenceId, requirementId });
     if (!photo) throw new HttpsError("not-found", "Checklist photo not found.");
-    return downloadSavedChecklistEvidence(run, photo, { storage });
+    return downloadSavedChecklistEvidence(run, photo, { storage, variant });
   }
   if (!evidenceSnapshot.exists || evidenceId !== undefined) throw new HttpsError("not-found", "Checklist photo not found.");
   const evidence = evidenceSnapshot.data();
   assertStoredEvidence(run, evidence, requirementId);
-  return downloadSavedChecklistEvidence(run, evidence, { storage });
+  return downloadSavedChecklistEvidence(run, evidence, { storage, variant });
 }

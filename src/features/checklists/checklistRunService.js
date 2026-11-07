@@ -68,8 +68,11 @@ export async function base64ToBlob(base64, contentType) {
   return new Blob([bytes], { type: contentType });
 }
 
-export async function getChecklistEvidence(jobId, requirementId, evidenceId) {
-  const result = await getChecklistEvidenceCall({ jobId, ...(evidenceId ? { evidenceId } : { requirementId }) });
+/** Saved photo bytes; `variant: "thumbnail"` returns a small cached preview for grids. */
+export async function getChecklistEvidence(jobId, requirementId, evidenceId, { variant } = {}) {
+  const result = await getChecklistEvidenceCall({
+    jobId, ...(evidenceId ? { evidenceId } : { requirementId }), ...(variant === "thumbnail" ? { variant } : {}),
+  });
   const { base64, contentType } = result.data || {};
   if (typeof base64 !== "string" || typeof contentType !== "string") {
     throw new Error("Checklist photo is unavailable.");

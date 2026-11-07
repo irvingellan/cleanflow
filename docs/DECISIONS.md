@@ -1106,3 +1106,20 @@ closed the other) and searched service by service to find one with photos.
   list asks only for in-progress and completed services, reuses completed counts
   for the session, shows a camera count on each row and a "With photos" filter
   over the services already loaded.
+
+## DEC-053 — Cached photo thumbnails for grids
+
+**Context:** grids downloaded each full photo (~300–600 KB, base64 in the
+callable) only to show a small tile; a 40-photo checklist cost 15–25 MB per view.
+**Decision:** the first grid request for a saved photo builds a ~360 px JPEG
+(quality 72, ~20–40 KB) on the server with `jpeg-js` 0.4.4 (pure JS, no
+dependencies, CVE-2022-25851 fixed; decode limits set), stores it at
+`checklistThumbnails/v1/<sha256(storagePath#generation)>.jpg` and serves the
+cached copy afterwards. Full photos load only in the viewer, which shows the
+thumbnail blurred until the full photo arrives. Same authorization as the full
+photo (manager callable `variant: "thumbnail"`, report `thumb=1`). Non-JPEG
+photos fall back to the full file. Works for photos already saved; the cleaner
+upload is unchanged. The release tool accepts only dependencies listed in
+`reviewedFunctionDependencies` with their exact version.
+**Not included:** deleting thumbnails of photos removed during a draft (small
+orphan files, manager/report access only through the photo's own checks).

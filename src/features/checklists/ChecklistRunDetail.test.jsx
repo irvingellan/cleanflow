@@ -69,7 +69,8 @@ describe("ChecklistRunDetail", () => {
     fireEvent.click(tiles[10]);
     expect(screen.getByRole("dialog", { name: "Photo 11 of 20" })).toBeVisible();
     await act(async () => { pending.splice(0).forEach((resolve) => resolve(new Blob(["x"], { type: "image/jpeg" }))); });
-    expect(loadEvidence.mock.calls.slice(3, 6).map((call) => call[2])).toEqual(["opaque-9", "opaque-11", "opaque-10"]);
+    expect(loadEvidence.mock.calls.slice(0, 3).every((call) => call[3]?.variant === "thumbnail")).toBe(true);
+    expect(loadEvidence.mock.calls.slice(3, 6).map((call) => [call[2], call[3].variant])).toEqual([["opaque-9", "full"], ["opaque-11", "full"], ["opaque-10", "full"]]);
     await act(async () => { pending.splice(0).forEach((resolve) => resolve(new Blob(["x"], { type: "image/jpeg" }))); });
     expect(screen.getByAltText("Saved checklist photo")).toHaveAttribute("src", expect.stringMatching(/^blob:photo-/));
 
@@ -310,7 +311,7 @@ describe("ChecklistRunDetail", () => {
     expect(screen.getByText("Done")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /^Open photo 1:/ }));
     expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:abandoned-photo");
-    expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
+    expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings", undefined, { variant: "full" });
   });
 
   it("shows only a server-retrieved saved photo for the frozen requirement", async () => {
@@ -330,7 +331,7 @@ describe("ChecklistRunDetail", () => {
 
     expect(await screen.findByText("Saved evidence")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /^Open photo 1:/ }));
-    expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings");
+    expect(loadEvidence).toHaveBeenCalledWith("job-1", "living-belongings", undefined, { variant: "full" });
     expect(await screen.findByAltText("Saved checklist photo")).toHaveAttribute("src", "blob:manager-photo");
   });
 

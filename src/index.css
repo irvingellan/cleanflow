@@ -4710,7 +4710,18 @@ h1 {
   user-select: none;
 }
 
+.photo-lightbox__placeholder {
+  position: absolute;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+  filter: blur(6px);
+  transform: scale(1.02);
+}
+
 .photo-lightbox__image {
+  position: relative;
   max-width: 100%;
   max-height: 100%;
   border-radius: 6px;
