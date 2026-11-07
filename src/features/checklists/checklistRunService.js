@@ -46,12 +46,33 @@ export async function abandonChecklistRunAndCompleteJob(jobId) {
 }
 
 /** The manager receives image bytes only through the authorized server callable. */
+const imageContentType = /^image\/(jpeg|png|webp|heic|heif|gif)$/;
+
+/**
+ * Turns the callable's base64 photo into a Blob. The browser's own data-URL
+ * decoder runs off the main thread; decoding character by character in
+ * JavaScript froze slower laptops while a 40-photo grid loaded.
+ */
+export async function base64ToBlob(base64, contentType) {
+  if (typeof fetch === "function" && imageContentType.test(contentType)) {
+    try {
+      const response = await fetch(`data:${contentType};base64,${base64}`);
+      if (response.ok) return new Blob([await response.arrayBuffer()], { type: contentType });
+    } catch {
+      // Fall back to the manual decoder below.
+    }
+  }
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: contentType });
+}
+
 export async function getChecklistEvidence(jobId, requirementId, evidenceId) {
   const result = await getChecklistEvidenceCall({ jobId, ...(evidenceId ? { evidenceId } : { requirementId }) });
   const { base64, contentType } = result.data || {};
   if (typeof base64 !== "string" || typeof contentType !== "string") {
     throw new Error("Checklist photo is unavailable.");
   }
-  const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
-  return new Blob([bytes], { type: contentType });
+  return base64ToBlob(base64, contentType);
 }

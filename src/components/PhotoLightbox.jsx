@@ -77,7 +77,7 @@ export function PhotoLightbox({
         onPointerCancel={() => { pointer.current = null; }}>
         {src && !failed && (
           <img key={src} className={loaded ? "photo-lightbox__image is-loaded" : "photo-lightbox__image"} src={src} alt={alt}
-            draggable={false} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+            decoding="async" draggable={false} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
         )}
         {!loaded && !failed && <span className="photo-lightbox__spinner" role="status" aria-label={translate("photoViewer.loading")} />}
         {failed && <p className="photo-lightbox__error">{translate("photoViewer.unavailable")}</p>}

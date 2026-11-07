@@ -19,6 +19,7 @@ function ReportPhoto({ token, translate, evidenceId, className = "client-report_
       className={className}
       src={publicClientReportPhotoUrl(token, evidenceId)}
       loading={loading}
+      decoding="async"
       alt={translate("clientReport.savedEvidence")}
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}

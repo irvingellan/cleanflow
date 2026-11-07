@@ -93,7 +93,7 @@ function PhotoTile({ item, entry, request, onOpen, label, translate, hidden }) {
     <button ref={ref} type="button" className={hidden ? "photo-grid__tile is-hidden-from-report" : "photo-grid__tile"}
       onClick={onOpen} aria-label={label}>
       {entry?.status === "ready"
-        ? <img src={entry.url} alt="" loading="lazy" draggable={false} />
+        ? <img src={entry.url} alt="" loading="lazy" decoding="async" draggable={false} />
         : entry?.status === "error"
           ? <span className="photo-grid__error">{translate("photoViewer.unavailableShort")}</span>
           : <span className="photo-grid__skeleton" aria-hidden="true" />}

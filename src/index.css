@@ -4592,6 +4592,7 @@ h1 {
 
 .photo-grid__tile {
   position: relative;
+  contain: layout paint;
   display: block;
   width: 100%;
   aspect-ratio: 1;
@@ -4620,13 +4621,15 @@ h1 {
   opacity: 0.45;
 }
 
+/* Opacity-only pulse: runs on the compositor, no per-frame repaint (light on
+   older Intel laptops while dozens of tiles wait). */
 .photo-grid__skeleton {
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, var(--color-border) 30%, var(--color-surface-subtle) 50%, var(--color-border) 70%);
-  opacity: 0.6;
-  background-size: 200% 100%;
-  animation: photo-shimmer 1.2s linear infinite;
+  background: var(--color-border);
+  opacity: 0.35;
+  animation: photo-pulse 1.1s ease-in-out infinite alternate;
+  will-change: opacity;
 }
 
 .photo-grid__error {
@@ -4766,7 +4769,7 @@ h1 {
 }
 
 @keyframes photo-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes photo-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes photo-pulse { from { opacity: 0.25; } to { opacity: 0.6; } }
 @keyframes photo-spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {

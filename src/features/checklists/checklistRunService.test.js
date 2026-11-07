@@ -54,3 +54,29 @@ describe("checklistRunService", () => {
     expect(evidenceCall).toHaveBeenLastCalledWith({ jobId: "job-1", evidenceId: "opaque-photo" });
   });
 });
+
+describe("base64ToBlob", () => {
+  it("decodes a photo with the browser decoder and keeps the content type", async () => {
+    const { base64ToBlob } = await import("./checklistRunService.js");
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 1, 2, 250]);
+    const base64 = btoa(String.fromCharCode(...bytes));
+    const blob = await base64ToBlob(base64, "image/jpeg");
+    expect(blob.type).toBe("image/jpeg");
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
+  });
+
+  it("falls back to the manual decoder for an unexpected type or a failing fetch", async () => {
+    const { base64ToBlob } = await import("./checklistRunService.js");
+    const base64 = btoa("abc");
+    expect(new Uint8Array(await (await base64ToBlob(base64, "application/octet-stream")).arrayBuffer())).toEqual(new Uint8Array([97, 98, 99]));
+    const original = globalThis.fetch;
+    globalThis.fetch = () => Promise.reject(new Error("blocked"));
+    try {
+      const blob = await base64ToBlob(base64, "image/png");
+      expect(blob.type).toBe("image/png");
+      expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([97, 98, 99]));
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
