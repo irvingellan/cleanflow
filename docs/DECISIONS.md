@@ -1123,3 +1123,20 @@ upload is unchanged. The release tool accepts only dependencies listed in
 `reviewedFunctionDependencies` with their exact version.
 **Not included:** deleting thumbnails of photos removed during a draft (small
 orphan files, manager/report access only through the photo's own checks).
+
+## DEC-054 — Manager layout fits laptop and ultrawide screens
+
+**Context:** the manager pages were capped (Home 1320 px, Services 1240 px,
+open Job 1600 px) and anchored to the left beside the navigation, leaving a
+large empty band on 3440 px ultrawide and 4K screens. On a 13" MacBook
+(about 1440 x 790 in Safari) width was fine, but height pushed the day's
+queue below the fold.
+**Decision:** CSS only. Pages are centered in the space beside the
+navigation. From 1800 px the caps grow (Home 1880, Services 1440, open Job
+1840; from 2600 px 2240 / 1560 / 2080) and Home shows three columns:
+attention, next 48 hours, recently completed. Between 1100 and 1599 px the
+navigation is 224 px wide, and screens up to 940 px tall use tighter spacing
+on the page header, counts, blocks and rows. Phones and tablets are unchanged.
+**Evidence:** `e2e/definitive-ui/layout.spec.js` captures Home, Services and
+the open Job at 1440x790, 1440x840, 1920x1000, 3440x1300 and 3840x2000, light
+and dark.
