@@ -21,10 +21,10 @@ const root = resolve(import.meta.dirname, "..");
 /** Reviewed update branches, in publication order. */
 export const updateBranches = [
   "claude/cleaner-push-update", "claude/cleaner-push-rebind", "claude/cleaner-push-test-button", "claude/operations-evolution",
-  "claude/client-report-v2", "claude/photo-viewer", "claude/photo-perf", "claude/photo-thumbnails",
+  "claude/client-report-v2", "claude/photo-viewer", "claude/photo-perf", "claude/photo-thumbnails", "claude/layout-wide",
 ];
 /** Branches whose update moves the operations Functions too. */
-export const operationsBranches = ["claude/operations-evolution", "claude/client-report-v2", "claude/photo-viewer", "claude/photo-perf", "claude/photo-thumbnails"];
+export const operationsBranches = ["claude/operations-evolution", "claude/client-report-v2", "claude/photo-viewer", "claude/photo-perf", "claude/photo-thumbnails", "claude/layout-wide"];
 const fullSha = /^[a-f0-9]{40}$/;
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const encode = (value) => JSON.stringify(value, null, 2) + "\n";
