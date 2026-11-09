@@ -20,6 +20,15 @@ When resuming substantial CleanFlow work with incomplete conversational context,
 `docs/CURRENT_STATE.md` first, then the relevant active GitHub Issue, then only the
 source-of-truth documents needed for the task. Do not load all docs by default.
 
+## Task-sized discovery and optional code graph
+
+- Check the relevant task, branch/worktree and diff before changing code. Scope discovery to the behavior at hand.
+- Start with filename/symbol search and bounded source ranges when the affected area is known (`rg -n`, `git diff -- <path>`, or an editor's symbol lookup). Never dump large files merely to orient yourself.
+- For cross-module impact questions, if a **fresh local** `graphify-out/graph.json` and `graphify` CLI already exist, try a narrow `graphify query "<question>"` or `graphify explain "<symbol>"`; confirm results against source and tests. Inferred or outdated graph edges are not proof.
+- If Graphify is absent, stale, or unhelpful, use normal repository search. Do not install tools, rebuild the graph, or spawn investigative agents for a straightforward fix.
+- Work with focused tests during implementation, then run the applicable broader checks for substantive changes. Token savings must never bypass privacy, authorization, regression testing or release approvals.
+- For a handoff, record only the branch/SHA, observed checks, relevant decision, unresolved risk and next action. Keep customer/worker data out of notes.
+
 ## Core engineering principles
 
 1. Implement behavior supported by product documentation or an explicit task.
