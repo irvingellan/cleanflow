@@ -20,6 +20,42 @@ When resuming substantial CleanFlow work with incomplete conversational context,
 `docs/CURRENT_STATE.md` first, then the relevant active GitHub Issue, then only the
 source-of-truth documents needed for the task. Do not load all docs by default.
 
+## Shared Codex and Claude workflow
+
+1. Run `node scripts/engineering.mjs doctor` from the CleanFlow checkout and read
+   the active Issue. Compare the freshly advertised GitHub `main` with the
+   Production Hosting marker. Use the release receipt for backend provenance.
+   Stop pushes and release operations on a failed diagnostic. Work in an
+   isolated local branch when an approved baseline permits preservation work.
+2. Use a dedicated registered worktree and branch `codex/issue-N-topic` or
+   `claude/issue-N-topic` from the verified canonical commit. Record owner and
+   intended paths in the Issue or PR. Claim the local scope with
+   `node scripts/engineering.mjs claim --issue N --path path/to/area` before
+   editing. Resolve scope overlaps before either agent writes.
+3. Use one PR per task and label it `scope:hosting` or `scope:full`. Claude
+   leads visual design, CSS and visual QA. Codex leads service boundaries,
+   security, integration and release tooling. Cross-review changes that cross
+   those boundaries. Review the exact commit and CI results before integration.
+4. Use Issues and PRs to track work, CURRENT_STATE for the technical summary
+   and sealed receipts for deployment and rollback. Generate a checkpoint
+   with `node scripts/engineering.mjs checkpoint --issue N` and link the
+   checks and receipt where appropriate. Report real-device acceptance separately.
+5. Release from the integrated canonical SHA under specific authorization.
+   Compare the reviewed release plan, live snapshot and rollback before writing.
+   Use the Hosting-only executor for eligible presentation changes. CI has
+   no Production credentials. See [Unified Engineering](docs/engineering/UNIFIED_ENGINEERING.md).
+
+## Task-sized discovery and optional code graph
+
+- Inspect the task, branch, worktree and diff. Start with bounded filenames
+  and symbol searches, such as `rg -n` and `git diff -- path`.
+- For cross-module questions, use a narrow Graphify query only when the CLI
+  and a fresh local graph already exist. Confirm against source and tests.
+  Otherwise use repository search. Keep generated graph data out of Git.
+- Run focused checks while editing and the applicable wider gates before
+  handoff. Record branch, exact SHA, observed checks, decision, risk and next
+  action. Keep customer and worker information out of records.
+
 ## Core engineering principles
 
 1. Implement behavior supported by product documentation or an explicit task.

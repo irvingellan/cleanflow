@@ -5,7 +5,7 @@
 **Goal:** One local Production-compatible Multi-Photo release candidate with exact runtime reconciliation.
 **Architecture:** Reuse ba3fa84; selectively pin Node22/PolicyB from1d8a6b6. No whole legacy merge or new feature.
 **Tech:** Existing React/Firebase, Node22.23.2, CLI15.28.1, Vitest/Playwright/emulators.
-**Spec:** /Users/irvingellan/.codex/attachments/2d136859-d10c-475e-ba5a-bf7e2922bc44/goal-objective.md
+**Worktree:** the isolated `codex/multi-photo-node22-release-candidate` checkout.
 
 ## Constraints
 No Production deploy/mutation, main merge, push, billing/secret change or visual work. Preserve original worktrees/WIP/refs/backups and both STOP files byte-identical. Policy2 remains20photos/50MiB, per-image5MiB. No duplicate broad suites without integration reason.

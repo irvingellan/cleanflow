@@ -1,0 +1,93 @@
+name: Engineering checks
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engineering-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  scope:
+    name: Integration scope
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.12.0'
+      - name: Verify the submitted head and exact PR base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HOSTING: ${{ contains(github.event.pull_request.labels.*.name, 'scope:hosting') }}
+          FULL: ${{ contains(github.event.pull_request.labels.*.name, 'scope:full') }}
+        run: |
+          set -euo pipefail
+          if [[ "$HOSTING" == true && "$FULL" == false ]]; then scope=hosting
+          elif [[ "$HOSTING" == false && "$FULL" == true ]]; then scope=full
+          else echo 'Apply exactly one scope label: scope:hosting or scope:full'; exit 1
+          fi
+          [[ "$(git rev-parse --verify refs/remotes/origin/main)" == "$BASE_SHA" ]] ||
+            { echo 'main advanced before checkout. Refresh the PR against the new base.'; exit 1; }
+          if git cat-file -e "$BASE_SHA:scripts/engineering.mjs" &&
+            git cat-file -e "$BASE_SHA:scripts/releaseHostingScope.mjs"; then
+            trusted="$(mktemp -d)"
+            git archive "$BASE_SHA" scripts/engineering.mjs scripts/releaseHostingScope.mjs | tar -x -C "$trusted"
+            node "$trusted/scripts/engineering.mjs" check --base "$BASE_SHA" --head "$HEAD_SHA" --scope "$scope"
+          else
+            [[ "$scope" == full && "$HEAD_SHA" != "$BASE_SHA" ]] &&
+              git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+          fi
+          {
+            echo '## CleanFlow integration checkpoint'
+            printf -- '- PR head: `%s`\n- PR base: `%s`\n- Scope: %s\n' "$HEAD_SHA" "$BASE_SHA" "$scope"
+            echo '- Scope verification: passed'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verification:
+    name: Unit, build and emulator checks
+    needs: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      FIREBASE_CLI_DISABLE_TELEMETRY: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - run: npx --no-install playwright install --with-deps chromium webkit
+      - name: Verify release and integration tooling
+        run: node --test scripts/engineering.test.mjs scripts/releaseHostingOnly.test.mjs scripts/releaseNotificationBUpdate.test.mjs
+      - run: npm test
+      - run: npm run build:emulators
+      - run: npm run test:security
+      - run: npm run test:cleaner-hub:security
+      - run: npm run test:e2e
+      - run: npm run test:cleaner-hub:e2e
+      - name: Record technical checkpoint
+        if: success()
+        run: |
+          printf '%s\n' '- Unit, build, security and browser checks: passed in CI with emulators' >> "$GITHUB_STEP_SUMMARY"
