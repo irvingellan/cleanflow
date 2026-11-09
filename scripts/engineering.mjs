@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { inspectHostingOnlyPaths } from "./releaseHostingScope.mjs";
@@ -296,6 +296,8 @@ async function main() {
   console.log(checkpoint);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const entryPath = process.argv[1];
+if (entryPath && existsSync(entryPath)
+  && realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url))) {
   main().catch((error) => { console.error(error.message); process.exitCode = 1; });
 }

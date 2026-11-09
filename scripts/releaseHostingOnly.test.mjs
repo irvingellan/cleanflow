@@ -35,6 +35,23 @@ test("admit presentation plus exact engineering evidence, fail closed on configu
   }
 });
 
+test("the emulator command alone can accompany Hosting, but build and dependency changes cannot", () => {
+  const paths = ["src/index.css", "package.json", "playwright.config.js", "firebase.manager-e2e.json", "scripts/runManagerE2e.mjs"];
+  const previousPackage = { scripts: { build: "vite build", "test:e2e": "legacy e2e" }, dependencies: { vite: "8" } };
+  const candidatePackage = { ...previousPackage, scripts: { ...previousPackage.scripts, "test:e2e": "node scripts/runManagerE2e.mjs" } };
+  assert.equal(inspectHostingOnlyPaths(paths, { previousPackage, candidatePackage }).allowed, true);
+  assert.equal(inspectHostingOnlyPaths(paths).allowed, false);
+  for (const change of [
+    { dependencies: { vite: "9" } },
+    { scripts: { ...candidatePackage.scripts, build: "different build" } },
+    { scripts: { ...candidatePackage.scripts, "test:e2e": "unreviewed command" } },
+  ]) {
+    assert.deepEqual(inspectHostingOnlyPaths(paths, {
+      previousPackage, candidatePackage: { ...candidatePackage, ...change },
+    }).blocked, ["package.json"]);
+  }
+});
+
 test("a release needs the exact fresh official SHA and a strict forward ancestry", () => {
   const reviewed = { baselineSha: before, head, officialHead: head, isAncestor: (a, b) => a === before && b === head };
   assert.doesNotThrow(() => validateForwardRelease(reviewed));

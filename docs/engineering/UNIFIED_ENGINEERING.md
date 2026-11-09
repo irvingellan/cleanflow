@@ -50,6 +50,12 @@ Irving Hub note `2026-11-09-5dbclm` provides shared context. Git holds the sourc
    sanitized conclusion to the Irving Hub when the task authorizes it. This
    command does not send a message or infer acceptance of a release.
 
+The CI checks the exact GitHub event merge commit and its two parents. The
+manager browser suite (`npm run test:e2e`) uses isolated local Auth, Firestore
+and Functions for `demo-cleanflow`, with synthetic secret overrides and no
+Production credentials. Nested browser suites retain their dedicated runners.
+Use a task worktree without an existing Functions secret override file.
+
 The default branch is the integration line after canonization. An agent task
 branch is a review candidate. GitHub branch protections should be set after
 the first observed passing checks. Require a PR, approved review, exact

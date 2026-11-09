@@ -38,14 +38,19 @@ jobs:
           fi
           [[ "$(git rev-parse --verify refs/remotes/origin/main)" == "$BASE_SHA" ]] ||
             { echo 'main advanced before checkout. Refresh the PR against the new base.'; exit 1; }
-          if git cat-file -e "$BASE_SHA:scripts/engineering.mjs" &&
-            git cat-file -e "$BASE_SHA:scripts/releaseHostingScope.mjs"; then
+          [[ "$(git rev-parse --verify HEAD)" == "$GITHUB_SHA" &&
+             "$(git show --no-patch --format=%P HEAD)" == "$BASE_SHA $HEAD_SHA" ]] ||
+            { echo 'Checkout is not the event merge commit for the exact PR base and head.'; exit 1; }
+          if git cat-file -e "$BASE_SHA:scripts/engineering.mjs" 2>/dev/null &&
+            git cat-file -e "$BASE_SHA:scripts/releaseHostingScope.mjs" 2>/dev/null; then
             trusted="$(mktemp -d)"
+            trap 'rm -rf "$trusted"' EXIT
             git archive "$BASE_SHA" scripts/engineering.mjs scripts/releaseHostingScope.mjs | tar -x -C "$trusted"
             node "$trusted/scripts/engineering.mjs" check --base "$BASE_SHA" --head "$HEAD_SHA" --scope "$scope"
           else
-            [[ "$scope" == full && "$HEAD_SHA" != "$BASE_SHA" ]] &&
-              git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+            [[ "$scope" == full && "$HEAD_SHA" != "$BASE_SHA" ]] ||
+              { echo 'A base without scope policy requires a scope:full bootstrap PR.'; exit 1; }
+            git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
           fi
           {
             echo '## CleanFlow integration checkpoint'

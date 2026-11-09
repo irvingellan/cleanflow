@@ -1,9 +1,25 @@
+import { readFileSync } from "node:fs";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 const projectId = "demo-cleanflow";
 const organizationId = "cleanflow-demo";
+const { emulators } = JSON.parse(readFileSync(new URL("../firebase.manager-e2e.json", import.meta.url), "utf8"));
+const emulatorProfiles = [
+  { firestore: emulators.firestore.port, auth: emulators.auth.port, functions: emulators.functions.port },
+  { firestore: 8080, auth: 9099, functions: 5001 },
+];
+
+function matchesEmulatorHost(host, port) {
+  return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
+}
+
+export function managerE2ePorts(env = process.env) {
+  return emulatorProfiles.find(({ firestore, auth }) =>
+    matchesEmulatorHost(env.FIRESTORE_EMULATOR_HOST, firestore)
+    && matchesEmulatorHost(env.FIREBASE_AUTH_EMULATOR_HOST, auth));
+}
 
 export const e2eManager = {
   email: "manager@cleanflow.e2e",
@@ -11,6 +27,7 @@ export const e2eManager = {
 };
 
 export function getE2eFirestore() {
+  requireLocalEmulators();
   const app = getApps().find((candidate) => candidate.name === "cleanflow-e2e-test") ||
     initializeApp({ projectId }, "cleanflow-e2e-test");
 
@@ -18,14 +35,7 @@ export function getE2eFirestore() {
 }
 
 function requireLocalEmulators() {
-  const allowedFirestoreHosts = new Set(["127.0.0.1:8080", "localhost:8080"]);
-  const allowedAuthHosts = new Set(["127.0.0.1:9099", "localhost:9099"]);
-
-  if (
-    !allowedFirestoreHosts.has(process.env.FIRESTORE_EMULATOR_HOST) ||
-    !allowedAuthHosts.has(process.env.FIREBASE_AUTH_EMULATOR_HOST) ||
-    process.env.GCLOUD_PROJECT !== projectId
-  ) {
+  if (process.env.GCLOUD_PROJECT !== projectId || !managerE2ePorts()) {
     throw new Error(
       "CleanFlow E2E fixtures require local demo-cleanflow Auth and Firestore emulators.",
     );
@@ -201,6 +211,7 @@ export default async function seedE2eFixtures() {
         scheduledDate: localDateKey(3),
         operationalStatus: "UNASSIGNED",
         assignedCleanerIds: [],
+        requiredCleanerCount: 2,
         checklistContextRevision: 0,
       },
     ],

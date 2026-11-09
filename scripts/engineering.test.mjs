@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { checkCandidate, claimTask, closeTask, diagnose, renderCheckpoint, updateCheckpoint } from "./engineering.mjs";
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -34,7 +35,7 @@ function scenario() {
   const codex = join(root, "server-worktree");
   git(repo, "worktree", "add", "-b", "claude/issue-101-colors", claude, base);
   git(repo, "worktree", "add", "-b", "codex/issue-102-server", codex, base);
-  return { repo, claude, codex, base };
+  return { root, repo, claude, codex, base };
 }
 
 test("parallel Claude and Codex tasks keep exclusive paths and isolate uncommitted edits", () => {
@@ -92,4 +93,18 @@ test("doctor distinguishes a public, stale canonical ref from the published comm
   assert.ok(revised.includes("Keep original evidence."));
   assert.equal(revised.match(/cleanflow-engineering:begin/g)?.length, 1);
   assert.throws(() => updateCheckpoint(managed + "\n<!-- cleanflow-engineering:end -->", "invalid"), /Ambiguous/);
+});
+
+test("a symlinked CLI path still executes the committed scope policy", (context) => {
+  const { root, repo, claude, codex, base } = scenario();
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const cli = join(root, "linked-engineering.mjs");
+  symlinkSync(fileURLToPath(new URL("./engineering.mjs", import.meta.url)), cli);
+  const run = (head) => execFileSync(process.execPath, [cli, "check", "--base", base, "--head", head, "--scope", "hosting"], {
+    cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  });
+  file(claude, "src/index.css", ":root { color: blue; }\n");
+  assert.deepEqual(JSON.parse(run(commit(claude, "visual fixture"))).changed, ["src/index.css"]);
+  file(codex, "functions/index.js", "export const fixture = false;\n");
+  assert.throws(() => run(commit(codex, "backend fixture")), /Hosting scope blocked/);
 });

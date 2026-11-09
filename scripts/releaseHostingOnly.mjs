@@ -58,7 +58,10 @@ function assertCandidate(previousSha, sha, action) {
   check(fullSha.test(sha || ""), "Pass the exact full source SHA.");
   assertOfficialReleaseHead(root, previousSha, sha, { action });
   const paths = git("diff", "--no-renames", "--name-only", previousSha, sha).split("\n").filter(Boolean);
-  const scope = inspectHostingOnlyPaths(paths);
+  const scope = inspectHostingOnlyPaths(paths, paths.includes("package.json") ? {
+    previousPackage: JSON.parse(git("show", `${previousSha}:package.json`)),
+    candidatePackage: JSON.parse(git("show", `${sha}:package.json`)),
+  } : undefined);
   check(scope.allowed, `Hosting-only scope rejected: ${scope.blocked.join(", ") || "no presentation change"}.`);
   const config = JSON.parse(git("show", `${sha}:firebase.json`)).hosting;
   assertStaticHostingConfig(config);

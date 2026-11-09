@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { isDeepStrictEqual } from "node:util";
 
 const officialOrigin = "https://github.com/irvingellan/cleanflow.git";
 const fullSha = /^[a-f0-9]{40}$/;
@@ -6,13 +7,21 @@ const presentation = /^src\/(?:[^\n]+\.css|App\.jsx|(?:components|features)\/[^\
 const engineeringMetadata = new Set([
   ".github/workflows/engineering.yml", ".github/pull_request_template.md", "AGENTS.md", "CLAUDE.md", ".gitignore",
   "scripts/engineering.mjs", "scripts/releaseHostingScope.mjs", "scripts/releaseHostingOnly.mjs", "scripts/releaseNotificationBUpdate.mjs",
+  "firebase.manager-e2e.json", "playwright.config.js", "scripts/runManagerE2e.mjs",
 ]);
 const evidence = /^(?:docs\/|e2e\/|security\/)|(?:^|\/)[^/]+\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
 /** Exact policy shared by release admission and CI. Unknown paths require separate review. */
-export function inspectHostingOnlyPaths(paths) {
+export function inspectHostingOnlyPaths(paths, { previousPackage, candidatePackage } = {}) {
   const changed = [...new Set(paths)].sort();
   const blocked = changed.filter((file) => {
+    if (file === "package.json" && previousPackage?.scripts && candidatePackage?.scripts) {
+      // The bootstrap can change the emulator test entry point without forcing
+      // a backend deploy. All other package metadata must be identical.
+      return !isDeepStrictEqual(previousPackage, {
+        ...candidatePackage, scripts: { ...candidatePackage.scripts, "test:e2e": previousPackage.scripts["test:e2e"] },
+      }) || candidatePackage.scripts["test:e2e"] !== "node scripts/runManagerE2e.mjs";
+    }
     if (/^(?:functions\/|public\/|src\/services\/firebase\/)/.test(file)) return true;
     return !presentation.test(file) && !evidence.test(file) && !engineeringMetadata.has(file);
   });

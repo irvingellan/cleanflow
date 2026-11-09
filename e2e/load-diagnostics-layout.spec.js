@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { Timestamp } from "firebase-admin/firestore";
 import { writeFile } from "node:fs/promises";
-import { e2eManager, getE2eFirestore } from "./globalSetup.js";
+import { e2eManager, getE2eFirestore, managerE2ePorts } from "./globalSetup.js";
 
 const syntheticUid = "e2e-layout-manager-0000000001";
 const fixturePrefix = "e2e-load-diagnostics-layout";
 const pages = ["dashboard", "jobs", "properties", "clients", "cleaners", "payouts"];
 const operations = ["offers", "issues", "assignments", "checklist-run", "checklist-capability", "cleaners"];
 const viewports = [
+  { width: 2880, height: 1080 },
   { width: 2560, height: 1080 },
   { width: 1920, height: 1080 },
   { width: 1440, height: 900 },
@@ -21,11 +22,6 @@ const labels = {
 };
 
 function fixtureReferences() {
-  if (!["127.0.0.1:8080", "localhost:8080"].includes(process.env.FIRESTORE_EMULATOR_HOST)
-    || !["127.0.0.1:9099", "localhost:9099"].includes(process.env.FIREBASE_AUTH_EMULATOR_HOST)
-    || process.env.GCLOUD_PROJECT !== "demo-cleanflow") {
-    throw new Error("Diagnostics layout fixtures require local demo-cleanflow emulators.");
-  }
   const organization = getE2eFirestore().collection("organizations").doc("cleanflow-demo");
   return [
     ...Array.from({ length: 48 }, (_, index) => organization.collection("managerPageLoadEvents").doc(`${fixturePrefix}-${index}`)),
@@ -88,9 +84,10 @@ async function openDiagnostics(page, language) {
     localStorage.setItem("cleanflow-language", locale);
     localStorage.setItem("cleanflow-manager-theme", "light");
   }, language);
-  // The existing E2E setup runs Auth + Firestore only. Mock this one local
-  // developer callable; manager authorization and timing reads use emulators.
-  await page.route("http://127.0.0.1:5001/demo-cleanflow/us-central1/getDevCenterAccess", async (route) => {
+  // Supply the developer access fixture only. Manager authorization and timing
+  // reads still use the emulators.
+  const { functions } = managerE2ePorts();
+  await page.route(`http://127.0.0.1:${functions}/demo-cleanflow/us-central1/getDevCenterAccess`, async (route) => {
     const headers = {
       "access-control-allow-origin": "http://127.0.0.1:4173",
       "access-control-allow-methods": "POST, OPTIONS",
@@ -134,7 +131,8 @@ for (const language of Object.keys(labels)) {
       const workspace = page.locator(".cf-main--wide .cf-main__inner");
       await expect(workspace).toBeVisible();
       const foundation = await workspace.boundingBox();
-      expect(foundation.width).toBeLessThanOrEqual(1241);
+      const wideCap = viewport.width >= 2600 ? 1560 : viewport.width >= 1800 ? 1440 : 1240;
+      expect(foundation.width).toBeLessThanOrEqual(wideCap + 1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
 
       const byPage = diagnostics.locator('section[aria-labelledby="load-diagnostics-by-page"]');
@@ -151,7 +149,7 @@ for (const language of Object.keys(labels)) {
       await testInfo.attach("diagnostics-layout-measurements", { path: measurementsPath, contentType: "application/json" });
       if (viewport.width >= 1440) {
         const sidebar = await page.locator(".cf-sidebar").boundingBox();
-        expect(foundation.width).toBeGreaterThanOrEqual(Math.min(viewport.width - sidebar.width, 1240) - 1);
+        expect(foundation.width).toBeGreaterThanOrEqual(Math.min(viewport.width - sidebar.width, wideCap) - 1);
         expect(Math.abs(boxes[0].y - boxes[1].y)).toBeLessThanOrEqual(1);
         expect(boxes[1].x).toBeGreaterThan(boxes[0].x + boxes[0].width);
         expect(boxes[2].width).toBeGreaterThan(boxes[0].width + boxes[1].width);
