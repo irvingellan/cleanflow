@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import test from "node:test";
 import { notificationProject } from "./notificationReleaseCloud.mjs";
 import { assertOwnedHostingPublication, assertStaticHostingConfig, hostingUploadMatches, runHostingOnlySequence } from "./releaseHostingOnly.mjs";
@@ -45,8 +45,22 @@ test("a release needs the exact fresh official SHA and a strict forward ancestry
 });
 
 test("rollback uses the clean sealed commit even when main has advanced", (t) => {
-  const checkout = mkdtempSync(join(tmpdir(), "cleanflow-sealed-git-"));
-  t.after(() => rmSync(checkout, { recursive: true, force: true }));
+  const fixture = mkdtempSync(join(tmpdir(), "cleanflow-sealed-git-"));
+  const checkout = join(fixture, "checkout");
+  const bin = join(fixture, "bin");
+  mkdirSync(checkout);
+  mkdirSync(bin);
+  const path = process.env.PATH;
+  process.env.PATH = bin + delimiter + path;
+  t.after(() => {
+    process.env.PATH = path;
+    rmSync(fixture, { recursive: true, force: true });
+  });
+  const gh = (visibility, branch) => writeFileSync(join(bin, "gh"),
+    `#!/bin/sh
+printf '%s\n' '${JSON.stringify({ visibility, defaultBranchRef: { name: branch } })}'
+`, { mode: 0o700 });
+  gh("PUBLIC", "main");
   const git = (...args) => execFileSync("git", args, { cwd: checkout, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const commit = (message) => git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
     "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", message);
@@ -66,7 +80,12 @@ test("rollback uses the clean sealed commit even when main has advanced", (t) =>
   git("checkout", "--detach", sealed);
   assert.notEqual(git("rev-parse", "origin/main"), sealed);
   assert.doesNotThrow(rollback);
-  assert.throws(() => assertOfficialReleaseHead(checkout, baseline, sealed), /ls-remote/);
+  const publish = () => assertOfficialReleaseHead(checkout, baseline, sealed);
+  assert.throws(publish, /PRIVATE/);
+  gh("PRIVATE", "other");
+  assert.throws(publish, /official main/);
+  gh("PRIVATE", "main");
+  assert.throws(publish, /ls-remote/);
 
   const dirty = join(checkout, "dirty");
   writeFileSync(dirty, "changed");

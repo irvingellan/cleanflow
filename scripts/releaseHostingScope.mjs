@@ -31,14 +31,25 @@ export function validateForwardRelease({ baselineSha, head, officialHead, isAnce
 }
 
 export function assertOfficialReleaseHead(root, baselineSha, head, { action = "publish" } = {}) {
-  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", timeout: 20_000,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, stdio: ["ignore", "pipe", "ignore"] }).trim();
+  const options = { cwd: root, encoding: "utf8", timeout: 20_000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" }, stdio: ["ignore", "pipe", "ignore"] };
+  const git = (...args) => execFileSync("git", args, options).trim();
   if (!fullSha.test(head || "") || git("remote", "get-url", "origin") !== officialOrigin || git("rev-parse", "HEAD") !== head
     || git("status", "--porcelain", "--untracked-files=all")) {
     throw new Error("Use the clean official CleanFlow source checkout and exact candidate HEAD.");
   }
   // A sealed rollback follows its live publication receipt, even after main advances.
   if (action === "rollback") return;
+  let repository;
+  try {
+    repository = JSON.parse(execFileSync("gh", ["repo", "view", officialOrigin.slice(0, -4),
+      "--json", "visibility,defaultBranchRef"], options));
+  } catch {
+    throw new Error("Official repository visibility could not be verified.");
+  }
+  if (repository?.visibility !== "PRIVATE" || repository?.defaultBranchRef?.name !== "main") {
+    throw new Error("Publishing requires verified PRIVATE visibility and the official main branch.");
+  }
   const official = git("ls-remote", "--exit-code", "origin", "refs/heads/main");
   const [officialHead, ref, extra] = official.split(/\s+/);
   if (ref !== "refs/heads/main" || extra) throw new Error("Official origin/main could not be verified.");
