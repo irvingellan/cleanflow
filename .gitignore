@@ -52,3 +52,6 @@ tmp/
 .DS_Store
 Thumbs.db
 logs/
+
+# Local code graph (never commit generated maps)
+graphify-out/
