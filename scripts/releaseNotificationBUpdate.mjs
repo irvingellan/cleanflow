@@ -11,7 +11,7 @@ import { checkedWebEnvironment, deployGroups, validReleaseVerification } from ".
 import { releaseToolchain, runReleaseSequence, stageReleaseInputs, verifyLiveAssets, verifyTransition, writeReleaseModes } from "./releaseNotificationA.mjs";
 import { pushTestFunction, releaseBSnapshot, releaseBSteps, transportFunctions, verifiedBReceipt, verifyBStep } from "./releaseNotificationB.mjs";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
-import { assertOfficialReleaseHead } from "./releaseHostingScope.mjs";
+import { assertOfficialReleaseHead, isManagerE2eScriptOnly } from "./releaseHostingScope.mjs";
 
 // Updates the published Release B pilot in place: the four cleaner push
 // Functions move to the new source (bound to the new SHA) and Hosting moves to
@@ -178,6 +178,9 @@ function packageDependenciesAt(sha) {
 export function serverScopeChanges(previousSha, sha, { operations = false } = {}) {
   const changed = git("diff", "--no-renames", "--name-only", `${previousSha}..${sha}`, "--",
     "functions", ...lockedServerPaths).split("\n").filter(Boolean);
+  if (changed.includes("package.json") && isManagerE2eScriptOnly(
+    JSON.parse(git("show", `${previousSha}:package.json`)), JSON.parse(git("show", `${sha}:package.json`)),
+  )) changed.splice(changed.indexOf("package.json"), 1);
   const packageFiles = ["functions/package.json", "functions/package-lock.json"];
   const dependenciesReviewed = !changed.some((file) => packageFiles.includes(file))
     || dependencyChangesReviewed(packageDependenciesAt(previousSha), packageDependenciesAt(sha));

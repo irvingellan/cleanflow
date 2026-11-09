@@ -11,17 +11,20 @@ const engineeringMetadata = new Set([
 ]);
 const evidence = /^(?:docs\/|e2e\/|security\/)|(?:^|\/)[^/]+\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
+// Only the exact emulator entry point may differ. Runtime, dependency, and
+// build metadata still require separate release review.
+export function isManagerE2eScriptOnly(previousPackage, candidatePackage) {
+  return candidatePackage?.scripts?.["test:e2e"] === "node scripts/runManagerE2e.mjs"
+    && isDeepStrictEqual(previousPackage, {
+      ...candidatePackage, scripts: { ...candidatePackage.scripts, "test:e2e": previousPackage?.scripts?.["test:e2e"] },
+    });
+}
+
 /** Exact policy shared by release admission and CI. Unknown paths require separate review. */
 export function inspectHostingOnlyPaths(paths, { previousPackage, candidatePackage } = {}) {
   const changed = [...new Set(paths)].sort();
   const blocked = changed.filter((file) => {
-    if (file === "package.json" && previousPackage?.scripts && candidatePackage?.scripts) {
-      // The bootstrap can change the emulator test entry point without forcing
-      // a backend deploy. All other package metadata must be identical.
-      return !isDeepStrictEqual(previousPackage, {
-        ...candidatePackage, scripts: { ...candidatePackage.scripts, "test:e2e": previousPackage.scripts["test:e2e"] },
-      }) || candidatePackage.scripts["test:e2e"] !== "node scripts/runManagerE2e.mjs";
-    }
+    if (file === "package.json") return !isManagerE2eScriptOnly(previousPackage, candidatePackage);
     if (/^(?:functions\/|public\/|src\/services\/firebase\/)/.test(file)) return true;
     return !presentation.test(file) && !evidence.test(file) && !engineeringMetadata.has(file);
   });
