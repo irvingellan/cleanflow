@@ -1155,11 +1155,11 @@ to finish all phases before showing the Dashboard are preserved. Each
 query needs a current server response. The full SDK still owns manager
 membership observation, revocation, writes and other screens.
 
-Load the Dashboard reader after manager verification and include its
-hashed module in Hosting preparation and rollback. This confines the
-transport change to the reads that do not need a listener and keeps the
-module out of the public entry. Preserve the existing deadline and
-retry for network or module failures. Use the full synthetic fixture
-in WebKit and verify the affected devices before publication.
+Bundle the Dashboard reader with the entry JavaScript and initialize it
+on first use. WebKit cached a failed post-login module import in the
+same document after a transient 503. Bundling makes the reader part of
+the existing entry watchdog and asset retention. The transport change
+stays confined to Dashboard reads. Use the full synthetic fixture in
+WebKit and verify the affected devices before publication.
 
 [Firebase Firestore Lite SDK](https://firebase.google.com/docs/firestore/solutions/firestore-lite)

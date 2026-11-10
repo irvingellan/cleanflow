@@ -1,4 +1,5 @@
 import { isJobFilled, requiredCleanerCount } from "../jobs/offerSlots.js";
+import * as reads from "./dashboardReads.js";
 import {
   getAssignedCleanerIds,
   normalizeJobRecord,
@@ -128,7 +129,6 @@ export async function getOperationalDashboard(observation = {}) {
   const weekDays = Array.from({ length: 7 }, (_, index) =>
     localDateKey(addLocalDays(weekStart, index)),
   );
-  const reads = await readDashboardPhase("dashboard_read_module", () => import("./dashboardReads.js"), observation);
   const [
     propertiesSnapshot,
     openJobsSnapshot,

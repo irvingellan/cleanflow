@@ -8,7 +8,6 @@ const buildId = "a".repeat(40);
 const deploymentId = `${buildId}-cleaner-push`;
 const entryAsset = "/assets/main-fixture.js";
 const cssAsset = "/assets/main-fixture.css";
-const dashboardAsset = "assets/dashboardReads-TestHash.js";
 const blockedRequests = ["/api/fixture", "/version.json?fixture=private"];
 
 function entryHtml(manifest, preload = "") {
@@ -18,7 +17,6 @@ function entryHtml(manifest, preload = "") {
 }
 
 const renderedEntry = `
-  const readDashboard = () => import("./dashboardReads-TestHash.js");
   const manager = '<input type="email"><input type="password"><button type="submit">Sign in</button>';
   const cleaner = '<input name="cleaner-access-code"><button type="submit" disabled>Sign in</button>';
   document.getElementById("root").innerHTML = '<form>' + (location.pathname === '/' ? manager : cleaner) + '</form>';
@@ -67,9 +65,6 @@ async function withFixture(options, run) {
         return send("text/javascript", options.emptyApp ? "export {};" : renderedEntry);
       case cssAsset:
         return send("text/css", "input,button { display: inline-block; }");
-      case "/" + dashboardAsset:
-        if (options.dashboardFallback) return send("text/html", entryHtml("/manifest.webmanifest"));
-        return send("text/javascript", "export default true;");
       default:
         response.writeHead(404).end();
     }
@@ -101,19 +96,6 @@ test("rejects an SPA fallback served with HTTP 200 in place of an entry JavaScri
     assert.equal(result.ok, false);
     assert.equal(asset.status, 200);
     assert.equal(asset.issue, "WRONG_CONTENT_TYPE");
-  });
-});
-
-test("checks a pinned lazy Dashboard asset even though anonymous HTML does not reference it", async () => {
-  await withFixture({ dashboardFallback: true }, async (origin, requests) => {
-    assert.equal((await probeHttp(origin)).ok, true);
-    assert.equal(requests.some(({ url }) => url === `/${dashboardAsset}`), false);
-    const result = await probeHttp(origin, { dashboardAsset });
-    assert.equal(result.ok, false);
-    const chunk = result.rows.find(({ path }) => path === `/${dashboardAsset}`);
-    assert.equal(chunk.method, "HEAD");
-    assert.equal(chunk.status, 200);
-    assert.equal(chunk.issue, "WRONG_CONTENT_TYPE");
   });
 });
 
@@ -159,7 +141,6 @@ test("renders anonymous screens while blocking writes and query-bearing requests
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.deepEqual(result.rows.map(({ path, screenReady }) => [path, screenReady]), [["/", true], ["/agenda", true]]);
     assert.equal(requests.some(({ url }) => blockedRequests.includes(url)), false);
-    assert.equal(requests.some(({ url }) => url === `/${dashboardAsset}`), false);
   });
 });
 

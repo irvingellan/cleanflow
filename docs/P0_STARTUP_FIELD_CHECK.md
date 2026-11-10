@@ -21,6 +21,11 @@ runner. Compare their document, asset and render outcomes to the observed stage.
 The probes exercise public entries. For a populated Dashboard, sign in on an
 isolated origin with a synthetic account and verify the full result after resume.
 
+If Checking sign-in persists and another CleanFlow tab is idle, record that
+fact. With the operator's permission and after checking the other tab has no
+unsaved work, close only that tab and observe whether the original one recovers.
+This distinguishes the two-tab Auth symptom reproduced in the lab.
+
 If the operator already has Web Inspector enabled and consents to its use, open
 the console for the affected tab or installed app. The following expression
 returns selected fields from the two CleanFlow session-local diagnostic rings.
@@ -35,7 +40,7 @@ still applies in those cases.
   const shellStages = new Set([
     "html_ready", "script_error", "stylesheet_error", "entry_exception",
     "entry_timeout", "react_mounted", "render_error", "worker_registration_error",
-    "online_recovery", "version_recovery", "manual_reload",
+    "online_recovery", "version_recovery", "asset_recovery", "manual_reload",
   ]);
   const appStages = new Set([
     "auth_resolved", "access_verification_started", "cache_snapshot_seen",

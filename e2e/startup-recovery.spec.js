@@ -27,11 +27,11 @@ async function signIn(page, { email, password }) {
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-function restQueryCollection(response) {
-  const url = new URL(response.url());
+function restQueryCollection(request) {
+  const url = new URL(request.url());
   if (url.origin !== firestoreOrigin || !url.pathname.endsWith(":runQuery")
-      || response.request().method() !== "POST") return undefined;
-  return response.request().postDataJSON()?.structuredQuery?.from?.[0]?.collectionId;
+      || request.method() !== "POST") return undefined;
+  return request.postDataJSON()?.structuredQuery?.from?.[0]?.collectionId;
 }
 
 test("recovers from an unanswered Firebase Auth observer without treating the browser as signed out", async ({ page }) => {
@@ -59,48 +59,103 @@ test("recovers from an unanswered Firebase Auth observer without treating the br
   expect(navigations).toBe(0);
 });
 
-test("an unanswered Dashboard read stays actionable and resumes through the real emulator on one retry", async ({ page }) => {
+test("an unanswered Dashboard REST request stays actionable and resumes through the real emulator on one retry", async ({ page }) => {
   test.setTimeout(55_000);
   const successfulQueries = new Set();
   page.on("response", (response) => {
-    const collection = restQueryCollection(response);
+    const collection = restQueryCollection(response.request());
     if (collection && response.ok()) successfulQueries.add(collection);
   });
-  await page.route((url) => url.pathname === "/src/features/dashboard/dashboardService.js"
-    && !url.searchParams.has("p0-original"), (route) => route.fulfill({
-    contentType: "application/javascript",
-    body: `
-      let attempts = 0;
-      export async function getOperationalDashboard(observer) {
-        if (++attempts === 1) {
-          observer?.onPhase("core_reads", "started");
-          return new Promise(() => {});
-        }
-        const service = await import("/src/features/dashboard/dashboardService.js?p0-original");
-        return service.getOperationalDashboard(observer);
+  await page.addInitScript((origin) => {
+    const fetchFromBrowser = window.fetch.bind(window);
+    let propertiesSeen = false;
+    let holdFirstWave = true;
+    const firstWaveReleased = new Promise((resolve) =>
+      window.addEventListener("p0-release-rest-response", resolve, { once: true }));
+    window.fetch = async (resource, options) => {
+      const url = new URL(typeof resource === "string" || resource instanceof URL ? resource : resource.url, location.href);
+      if (url.origin !== origin || !url.pathname.endsWith(":runQuery") || options?.method !== "POST") {
+        return fetchFromBrowser(resource, options);
       }
-    `,
-  }));
+      // The second Properties request begins the retry. Hold only the first
+      // wave's results so the retry still uses the real emulator transport.
+      const collection = JSON.parse(options.body).structuredQuery.from[0].collectionId;
+      if (collection === "properties") {
+        if (propertiesSeen) holdFirstWave = false;
+        propertiesSeen = true;
+      }
+      if (!holdFirstWave) return fetchFromBrowser(resource, options);
+      try {
+        const response = await fetchFromBrowser(resource, options);
+        if (response.ok) window.__p0HeldRestResponse = true;
+        return await firstWaveReleased.then(() => response);
+      } catch (error) {
+        await firstWaveReleased;
+        throw error;
+      }
+    };
+  }, firestoreOrigin);
+
+  try {
+    await page.goto("/");
+    await page.bringToFront();
+    await signIn(page, e2eManager);
+    await expect.poll(() => page.evaluate(() => window.__p0HeldRestResponse)).toBe(true);
+    await expect(page.getByText("Loading dashboard…")).toBeVisible();
+    if (!stress) await advanceWhileSuspended(page, 21_000);
+    await expect(page.getByText(/Unable to load (the )?dashboard/i)).toBeVisible({ timeout: 22_000 });
+    await expect.poll(() => page.evaluate(() => {
+      const ring = JSON.parse(sessionStorage.getItem("cleanflow.manager-access.diagnostics") || "[]");
+      return {
+        timedOut: ring.some(({ attempt, stage, phase }) => attempt === 1
+          && stage === "dashboard_load_timeout" && phase === "core_reads"),
+        ready: ring.some(({ attempt, stage }) => attempt === 2 && stage === "dashboard_load_ready"),
+      };
+    }), { timeout: 12_000 }).toEqual({ timedOut: true, ready: true });
+    await expect(page.getByRole("heading", { name: "Operations dashboard" })).toBeVisible();
+    await expect(page.getByText("Loading dashboard…")).toHaveCount(0);
+    expect([...successfulQueries]).toEqual(expect.arrayContaining(
+      stress ? ["properties", "jobs", "offers", "issues", "cleaners"] : ["properties", "jobs"],
+    ));
+    if (stress) {
+      await expect(page.getByText(/E2E Team Cleaner A.*E2E Team Cleaner B|E2E Team Cleaner B.*E2E Team Cleaner A/)).toBeVisible();
+    }
+  } finally {
+    await page.evaluate(() => window.dispatchEvent(new Event("p0-release-rest-response"))).catch(() => {});
+  }
+});
+
+test("Dashboard retries automatically when an offline browser reconnects", async ({ page, context }) => {
   await page.goto("/");
-  await page.bringToFront();
   await signIn(page, e2eManager);
-  await expect(page.getByText("Loading dashboard…")).toBeVisible();
-  if (!stress) await advanceWhileSuspended(page, 21_000);
-  await expect(page.getByText(/Unable to load (the )?dashboard/i)).toBeVisible({ timeout: 22_000 });
-  await expect.poll(() => page.evaluate(() => {
-    const ring = JSON.parse(sessionStorage.getItem("cleanflow.manager-access.diagnostics") || "[]");
-    return { visibility: document.visibilityState, recoveryStages: ring.filter(({ attempt, stage }) => attempt === 2 && stage.startsWith("dashboard_")).map(({ stage, phase, reason }) => ({ stage, phase, reason })) };
-  }), { timeout: 12_000 }).toMatchObject({
-    visibility: "visible", recoveryStages: expect.arrayContaining([expect.objectContaining({ stage: "dashboard_load_ready" })]),
-  });
-  await expect(page.getByRole("heading", { name: "Operations dashboard" })).toBeVisible();
-  await expect(page.getByText("Loading dashboard…")).toHaveCount(0);
-  expect([...successfulQueries]).toEqual(expect.arrayContaining(
-    stress ? ["properties", "jobs", "offers", "issues", "cleaners"] : ["properties", "jobs"],
-  ));
-  if (stress) {
-    // The seeded offer reached the UI, rather than only returning HTTP 200.
-    await expect(page.getByText(/E2E Team Cleaner A.*E2E Team Cleaner B|E2E Team Cleaner B.*E2E Team Cleaner A/)).toBeVisible();
+  const dashboard = page.getByRole("heading", { name: "Operations dashboard" });
+  await expect(dashboard).toBeVisible();
+  let navigations = 0;
+  page.on("framenavigated", (frame) => { if (frame === page.mainFrame()) navigations += 1; });
+
+  try {
+    await context.setOffline(true);
+    // Playwright network emulation and the OS online hint are independent.
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+      window.dispatchEvent(new Event("offline"));
+    });
+    await page.getByRole("button", { name: "Refresh dashboard" }).click();
+    await expect(page.getByText(/Unable to load (the )?dashboard/i)).toBeVisible();
+    await expect(dashboard).toHaveCount(0);
+
+    await context.setOffline(false);
+    const recoveredProperties = page.waitForResponse((response) =>
+      response.ok() && restQueryCollection(response.request()) === "properties");
+    await page.evaluate(() => {
+      delete navigator.onLine;
+      window.dispatchEvent(new Event("online"));
+    });
+    await recoveredProperties;
+    await expect(dashboard).toBeVisible();
+    expect(navigations).toBe(0);
+  } finally {
+    await context.setOffline(false);
   }
 });
 
@@ -119,7 +174,7 @@ test("Dashboard REST queries enforce manager access in Firestore independently o
 
   async function expectQueryDenied() {
     const [response, errorCode] = await Promise.all([
-      page.waitForResponse((response) => restQueryCollection(response) === "properties"),
+      page.waitForResponse((response) => restQueryCollection(response.request()) === "properties"),
       page.evaluate(async () => {
         const { getOperationalDashboard } = await import("/src/features/dashboard/dashboardService.js?p0-original");
         try {

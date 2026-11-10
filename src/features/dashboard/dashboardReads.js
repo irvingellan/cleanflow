@@ -19,19 +19,27 @@ import { managerDecisionOf } from "../jobs/offerSlots.js";
 // app and its Auth provider, without starting queries on the realtime Watch.
 // The Lite logger includes request paths and query bodies on some failures.
 // App diagnostics capture only the phase, elapsed time and allowlisted code.
-setLogLevel("silent");
-const db = getFirestore(firebaseApp);
-if (useFirebaseEmulators) connectFirestoreEmulator(db, "127.0.0.1", emulatorPorts.firestore);
+let db;
+
+function dashboardDb() {
+  if (!db) {
+    setLogLevel("silent");
+    const instance = getFirestore(firebaseApp);
+    if (useFirebaseEmulators) connectFirestoreEmulator(instance, "127.0.0.1", emulatorPorts.firestore);
+    db = instance;
+  }
+  return db;
+}
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
 
 function jobsCollection() {
-  return collection(db, "organizations", organizationId, "jobs");
+  return collection(dashboardDb(), "organizations", organizationId, "jobs");
 }
 
 function propertiesCollection() {
-  return collection(db, "organizations", organizationId, "properties");
+  return collection(dashboardDb(), "organizations", organizationId, "properties");
 }
 
 export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart }) {
@@ -87,7 +95,7 @@ export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, w
 }
 
 async function readJobRecords(jobId, subcollection, status, max) {
-  const records = collection(db, "organizations", organizationId, "jobs", jobId, subcollection);
+  const records = collection(dashboardDb(), "organizations", organizationId, "jobs", jobId, subcollection);
   const snapshot = await getDocs(query(records, where("status", "==", status), limit(max)));
   return snapshot.docs.map((record) => ({ ...record.data(), id: record.id }));
 }
@@ -108,7 +116,7 @@ export function getOpenJobIssues(jobId) {
 
 export async function getCleanerNamesById(cleanerIds) {
   const batches = cleanerLookupBatches(cleanerIds);
-  const cleaners = collection(db, "organizations", organizationId, "cleaners");
+  const cleaners = collection(dashboardDb(), "organizations", organizationId, "cleaners");
   const snapshots = await Promise.all(batches.map((batch) => (
     getDocs(query(cleaners, where(documentId(), "in", batch)))
   )));

@@ -85,26 +85,3 @@ test("same preparation validates Sandbox and production binding, not only SHA", 
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ buildId: "expected", environment: "sandbox", projectId: "clean-flow-prototipo" }));
   assert.throws(() => inspectHostingBuild(dir, "expected", [], binding), /environment\/project/);
 });
-
-test("accepts the reviewed Vite Dashboard chunk only when its entry references it", t => {
-  const dir = fixture(t);
-  const chunk = "assets/dashboardReads-Abc1_23-.js";
-  const entry = path.join(dir, "assets/index-demo.js");
-  fs.writeFileSync(path.join(dir, chunk), "export const dashboardRead = true;");
-  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unreferenced Dashboard chunk/);
-
-  fs.writeFileSync(entry, 'const read = () => import(`./dashboardReads-Abc1_23-.js`);');
-  assert.ok(inspectHostingBuild(dir, "expected", []).some(({ file }) => file === chunk));
-  fs.unlinkSync(path.join(dir, chunk));
-  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Missing or invalid Dashboard chunk/);
-});
-
-test("keeps the chunk allowlist limited to the reviewed basename and hash", t => {
-  const dir = fixture(t);
-  for (const file of ["dashboardReads-abc.js", "anotherChunk-Abc1_23-.js", "dashboardReads-Abc1_23-.css"]) {
-    const asset = path.join(dir, "assets", file);
-    fs.writeFileSync(asset, "unexpected");
-    assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected Hosting file/);
-    fs.unlinkSync(asset);
-  }
-});

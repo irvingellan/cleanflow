@@ -9,8 +9,10 @@ source reconciliation.
 
 The entry HTML has a fallback independent of the main JavaScript and CSS.
 Its 15-second budget uses elapsed wall time on resume. A failed module may
-reopen once before React commits, on observed reconnection or a confirmed
-different deployment marker, only on the plain manager and agenda entries.
+reopen once before React commits after reconnection, a different deployment
+marker, or a same-origin check that returns the expected JavaScript MIME
+for the failed entry asset. This applies to the plain manager and agenda
+entries.
 A JavaScript exception is reported by stage, without exception text. Language
 preferences remain optional when browser storage denies access. An HTML document
 that does not reach the device cannot render an application fallback.
@@ -19,8 +21,9 @@ The manager session observer has a 12-second UI deadline. It may still resolve
 and proceed to server-backed manager verification. A confirmed network return can
 open one fresh verification window; cached membership is insufficient and the
 revocation listener remains in place. Dashboard still uses server reads with a
-20-second deadline. Its one-time queries use Firestore Lite in a module loaded
-after manager verification. The server evaluates the same Firebase Auth and
+20-second deadline. Its one-time queries use Firestore Lite. The reader
+ships in the entry JavaScript and initializes on its first query after
+manager verification. The server evaluates the same Firebase Auth and
 Firestore Rules for each query. The full SDK retains the membership listener
 and revocation path. A transient read can retry once in the foreground while
 the error stays visible. Late or expired requests cannot publish data or launch
@@ -36,10 +39,9 @@ can include request paths or query bodies. The app's allowlisted diagnostics
 record these failures locally. The existing remotely collected aggregate page/operation telemetry
 keeps its prior schema and coverage.
 
-Use [public probes](../scripts/cleanflowPublicProbe.md) to distinguish reachable
-Hosting and correct files from anonymous browser readiness. Use the reviewed Dashboard module path with
-`--dashboard-asset` to check it separately. A synthetic manager run exercises
-the module and the signed-in data. Use [retention preparation](../scripts/prepareStartupHostingRetention.md)
+Use [public probes](../scripts/cleanflowPublicProbe.md) to check Hosting,
+entry assets and anonymous browser readiness. A synthetic manager run
+exercises the signed-in data. Use [retention preparation](../scripts/prepareStartupHostingRetention.md)
 to build local, hash-verified forward and compatible rollback files. Only hashed
 assets cross versions; entry HTML, version markers, manifests and workers do not.
 Older pages can then still fetch their script even after the Hosting switch.
@@ -64,13 +66,18 @@ non-manager sessions.
 With the earlier Watch transport, a repeated full-fixture test completed
 one of four runs using SDK defaults and four of four with fetch streams
 disabled. The Firestore Lite experiment also completed all four runs and
-used direct queries. The lazy module adds one download after the manager
-has been authorized. Dashboard data now requires current server results
-for every phase. Consult [DEC-055](DECISIONS.md#dec-055--direct-server-reads-for-the-manager-dashboard)
+used direct queries. A transient 503 on the earlier separate reader module
+was cached by WebKit in the same document. Including the reader in the entry
+keeps JavaScript failures in the existing pre-React recovery path. Dashboard
+data requires current server results for every phase. Consult [DEC-055](DECISIONS.md#dec-055--direct-server-reads-for-the-manager-dashboard)
 and use the [field check](P0_STARTUP_FIELD_CHECK.md) to record the actual
 stage on the affected Mac and iPhone. The [upstream Firestore WebKit report](https://github.com/firebase/firebase-js-sdk/issues/9789)
 and [Auth persistence report](https://github.com/firebase/firebase-js-sdk/issues/10540)
-describe separate mechanisms to compare with those observations.
+describe separate mechanisms to compare with those observations. In a local
+two-tab test, a held Firebase Auth IndexedDB transaction stalled the second
+tab with and without a saved synthetic session. Closing the holding tab
+allowed the pending observer to finish in the same document. The Auth
+watchdog gives a bounded error while the SDK remains blocked.
 
 Before any approved release, recheck the exact live version and review both
 sealed directories against the source and Hosting configuration. Run anonymous

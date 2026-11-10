@@ -22,7 +22,7 @@ function writeJson(file, data) {
   return hash(bytes);
 }
 
-function build(directory, sha, asset, { cleanerWorker = "same-cleaner", dashboardChunk } = {}) {
+function build(directory, sha, asset, { cleanerWorker = "same-cleaner" } = {}) {
   const dist = join(directory, "assets-U");
   mkdirSync(join(dist, "assets"), { recursive: true });
   mkdirSync(join(dist, "onesignal"));
@@ -34,12 +34,9 @@ function build(directory, sha, asset, { cleanerWorker = "same-cleaner", dashboar
     "firebase-messaging-sw.js": "same-manager",
     "cleaner-messaging-sw.js": cleanerWorker,
     "onesignal/OneSignalSDKWorker.js": "same-onesignal",
-    [`assets/main-${asset}.js`]: dashboardChunk
-      ? `export default () => import("./${dashboardChunk}");`
-      : `export default "${sha}";`,
+    [`assets/main-${asset}.js`]: `export default "${sha}";`,
     [`assets/main-${asset}.css`]: `/* ${sha} */`,
   };
-  if (dashboardChunk) files[`assets/${dashboardChunk}`] = `export default "${sha}";`;
   for (const [file, contents] of Object.entries(files)) writeFileSync(join(dist, file), contents);
   writeJson(join(dist, "version.json"), { buildId: sha, environment, projectId, deploymentId: `${sha}-cleaner-push` });
   const manifest = join(directory, "hosting-manifest-U.json");
@@ -67,7 +64,7 @@ function fixture(t, options = {}) {
   const olderReview = join(root, "older");
   const older = build(olderReview, olderSha, "older");
   const olderBinding = publication(olderReview, older, "c".repeat(16));
-  const baseline = build(baselineReview, baselineSha, "baseline", { dashboardChunk: options.baselineChunk });
+  const baseline = build(baselineReview, baselineSha, "baseline");
   publication(baselineReview, baseline, baselineVersion, olderBinding);
   const candidate = build(join(root, "candidate"), candidateSha, options.collision ? "baseline" : "candidate", options);
   const args = { candidateDist: candidate.dist, candidateManifest: candidate.manifest, candidateSha,
@@ -100,20 +97,6 @@ test("rejects the same asset path with different bytes before creating output", 
   const { args, prepare } = fixture(t, { collision: true });
   assert.throws(prepare, /asset path refers to different bytes/);
   assert.equal(existsSync(args.out), false);
-});
-
-test("retains the Dashboard chunk required by the other release's entry in each direction", (t) => {
-  const baselineChunk = "dashboardReads-Baseline.js";
-  const dashboardChunk = "dashboardReads-NextHash.js";
-  const { args, prepare } = fixture(t, { baselineChunk, dashboardChunk });
-  prepare();
-  const manifest = JSON.parse(readFileSync(join(args.out, "retention-manifest.json")));
-  assert.equal(manifest.forward.retainedAssets.find(({ file }) => file === `assets/${baselineChunk}`)?.fromBuild, baselineSha);
-  assert.equal(manifest.rollback.retainedAssets.find(({ file }) => file === `assets/${dashboardChunk}`)?.fromBuild, candidateSha);
-  for (const variant of ["forward", "rollback"]) {
-    assert.ok(existsSync(join(args.out, variant, "assets", baselineChunk)));
-    assert.ok(existsSync(join(args.out, variant, "assets", dashboardChunk)));
-  }
 });
 
 test("rejects changed reviewed bytes and an altered prior release receipt", (t) => {

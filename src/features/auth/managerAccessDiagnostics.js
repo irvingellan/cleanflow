@@ -18,7 +18,7 @@ const reasons = new Set([
   "timeout", "offline", "unavailable", "permission-denied", "unauthenticated",
   "unknown", "pageshow", "visible", "online", "manual", "deadline-exceeded", "resource-exhausted", "auto",
 ]);
-const phases = new Set(["dashboard_read_module", "core_reads", "offers", "issues", "cleaner_names", "cleaner_auth", "cleaner_membership", "cleaner_agenda"]);
+const phases = new Set(["core_reads", "offers", "issues", "cleaner_names", "cleaner_auth", "cleaner_membership", "cleaner_agenda"]);
 const buildPattern = /^(?:[a-f0-9]{40}|\d+\.\d+\.\d+-[\dT:.Z-]+)(?:-cleaner-push|-inbox-off)?$/;
 const browsers = new Set(["safari", "chrome", "firefox", "edge", "other"]);
 const platforms = new Set(["ios", "android", "macos", "windows", "linux", "other"]);

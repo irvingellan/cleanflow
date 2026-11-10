@@ -57,6 +57,28 @@ test("a failed module checks the deployed version and reopens stale HTML once", 
   expect((await trace(page)).filter((stage) => stage === "version_recovery")).toHaveLength(1);
 });
 
+for (const recovered of [true, false]) {
+  test(`an online entry 503 gets one checked retry (${recovered ? "transient" : "persistent"})`, async ({ page }) => {
+    let gets = 0;
+    let heads = 0;
+    await page.route(moduleAsset, (route) => {
+      if (route.request().method() === "HEAD") {
+        heads += 1;
+        return route.continue();
+      }
+      gets += 1;
+      if (recovered && gets > 1) return route.continue();
+      return route.fulfill({ status: 503, headers: { "Cache-Control": "no-store" }, body: "synthetic outage" });
+    });
+    await page.goto("/", { waitUntil: "commit" });
+    await expect.poll(() => gets).toBe(2);
+    if (recovered) await expect(login(page)).toBeVisible();
+    else await expect(retryButton(page)).toBeVisible();
+    expect(heads).toBeGreaterThanOrEqual(1);
+    expect((await trace(page)).filter((stage) => stage === "asset_recovery")).toHaveLength(1);
+  });
+}
+
 test("a pending entry request expires on return after simulated suspension", async ({ page }) => {
   let release;
   const stalled = new Promise((resolve) => { release = resolve; });

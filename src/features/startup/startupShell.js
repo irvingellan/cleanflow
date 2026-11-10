@@ -7,7 +7,7 @@
   const known = new Set([
     "html_ready", "script_error", "stylesheet_error", "entry_exception",
     "entry_timeout", "react_mounted", "render_error", "worker_registration_error",
-    "online_recovery", "version_recovery", "manual_reload",
+    "online_recovery", "version_recovery", "asset_recovery", "manual_reload",
   ]);
   const script = document.currentScript;
   const buildPattern = /^(?:[a-f0-9]{40}|\d+\.\d+\.\d+-[\dT:.Z-]+)(?:-cleaner-push|-inbox-off)?$/;
@@ -23,7 +23,7 @@
   let sawOffline = navigator.onLine === false;
   let reconnected = false;
   let watchdog;
-  let checkedVersion = false;
+  let checkedAvailability = false;
 
   function record(stage) {
     try {
@@ -87,20 +87,33 @@
     if (reconnected) reloadOnce("online_recovery");
   }
 
-  async function checkVersion() {
-    if (checkedVersion || !buildId || !mayReload()) return;
-    checkedVersion = true;
+  async function checkAvailability(source) {
+    if (checkedAvailability || !buildId || !mayReload()) return;
+    checkedAvailability = true;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2_500);
+    const options = {
+      cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
+      redirect: "error", signal: controller.signal,
+    };
     try {
-      const response = await fetch("/version.json", {
-        cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal: controller.signal,
-      });
-      if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return;
-      const version = await response.json();
-      const deployed = version?.deploymentId || version?.buildId;
-      if (!controller.signal.aborted && buildPattern.test(deployed) && deployed !== buildId) {
-        reloadOnce("version_recovery");
+      const response = await fetch("/version.json", options);
+      if (response.ok && response.headers.get("content-type")?.includes("application/json")) {
+        const version = await response.json();
+        const deployed = version?.deploymentId || version?.buildId;
+        if (!controller.signal.aborted && buildPattern.test(deployed) && deployed !== buildId) {
+          reloadOnce("version_recovery");
+          return;
+        }
+      }
+
+      const asset = new URL(source, location.href);
+      if (asset.origin !== location.origin || asset.search || asset.hash
+        || !/^\/assets\/(?:index|main)-[\w-]+\.js$/.test(asset.pathname)) return;
+      const available = await fetch(asset.pathname, { ...options, method: "HEAD" });
+      const mime = available.headers.get("content-type") || "";
+      if (!controller.signal.aborted && available.ok && /^(?:text|application)\/(?:javascript|ecmascript)\b/i.test(mime)) {
+        reloadOnce("asset_recovery");
       }
     } catch {
       // A failed probe does not prevent the visible recovery state.
@@ -109,12 +122,12 @@
     }
   }
 
-  function fail(stage) {
+  function fail(stage, source) {
     record(stage);
     failed = true;
     apply();
     retryOnline();
-    if (stage === "script_error") void checkVersion();
+    if (stage === "script_error") void checkAvailability(source);
   }
 
   function expire(force) {
@@ -125,7 +138,7 @@
     if (!mounted && event.target?.tagName === "LINK" && event.target.rel === "stylesheet") {
       record("stylesheet_error");
     } else if (!mounted && event.target?.tagName === "SCRIPT" && event.target.type === "module") {
-      fail("script_error");
+      fail("script_error", event.target.src);
     } else if (!mounted && event.target === window && event instanceof ErrorEvent) {
       fail("entry_exception");
     }
