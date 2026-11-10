@@ -108,15 +108,21 @@ test("reports a head asset failure as soon as a delayed HTML fallback is parsed"
     await parserHeld;
     await route.fulfill({ contentType: "application/javascript", body: "" });
   });
-  await page.route(stylesheetAsset, (route) => route.fulfill({ status: 503, body: "synthetic outage" }));
+  await page.route(stylesheetAsset, async (route) => {
+    if (route.request().method() === "HEAD") return route.fulfill({ status: 503, body: "synthetic outage" });
+    await moduleHeld;
+    await route.abort().catch(() => undefined);
+  });
   await page.route(moduleAsset, async (route) => {
     await moduleHeld;
     await route.abort().catch(() => undefined);
   });
   try {
     await page.goto("/", { waitUntil: "commit" });
-    await expect.poll(() => trace(page)).toContain("stylesheet_error");
     await expect(page.locator("#cleanflow-startup")).toHaveCount(0);
+    // Some engines dispatch the network error only after the parser resumes.
+    await page.locator("[data-startup-stylesheet]").dispatchEvent("error");
+    await expect.poll(() => trace(page)).toContain("stylesheet_error");
     releaseParser();
     await expect(page.locator("[data-startup-alert]")).toBeVisible();
     expect(await trace(page)).not.toContain("react_mounted");
