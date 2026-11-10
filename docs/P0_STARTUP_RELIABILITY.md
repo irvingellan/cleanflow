@@ -55,8 +55,10 @@ The WebKit config uses a fresh manager-only fixture by default to assert the
 Auth and core Firestore recovery path. Set `CLEANFLOW_P0_STRESS=1` before the
 same command to seed jobs and exercise all downstream Dashboard reads. In
 initial stress runs, WebKit reached the server reads and retried, but later
-queries did not all settle; Chromium completed the full fixture. Treat a
-populated, representative WebKit Dashboard as a release gate. Compare
+queries did not all settle; Chromium completed the full fixture. The same
+stress command with `VITE_CLEANFLOW_EMULATOR_FORCE_LONG_POLLING=true` compares
+Firestore transport only in local emulators; deployed builds ignore the flag.
+Treat a populated, representative WebKit Dashboard as a release gate. Compare
 [Firebase's WebKit transport report](https://github.com/firebase/firebase-js-sdk/issues/9789)
 and [Auth persistence report](https://github.com/firebase/firebase-js-sdk/issues/10540)
 against the affected devices before changing SDK or transport settings.
