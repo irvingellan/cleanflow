@@ -56,7 +56,10 @@
 
   function apply() {
     const panel = shell();
-    if (!panel) return;
+    const pending = panel?.querySelector("[data-startup-pending]");
+    const alert = panel?.querySelector("[data-startup-alert]");
+    const retry = panel?.querySelector("[data-startup-retry]");
+    if (!pending || !alert || !retry) return false;
     const root = document.getElementById("root");
     if (root) root.hidden = !mounted;
     let language;
@@ -64,12 +67,13 @@
     if (!Object.hasOwn(copy, language)) language = navigator.language?.split("-")[0];
     const messages = Object.hasOwn(copy, language) ? copy[language] : copy[route === "agenda" ? "pt" : "en"];
     panel.hidden = mounted && !failed;
-    panel.querySelector("[data-startup-pending]").textContent = messages[0];
-    panel.querySelector("[data-startup-alert]").textContent = messages[1];
-    panel.querySelector("[data-startup-retry]").textContent = messages[2];
-    panel.querySelector("[data-startup-pending]").hidden = failed;
-    panel.querySelector("[data-startup-alert]").hidden = !failed;
-    panel.querySelector("[data-startup-retry]").hidden = !failed;
+    pending.textContent = messages[0];
+    alert.textContent = messages[1];
+    retry.textContent = messages[2];
+    pending.hidden = failed;
+    alert.hidden = !failed;
+    retry.hidden = !failed;
+    return true;
   }
 
   function mayReload() {
@@ -201,7 +205,12 @@
       location.reload();
     }
   });
-  // This script runs from <head>; the body may not exist yet. On a hung module
-  // the watchdog can still reveal the body fallback before DOMContentLoaded.
-  document.addEventListener("DOMContentLoaded", apply, { once: true });
+  // A head asset can fail before the fallback arrives, and DOMContentLoaded
+  // can wait on the module. Apply the current state as soon as controls exist.
+  if (!apply()) {
+    const observer = new MutationObserver(() => {
+      if (apply()) observer.disconnect();
+    });
+    observer.observe(document, { childList: true, subtree: true });
+  }
 })();

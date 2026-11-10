@@ -68,6 +68,7 @@ test("a stalled stylesheet leaves the HTML fallback visible and opens when the s
     release();
     await expect(login(page)).toBeVisible();
     await expect(page.locator("#cleanflow-startup")).toBeHidden();
+    await expect(page.locator("[data-startup-stylesheet]")).toHaveAttribute("media", "all");
     expect(stylesheetRequests).toBe(1);
     expect(await trace(page)).toEqual(expect.arrayContaining(["stylesheet_ready", "entry_ready"]));
   } finally {
@@ -91,6 +92,38 @@ test("a transient stylesheet 503 triggers one checked retry", async ({ page }) =
   expect(gets).toBe(2);
   expect(heads).toBe(1);
   expect((await trace(page)).filter((stage) => stage === "asset_recovery")).toHaveLength(1);
+});
+
+test("reports a head asset failure as soon as a delayed HTML fallback is parsed", async ({ page, baseURL }) => {
+  let releaseParser;
+  let releaseModule;
+  const parserHeld = new Promise((resolve) => { releaseParser = resolve; });
+  const moduleHeld = new Promise((resolve) => { releaseModule = resolve; });
+  await page.route(`${baseURL}/`, async (route) => {
+    const response = await route.fetch();
+    const html = await response.text();
+    await route.fulfill({ response, body: html.replace("</head>", '<script src="/held-parser.js"></script></head>') });
+  });
+  await page.route("**/held-parser.js", async (route) => {
+    await parserHeld;
+    await route.fulfill({ contentType: "application/javascript", body: "" });
+  });
+  await page.route(stylesheetAsset, (route) => route.fulfill({ status: 503, body: "synthetic outage" }));
+  await page.route(moduleAsset, async (route) => {
+    await moduleHeld;
+    await route.abort().catch(() => undefined);
+  });
+  try {
+    await page.goto("/", { waitUntil: "commit" });
+    await expect.poll(() => trace(page)).toContain("stylesheet_error");
+    await expect(page.locator("#cleanflow-startup")).toHaveCount(0);
+    releaseParser();
+    await expect(page.locator("[data-startup-alert]")).toBeVisible();
+    expect(await trace(page)).not.toContain("react_mounted");
+  } finally {
+    releaseParser();
+    releaseModule();
+  }
 });
 
 test("a failed module checks the deployed version and reopens stale HTML once", async ({ page }) => {
