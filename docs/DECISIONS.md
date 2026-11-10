@@ -1140,3 +1140,26 @@ on the page header, counts, blocks and rows. Phones and tablets are unchanged.
 **Evidence:** `e2e/definitive-ui/layout.spec.js` captures Home, Services and
 the open Job at 1440x790, 1440x840, 1920x1000, 3440x1300 and 3840x2000, light
 and dark.
+
+## DEC-055 — Direct server reads for the manager Dashboard
+
+A populated Dashboard can finish its first batch of queries in WebKit and
+then wait on later Watch responses. A controlled emulator test reproduced
+this with the full SDK. Disabling its fetch streams and using one-shot REST
+queries each improved results in small, separate comparison runs.
+
+The Dashboard now uses Firestore Lite from the existing Firebase package.
+The same app supplies Firebase Auth and the server applies the existing
+Rules. Query filters, per-job limits, cleaner batches and the requirement
+to finish all phases before showing the Dashboard are preserved. Each
+query needs a current server response. The full SDK still owns manager
+membership observation, revocation, writes and other screens.
+
+Load the Dashboard reader after manager verification and include its
+hashed module in Hosting preparation and rollback. This confines the
+transport change to the reads that do not need a listener and keeps the
+module out of the public entry. Preserve the existing deadline and
+retry for network or module failures. Use the full synthetic fixture
+in WebKit and verify the affected devices before publication.
+
+[Firebase Firestore Lite SDK](https://firebase.google.com/docs/firestore/solutions/firestore-lite)

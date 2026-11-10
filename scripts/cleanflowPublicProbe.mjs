@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { hostingBundleAsset } from "./prepareHosting.mjs";
+import { hostingBundleAsset, hostingDashboardChunk, hostingEntryAsset } from "./prepareHosting.mjs";
 
 const projectId = "clean-flow-prototipo";
 const hosts = ["web.app", "firebaseapp.com"];
@@ -45,9 +45,11 @@ function readEntryHtml(html, manifest) {
 
     const path = attrs.get(entry ? "src" : "href") || "";
     const extension = rel === "stylesheet" ? "css" : "js";
-    if (!browserAsset.test(path) || !path.endsWith(`.${extension}`)) return { issue: "UNEXPECTED_ASSET_REFERENCE" };
+    if (!browserAsset.test(path) || !hostingBundleAsset.test(path.slice(1)) || !path.endsWith(`.${extension}`)) {
+      return { issue: "UNEXPECTED_ASSET_REFERENCE" };
+    }
     if (entry) {
-      if (!hostingBundleAsset.test(path.slice(1))) return { issue: "UNEXPECTED_ENTRY_REFERENCE" };
+      if (!hostingEntryAsset.test(path.slice(1))) return { issue: "UNEXPECTED_ENTRY_REFERENCE" };
       hasEntry = true;
     }
     assets.set(path, extension);
@@ -80,7 +82,10 @@ async function readSmallBody(response, signal) {
   }
 }
 
-export async function probeHttp(origin, { expectedBuild, timeoutMs = 10_000 } = {}) {
+export async function probeHttp(origin, { expectedBuild, dashboardAsset, timeoutMs = 10_000 } = {}) {
+  if (dashboardAsset !== undefined && (typeof dashboardAsset !== "string" || !hostingDashboardChunk.test(dashboardAsset))) {
+    throw new Error("Use a reviewed Dashboard asset path from the Hosting manifest.");
+  }
   const rows = [];
   async function check(path, validate, { head = false } = {}) {
     const row = { path, method: head ? "HEAD" : "GET" };
@@ -174,6 +179,7 @@ export async function probeHttp(origin, { expectedBuild, timeoutMs = 10_000 } = 
   }
 
   const assets = new Map(entries.flatMap(({ assets }) => assets ? [...assets] : []));
+  if (dashboardAsset) assets.set(`/${dashboardAsset}`, "js");
   await Promise.all([...assets].map(([path, extension]) => check(path, (headers) => {
     if (!assetType[extension].test(contentType(headers))) return { issue: "WRONG_CONTENT_TYPE" };
     if (headers.get("content-length") === "0") return { issue: "EMPTY_BODY" };
@@ -276,16 +282,18 @@ async function main() {
       host: { type: "string", default: "web.app" },
       browser: { type: "string" },
       "expected-build": { type: "string" },
+      "dashboard-asset": { type: "string" },
     },
   });
   if (!hosts.includes(values.host) || (values.browser && !engines.includes(values.browser)) ||
-      (values["expected-build"] && !fullSha.test(values["expected-build"]))) {
+      (values["expected-build"] && !fullSha.test(values["expected-build"])) ||
+      (values["dashboard-asset"] !== undefined && !hostingDashboardChunk.test(values["dashboard-asset"]))) {
     throw new Error("Invalid probe arguments.");
   }
   const origin = `https://${projectId}.${values.host}`;
   const startedAt = new Date().toISOString();
   const [http, browser] = await Promise.all([
-    probeHttp(origin, { expectedBuild: values["expected-build"] }),
+    probeHttp(origin, { expectedBuild: values["expected-build"], dashboardAsset: values["dashboard-asset"] }),
     values.browser ? probeBrowser(origin, values.browser) : { skipped: true },
   ]);
   const ok = http.ok && (browser.skipped || browser.ok);

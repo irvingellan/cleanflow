@@ -25,6 +25,13 @@ release verification. The Hosting release workflow still compares the exact
 published bytes with the approved preparation manifest. Leave the SHA unpinned
 for routine availability sampling.
 
+Add `--dashboard-asset assets/dashboardReads-<hash>.js` with the exact path
+from the reviewed manifest to check the dynamically imported Dashboard chunk
+during release verification.
+This is a separate HTTP and MIME check. The anonymous pages do not load
+the authenticated Dashboard or run its chunk, so test execution of that
+import with a synthetic authorized manager on an isolated origin.
+
 ## Schedule proposal
 
 The repository contains the runnable probe and commands. No schedule is active.

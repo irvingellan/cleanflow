@@ -1,43 +1,13 @@
 import { isJobFilled, requiredCleanerCount } from "../jobs/offerSlots.js";
 import {
-  collection,
-  getDocsFromServer,
-  orderBy,
-  query,
-  Timestamp,
-  where,
-} from "firebase/firestore";
-import { db } from "../../services/firebase/client.js";
-import { getCleanerNamesById } from "../cleaners/cleanerService.js";
-import { getOpenJobIssues } from "../issues/issueService.js";
-import {
-  getInterestedJobOffers,
-  getPendingJobOffers,
-} from "../jobs/jobOfferService.js";
-import {
   getAssignedCleanerIds,
   normalizeJobRecord,
 } from "../jobs/jobCompatibility.js";
 
-const organizationId = "cleanflow-demo";
-const activeOperationalStatuses = [
-  "UNASSIGNED",
-  "OFFERED",
-  "ASSIGNED",
-  "IN_PROGRESS",
-];
 const attentionJobLimit = 10;
 const issueCandidateJobLimit = 10;
 const next48HoursJobLimit = 20;
 const recentlyCompletedJobLimit = 5;
-
-function jobsCollection() {
-  return collection(db, "organizations", organizationId, "jobs");
-}
-
-function propertiesCollection() {
-  return collection(db, "organizations", organizationId, "properties");
-}
 
 function jobFromSnapshot(snapshot) {
   return normalizeJobRecord(snapshot.data(), snapshot.id);
@@ -158,8 +128,7 @@ export async function getOperationalDashboard(observation = {}) {
   const weekDays = Array.from({ length: 7 }, (_, index) =>
     localDateKey(addLocalDays(weekStart, index)),
   );
-  const jobs = jobsCollection();
-  // An offline cache can be empty or stale. The Home status requires current reads.
+  const reads = await readDashboardPhase("dashboard_read_module", () => import("./dashboardReads.js"), observation);
   const [
     propertiesSnapshot,
     openJobsSnapshot,
@@ -168,54 +137,9 @@ export async function getOperationalDashboard(observation = {}) {
     recentlyCompletedSnapshot,
     weeklyScheduledSnapshot,
     weeklyCompletedSnapshot,
-  ] = await readDashboardPhase("core_reads", () => Promise.all([
-    getDocsFromServer(propertiesCollection()),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "IN_PROGRESS"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "in", activeOperationalStatuses),
-        where("scheduledDate", ">=", today),
-        where("scheduledDate", "<=", endDate),
-        orderBy("scheduledDate", "asc"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "COMPLETED"),
-        orderBy("completedAt", "desc"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("scheduledDate", ">=", weekStartDate),
-        where("scheduledDate", "<=", weekEndDate),
-        orderBy("scheduledDate", "asc"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "COMPLETED"),
-        where("completedAt", ">=", Timestamp.fromDate(weekStart)),
-        where("completedAt", "<", Timestamp.fromDate(nextWeekStart)),
-        orderBy("completedAt", "desc"),
-      ),
-    ),
-  ]), observation);
+  ] = await readDashboardPhase("core_reads", () => reads.getDashboardCore({
+    today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart,
+  }), observation);
   const propertiesById = Object.fromEntries(propertiesSnapshot.docs.map((property) => [
     property.id,
     property.data(),
@@ -256,8 +180,8 @@ export async function getOperationalDashboard(observation = {}) {
     readDashboardPhase("offers", () => Promise.all(
       offeredAttentionJobs.map(async (job) => {
         const [interestedOffers, pendingOffers] = await Promise.all([
-          getInterestedJobOffers(job.id),
-          getPendingJobOffers(job.id),
+          reads.getInterestedJobOffers(job.id),
+          reads.getPendingJobOffers(job.id),
         ]);
 
         return {
@@ -270,11 +194,11 @@ export async function getOperationalDashboard(observation = {}) {
     readDashboardPhase("issues", () => Promise.all(
       issueCandidateJobs.map(async (job) => ({
         job,
-        issues: await getOpenJobIssues(job.id),
+        issues: await reads.getOpenJobIssues(job.id),
       })),
     ), observation),
   ]);
-  const cleanerNamesById = await readDashboardPhase("cleaner_names", () => getCleanerNamesById([
+  const cleanerNamesById = await readDashboardPhase("cleaner_names", () => reads.getCleanerNamesById([
     ...[...recentlyCompletedJobs, ...next48HoursJobs].flatMap((job) => [
       ...getAssignedCleanerIds(job),
       job.assignedCleanerId,

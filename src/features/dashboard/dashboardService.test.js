@@ -2,30 +2,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const services = vi.hoisted(() => ({
   getDocs: vi.fn(),
-  getDocsFromServer: vi.fn(),
+  readServer: vi.fn(),
   getCleanerNamesById: vi.fn(),
   getOpenJobIssues: vi.fn(),
   getInterestedJobOffers: vi.fn(),
   getPendingJobOffers: vi.fn(),
 }));
 
-vi.mock("firebase/firestore", () => ({
-  collection: vi.fn(),
-  getDocs: services.getDocs,
-  getDocsFromServer: services.getDocsFromServer,
-  orderBy: vi.fn(),
-  query: vi.fn(),
+vi.mock("firebase/firestore", () => ({ getDocs: services.getDocs }));
+vi.mock("firebase/firestore/lite", () => ({
+  setLogLevel: vi.fn(),
+  collection: vi.fn(), orderBy: vi.fn(), query: vi.fn(), where: vi.fn(),
+  getFirestore: vi.fn(), getDocs: services.readServer,
   Timestamp: { fromDate: vi.fn((date) => date) },
-  where: vi.fn(),
 }));
-vi.mock("../../services/firebase/client.js", () => ({ db: {} }));
-vi.mock("../cleaners/cleanerService.js", () => ({
+vi.mock("../../services/firebase/client.js", () => ({
+  firebaseApp: {}, useFirebaseEmulators: false, emulatorPorts: {},
+}));
+vi.mock("./dashboardReads.js", async (original) => ({
+  ...await original(),
   getCleanerNamesById: services.getCleanerNamesById,
-}));
-vi.mock("../issues/issueService.js", () => ({
   getOpenJobIssues: services.getOpenJobIssues,
-}));
-vi.mock("../jobs/jobOfferService.js", () => ({
   getInterestedJobOffers: services.getInterestedJobOffers,
   getPendingJobOffers: services.getPendingJobOffers,
 }));
@@ -139,7 +136,7 @@ describe("Dashboard cleaner names across Job schemas", () => {
       [],
       [],
     ]) {
-      services.getDocsFromServer.mockResolvedValueOnce(snapshot(records));
+      services.readServer.mockResolvedValueOnce(snapshot(records));
     }
     // Mirrors the existing batched name lookup: absent records are simply absent.
     services.getCleanerNamesById.mockImplementation(async (ids) =>
@@ -163,7 +160,7 @@ describe("Dashboard cleaner names across Job schemas", () => {
     expect(summary(dashboard.next48HoursJobs[0], dashboard)).toBe("Cleaner Alpha");
     expect(services.getCleanerNamesById).toHaveBeenCalledTimes(1);
     expect(services.getCleanerNamesById).toHaveBeenCalledWith(expect.arrayContaining(["cleaner-a"]));
-    expect(services.getDocsFromServer).toHaveBeenCalledTimes(7);
+    expect(services.readServer).toHaveBeenCalledTimes(7);
   });
 
   it("renders current multi-cleaner roster names once each using existing presentation", async () => {
@@ -210,13 +207,13 @@ describe("Dashboard cleaner names across Job schemas", () => {
   it("rejects the dashboard load when the server is unavailable even if cached reads could succeed", async () => {
     services.getDocs.mockResolvedValue({ docs: [], metadata: { fromCache: true } });
     const unavailable = Object.assign(new Error("Network unavailable"), { code: "unavailable" });
-    services.getDocsFromServer.mockRejectedValue(unavailable);
+    services.readServer.mockRejectedValue(unavailable);
     try {
       await expect(getOperationalDashboard()).rejects.toBe(unavailable);
       expect(services.getDocs).not.toHaveBeenCalled();
     } finally {
       services.getDocs.mockReset();
-      services.getDocsFromServer.mockReset();
+      services.readServer.mockReset();
     }
   });
 });

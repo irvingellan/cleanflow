@@ -4,17 +4,22 @@ import { useDashboardController } from "./useDashboardController.js";
 import { recordManagerAccessDiagnostic } from "../auth/managerAccessDiagnostics.js";
 
 const services = vi.hoisted(() => ({
-  getDocsFromServer: vi.fn(), names: vi.fn(), issues: vi.fn(), interested: vi.fn(), pending: vi.fn(),
+  readServer: vi.fn(), names: vi.fn(), issues: vi.fn(), interested: vi.fn(), pending: vi.fn(),
 }));
-vi.mock("firebase/firestore", () => ({
+vi.mock("firebase/firestore/lite", () => ({
+  setLogLevel: vi.fn(),
   collection: vi.fn(), query: vi.fn(), where: vi.fn(), orderBy: vi.fn(),
-  getDocsFromServer: services.getDocsFromServer, Timestamp: { fromDate: (date) => date },
+  getFirestore: vi.fn(), getDocs: services.readServer, Timestamp: { fromDate: (date) => date },
 }));
-vi.mock("../../services/firebase/client.js", () => ({ db: {} }));
-vi.mock("../cleaners/cleanerService.js", () => ({ getCleanerNamesById: services.names }));
-vi.mock("../issues/issueService.js", () => ({ getOpenJobIssues: services.issues }));
-vi.mock("../jobs/jobOfferService.js", () => ({
-  getInterestedJobOffers: services.interested, getPendingJobOffers: services.pending,
+vi.mock("../../services/firebase/client.js", () => ({
+  firebaseApp: {}, useFirebaseEmulators: false, emulatorPorts: {},
+}));
+vi.mock("./dashboardReads.js", async (original) => ({
+  ...await original(),
+  getCleanerNamesById: services.names,
+  getOpenJobIssues: services.issues,
+  getInterestedJobOffers: services.interested,
+  getPendingJobOffers: services.pending,
 }));
 vi.mock("../auth/managerAccessDiagnostics.js", () => ({ recordManagerAccessDiagnostic: vi.fn() }));
 
@@ -30,7 +35,7 @@ beforeEach(() => {
   for (const rows of [
     [{ id: "synthetic-property" }], [job("offered", "OFFERED")],
     [job("working", "IN_PROGRESS")], [job("next", "ASSIGNED")], [], [], [],
-  ]) services.getDocsFromServer.mockResolvedValueOnce(snapshot(rows));
+  ]) services.readServer.mockResolvedValueOnce(snapshot(rows));
   services.interested.mockResolvedValue([]);
   services.pending.mockResolvedValue([]);
   services.issues.mockResolvedValue([]);
@@ -39,13 +44,17 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 it.each([
-  ["getDocsFromServer", "core_reads"], ["interested", "offers"], ["pending", "offers"],
+  ["readServer", "core_reads"], ["interested", "offers"], ["pending", "offers"],
   ["issues", "issues"], ["names", "cleaner_names"],
 ])("records the exact Dashboard phase still pending when %s stalls", async (dependency, phase) => {
-    services[dependency].mockReset().mockReturnValue(new Promise(() => {}));
+    let markStarted;
+    const started = new Promise((resolve) => { markStarted = resolve; });
+    services[dependency].mockReset().mockImplementation(() => {
+      markStarted();
+      return new Promise(() => {});
+    });
     const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
-    await act(async () => {});
-    expect(services[dependency]).toHaveBeenCalled();
+    await act(() => started);
     expect(result.current.isLoading).toBe(true);
     await act(() => vi.advanceTimersByTimeAsync(20_000));
     expect(result.current.isLoading).toBe(false);
@@ -58,10 +67,16 @@ it.each([
 
 it("does not start new reads for a Dashboard that timed out before core queries resolved", async () => {
   let completeProperties;
-  services.getDocsFromServer.mockReset()
-    .mockReturnValueOnce(new Promise((resolve) => { completeProperties = resolve; }))
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
+  services.readServer.mockReset()
+    .mockImplementationOnce(() => {
+      markStarted();
+      return new Promise((resolve) => { completeProperties = resolve; });
+    })
     .mockResolvedValue(snapshot([]));
   const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
+  await act(() => started);
   await act(() => vi.advanceTimersByTimeAsync(20_000));
   expect(result.current.hasError).toBe(true);
   await act(async () => { completeProperties(snapshot([{ id: "synthetic-property" }])); });
@@ -72,9 +87,14 @@ it("does not start new reads for a Dashboard that timed out before core queries 
 });
 
 it("reports a phase rejection with an allowlisted code only", async () => {
-  services.issues.mockRejectedValue({ code: "permission-denied", message: "private synthetic string" });
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
+  services.issues.mockImplementation(async () => {
+    markStarted();
+    throw { code: "permission-denied", message: "private synthetic string" };
+  });
   const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
-  await act(async () => {});
+  await act(() => started);
   expect(result.current.hasError).toBe(true);
   expect(recordManagerAccessDiagnostic).toHaveBeenCalledWith("dashboard_phase_completed", {
     attempt: 1, phase: "issues", durationMs: 0, reason: "permission-denied",

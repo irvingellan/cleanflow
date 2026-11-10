@@ -4,7 +4,12 @@ import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-export const hostingBundleAsset = /^assets\/(?:index|main)-[A-Za-z0-9_-]+\.(js|css)$/;
+const entryAssetName = "(?:index|main)-[A-Za-z0-9_-]+\\.(?:js|css)";
+const dashboardChunkName = "dashboardReads-[A-Za-z0-9_-]{8}\\.js";
+export const hostingEntryAsset = new RegExp(`^assets/${entryAssetName}$`);
+export const hostingDashboardChunk = new RegExp(`^assets/${dashboardChunkName}$`);
+export const hostingBundleAsset = new RegExp(`^assets/(?:${entryAssetName}|${dashboardChunkName})$`);
+const dashboardChunkImport = /\bimport\(\s*(["'`])(?:\.\/|\/assets\/)(dashboardReads-[\w-]+\.js)\1\s*\)/g;
 // Emitted by Vite from @fontsource-variable/inter 5.2.8's wght.css.
 // Pin both the emitted paths and the SHA-256 of the reviewed package bytes.
 const interFonts = new Map([
@@ -36,6 +41,23 @@ export function inspectHostingFonts(dist, files) {
   return declared;
 }
 
+function inspectDashboardChunks(dist, files) {
+  const referenced = new Set();
+  for (const entry of files.filter((file) => hostingEntryAsset.test(file) && file.endsWith(".js"))) {
+    const source = fs.readFileSync(path.join(dist, entry), "utf8");
+    for (const [, , name] of source.matchAll(dashboardChunkImport)) {
+      const file = `assets/${name}`;
+      if (!hostingDashboardChunk.test(file) || !files.includes(file)) {
+        throw new Error(`Missing or invalid Dashboard chunk: ${file}`);
+      }
+      referenced.add(file);
+    }
+  }
+  for (const file of files.filter((file) => hostingDashboardChunk.test(file))) {
+    if (!referenced.has(file)) throw new Error(`Unreferenced Dashboard chunk: ${file}`);
+  }
+}
+
 export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBinding, { removeFinderMetadata = true } = {}) {
   const files = [];
   function walk(directory, prefix = "") {
@@ -65,6 +87,7 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
     }
   }
   for (const file of required) if (!files.includes(file)) throw new Error(`Missing Hosting file: ${file}`);
+  inspectDashboardChunks(dist, files);
   const version = JSON.parse(fs.readFileSync(path.join(dist, "version.json"), "utf8"));
   if (version.buildId !== expectedSha) {
     throw new Error("Hosting build ID does not match intended SHA");

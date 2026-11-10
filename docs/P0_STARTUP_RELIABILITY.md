@@ -19,23 +19,27 @@ The manager session observer has a 12-second UI deadline. It may still resolve
 and proceed to server-backed manager verification. A confirmed network return can
 open one fresh verification window; cached membership is insufficient and the
 revocation listener remains in place. Dashboard still uses server reads with a
-20-second deadline. It can retry one transient read in the foreground without
-hiding the error. Late or expired requests cannot publish data or launch later
-phases. Cleaner Hub bounds the first session, membership and agenda waits, and
+20-second deadline. Its one-time queries use Firestore Lite in a module loaded
+after manager verification. The server evaluates the same Firebase Auth and
+Firestore Rules for each query. The full SDK retains the membership listener
+and revocation path. A transient read can retry once in the foreground while
+the error stays visible. Late or expired requests cannot publish data or launch
+later phases. Cleaner Hub bounds the first session, membership and agenda waits, and
 still requires server-confirmed active membership before exposing private data.
 The legacy public Offer entry bounds the initial GET, including reading the body.
 
 Diagnostics reuse the existing session-local ring for manager verification and
 add Auth, Dashboard and Cleaner Hub phases. A separate ring starts in HTML
 before the module. Stage, elapsed time, build marker and coarse environment
-describe the failure. No new remote telemetry, quota-consuming diagnostic writes,
-raw exception strings, URLs, tokens, operational data or production rule changes
-are required. The existing remotely collected aggregate page/operation telemetry
+describe the failure. The Dashboard reader silences Lite SDK messages that
+can include request paths or query bodies. The app's allowlisted diagnostics
+record these failures locally. The existing remotely collected aggregate page/operation telemetry
 keeps its prior schema and coverage.
 
 Use [public probes](../scripts/cleanflowPublicProbe.md) to distinguish reachable
-Hosting and correct files from anonymous browser readiness. The probe does not
-establish signed-in availability. Use [retention preparation](../scripts/prepareStartupHostingRetention.md)
+Hosting and correct files from anonymous browser readiness. Use the reviewed Dashboard module path with
+`--dashboard-asset` to check it separately. A synthetic manager run exercises
+the module and the signed-in data. Use [retention preparation](../scripts/prepareStartupHostingRetention.md)
 to build local, hash-verified forward and compatible rollback files. Only hashed
 assets cross versions; entry HTML, version markers, manifests and workers do not.
 Older pages can then still fetch their script even after the Hosting switch.
@@ -51,17 +55,22 @@ VITE_CLEANFLOW_EMULATOR_FIRESTORE_PORT=18180 VITE_CLEANFLOW_EMULATOR_AUTH_PORT=1
   --only auth,firestore 'playwright test --config=playwright.p0-startup.config.js'
 ```
 
-The WebKit config uses a fresh manager-only fixture by default to assert the
-Auth and core Firestore recovery path. Set `CLEANFLOW_P0_STRESS=1` before the
-same command to seed jobs and exercise all downstream Dashboard reads. In
-initial stress runs, WebKit reached the server reads and retried, but later
-queries did not all settle; Chromium completed the full fixture. The same
-stress command with `VITE_CLEANFLOW_EMULATOR_FORCE_LONG_POLLING=true` compares
-Firestore transport only in local emulators; deployed builds ignore the flag.
-Treat a populated, representative WebKit Dashboard as a release gate. Compare
-[Firebase's WebKit transport report](https://github.com/firebase/firebase-js-sdk/issues/9789)
+The WebKit config uses a fresh manager-only fixture by default. Set
+`CLEANFLOW_P0_STRESS=1` before the same command to seed jobs and exercise all
+Dashboard queries. The tests check which collections return successful REST
+responses and verify that Firestore denies queries from signed-out and
+non-manager sessions.
+
+With the earlier Watch transport, a repeated full-fixture test completed
+one of four runs using SDK defaults and four of four with fetch streams
+disabled. The Firestore Lite experiment also completed all four runs and
+used direct queries. The lazy module adds one download after the manager
+has been authorized. Dashboard data now requires current server results
+for every phase. Consult [DEC-055](DECISIONS.md#dec-055--direct-server-reads-for-the-manager-dashboard)
+and use the [field check](P0_STARTUP_FIELD_CHECK.md) to record the actual
+stage on the affected Mac and iPhone. The [upstream Firestore WebKit report](https://github.com/firebase/firebase-js-sdk/issues/9789)
 and [Auth persistence report](https://github.com/firebase/firebase-js-sdk/issues/10540)
-against the affected devices before changing SDK or transport settings.
+describe separate mechanisms to compare with those observations.
 
 Before any approved release, recheck the exact live version and review both
 sealed directories against the source and Hosting configuration. Run anonymous

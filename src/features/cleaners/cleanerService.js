@@ -16,8 +16,9 @@ import {
 } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 
+import { cleanerLookupBatches } from "./cleanerLookupBatches.js";
+
 const organizationId = "cleanflow-demo";
-const cleanerLookupBatchSize = 30;
 export const supportedCleanerTeamTypes = ["", "SOLO", "COUPLE", "TEAM"];
 export const supportedPaymentMethods = ["", "ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 
@@ -40,15 +41,7 @@ function assertValidProfileEnums({ teamType, preferredPaymentMethod }) {
 }
 
 export async function getCleanerContactsById(cleanerIds) {
-  const uniqueCleanerIds = [...new Set(cleanerIds.filter(Boolean))];
-  const cleanerIdBatches = Array.from(
-    { length: Math.ceil(uniqueCleanerIds.length / cleanerLookupBatchSize) },
-    (_, index) =>
-      uniqueCleanerIds.slice(
-        index * cleanerLookupBatchSize,
-        (index + 1) * cleanerLookupBatchSize,
-      ),
-  );
+  const cleanerIdBatches = cleanerLookupBatches(cleanerIds);
   const snapshots = await Promise.all(
     cleanerIdBatches.map((cleanerIdsBatch) =>
       getDocs(

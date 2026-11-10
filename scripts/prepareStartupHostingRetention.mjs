@@ -4,7 +4,7 @@ import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { hostingBundleAsset, inspectHostingBuild } from "./prepareHosting.mjs";
+import { hostingBundleAsset, hostingEntryAsset, inspectHostingBuild } from "./prepareHosting.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const projectId = "clean-flow-prototipo";
@@ -40,7 +40,7 @@ function verifyEntries(dist, files) {
     const refs = [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)=["']\/(assets\/[\w-]+\.(?:js|css))["'][^>]*>/gi)]
       .map(([, file]) => file);
     check(refs.some((file) => file.endsWith(".js")) && refs.some((file) => file.endsWith(".css")) &&
-      refs.every((file) => hostingBundleAsset.test(file) && paths.has(file)), "An entry points outside its reviewed JS and CSS.");
+      refs.every((file) => hostingEntryAsset.test(file) && paths.has(file)), "An entry points outside its reviewed JS and CSS.");
   }
 }
 

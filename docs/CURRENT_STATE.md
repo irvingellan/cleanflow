@@ -4,8 +4,9 @@
 
 This isolated branch starts at verified live source `0f9735f`, independent of
 public main. Entry, Auth, manager verification, Dashboard and Cleaner Hub have
-bounded startup recovery and local stage diagnostics. Local public probes and
-Hosting asset retention are prepared. The affected physical devices and current
+bounded startup recovery and local stage diagnostics. The manager Dashboard
+loads its one-time queries through a lazily loaded Firestore Lite module.
+Local public probes and Hosting asset retention cover the additional module. The affected physical devices and current
 field trigger still require confirmation. No rollout, infrastructure, Rules,
 Functions or data changes. See [startup reliability](P0_STARTUP_RELIABILITY.md).
 
