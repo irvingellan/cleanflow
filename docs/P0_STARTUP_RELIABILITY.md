@@ -8,11 +8,13 @@ integration. [#83](https://github.com/irvingellan/cleanflow/issues/83) owns
 source reconciliation.
 
 The entry HTML has a fallback independent of the main JavaScript and CSS.
-Its 15-second budget uses elapsed wall time on resume. A failed module may
-reopen once before React commits after reconnection, a different deployment
-marker, or a same-origin check that returns the expected JavaScript MIME
-for the failed entry asset. This applies to the plain manager and agenda
-entries.
+The compiled stylesheet downloads without blocking that fallback's first
+paint. The operational interface becomes visible when React has committed
+and the stylesheet applies. The 15-second budget uses elapsed wall time on
+resume. Before the operational interface opens, a failed entry asset may
+trigger one reload after reconnection, a different deployment marker, or a
+same-origin check that returns the expected MIME type. This applies to the
+plain manager and agenda entries.
 A JavaScript exception is reported by stage, without exception text. Language
 preferences remain optional when browser storage denies access. An HTML document
 that does not reach the device cannot render an application fallback.

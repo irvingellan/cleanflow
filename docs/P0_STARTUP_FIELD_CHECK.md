@@ -39,7 +39,8 @@ still applies in those cases.
 (() => {
   const shellStages = new Set([
     "html_ready", "script_error", "stylesheet_error", "entry_exception",
-    "entry_timeout", "react_mounted", "render_error", "worker_registration_error",
+    "entry_timeout", "stylesheet_timeout", "stylesheet_ready", "react_mounted", "entry_ready",
+    "render_error", "worker_registration_error",
     "online_recovery", "version_recovery", "asset_recovery", "manual_reload",
   ]);
   const appStages = new Set([

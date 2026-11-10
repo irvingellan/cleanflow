@@ -253,18 +253,28 @@ function cleanflowServiceWorkers(buildInfo) {
 
 function startupShell(buildId) {
   const source = readFileSync(new URL('./src/features/startup/startupShell.js', import.meta.url), 'utf8')
+  const entryStylesheet = /<link\b(?=[^>]*\brel="stylesheet")(?=[^>]*\bhref="\/assets\/(?:index|main)-[\w-]+\.css")[^>]*>/i
   return {
     name: 'cleanflow-startup-shell',
     transformIndexHtml: {
-      order: 'pre',
-      handler(_html, context) {
+      order: 'post',
+      handler(html, context) {
         const agenda = path.basename(context.filename) === 'agenda.html'
-        return [{
-          tag: 'script',
-          attrs: { 'data-entry': agenda ? 'agenda' : 'manager', 'data-build': buildId },
-          children: source,
-          injectTo: 'head-prepend',
-        }]
+        const requiresStyles = entryStylesheet.test(html)
+        if (context.bundle && !requiresStyles) throw new Error('CleanFlow entry stylesheet missing')
+        return {
+          // Download the stylesheet without blocking the HTML fallback's first paint.
+          html: html.replace(entryStylesheet, (tag) => tag.replace(/>$/, ' media="print" data-startup-stylesheet>')),
+          tags: [{
+            tag: 'script',
+            attrs: {
+              'data-entry': agenda ? 'agenda' : 'manager', 'data-build': buildId,
+              ...(requiresStyles ? { 'data-requires-styles': 'true' } : {}),
+            },
+            children: source,
+            injectTo: 'head-prepend',
+          }],
+        }
       },
     },
   }

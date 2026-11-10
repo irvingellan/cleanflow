@@ -6,7 +6,8 @@
   const reloadKey = "cleanflow.startup.reloaded";
   const known = new Set([
     "html_ready", "script_error", "stylesheet_error", "entry_exception",
-    "entry_timeout", "react_mounted", "render_error", "worker_registration_error",
+    "entry_timeout", "stylesheet_timeout", "stylesheet_ready", "react_mounted", "entry_ready",
+    "render_error", "worker_registration_error",
     "online_recovery", "version_recovery", "asset_recovery", "manual_reload",
   ]);
   const script = document.currentScript;
@@ -19,6 +20,8 @@
     es: ["Abriendo CleanFlow…", "CleanFlow no terminó de abrir. Comprueba tu conexión y vuelve a intentarlo.", "Intentar de nuevo"],
   };
   let mounted = false;
+  let reactMounted = false;
+  let stylesReady = script?.dataset.requiresStyles !== "true";
   let failed = false;
   let sawOffline = navigator.onLine === false;
   let reconnected = false;
@@ -54,6 +57,8 @@
   function apply() {
     const panel = shell();
     if (!panel) return;
+    const root = document.getElementById("root");
+    if (root) root.hidden = !mounted;
     let language;
     try { language = localStorage.getItem("cleanflow-language"); } catch { /* storage is optional */ }
     if (!Object.hasOwn(copy, language)) language = navigator.language?.split("-")[0];
@@ -109,10 +114,12 @@
 
       const asset = new URL(source, location.href);
       if (asset.origin !== location.origin || asset.search || asset.hash
-        || !/^\/assets\/(?:index|main)-[\w-]+\.js$/.test(asset.pathname)) return;
+        || !/^\/assets\/(?:index|main)-[\w-]+\.(?:js|css)$/.test(asset.pathname)) return;
       const available = await fetch(asset.pathname, { ...options, method: "HEAD" });
       const mime = available.headers.get("content-type") || "";
-      if (!controller.signal.aborted && available.ok && /^(?:text|application)\/(?:javascript|ecmascript)\b/i.test(mime)) {
+      const correctMime = asset.pathname.endsWith(".css")
+        ? /^text\/css\b/i.test(mime) : /^(?:text|application)\/(?:javascript|ecmascript)\b/i.test(mime);
+      if (!controller.signal.aborted && available.ok && correctMime) {
         reloadOnce("asset_recovery");
       }
     } catch {
@@ -127,16 +134,18 @@
     failed = true;
     apply();
     retryOnline();
-    if (stage === "script_error") void checkAvailability(source);
+    if (source) void checkAvailability(source);
   }
 
   function expire(force) {
-    if (!mounted && !failed && (force === true || Date.now() - startedAt >= budget)) fail("entry_timeout");
+    if (!mounted && !failed && (force === true || Date.now() - startedAt >= budget)) {
+      fail(reactMounted && !stylesReady ? "stylesheet_timeout" : "entry_timeout");
+    }
   }
 
   function onError(event) {
-    if (!mounted && event.target?.tagName === "LINK" && event.target.rel === "stylesheet") {
-      record("stylesheet_error");
+    if (!mounted && event.target?.hasAttribute?.("data-startup-stylesheet")) {
+      fail("stylesheet_error", event.target.href);
     } else if (!mounted && event.target?.tagName === "SCRIPT" && event.target.type === "module") {
       fail("script_error", event.target.src);
     } else if (!mounted && event.target === window && event instanceof ErrorEvent) {
@@ -144,15 +153,30 @@
     }
   }
 
+  function openWhenReady() {
+    if (mounted || !reactMounted || !stylesReady) return;
+    mounted = true;
+    failed = false;
+    clearTimeout(watchdog);
+    try { sessionStorage.removeItem(reloadKey); } catch { /* storage is optional */ }
+    record("entry_ready");
+    apply();
+  }
+
+  function onStyleLoad(event) {
+    if (stylesReady || !event.target?.hasAttribute?.("data-startup-stylesheet")) return;
+    event.target.media = "all";
+    stylesReady = true;
+    record("stylesheet_ready");
+    openWhenReady();
+  }
+
   window.__cleanflowStartup = {
     mounted() {
-      if (mounted) return;
-      mounted = true;
-      failed = false;
-      clearTimeout(watchdog);
-      try { sessionStorage.removeItem(reloadKey); } catch { /* storage is optional */ }
+      if (reactMounted) return;
+      reactMounted = true;
       record("react_mounted");
-      apply();
+      openWhenReady();
     },
     renderFailed: () => fail("render_error"),
     workerFailed: () => record("worker_registration_error"),
@@ -160,6 +184,7 @@
   record("html_ready");
   watchdog = setTimeout(() => expire(true), budget);
   window.addEventListener("error", onError, true);
+  document.addEventListener("load", onStyleLoad, true);
   window.addEventListener("pageshow", expire);
   window.addEventListener("offline", () => { if (!mounted) sawOffline = true; });
   window.addEventListener("online", () => {
