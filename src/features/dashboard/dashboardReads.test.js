@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { getDocs } from "firebase/firestore/lite";
-import { getCleanerNamesById, getInterestedJobOffers, getOpenJobIssues, getPendingJobOffers } from "./dashboardReads.js";
+import {
+  createDashboardRead, getCleanerNamesById, getInterestedJobOffers, getOpenJobIssues, getPendingJobOffers,
+} from "./dashboardReads.js";
 
 vi.mock("../../services/firebase/client.js", () => ({
   firebaseApp: {}, emulatorPorts: {}, useFirebaseEmulators: false,
@@ -22,6 +24,34 @@ vi.mock("firebase/firestore/lite", () => ({
 const snapshot = (records) => ({ docs: records.map(([id, fields]) => ({ id, data: () => fields })) });
 
 beforeEach(() => vi.resetAllMocks());
+
+it("uses four shared slots and starts a waiting read when a slot opens", async () => {
+  const completions = Array.from({ length: 6 }, () => Promise.withResolvers());
+  getDocs.mockImplementation((index) => completions[index].promise);
+  const read = createDashboardRead();
+  const all = Promise.all(completions.map((_, index) => read(index)));
+  await Promise.resolve();
+  expect(getDocs.mock.calls.flat()).toEqual([0, 1, 2, 3]);
+
+  completions[2].resolve("third");
+  await vi.waitFor(() => expect(getDocs.mock.calls.flat()).toEqual([0, 1, 2, 3, 4]));
+  completions.forEach(({ resolve }, index) => resolve(index));
+  await expect(all).resolves.toEqual([0, 1, "third", 3, 4, 5]);
+});
+
+it("does not start a queued query after the Dashboard attempt expires", async () => {
+  const held = Promise.withResolvers();
+  let active = true;
+  getDocs.mockReturnValue(held.promise);
+  const read = createDashboardRead(() => active);
+  const first = Promise.all([0, 1, 2, 3].map(read));
+  const queued = expect(read(4)).rejects.toThrow("Dashboard load is no longer active");
+  await Promise.resolve();
+  active = false;
+  held.resolve("completed");
+  await Promise.all([first, queued]);
+  expect(getDocs).toHaveBeenCalledTimes(4);
+});
 
 it("keeps independent per-job limits and ignores withdrawn pending offers", async () => {
   getDocs.mockResolvedValueOnce(snapshot([["interested", { status: "INTERESTED" }]]))

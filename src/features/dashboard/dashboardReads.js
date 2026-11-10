@@ -33,6 +33,31 @@ function dashboardDb() {
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
+const maxConcurrentDashboardReads = 4;
+
+export function createDashboardRead(isActive) {
+  const pending = new Set();
+  let failure;
+
+  // The same budget applies to core queries and later waves. Once an attempt
+  // fails or expires, let current reads settle without launching queued reads.
+  return async (target) => {
+    while (pending.size >= maxConcurrentDashboardReads) await Promise.race(pending);
+    if (failure) throw failure.error;
+    if (isActive?.() === false) throw new Error("Dashboard load is no longer active");
+
+    const request = Promise.resolve().then(() => getDocs(target));
+    const settled = request.then(
+      () => pending.delete(settled),
+      (error) => {
+        failure ??= { error };
+        pending.delete(settled);
+      },
+    );
+    pending.add(settled);
+    return request;
+  };
+}
 
 function jobsCollection() {
   return collection(dashboardDb(), "organizations", organizationId, "jobs");
@@ -42,23 +67,23 @@ function propertiesCollection() {
   return collection(dashboardDb(), "organizations", organizationId, "properties");
 }
 
-export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart }) {
+export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart }, read) {
   const jobs = jobsCollection();
   return Promise.all([
-    getDocs(propertiesCollection()),
-    getDocs(
+    read(propertiesCollection()),
+    read(
       query(
         jobs,
         where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
       ),
     ),
-    getDocs(
+    read(
       query(
         jobs,
         where("operationalStatus", "==", "IN_PROGRESS"),
       ),
     ),
-    getDocs(
+    read(
       query(
         jobs,
         where("operationalStatus", "in", activeOperationalStatuses),
@@ -67,14 +92,14 @@ export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, w
         orderBy("scheduledDate", "asc"),
       ),
     ),
-    getDocs(
+    read(
       query(
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
         orderBy("completedAt", "desc"),
       ),
     ),
-    getDocs(
+    read(
       query(
         jobs,
         where("scheduledDate", ">=", weekStartDate),
@@ -82,7 +107,7 @@ export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, w
         orderBy("scheduledDate", "asc"),
       ),
     ),
-    getDocs(
+    read(
       query(
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
@@ -94,31 +119,31 @@ export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, w
   ]);
 }
 
-async function readJobRecords(jobId, subcollection, status, max) {
+async function readJobRecords(jobId, subcollection, status, max, read) {
   const records = collection(dashboardDb(), "organizations", organizationId, "jobs", jobId, subcollection);
-  const snapshot = await getDocs(query(records, where("status", "==", status), limit(max)));
+  const snapshot = await read(query(records, where("status", "==", status), limit(max)));
   return snapshot.docs.map((record) => ({ ...record.data(), id: record.id }));
 }
 
-export function getInterestedJobOffers(jobId) {
-  return readJobRecords(jobId, "offers", "INTERESTED", 5);
+export function getInterestedJobOffers(jobId, read = getDocs) {
+  return readJobRecords(jobId, "offers", "INTERESTED", 5, read);
 }
 
-export async function getPendingJobOffers(jobId) {
-  const pending = await readJobRecords(jobId, "offers", "PENDING", 10);
+export async function getPendingJobOffers(jobId, read = getDocs) {
+  const pending = await readJobRecords(jobId, "offers", "PENDING", 10, read);
   // A withdrawn invite is no longer awaiting a reply (FB09).
   return pending.filter((offer) => !managerDecisionOf(offer)).slice(0, 1);
 }
 
-export function getOpenJobIssues(jobId) {
-  return readJobRecords(jobId, "issues", "OPEN", 3);
+export function getOpenJobIssues(jobId, read = getDocs) {
+  return readJobRecords(jobId, "issues", "OPEN", 3, read);
 }
 
-export async function getCleanerNamesById(cleanerIds) {
+export async function getCleanerNamesById(cleanerIds, read = getDocs) {
   const batches = cleanerLookupBatches(cleanerIds);
   const cleaners = collection(dashboardDb(), "organizations", organizationId, "cleaners");
   const snapshots = await Promise.all(batches.map((batch) => (
-    getDocs(query(cleaners, where(documentId(), "in", batch)))
+    read(query(cleaners, where(documentId(), "in", batch)))
   )));
   return Object.fromEntries(snapshots.flatMap(({ docs }) => (
     docs.map((cleaner) => [cleaner.id, cleaner.data().name])

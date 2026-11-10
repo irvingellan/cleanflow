@@ -16,7 +16,8 @@ const stages = new Set([
 ]);
 const reasons = new Set([
   "timeout", "offline", "unavailable", "permission-denied", "unauthenticated",
-  "unknown", "pageshow", "visible", "online", "manual", "deadline-exceeded", "resource-exhausted", "auto",
+  "unknown", "pageshow", "visible", "online", "manual", "deadline-exceeded", "resource-exhausted",
+  "failed-precondition", "firestore-unknown", "auto",
 ]);
 const phases = new Set(["core_reads", "offers", "issues", "cleaner_names", "cleaner_auth", "cleaner_membership", "cleaner_agenda"]);
 const buildPattern = /^(?:[a-f0-9]{40}|\d+\.\d+\.\d+-[\dT:.Z-]+)(?:-cleaner-push|-inbox-off)?$/;

@@ -25,8 +25,15 @@ revocation listener remains in place. Dashboard still uses server reads with a
 ships in the entry JavaScript and initializes on its first query after
 manager verification. The server evaluates the same Firebase Auth and
 Firestore Rules for each query. The full SDK retains the membership listener
-and revocation path. A transient read can retry once in the foreground while
-the error stays visible. Late or expired requests cannot publish data or launch
+and revocation path. Each Dashboard attempt runs at most four queries
+concurrently across all its phases. In the compiled WebKit desktop experiment,
+the unbounded control failed before HTTP headers in all three attempts.
+All three attempts with the four-read limit loaded the populated Dashboard.
+A transient read can retry once in the foreground while
+the error stays visible. Firestore Lite reports fetch failures without an HTTP
+status as a Firebase `unknown` error. That SDK code also gets one retry and is
+recorded as `firestore-unknown`, separately from unclassified application errors.
+Late or expired requests cannot publish data or launch
 later phases. Cleaner Hub bounds the first session, membership and agenda waits, and
 still requires server-confirmed active membership before exposing private data.
 The legacy public Offer entry bounds the initial GET, including reading the body.

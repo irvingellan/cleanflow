@@ -49,8 +49,8 @@ it("automatically recovers one timed-out load while leaving the recovery control
   });
 });
 
-it("recovers a transient error once and never loops through repeated failures and resume events", async () => {
-  getOperationalDashboard.mockRejectedValue({ code: "firestore/unavailable" });
+it.each(["firestore/unavailable", "unknown"])("recovers %s once without looping on resume", async (code) => {
+  getOperationalDashboard.mockRejectedValue({ name: "FirebaseError", code });
   const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
   await act(() => vi.advanceTimersByTimeAsync(500));
   expect(getOperationalDashboard).toHaveBeenCalledTimes(2);
@@ -199,8 +199,14 @@ it("does not publish overdue success ahead of a suspended timer", async () => {
   expect(result.current.dashboardData).toBe(null);
 });
 
-it.each(["permission-denied", "unauthenticated", "resource-exhausted"])("surfaces %s without replaying the read", async (code) => {
-  getOperationalDashboard.mockRejectedValue({ code });
+it.each([
+  { code: "permission-denied" },
+  { code: "unauthenticated" },
+  { code: "resource-exhausted" },
+  { code: "failed-precondition" },
+  new Error("Unclassified application exception"),
+])("surfaces %s without replaying the read", async (error) => {
+  getOperationalDashboard.mockRejectedValue(error);
   const { result } = renderHook(() => useDashboardController({ view: "dashboard" }));
   await act(async () => {});
   expect(result.current.hasError).toBe(true);

@@ -61,7 +61,7 @@ still applies in those cases.
   const reasons = new Set([
     "timeout", "offline", "unavailable", "permission-denied", "unauthenticated",
     "unknown", "pageshow", "visible", "online", "manual", "deadline-exceeded",
-    "resource-exhausted", "auto",
+    "resource-exhausted", "failed-precondition", "firestore-unknown", "auto",
   ]);
   const entries = new Set(["manager_entry", "agenda"]);
   const build = /^[a-f0-9]{40}(?:-cleaner-push|-inbox-off)?$/;

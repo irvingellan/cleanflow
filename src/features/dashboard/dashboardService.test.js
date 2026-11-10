@@ -159,7 +159,7 @@ describe("Dashboard cleaner names across Job schemas", () => {
 
     expect(summary(dashboard.next48HoursJobs[0], dashboard)).toBe("Cleaner Alpha");
     expect(services.getCleanerNamesById).toHaveBeenCalledTimes(1);
-    expect(services.getCleanerNamesById).toHaveBeenCalledWith(expect.arrayContaining(["cleaner-a"]));
+    expect(services.getCleanerNamesById).toHaveBeenCalledWith(expect.arrayContaining(["cleaner-a"]), expect.any(Function));
     expect(services.readServer).toHaveBeenCalledTimes(7);
   });
 
@@ -181,7 +181,7 @@ describe("Dashboard cleaner names across Job schemas", () => {
     expect(services.getCleanerNamesById).toHaveBeenCalledTimes(1);
     expect(services.getCleanerNamesById).toHaveBeenCalledWith(expect.arrayContaining([
       "cleaner-a", "cleaner-b",
-    ]));
+    ]), expect.any(Function));
   });
 
   it("preserves singular legacy current-name and historical snapshot fallbacks", async () => {

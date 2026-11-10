@@ -159,6 +159,39 @@ test("Dashboard retries automatically when an offline browser reconnects", async
   }
 });
 
+test("Dashboard retries a Firestore Lite fetch failure once without navigating", async ({ page }) => {
+  await page.addInitScript((origin) => {
+    const fetchFromBrowser = window.fetch.bind(window);
+    let failed = false;
+    window.fetch = (resource, options) => {
+      const url = new URL(resource instanceof Request ? resource.url : resource, location.href);
+      if (!failed && url.origin === origin && url.pathname.endsWith(":runQuery") && options?.method === "POST") {
+        failed = true;
+        return Promise.reject(new TypeError("Synthetic request failure before HTTP response"));
+      }
+      return fetchFromBrowser(resource, options);
+    };
+  }, firestoreOrigin);
+
+  await page.goto("/");
+  await page.bringToFront();
+  let navigations = 0;
+  page.on("framenavigated", (frame) => { if (frame === page.mainFrame()) navigations += 1; });
+  await signIn(page, e2eManager);
+  await expect(page.getByRole("heading", { name: "Operations dashboard" })).toBeVisible();
+  const events = await page.evaluate(() => {
+    const ring = JSON.parse(sessionStorage.getItem("cleanflow.manager-access.diagnostics") || "[]");
+    return ring.filter(({ stage }) => ["dashboard_load_error", "dashboard_recovery", "dashboard_load_ready"].includes(stage))
+      .map(({ stage, attempt, reason }) => ({ stage, attempt, reason }));
+  });
+  expect(events).toEqual([
+    { stage: "dashboard_load_error", attempt: 1, reason: "firestore-unknown" },
+    { stage: "dashboard_recovery", attempt: 2, reason: "auto" },
+    { stage: "dashboard_load_ready", attempt: 2, reason: undefined },
+  ]);
+  expect(navigations).toBe(0);
+});
+
 test("Dashboard REST queries enforce manager access in Firestore independently of the UI", async ({ page }) => {
   requireLocalE2EEmulators();
   let rawLiteQueryLogs = 0;

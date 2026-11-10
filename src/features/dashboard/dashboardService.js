@@ -112,6 +112,7 @@ async function readDashboardPhase(phase, read, { isActive, onPhase }) {
 }
 
 export async function getOperationalDashboard(observation = {}) {
+  const read = reads.createDashboardRead(observation.isActive);
   const now = new Date();
   const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   const today = localDateKey(now);
@@ -139,7 +140,7 @@ export async function getOperationalDashboard(observation = {}) {
     weeklyCompletedSnapshot,
   ] = await readDashboardPhase("core_reads", () => reads.getDashboardCore({
     today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart,
-  }), observation);
+  }, read), observation);
   const propertiesById = Object.fromEntries(propertiesSnapshot.docs.map((property) => [
     property.id,
     property.data(),
@@ -180,8 +181,8 @@ export async function getOperationalDashboard(observation = {}) {
     readDashboardPhase("offers", () => Promise.all(
       offeredAttentionJobs.map(async (job) => {
         const [interestedOffers, pendingOffers] = await Promise.all([
-          reads.getInterestedJobOffers(job.id),
-          reads.getPendingJobOffers(job.id),
+          reads.getInterestedJobOffers(job.id, read),
+          reads.getPendingJobOffers(job.id, read),
         ]);
 
         return {
@@ -194,7 +195,7 @@ export async function getOperationalDashboard(observation = {}) {
     readDashboardPhase("issues", () => Promise.all(
       issueCandidateJobs.map(async (job) => ({
         job,
-        issues: await reads.getOpenJobIssues(job.id),
+        issues: await reads.getOpenJobIssues(job.id, read),
       })),
     ), observation),
   ]);
@@ -206,7 +207,7 @@ export async function getOperationalDashboard(observation = {}) {
     ...offeredJobOffers.flatMap(({ interestedOffers }) =>
       interestedOffers.map((offer) => offer.cleanerId),
     ),
-  ]), observation);
+  ], read), observation);
 
   return {
     counts: {

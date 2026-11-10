@@ -4,9 +4,10 @@ import { getOperationalDashboard } from "./dashboardService.js";
 
 export const dashboardLoadDeadlineMs = 20_000;
 const recoveryDelayMs = 500;
-const transientReasons = new Set(["timeout", "unavailable", "deadline-exceeded", "offline"]);
+const transientReasons = new Set(["timeout", "unavailable", "deadline-exceeded", "offline", "firestore-unknown"]);
 const knownErrors = new Set([
   "unavailable", "deadline-exceeded", "permission-denied", "unauthenticated", "resource-exhausted",
+  "failed-precondition",
 ]);
 
 function isOffline() {
@@ -19,6 +20,9 @@ function canRecoverNow() {
 
 function errorReason(error) {
   const code = typeof error?.code === "string" ? error.code.replace(/^firestore\//, "") : "";
+  // Firestore Lite uses this code when a browser fetch fails before it receives
+  // an HTTP status. Generic application exceptions must not replay the read.
+  if (code === "unknown" && error.name === "FirebaseError") return "firestore-unknown";
   return knownErrors.has(code) ? code : "unknown";
 }
 
