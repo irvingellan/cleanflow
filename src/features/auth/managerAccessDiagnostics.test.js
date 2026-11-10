@@ -30,11 +30,16 @@ describe("session-local manager access diagnostics", () => {
       uid: "unexpected-user", error: "raw error with secret", token: "unexpected-token",
     });
 
-    expect(events()).toEqual([{
+    expect(events()).toMatchObject([{
       stage: "verification_timeout", attempt: 2, durationMs: 6500,
       sessionId, browser: "safari", platform: "ios", deviceClass: "mobile",
       standalone: true, appVersion: "v0.9.3", reason: "timeout",
     }]);
+    expect(events()[0]).toHaveProperty("elapsedMs", expect.any(Number));
+    expect(Object.keys(events()[0]).sort()).toEqual([
+      "appVersion", "attempt", "browser", "buildId", "deviceClass", "durationMs", "elapsedMs",
+      "navigationSecond", "platform", "reason", "sessionId", "stage", "standalone",
+    ]);
     expect(managerPageClientMetadata.mock.calls[0][0]).not.toHaveProperty("localStorage");
     expect(sessionStorage.getItem(storageKey)).not.toMatch(/private|unexpected|secret|email|uid|deviceId|jobId|token|error/);
   });
@@ -67,10 +72,19 @@ describe("session-local manager access diagnostics", () => {
       platform: "private platform", appVersion: "private-build", deviceClass: "mobile",
     });
     recordManagerAccessDiagnostic("listener_error", { reason: "raw secret error", attempt: -1, durationMs: Infinity });
-    expect(events()).toEqual([{
+    expect(events()).toMatchObject([{
       stage: "listener_error", attempt: 0, durationMs: 0, reason: "unknown",
       browser: "other", platform: "other", deviceClass: "mobile", standalone: false,
     }]);
+  });
+
+  it("retains only known query phase names, without raw errors or URLs", () => {
+    recordManagerAccessDiagnostic("dashboard_load_timeout", { phase: "offers", reason: "timeout", durationMs: 20_001 });
+    recordManagerAccessDiagnostic("dashboard_phase_started", { phase: "private/path?token=x", reason: "private error" });
+    expect(events()[0]).toMatchObject({ phase: "offers", reason: "timeout", durationMs: 20_001 });
+    expect(events()[1]).not.toHaveProperty("phase");
+    expect(events()[1].reason).toBe("unknown");
+    expect(sessionStorage.getItem(storageKey)).not.toContain("private");
   });
 
   it("can recover a malformed local ring without affecting the gate", () => {

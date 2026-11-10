@@ -118,7 +118,29 @@ export function composeAttentionJobCandidates(attentionJobs, next48HoursJobs) {
   ]);
 }
 
-export async function getOperationalDashboard() {
+async function readDashboardPhase(phase, read, { isActive, onPhase }) {
+  // SDK reads already in flight cannot be canceled. Do not launch the next wave
+  // after a timeout, a retry or navigation has invalidated this attempt.
+  if (isActive?.() === false) throw new Error("Dashboard load is no longer active");
+  const report = (state, error) => {
+    try {
+      onPhase?.(phase, state, error);
+    } catch {
+      // Diagnostics must never change the query result.
+    }
+  };
+  report("started");
+  try {
+    const result = await read();
+    report("completed");
+    return result;
+  } catch (error) {
+    report("error", error);
+    throw error;
+  }
+}
+
+export async function getOperationalDashboard(observation = {}) {
   const now = new Date();
   const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   const today = localDateKey(now);
@@ -146,7 +168,7 @@ export async function getOperationalDashboard() {
     recentlyCompletedSnapshot,
     weeklyScheduledSnapshot,
     weeklyCompletedSnapshot,
-  ] = await Promise.all([
+  ] = await readDashboardPhase("core_reads", () => Promise.all([
     getDocsFromServer(propertiesCollection()),
     getDocsFromServer(
       query(
@@ -193,7 +215,7 @@ export async function getOperationalDashboard() {
         orderBy("completedAt", "desc"),
       ),
     ),
-  ]);
+  ]), observation);
   const propertiesById = Object.fromEntries(propertiesSnapshot.docs.map((property) => [
     property.id,
     property.data(),
@@ -231,7 +253,7 @@ export async function getOperationalDashboard() {
     ...recentlyCompletedJobs,
   ]);
   const [offeredJobOffers, issueGroups] = await Promise.all([
-    Promise.all(
+    readDashboardPhase("offers", () => Promise.all(
       offeredAttentionJobs.map(async (job) => {
         const [interestedOffers, pendingOffers] = await Promise.all([
           getInterestedJobOffers(job.id),
@@ -244,15 +266,15 @@ export async function getOperationalDashboard() {
           hasPendingOffer: pendingOffers.length > 0,
         };
       }),
-    ),
-    Promise.all(
+    ), observation),
+    readDashboardPhase("issues", () => Promise.all(
       issueCandidateJobs.map(async (job) => ({
         job,
         issues: await getOpenJobIssues(job.id),
       })),
-    ),
+    ), observation),
   ]);
-  const cleanerNamesById = await getCleanerNamesById([
+  const cleanerNamesById = await readDashboardPhase("cleaner_names", () => getCleanerNamesById([
     ...[...recentlyCompletedJobs, ...next48HoursJobs].flatMap((job) => [
       ...getAssignedCleanerIds(job),
       job.assignedCleanerId,
@@ -260,7 +282,7 @@ export async function getOperationalDashboard() {
     ...offeredJobOffers.flatMap(({ interestedOffers }) =>
       interestedOffers.map((offer) => offer.cleanerId),
     ),
-  ]);
+  ]), observation);
 
   return {
     counts: {

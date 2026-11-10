@@ -251,6 +251,25 @@ function cleanflowServiceWorkers(buildInfo) {
   }
 }
 
+function startupShell(buildId) {
+  const source = readFileSync(new URL('./src/features/startup/startupShell.js', import.meta.url), 'utf8')
+  return {
+    name: 'cleanflow-startup-shell',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(_html, context) {
+        const agenda = path.basename(context.filename) === 'agenda.html'
+        return [{
+          tag: 'script',
+          attrs: { 'data-entry': agenda ? 'agenda' : 'manager', 'data-build': buildId },
+          children: source,
+          injectTo: 'head-prepend',
+        }]
+      },
+    },
+  }
+}
+
 function cleanerHubHtmlEntry() {
   function rewriteAgenda(server) {
     server.middlewares.use((request, _response, next) => {
@@ -332,8 +351,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: ["test", "e2e"].includes(mode)
-      ? [react(), cleanerHubHtmlEntry()]
-      : [react(), cleanerHubHtmlEntry(), cleanflowServiceWorkers(buildInfo)],
+      ? [react(), cleanerHubHtmlEntry(), startupShell(buildInfo.deploymentId || buildInfo.buildId)]
+      : [react(), cleanerHubHtmlEntry(), startupShell(buildInfo.deploymentId || buildInfo.buildId), cleanflowServiceWorkers(buildInfo)],
     test: {
       environment: "jsdom",
       setupFiles: "./src/test/setup.js",

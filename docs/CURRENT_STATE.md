@@ -1,5 +1,14 @@
 # CleanFlow — Current State
 
+## P0 startup reliability — local candidate (2026-11-10)
+
+This isolated branch starts at verified live source `0f9735f`, independent of
+public main. Entry, Auth, manager verification, Dashboard and Cleaner Hub have
+bounded startup recovery and local stage diagnostics. Local public probes and
+Hosting asset retention are prepared. The affected physical devices and current
+field trigger still require confirmation. No rollout, infrastructure, Rules,
+Functions or data changes. See [startup reliability](P0_STARTUP_RELIABILITY.md).
+
 ## 2026-11-05 — Cleaner push test notices (Issue #85)
 
 `claude/cleaner-push-test-button` adds one callable, `cleanerPushTest`:

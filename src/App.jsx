@@ -24,8 +24,9 @@ import { WhatsNewPanel } from "./features/releases/WhatsNewPanel.jsx";
 import {
   signInWithEmail,
   signOutManager,
-  subscribeToAuthState,
 } from "./features/auth/authService.js";
+import { useInitialManagerSession } from "./features/auth/useInitialManagerSession.js";
+import { recordManagerAccessDiagnostic } from "./features/auth/managerAccessDiagnostics.js";
 import { CleanerDetail } from "./features/cleaners/CleanerDetail.jsx";
 import { CleanerDirectory } from "./features/cleaners/CleanerDirectory.jsx";
 import {
@@ -159,17 +160,12 @@ function App() {
   const isChecklistPreviewRoute = isChecklistPreviewPath();
   // Cleaner Hub has its own Firebase app/session; the manager session is never read there.
   const isCleanerHubRoute = isCleanerHubPath();
-  const [authUser, setAuthUser] = useState(undefined);
+  const { authUser, status: authStatus, retry: retryAuth } = useInitialManagerSession(
+    !isPublicOfferRoute && !isPublicChecklistRoute && !isPublicClientReportRoute
+    && !isChecklistPreviewRoute && !isCleanerHubRoute,
+  );
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
-
-  useEffect(() => {
-    if (isPublicOfferRoute || isPublicChecklistRoute || isPublicClientReportRoute || isChecklistPreviewRoute || isCleanerHubRoute) {
-      return undefined;
-    }
-
-    return subscribeToAuthState(setAuthUser);
-  }, [isChecklistPreviewRoute, isCleanerHubRoute, isPublicChecklistRoute, isPublicClientReportRoute, isPublicOfferRoute]);
 
   if (isCleanerHubRoute) {
     return <CleanerHubApp />;
@@ -209,7 +205,7 @@ function App() {
   }
 
   if (authUser === undefined) {
-    return <ThemeProvider><AuthenticationLoading /></ThemeProvider>;
+    return <ThemeProvider><AuthenticationLoading status={authStatus} onRetry={retryAuth} /></ThemeProvider>;
   }
 
   if (!authUser) {
@@ -238,6 +234,7 @@ function App() {
 
 function PublicOfferPage({ token }) {
   const [offer, setOffer] = useState(null);
+  const [offerLoadAttempt, setOfferLoadAttempt] = useState(0);
   const { language, setLanguage, translate } = usePublicTranslation(offer?.preferredLanguage);
   const [loadError, setLoadError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -292,7 +289,7 @@ function PublicOfferPage({ token }) {
     return () => {
       isCurrent = false;
     };
-  }, [token]);
+  }, [token, offerLoadAttempt]);
 
   async function submitResponse(status) {
     setIsResponding(true);
@@ -347,7 +344,14 @@ function PublicOfferPage({ token }) {
         {isLoading && <StateCard message={translate("publicOffer.loading")} status="status" />}
 
         {!isLoading && loadError && (
-          <StateCard message={translate(errorMessage)} status="alert" isError />
+          <>
+            <StateCard message={translate(errorMessage)} status="alert" isError />
+            {loadError === "request_failed" && (
+              <button className="button" type="button" onClick={() => setOfferLoadAttempt((attempt) => attempt + 1)}>
+                {translate("common.retry")}
+              </button>
+            )}
+          </>
         )}
 
         {!isLoading && !loadError && offer && (
@@ -1576,12 +1580,19 @@ function initialsFor(name) {
   return ((words[0]?.[0] || "C") + (words[1]?.[0] || "")).toUpperCase();
 }
 
-function AuthenticationLoading() {
+function AuthenticationLoading({ status, onRetry }) {
   const { language, setLanguage, translate } = useTranslation();
+  const pending = status === "loading";
+  const copy = pending ? "auth.loading" : status === "offline" ? "auth.managerAccessOffline" : "auth.restoreError";
 
   return (
     <AuthenticationLayout language={language} onLanguageChange={setLanguage}>
-      <StateCard message={translate("auth.loading")} status="status" />
+      <StateCard message={translate(copy)} status={pending ? "status" : "alert"} isError={!pending} />
+      {!pending && (
+        <button className="button button--primary" type="button" onClick={onRetry}>
+          {translate("auth.managerAccessRetry")}
+        </button>
+      )}
     </AuthenticationLayout>
   );
 }
@@ -1592,9 +1603,31 @@ function ManagerLogin() {
   const [password, setPassword] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [signInSlow, setSignInSlow] = useState(false);
+
+  useEffect(() => {
+    if (!isSigningIn) return undefined;
+    const startedAt = Date.now();
+    let reported = false;
+    const expire = (force) => {
+      if (reported || (force !== true && Date.now() - startedAt < 20_000)) return;
+      reported = true;
+      setSignInSlow(true);
+      recordManagerAccessDiagnostic("auth_signin_timeout", { durationMs: Date.now() - startedAt, reason: "timeout" });
+    };
+    const timer = setTimeout(() => expire(true), 20_000);
+    window.addEventListener("pageshow", expire);
+    document.addEventListener("visibilitychange", expire);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pageshow", expire);
+      document.removeEventListener("visibilitychange", expire);
+    };
+  }, [isSigningIn]);
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (isSigningIn) return;
 
     if (!email.trim() || !password) {
       setErrorMessage(translate("auth.credentialsRequired"));
@@ -1602,6 +1635,7 @@ function ManagerLogin() {
     }
 
     setIsSigningIn(true);
+    setSignInSlow(false);
     setErrorMessage("");
 
     try {
@@ -1644,15 +1678,15 @@ function ManagerLogin() {
             />
           </label>
 
-          {errorMessage && (
+          {(errorMessage || signInSlow) && (
             <p className="form-error" role="alert">
-              {errorMessage}
+              {errorMessage || translate("auth.signInSlow")}
             </p>
           )}
 
           <div className="button-row">
             <button className="button button--primary" type="submit" disabled={isSigningIn}>
-              {isSigningIn ? translate("auth.signingIn") : translate("auth.signIn")}
+              {isSigningIn && !signInSlow ? translate("auth.signingIn") : translate("auth.signIn")}
             </button>
           </div>
         </form>

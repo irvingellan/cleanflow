@@ -17,9 +17,19 @@ export function getE2eFirestore() {
   return getFirestore(app);
 }
 
-function requireLocalEmulators() {
-  const allowedFirestoreHosts = new Set(["127.0.0.1:8080", "localhost:8080"]);
-  const allowedAuthHosts = new Set(["127.0.0.1:9099", "localhost:9099"]);
+function configuredLocalPort(name, fallback) {
+  const value = process.env[`VITE_CLEANFLOW_EMULATOR_${name}_PORT`];
+  const port = value === undefined ? fallback : Number(value);
+  if (!Number.isInteger(port) || port <= 1024 || port >= 65536) throw new Error("Invalid local E2E port.");
+  return port;
+}
+
+export const e2eFirestorePort = configuredLocalPort("FIRESTORE", 8080);
+export const e2eAuthPort = configuredLocalPort("AUTH", 9099);
+
+export function requireLocalE2EEmulators() {
+  const allowedFirestoreHosts = new Set([`127.0.0.1:${e2eFirestorePort}`, `localhost:${e2eFirestorePort}`]);
+  const allowedAuthHosts = new Set([`127.0.0.1:${e2eAuthPort}`, `localhost:${e2eAuthPort}`]);
 
   if (
     !allowedFirestoreHosts.has(process.env.FIRESTORE_EMULATOR_HOST) ||
@@ -60,8 +70,8 @@ async function ensureManager(auth) {
   }
 }
 
-export default async function seedE2eFixtures() {
-  requireLocalEmulators();
+export default async function seedE2eFixtures({ managerOnly = false } = {}) {
+  requireLocalE2EEmulators();
 
   const app = getApps()[0] || initializeApp({ projectId }, "cleanflow-e2e");
   const auth = getAuth(app);
@@ -69,6 +79,12 @@ export default async function seedE2eFixtures() {
   const manager = await ensureManager(auth);
 
   const organization = db.collection("organizations").doc(organizationId);
+  const member = organization.collection("members").doc(manager.uid);
+  const membership = { role: "MANAGER", active: true };
+  if (managerOnly) {
+    await member.set(membership);
+    return;
+  }
   const now = Timestamp.now();
   const cleaner = {
     name: "E2E Cleaner",
@@ -206,7 +222,7 @@ export default async function seedE2eFixtures() {
     ],
   ];
   const batch = db.batch();
-  batch.set(organization.collection("members").doc(manager.uid), { role: "MANAGER", active: true });
+  batch.set(member, membership);
 
   batch.set(organization.collection("cleaners").doc("e2e-cleaner"), cleaner);
   batch.set(organization.collection("cleaners").doc("e2e-team-cleaner-a"), teamCleanerA);

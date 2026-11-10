@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { Timestamp } from "firebase-admin/firestore";
 import { writeFile } from "node:fs/promises";
-import { e2eManager, getE2eFirestore } from "./globalSetup.js";
+import { e2eManager, getE2eFirestore, requireLocalE2EEmulators } from "./globalSetup.js";
 
 const syntheticUid = "e2e-layout-manager-0000000001";
 const fixturePrefix = "e2e-load-diagnostics-layout";
@@ -21,11 +21,7 @@ const labels = {
 };
 
 function fixtureReferences() {
-  if (!["127.0.0.1:8080", "localhost:8080"].includes(process.env.FIRESTORE_EMULATOR_HOST)
-    || !["127.0.0.1:9099", "localhost:9099"].includes(process.env.FIREBASE_AUTH_EMULATOR_HOST)
-    || process.env.GCLOUD_PROJECT !== "demo-cleanflow") {
-    throw new Error("Diagnostics layout fixtures require local demo-cleanflow emulators.");
-  }
+  requireLocalE2EEmulators();
   const organization = getE2eFirestore().collection("organizations").doc("cleanflow-demo");
   return [
     ...Array.from({ length: 48 }, (_, index) => organization.collection("managerPageLoadEvents").doc(`${fixturePrefix}-${index}`)),

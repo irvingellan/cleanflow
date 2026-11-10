@@ -1,3 +1,4 @@
+import { appBuildId } from "../../buildInfo.js";
 import { managerPageClientMetadata } from "../telemetry/managerPageLoadService.js";
 
 const storageKey = "cleanflow.manager-access.diagnostics";
@@ -8,11 +9,17 @@ const stages = new Set([
   "verification_error", "listener_error", "lifecycle_retry", "manual_retry",
   "recovered_after_retry",
   "outer_deadline_expired", "lifecycle_retry_suppressed",
+  "auth_restore_started", "auth_restore_resolved", "auth_restore_timeout", "auth_restore_error", "auth_signin_timeout",
+  "dashboard_phase_started", "dashboard_phase_completed", "dashboard_load_started",
+  "dashboard_load_ready", "dashboard_load_error", "dashboard_load_timeout", "dashboard_recovery",
+  "cleaner_startup_started", "cleaner_startup_ready", "cleaner_startup_timeout", "cleaner_startup_error",
 ]);
 const reasons = new Set([
   "timeout", "offline", "unavailable", "permission-denied", "unauthenticated",
-  "unknown", "pageshow", "visible", "online", "manual",
+  "unknown", "pageshow", "visible", "online", "manual", "deadline-exceeded", "resource-exhausted", "auto",
 ]);
+const phases = new Set(["core_reads", "offers", "issues", "cleaner_names", "cleaner_auth", "cleaner_membership", "cleaner_agenda"]);
+const buildPattern = /^(?:[a-f0-9]{40}|\d+\.\d+\.\d+-[\dT:.Z-]+)(?:-cleaner-push|-inbox-off)?$/;
 const browsers = new Set(["safari", "chrome", "firefox", "edge", "other"]);
 const platforms = new Set(["ios", "android", "macos", "windows", "linux", "other"]);
 
@@ -39,12 +46,16 @@ function safeEvent(input) {
   if (typeof input.appVersion === "string" && /^v?\d+\.\d+\.\d+$/.test(input.appVersion)) {
     event.appVersion = input.appVersion;
   }
+  if (phases.has(input.phase)) event.phase = input.phase;
+  if (typeof input.buildId === "string" && buildPattern.test(input.buildId)) event.buildId = input.buildId;
+  if (Number.isFinite(input.navigationSecond) && input.navigationSecond >= 0) event.navigationSecond = Math.round(input.navigationSecond);
+  if (Number.isFinite(input.elapsedMs)) event.elapsedMs = boundedNumber(input.elapsedMs, 86_400_000);
   if (input.reason !== undefined) event.reason = reasons.has(input.reason) ? input.reason : "unknown";
   return event;
 }
 
 /** Session-local startup evidence only; diagnostics must never affect access verification. */
-export function recordManagerAccessDiagnostic(stage, { attempt = 0, durationMs = 0, reason } = {}) {
+export function recordManagerAccessDiagnostic(stage, { attempt = 0, durationMs = 0, reason, phase } = {}) {
   if (!stages.has(stage)) return;
   try {
     const storage = globalThis.sessionStorage;
@@ -56,7 +67,10 @@ export function recordManagerAccessDiagnostic(stage, { attempt = 0, durationMs =
       window: globalThis.window,
       crypto: globalThis.crypto,
     });
-    const event = safeEvent({ ...metadata, stage, attempt, durationMs, reason });
+    const event = safeEvent({
+      ...metadata, stage, attempt, durationMs, reason, phase, buildId: appBuildId,
+      navigationSecond: performance.timeOrigin / 1000, elapsedMs: performance.now(),
+    });
     let previous = [];
     try {
       const stored = JSON.parse(storage.getItem(storageKey) || "[]");

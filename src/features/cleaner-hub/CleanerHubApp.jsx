@@ -112,7 +112,7 @@ function whenText(t, point, today) {
 
 /* ---------- small pieces ---------- */
 
-function FreshnessBanner({ t, freshness }) {
+function FreshnessBanner({ t, freshness, onRetry, online = true }) {
   if (freshness.state === "live") {
     return (
       <div className="hb-coverage is-verified">
@@ -125,7 +125,16 @@ function FreshnessBanner({ t, freshness }) {
     return <div className="hb-coverage is-unknown" role="status"><HubIcon name="refresh" size={16} /><span><strong>{t("hb.fresh.loading")}</strong></span></div>;
   }
   if (freshness.state === "error") {
-    return <div className="hb-coverage is-partial" role="alert"><HubIcon name="alert" size={16} /><span><strong>{t("hb.fresh.stale")}</strong><span>{t("hb.fresh.error")}</span></span></div>;
+    return (
+      <div className="hb-coverage is-partial" role="alert">
+        <HubIcon name="alert" size={16} />
+        <span>
+          <strong>{t("hb.fresh.stale")}</strong>
+          <span>{t(online ? "hb.fresh.error" : "hb.fresh.offline")}</span>
+          {online && onRetry && <button type="button" className="mw-linkbtn" onClick={() => onRetry()}>{t("hb.fresh.retry")}</button>}
+        </span>
+      </div>
+    );
   }
   return (
     <div className="hb-coverage is-partial" role="status">
@@ -261,7 +270,7 @@ function Agenda({ t, hub, name, segment, setSegment, go, today }) {
         <h2>{name ? t("hb.hello", { name }) : t("hb.helloNoName")}</h2>
         <p className="mw-sec">{t("hb.helloSub", { count: schedule.openCount })}</p>
       </header>
-      <FreshnessBanner t={t} freshness={freshness} />
+      <FreshnessBanner t={t} freshness={freshness} onRetry={hub.retryStartup} online={hub.online} />
       {schedule.changes.length > 0 && (
         <section className="hb-changes" aria-label={t("hb.changes")}>
           <h3 className="mw-micro">{t("hb.changes")}</h3>
@@ -748,11 +757,11 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   // First visit defaults to Upcoming when nothing is scheduled today.
   const firstSnapshot = useRef(true);
   useEffect(() => {
-    if (firstSnapshot.current && hub.freshness.state !== "loading") {
+    if (firstSnapshot.current && active && hub.freshness.lastVerifiedAt) {
       firstSnapshot.current = false;
       if (!hub.schedule.today.length && hub.schedule.upcoming.length) setSegment("upcoming");
     }
-  }, [hub.freshness.state, hub.schedule.today.length, hub.schedule.upcoming.length]);
+  }, [active, hub.freshness.lastVerifiedAt, hub.schedule.today.length, hub.schedule.upcoming.length]);
 
   async function signOut() {
     setSigningOut(true);
@@ -766,9 +775,6 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     return true;
   }
 
-  if (session.status === "loading") {
-    return <Shell t={t} theme={theme} bar={<Brand t={t} />}><div className="hb-screen"><div className="hb-coverage is-unknown" role="status"><HubIcon name="refresh" size={16} /><span><strong>{t("hb.fresh.loading")}</strong></span></div></div></Shell>;
-  }
   if (hub.revoked) {
     return (
       <Shell t={t} theme={theme} bar={<Brand t={t} />}>
@@ -780,11 +786,20 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
       </Shell>
     );
   }
+  if (["loading", "unverified"].includes(session.status) || (session.status === "signed-in" && !active)) {
+    const failed = !hub.online || session.status === "unverified" || hub.membership.state === "error";
+    return (
+      <Shell t={t} theme={theme} bar={<Brand t={t} />}>
+        <div className="hb-screen">
+          <FreshnessBanner t={t} freshness={{ state: failed ? "error" : "loading" }} onRetry={hub.retryStartup} online={hub.online} />
+        </div>
+      </Shell>
+    );
+  }
   if (session.status !== "signed-in") {
     return (
       <Shell t={t} theme={theme} bar={<Brand t={t} />}>
         {session.status === "not-cleaner" && <p className="mw-hint hb-error" role="alert">{t("hb.notCleaner")}</p>}
-        {session.status === "unverified" && <FreshnessBanner t={t} freshness={{ state: "stale", reason: "offline", lastVerifiedAt: null }} />}
         <AccessCode t={t} onRedeem={hub.redeem} platform={platform} displayMode={displayMode} installPrompt={installPrompt} initialCode={initialCode} />
       </Shell>
     );
@@ -795,7 +810,9 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   const pendingOffers = hub.schedule.offers.filter((entry) => entry.offerStatus === "PENDING").length;
   const sub = view.type !== "tab";
   let body;
-  if (!onboardingDone) {
+  if (!onboardingDone && !hub.freshness.lastVerifiedAt) {
+    body = <div className="hb-screen"><FreshnessBanner t={t} freshness={hub.freshness} onRetry={hub.retryStartup} online={hub.online} /></div>;
+  } else if (!onboardingDone) {
     body = <FirstRun t={t} hub={hub} platform={platform} displayMode={displayMode} installPrompt={installPrompt} today={today} onDone={() => { writeStorage(onboardingStorageKey, session.uid); setOnboarded(session.uid); }} />;
   } else if (view.type === "job") body = <JobView key={`${sessionScope}:${view.jobId}`} t={t} hub={hub} jobId={view.jobId} today={today} />;
   else if (view.type === "offer") body = <OfferView key={`${sessionScope}:${view.jobId}`} t={t} hub={hub} jobId={view.jobId} today={today} wasAutomatic={view.wasAutomatic} />;
