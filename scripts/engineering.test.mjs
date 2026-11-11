@@ -40,7 +40,7 @@ function scenario() {
 
 test("parallel Claude and Codex tasks keep exclusive paths and isolate uncommitted edits", () => {
   const { repo, claude, codex, base } = scenario();
-  const observed = { canonical: base, production: base, visibility: "PRIVATE", defaultBranch: "main", remote: { main: base } };
+  const observed = { canonical: base, production: base, visibility: "PUBLIC", defaultBranch: "main", remote: { main: base } };
   claimTask(claude, { issue: "101", scopes: ["src"], canonical: base });
   assert.throws(() => claimTask(codex, { issue: "102", scopes: ["Src/INDEX.css"], canonical: base }), /already owns/);
   assert.throws(() => claimTask(codex, { issue: "102", scopes: [".Git/config"], canonical: base }), /repository-relative/);
@@ -86,7 +86,7 @@ test("doctor distinguishes a public, stale canonical ref from the published comm
   const live = commit(claude, "published fixture");
   const status = diagnose(repo, { canonical: base, production: live, visibility: "PUBLIC", defaultBranch: "main", remote: { main: base } });
   assert.deepEqual(status.liveDelta, { leftOnly: 1, rightOnly: 0 });
-  assert.ok(status.blockers.includes("PRIVATE_REMOTE_UNVERIFIED"));
+  assert.equal(status.visibility, "PUBLIC");
   assert.ok(status.blockers.includes("CANONICAL_MISSING_LIVE_SOURCE"));
   const managed = updateCheckpoint("# Current State\n\nKeep original evidence.\n", renderCheckpoint(status, { issue: "83", verification: "LOCAL" }));
   const revised = updateCheckpoint(managed, "## Replaced checkpoint");

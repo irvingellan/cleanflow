@@ -98,11 +98,11 @@ printf '%s\n' '${JSON.stringify({ visibility, defaultBranchRef: { name: branch }
   assert.notEqual(git("rev-parse", "origin/main"), sealed);
   assert.doesNotThrow(rollback);
   const publish = () => assertOfficialReleaseHead(checkout, baseline, sealed);
-  assert.throws(publish, /PRIVATE/);
-  gh("PRIVATE", "other");
-  assert.throws(publish, /official main/);
-  gh("PRIVATE", "main");
+  // A public official main reaches the exact remote SHA check. The
+  // fixture disables HTTPS so the lookup cannot reach GitHub.
   assert.throws(publish, /ls-remote/);
+  gh("PUBLIC", "other");
+  assert.throws(publish, /official main/);
 
   const dirty = join(checkout, "dirty");
   writeFileSync(dirty, "changed");

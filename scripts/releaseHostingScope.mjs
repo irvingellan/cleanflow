@@ -55,12 +55,12 @@ export function assertOfficialReleaseHead(root, baselineSha, head, { action = "p
   let repository;
   try {
     repository = JSON.parse(execFileSync("gh", ["repo", "view", officialOrigin.slice(0, -4),
-      "--json", "visibility,defaultBranchRef"], options));
+      "--json", "defaultBranchRef"], options));
   } catch {
-    throw new Error("Official repository visibility could not be verified.");
+    throw new Error("Official repository default branch could not be verified.");
   }
-  if (repository?.visibility !== "PRIVATE" || repository?.defaultBranchRef?.name !== "main") {
-    throw new Error("Publishing requires verified PRIVATE visibility and the official main branch.");
+  if (repository?.defaultBranchRef?.name !== "main") {
+    throw new Error("Publishing requires the verified official main branch.");
   }
   const official = git("ls-remote", "--exit-code", "origin", "refs/heads/main");
   const [officialHead, ref, extra] = official.split(/\s+/);

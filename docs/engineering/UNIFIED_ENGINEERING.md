@@ -1,7 +1,8 @@
 # CleanFlow Unified Engineering
 
 Issue [#83](https://github.com/irvingellan/cleanflow/issues/83) tracks source
-reconciliation. The official repository is [irvingellan/cleanflow](https://github.com/irvingellan/cleanflow).
+reconciliation. The public [irvingellan/cleanflow](https://github.com/irvingellan/cleanflow)
+repository is the official source.
 The GitHub Issues and PRs record tasks and ownership. [Current State](../CURRENT_STATE.md)
 summarizes technical state. The [release registry](WORKTREE_RELEASE_CANDIDATE_REGISTRY.md)
 and private sealed receipts track exact builds, deployments and rollback. The
@@ -28,8 +29,8 @@ Irving Hub note `2026-11-09-5dbclm` provides shared context. Git holds the sourc
    directory scopes and prevents another branch from claiming the same issue.
    Keep the claim until work is handed off. Inspect a stale claim and its
    worktree before deciding to clear it.
-3. Commit the scoped change. When the remote is private and the outgoing
-   history is reviewed, open one draft PR against `main` with a single
+3. Commit the scoped change. Review the outgoing history before pushing
+   to the public repository. Open one PR against `main` with a single
    `scope:hosting` or `scope:full` label. Bring the exact current `main` into
    the candidate before review. Have the other agent review affected shared
    interfaces. The Actions workflow checks the PR event base against the
@@ -86,13 +87,12 @@ the verified layout release. Preserve those receipts and revalidate them
 before relying on them for a later release. Historical commits and branches
 stay intact during reconciliation.
 
-Before the first push, require an observed `PRIVATE` from
-`gh repo view irvingellan/cleanflow --json visibility`. Re-read the current
-`main` and verify the intended fast-forward. Review every commit that will
-become reachable, including intermediate trees and files later deleted.
-A clean final tree alone is insufficient. If visibility, source or the
-privacy review is unresolved, continue with safe local work and record the
-blocker. Enable CI and branch protection only after the remote gate clears.
+On 2026-11-11, the owner confirmed the public repository as the official
+source and GitHub `main` was verified at the Production baseline. For each
+push, re-read official `main` and review every newly reachable commit,
+including intermediate trees and files later deleted. Keep secrets,
+personal data, local paths and private backups out of public commits.
+Record any unresolved source or privacy finding before publishing a ref.
 
 ### Hosting command and recovery boundary
 

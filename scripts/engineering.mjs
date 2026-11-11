@@ -193,7 +193,6 @@ export function diagnose(cwd, observed, proposed = []) {
     row.path === claim.path && row.branch === claim.branch && row.dirtyPaths !== null));
   const blockers = [];
   if (!observed.canonical || observed.defaultBranch !== "main") blockers.push("CANONICAL_MAIN_UNVERIFIED");
-  if (observed.visibility !== "PRIVATE") blockers.push("PRIVATE_REMOTE_UNVERIFIED");
   if (!liveDelta || liveDelta.leftOnly > 0) blockers.push("CANONICAL_MISSING_LIVE_SOURCE");
   if (!canonicalDelta || canonicalDelta.leftOnly > 0) blockers.push("HEAD_MISSING_CANONICAL");
   if (!here || here.locked || here.prunable || here.detached || here.dirtyPaths === null) blockers.push("WORKTREE_UNVERIFIED");
