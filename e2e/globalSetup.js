@@ -15,11 +15,29 @@ function matchesEmulatorHost(host, port) {
   return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
 }
 
+function configuredLocalPort(env, name, fallback) {
+  const value = env[`VITE_CLEANFLOW_EMULATOR_${name}_PORT`];
+  const port = value === undefined ? fallback : Number(value);
+  if (!Number.isInteger(port) || port <= 1024 || port >= 65536) {
+    throw new Error("Invalid local E2E port.");
+  }
+  return port;
+}
+
 export function managerE2ePorts(env = process.env) {
-  return emulatorProfiles.find(({ firestore, auth }) =>
+  const configuredPorts = {
+    firestore: configuredLocalPort(env, "FIRESTORE", 8080),
+    auth: configuredLocalPort(env, "AUTH", 9099),
+    functions: configuredLocalPort(env, "FUNCTIONS", 5001),
+  };
+  return [configuredPorts, ...emulatorProfiles].find(({ firestore, auth }) =>
     matchesEmulatorHost(env.FIRESTORE_EMULATOR_HOST, firestore)
     && matchesEmulatorHost(env.FIREBASE_AUTH_EMULATOR_HOST, auth));
 }
+
+const activePorts = managerE2ePorts();
+export const e2eFirestorePort = activePorts?.firestore ?? configuredLocalPort(process.env, "FIRESTORE", 8080);
+export const e2eAuthPort = activePorts?.auth ?? configuredLocalPort(process.env, "AUTH", 9099);
 
 export const e2eManager = {
   email: "manager@cleanflow.e2e",
@@ -27,14 +45,14 @@ export const e2eManager = {
 };
 
 export function getE2eFirestore() {
-  requireLocalEmulators();
+  requireLocalE2EEmulators();
   const app = getApps().find((candidate) => candidate.name === "cleanflow-e2e-test") ||
     initializeApp({ projectId }, "cleanflow-e2e-test");
 
   return getFirestore(app);
 }
 
-function requireLocalEmulators() {
+export function requireLocalE2EEmulators() {
   if (process.env.GCLOUD_PROJECT !== projectId || !managerE2ePorts()) {
     throw new Error(
       "CleanFlow E2E fixtures require local demo-cleanflow Auth and Firestore emulators.",
@@ -70,8 +88,8 @@ async function ensureManager(auth) {
   }
 }
 
-export default async function seedE2eFixtures() {
-  requireLocalEmulators();
+export default async function seedE2eFixtures({ managerOnly = false } = {}) {
+  requireLocalE2EEmulators();
 
   const app = getApps()[0] || initializeApp({ projectId }, "cleanflow-e2e");
   const auth = getAuth(app);
@@ -79,6 +97,13 @@ export default async function seedE2eFixtures() {
   const manager = await ensureManager(auth);
 
   const organization = db.collection("organizations").doc(organizationId);
+  const member = organization.collection("members").doc(manager.uid);
+  const membership = { role: "MANAGER", active: true };
+  if (managerOnly) {
+    await member.set(membership);
+    return;
+  }
+
   const now = Timestamp.now();
   const cleaner = {
     name: "E2E Cleaner",
@@ -217,7 +242,7 @@ export default async function seedE2eFixtures() {
     ],
   ];
   const batch = db.batch();
-  batch.set(organization.collection("members").doc(manager.uid), { role: "MANAGER", active: true });
+  batch.set(member, membership);
 
   batch.set(organization.collection("cleaners").doc("e2e-cleaner"), cleaner);
   batch.set(organization.collection("cleaners").doc("e2e-team-cleaner-a"), teamCleanerA);

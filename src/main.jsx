@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, useLayoutEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import '@fontsource-variable/inter/wght.css'
@@ -16,14 +16,24 @@ import { EnvironmentBanner } from './components/EnvironmentBanner.jsx'
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+      .catch(() => window.__cleanflowStartup?.workerFailed())
   })
 }
 
-createRoot(document.getElementById('root')).render(
+function StartupCommit() {
+  useLayoutEffect(() => { window.__cleanflowStartup?.mounted() }, [])
+  return null
+}
+
+const startup = window.__cleanflowStartup
+createRoot(document.getElementById('root'), startup ? {
+  onUncaughtError: () => startup.renderFailed(),
+} : undefined).render(
   <StrictMode>
     <TranslationProvider>
       <EnvironmentBanner />
       <App />
+      <StartupCommit />
     </TranslationProvider>
   </StrictMode>,
 )

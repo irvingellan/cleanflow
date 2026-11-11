@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App.jsx";
+import { publicOfferLoadDeadlineMs } from "./publicOfferService.js";
 import { TranslationProvider } from "../../i18n/translations.js";
 
 // Loading the public route must never require initializing manager auth.
@@ -51,6 +52,26 @@ describe("Public automatic offer", () => {
     expect(await screen.findByRole("link", { name: "Entrar na Minha agenda" })).toHaveAttribute("href", "/agenda");
     expect(screen.queryByRole("button", { name: "Tenho interesse" })).toBeNull();
     expect(screen.queryByText(/Você demonstrou interesse/)).toBeNull();
+  });
+
+  it("stops loading when a response body never settles and retries without a page refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      const load = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () => new Promise(() => {}),
+      }).mockResolvedValueOnce(Response.json({ offer: automaticOffer }));
+      vi.stubGlobal("fetch", load);
+      render(<TranslationProvider><App /></TranslationProvider>);
+      await act(async () => vi.advanceTimersByTimeAsync(publicOfferLoadDeadlineMs));
+      expect(screen.getByRole("alert")).toBeVisible();
+      expect(load.mock.calls[0][1].signal.aborted).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await act(async () => {});
+      expect(screen.getByRole("link", { name: "Entrar na Minha agenda" })).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows why a taken offer link is unavailable", async () => {

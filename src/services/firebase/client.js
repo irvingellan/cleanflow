@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
-import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectFirestoreEmulator, getFirestore, initializeFirestore } from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { createFirebaseConfig } from "./config.js";
 import { assertBuildEnvironment, assertHostingOriginBinding } from "../../environment.js";
@@ -33,7 +33,13 @@ export const firebaseApp = getApps().length
   ? getApp()
   : initializeApp(firebaseConfig);
 
-export const db = getFirestore(firebaseApp);
+// Local transport comparison only. A Production/Sandbox build always keeps
+// the existing SDK defaults, even if the test flag exists in the shell.
+const compareLongPolling = useFirebaseEmulators
+  && import.meta.env.VITE_CLEANFLOW_EMULATOR_FORCE_LONG_POLLING === "true";
+export const db = compareLongPolling
+  ? initializeFirestore(firebaseApp, { experimentalForceLongPolling: true })
+  : getFirestore(firebaseApp);
 export const functions = getFunctions(firebaseApp, "us-central1");
 export const storage = getStorage(firebaseApp);
 

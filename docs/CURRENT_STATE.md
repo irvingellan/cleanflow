@@ -18,6 +18,18 @@
   deployment notes below describe their original checkpoints.
 <!-- cleanflow-engineering:end -->
 
+## P0 startup reliability — GitHub candidate (2026-11-11)
+
+This candidate started at verified live source `0f9735f` and is based on
+the public GitHub integration line. Entry, Auth, manager verification,
+Dashboard and Cleaner Hub have bounded startup recovery and local stage
+diagnostics. The manager Dashboard
+uses Firestore Lite for one-time server reads after manager verification.
+Local public probes and Hosting asset retention cover the bundled entry.
+The affected physical devices and field trigger still require confirmation.
+No rollout, infrastructure, Rules, Functions or data changes.
+See [startup reliability](P0_STARTUP_RELIABILITY.md).
+
 ## 2026-11-05 — Cleaner push test notices (Issue #85)
 
 `claude/cleaner-push-test-button` adds one callable, `cleanerPushTest`:

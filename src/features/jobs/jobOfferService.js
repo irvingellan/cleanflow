@@ -3,13 +3,10 @@ import {
   doc,
   getDoc,
   getDocs,
-  limit,
-  query,
   runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
@@ -88,29 +85,6 @@ export async function getJobOffers(jobId) {
     ...offerDocumentSnapshot.data(),
     id: offerDocumentSnapshot.id,
   }));
-}
-
-export async function getInterestedJobOffers(jobId) {
-  const snapshot = await getDocs(
-    query(offersCollection(jobId), where("status", "==", "INTERESTED"), limit(5)),
-  );
-
-  return snapshot.docs.map((offerDocumentSnapshot) => ({
-    ...offerDocumentSnapshot.data(),
-    id: offerDocumentSnapshot.id,
-  }));
-}
-
-export async function getPendingJobOffers(jobId) {
-  // A withdrawn invite is no longer awaiting a reply (FB09).
-  const snapshot = await getDocs(
-    query(offersCollection(jobId), where("status", "==", "PENDING"), limit(10)),
-  );
-
-  return snapshot.docs.map((offerDocumentSnapshot) => ({
-    ...offerDocumentSnapshot.data(),
-    id: offerDocumentSnapshot.id,
-  })).filter((offer) => !managerDecisionOf(offer)).slice(0, 1);
 }
 
 export async function respondToJobOffer({ jobId, cleanerId, status }) {

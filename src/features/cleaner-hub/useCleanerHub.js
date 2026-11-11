@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { recordManagerAccessDiagnostic } from "../auth/managerAccessDiagnostics.js";
 import * as defaultService from "./cleanerHubService.js";
 import { buildCleanerAgenda, freshnessFor } from "./cleanerAgendaModel.js";
 
 const systemClock = () => new Date();
 const configuredInterval = Number(import.meta.env?.VITE_CLEANER_HUB_VERIFY_INTERVAL_MS);
 export const serverVerifyIntervalMs = Number.isInteger(configuredInterval) && configuredInterval >= 2000 ? configuredInterval : 60000;
+export const cleanerStartupTimeoutMs = 15000;
 const verificationTimeoutMs = 10000;
 const maximumVerificationAgeMs = serverVerifyIntervalMs + verificationTimeoutMs;
 const emptyAgenda = { entries: [], hasSnapshot: false, fromCache: false, error: null, lastVerifiedAt: null };
@@ -17,6 +19,42 @@ function browserOnline() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
 }
 
+function startupClock() {
+  return { wall: Date.now(), monotonic: performance.now() };
+}
+
+function trackStartup(phase, attempt, onTimeout, started = startupClock()) {
+  const elapsed = () => Math.max(Date.now() - started.wall, performance.now() - started.monotonic);
+  const report = (outcome, reason) => recordManagerAccessDiagnostic(`cleaner_startup_${outcome}`, {
+    phase, attempt, durationMs: elapsed(), reason,
+  });
+  const cancel = () => {
+    clearTimeout(timer);
+    window.removeEventListener("pageshow", restored);
+    document.removeEventListener("visibilitychange", visible);
+  };
+  const expire = () => {
+    cancel();
+    report("timeout", browserOnline() ? "timeout" : "offline");
+    onTimeout();
+  };
+  const visible = () => {
+    if (document.visibilityState === "visible" && elapsed() >= cleanerStartupTimeoutMs) expire();
+  };
+  const restored = (event) => { if (event.persisted) visible(); };
+  report("started");
+  const timer = setTimeout(expire, Math.max(0, cleanerStartupTimeoutMs - elapsed()));
+  window.addEventListener("pageshow", restored);
+  document.addEventListener("visibilitychange", visible);
+  return {
+    finish(outcome, reason) {
+      cancel();
+      report(outcome, reason);
+    },
+    cancel,
+  };
+}
+
 /**
  * Session, membership and live agenda for the signed-in cleaner. Private data
  * is dropped as soon as the membership is revoked or the session ends.
@@ -26,25 +64,49 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
   const [membership, setMembership] = useState({ state: "loading" });
   const [agenda, setAgenda] = useState(emptyAgenda);
   const [online, setOnline] = useState(browserOnline);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [, refreshClock] = useState(0);
   const sessionVersion = useRef(0);
+  const membershipConfirmed = useRef(false);
+  const startupTimes = useRef({});
+  const retryCount = useRef(0);
+  const autoRetryUsed = useRef(false);
   const liveSnapshot = useRef(null);
 
   useEffect(() => {
     let current;
-    return service.subscribeCleanerSession((next) => {
+    let cancelled = false;
+    let startup = trackStartup("cleaner_auth", sessionAttempt, () => {
+      setSession((previous) => previous.status === "loading" ? { status: "unverified" } : previous);
+    });
+    const stop = service.subscribeCleanerSession((next) => {
+      if (cancelled) return;
+      if (startup) {
+        const verified = next.status !== "unverified";
+        startup.finish(verified ? "ready" : "error", verified ? undefined : browserOnline() ? "unavailable" : "offline");
+        startup = null;
+      }
       if (current?.status === next.status && current?.uid === next.uid
         && current?.organizationId === next.organizationId && current?.cleanerId === next.cleanerId
         && current?.sessionId === next.sessionId) return;
       current = next;
       sessionVersion.current += 1;
+      membershipConfirmed.current = false;
+      startupTimes.current = {};
+      retryCount.current = 0;
+      if (next.status !== "unverified") autoRetryUsed.current = false;
       liveSnapshot.current = null;
       setAgenda(emptyAgenda);
       setMembership({ state: "loading" });
       setSession(next);
     });
-  }, [service]);
+    return () => {
+      cancelled = true;
+      startup?.cancel();
+      stop();
+    };
+  }, [service, sessionAttempt]);
 
   useEffect(() => {
     const worker = navigator.serviceWorker;
@@ -66,66 +128,120 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     };
   }, []);
 
+  const signedIn = session.status === "signed-in";
+  const retryStartup = useCallback(({ preserveFailure = false } = {}) => {
+    if (!browserOnline()) return;
+    if (session.status === "unverified" || session.status === "loading") {
+      if (!preserveFailure) setSession({ status: "loading" });
+      setSessionAttempt((value) => value + 1);
+      return;
+    }
+    if (!signedIn) return;
+    if (!preserveFailure) {
+      startupTimes.current = {};
+      setMembership((previous) => previous.state === "error" ? { state: "loading" } : previous);
+      setAgenda((previous) => !previous.hasSnapshot ? { ...previous, error: null } : previous);
+    }
+    retryCount.current = 0;
+    setAttempt((value) => value + 1);
+    service.reconnectAgenda?.().catch(() => undefined);
+  }, [service, session.status, signedIn]);
+
+  const startupNeedsRetry = session.status === "unverified" || membership.state === "error"
+    || (signedIn && !agenda.hasSnapshot && Boolean(agenda.error));
   useEffect(() => {
-    const reconnect = () => service.reconnectAgenda?.().catch(() => undefined);
-    const update = () => {
+    const resume = () => {
       const isOnline = browserOnline();
       setOnline(isOnline);
-      if (isOnline) reconnect();
+      if (!isOnline) return;
+      if (startupNeedsRetry) {
+        if (!autoRetryUsed.current) {
+          autoRetryUsed.current = true;
+          retryStartup({ preserveFailure: true });
+        }
+      } else if (signedIn) {
+        service.reconnectAgenda?.().catch(() => undefined);
+      }
     };
-    const resume = () => {
+    const visible = () => {
       if (document.visibilityState !== "visible") return;
       refreshClock((value) => value + 1);
-      update();
+      resume();
     };
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    document.addEventListener("visibilitychange", resume);
+    const restored = (event) => { if (event.persisted) visible(); };
+    const offline = () => {
+      autoRetryUsed.current = false;
+      setOnline(false);
+    };
+    window.addEventListener("online", resume);
+    window.addEventListener("offline", offline);
+    window.addEventListener("pageshow", restored);
+    document.addEventListener("visibilitychange", visible);
     return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("pageshow", restored);
+      document.removeEventListener("visibilitychange", visible);
     };
-  }, [service]);
-
-  const signedIn = session.status === "signed-in";
+  }, [service, signedIn, startupNeedsRetry, retryStartup]);
 
   useEffect(() => {
     if (!signedIn) return undefined;
     const version = sessionVersion.current;
     let retryTimer;
     let cancelled = false;
+    const current = () => !cancelled && version === sessionVersion.current;
+    // Firestore streams may remain open without a server response. Update the
+    // UI at the deadline while leaving the listeners eligible to recover.
+    let membershipStartup = membershipConfirmed.current ? null : trackStartup("cleaner_membership", attempt, () => {
+      if (current()) setMembership((previous) => previous.state === "loading" ? { state: "error" } : previous);
+    }, startupTimes.current.membership ??= startupClock());
+    let agendaStartup = liveSnapshot.current !== null ? null : trackStartup("cleaner_agenda", attempt, () => {
+      if (current()) setAgenda((previous) => previous.hasSnapshot ? previous : { ...previous, error: "timeout" });
+    }, startupTimes.current.agenda ??= startupClock());
+    const retryListeners = () => {
+      if (retryTimer !== undefined) return;
+      const delay = Math.min(30000, 2000 * 2 ** Math.min(retryCount.current++, 4));
+      retryTimer = setTimeout(() => { if (current()) setAttempt((value) => value + 1); }, delay);
+    };
     const stopMembership = service.subscribeMembership(session, (result) => {
-      if (cancelled || version !== sessionVersion.current) return;
+      if (!current()) return;
+      membershipStartup?.finish(result.state === "error" ? "error" : "ready", result.state === "error" ? "unavailable" : undefined);
+      membershipStartup = null;
       if (result.state === "error") {
-        setMembership((previous) => previous.state === "active" ? previous : result);
-        setAgenda((previous) => ({ ...previous, error: "membership-unavailable" }));
+        setMembership((previous) => previous.state === "active" ? { ...previous, verificationError: true } : result);
+        retryListeners();
         return;
       }
+      membershipConfirmed.current = result.state === "active";
       setMembership(result);
     });
     const stopAgenda = service.subscribeAgenda(
       session,
       ({ entries, fromCache }) => {
-        if (cancelled || version !== sessionVersion.current) return;
+        if (!current()) return;
         if (fromCache) {
           setAgenda((previous) => ({ ...previous, fromCache: true }));
           return;
         }
+        agendaStartup?.finish("ready");
+        agendaStartup = null;
         liveSnapshot.current = entries;
         setAgenda({ entries, hasSnapshot: true, fromCache: false, error: null, lastVerifiedAt: clock() });
       },
       (code) => {
-        if (cancelled || version !== sessionVersion.current) return;
+        if (!current()) return;
+        agendaStartup?.finish("error", code);
+        agendaStartup = null;
         setAgenda((previous) => ({ ...previous, error: code }));
-        // Firestore ends a listener after an error. Keep the last confirmed list
-        // labelled stale and reopen the listener with backoff.
-        retryTimer = setTimeout(() => setAttempt((value) => value + 1), Math.min(30000, 2000 * 2 ** Math.min(attempt, 4)));
+        retryListeners();
       },
     );
     return () => {
       cancelled = true;
       clearTimeout(retryTimer);
+      membershipStartup?.cancel();
+      agendaStartup?.cancel();
       stopMembership();
       stopAgenda();
     };
@@ -160,6 +276,8 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
           setMembership({ state: "revoked" });
           return;
         }
+        setMembership((previous) => previous.state === "active" && previous.verificationError
+          ? { ...previous, verificationError: false } : previous);
         if (liveSnapshot.current !== snapshotAtStart) return;
         if (fingerprint(snapshotAtStart || []) !== fingerprint(result.entries)) service.reconnectAgenda?.().catch(() => undefined);
         setAgenda({ entries: result.entries, hasSnapshot: true, fromCache: false, error: null, lastVerifiedAt: clock() });
@@ -198,12 +316,17 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
   const freshness = freshnessFor({
     ...agenda,
     hasSnapshot: membership.state === "active" && agenda.hasSnapshot,
-    error: membership.state === "error" ? "membership-unavailable" : agenda.error,
+    error: membership.state === "error" || membership.verificationError
+      ? "membership-unavailable" : agenda.error || (!online ? "offline" : null),
     online,
     nowMs,
     maxAgeMs: maximumVerificationAgeMs,
   });
-  useEffect(() => { if (freshness.state === "live") setAttempt(0); }, [freshness.state]);
+  useEffect(() => {
+    if (freshness.state !== "live") return;
+    retryCount.current = 0;
+    autoRetryUsed.current = false;
+  }, [freshness.state]);
   useEffect(() => {
     if (freshness.state !== "stale" || !online || !signedIn) return undefined;
     const timer = setInterval(() => service.reconnectAgenda?.().catch(() => undefined), 10000);
@@ -224,6 +347,8 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     entries: [...schedule.today, ...schedule.upcoming, ...schedule.completed, ...schedule.offers],
     schedule,
     freshness,
+    online,
+    retryStartup,
     redeem,
     signOut,
     openChecklist: service.openMyChecklist,

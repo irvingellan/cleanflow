@@ -130,17 +130,12 @@ firebase.messaging();
 
 function rootWorkerSource(buildId) {
   return `const buildId = ${JSON.stringify(buildId)};
-const acknowledgedClients = new Set();
 
 self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "CLEANFLOW_UPDATE_CLIENT_READY" && event.source?.id) {
-    acknowledgedClients.add(event.source.id);
-  }
-
   if (event.data?.type === "CLEANFLOW_SKIP_WAITING") {
     self.skipWaiting();
   }
@@ -155,16 +150,8 @@ self.addEventListener("activate", (event) => {
       client.postMessage({ type: "CLEANFLOW_UPDATE_AVAILABLE", buildId });
     });
 
-    // Older installed builds cannot acknowledge the update message. Reload them once so this
-    // update protocol can take over; current builds acknowledge and show their own prompt.
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const currentWindows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-
-    await Promise.all(
-      currentWindows
-        .filter((client) => !acknowledgedClients.has(client.id))
-        .map((client) => client.navigate(client.url).catch(() => undefined)),
-    );
+    // A worker cannot know whether a page has unfinished work or can reach
+    // Hosting. Let an open document keep running through the worker update.
   })());
 });
 
@@ -251,6 +238,35 @@ function cleanflowServiceWorkers(buildInfo) {
   }
 }
 
+function startupShell(buildId) {
+  const source = readFileSync(new URL('./src/features/startup/startupShell.js', import.meta.url), 'utf8')
+  const entryStylesheet = /<link\b(?=[^>]*\brel="stylesheet")(?=[^>]*\bhref="\/assets\/(?:index|main)-[\w-]+\.css")[^>]*>/i
+  return {
+    name: 'cleanflow-startup-shell',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, context) {
+        const agenda = path.basename(context.filename) === 'agenda.html'
+        const requiresStyles = entryStylesheet.test(html)
+        if (context.bundle && !requiresStyles) throw new Error('CleanFlow entry stylesheet missing')
+        return {
+          // Download the stylesheet without blocking the HTML fallback's first paint.
+          html: html.replace(entryStylesheet, (tag) => tag.replace(/>$/, ' media="print" data-startup-stylesheet>')),
+          tags: [{
+            tag: 'script',
+            attrs: {
+              'data-entry': agenda ? 'agenda' : 'manager', 'data-build': buildId,
+              ...(requiresStyles ? { 'data-requires-styles': 'true' } : {}),
+            },
+            children: source,
+            injectTo: 'head-prepend',
+          }],
+        }
+      },
+    },
+  }
+}
+
 function cleanerHubHtmlEntry() {
   function rewriteAgenda(server) {
     server.middlewares.use((request, _response, next) => {
@@ -332,8 +348,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: ["test", "e2e"].includes(mode)
-      ? [react(), cleanerHubHtmlEntry()]
-      : [react(), cleanerHubHtmlEntry(), cleanflowServiceWorkers(buildInfo)],
+      ? [react(), cleanerHubHtmlEntry(), startupShell(buildInfo.deploymentId || buildInfo.buildId)]
+      : [react(), cleanerHubHtmlEntry(), startupShell(buildInfo.deploymentId || buildInfo.buildId), cleanflowServiceWorkers(buildInfo)],
     test: {
       environment: "jsdom",
       setupFiles: "./src/test/setup.js",

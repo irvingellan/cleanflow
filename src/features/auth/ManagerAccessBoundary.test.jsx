@@ -200,6 +200,20 @@ describe("bounded manager application authorization gate", () => {
     expect(screen.queryByText("Operational UI")).not.toBeInTheDocument();
   });
 
+  it("opens one new verification window on actual reconnection after the deadline", async () => {
+    render(gate());
+    await advance(managerAccessOuterDeadlineMs);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    fireEvent(window, new Event("offline"));
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    verifyManagerAccess.mockResolvedValue(true);
+    fireEvent(window, new Event("online"));
+    await flush();
+    expect(verifyManagerAccess).toHaveBeenCalledTimes(3);
+    expect(screen.getByText("Operational UI")).toBeVisible();
+  });
+
   it("manual retry starts a fresh attempt and can recover without reloading", async () => {
     render(gate());
     await advance(managerAccessDeadlineMs * 2);

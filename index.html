@@ -17,7 +17,13 @@
     <title>CleanFlow</title>
   </head>
   <body>
-    <div id="root"></div>
+    <main id="cleanflow-startup">
+      <p data-startup-pending role="status">Opening CleanFlow…</p>
+      <p data-startup-alert role="alert" hidden></p>
+      <button data-startup-retry type="button" hidden></button>
+      <noscript><style>[data-startup-pending] { display: none; }</style><p>Enable JavaScript to open CleanFlow.</p></noscript>
+    </main>
+    <div id="root" hidden></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

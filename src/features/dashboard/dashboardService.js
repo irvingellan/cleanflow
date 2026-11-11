@@ -1,43 +1,14 @@
 import { isJobFilled, requiredCleanerCount } from "../jobs/offerSlots.js";
-import {
-  collection,
-  getDocsFromServer,
-  orderBy,
-  query,
-  Timestamp,
-  where,
-} from "firebase/firestore";
-import { db } from "../../services/firebase/client.js";
-import { getCleanerNamesById } from "../cleaners/cleanerService.js";
-import { getOpenJobIssues } from "../issues/issueService.js";
-import {
-  getInterestedJobOffers,
-  getPendingJobOffers,
-} from "../jobs/jobOfferService.js";
+import * as reads from "./dashboardReads.js";
 import {
   getAssignedCleanerIds,
   normalizeJobRecord,
 } from "../jobs/jobCompatibility.js";
 
-const organizationId = "cleanflow-demo";
-const activeOperationalStatuses = [
-  "UNASSIGNED",
-  "OFFERED",
-  "ASSIGNED",
-  "IN_PROGRESS",
-];
 const attentionJobLimit = 10;
 const issueCandidateJobLimit = 10;
 const next48HoursJobLimit = 20;
 const recentlyCompletedJobLimit = 5;
-
-function jobsCollection() {
-  return collection(db, "organizations", organizationId, "jobs");
-}
-
-function propertiesCollection() {
-  return collection(db, "organizations", organizationId, "properties");
-}
 
 function jobFromSnapshot(snapshot) {
   return normalizeJobRecord(snapshot.data(), snapshot.id);
@@ -118,7 +89,30 @@ export function composeAttentionJobCandidates(attentionJobs, next48HoursJobs) {
   ]);
 }
 
-export async function getOperationalDashboard() {
+async function readDashboardPhase(phase, read, { isActive, onPhase }) {
+  // SDK reads already in flight cannot be canceled. Do not launch the next wave
+  // after a timeout, a retry or navigation has invalidated this attempt.
+  if (isActive?.() === false) throw new Error("Dashboard load is no longer active");
+  const report = (state, error) => {
+    try {
+      onPhase?.(phase, state, error);
+    } catch {
+      // Diagnostics must never change the query result.
+    }
+  };
+  report("started");
+  try {
+    const result = await read();
+    report("completed");
+    return result;
+  } catch (error) {
+    report("error", error);
+    throw error;
+  }
+}
+
+export async function getOperationalDashboard(observation = {}) {
+  const read = reads.createDashboardRead(observation.isActive);
   const now = new Date();
   const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   const today = localDateKey(now);
@@ -136,8 +130,6 @@ export async function getOperationalDashboard() {
   const weekDays = Array.from({ length: 7 }, (_, index) =>
     localDateKey(addLocalDays(weekStart, index)),
   );
-  const jobs = jobsCollection();
-  // An offline cache can be empty or stale. The Home status requires current reads.
   const [
     propertiesSnapshot,
     openJobsSnapshot,
@@ -146,54 +138,9 @@ export async function getOperationalDashboard() {
     recentlyCompletedSnapshot,
     weeklyScheduledSnapshot,
     weeklyCompletedSnapshot,
-  ] = await Promise.all([
-    getDocsFromServer(propertiesCollection()),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "in", ["UNASSIGNED", "OFFERED"]),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "IN_PROGRESS"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "in", activeOperationalStatuses),
-        where("scheduledDate", ">=", today),
-        where("scheduledDate", "<=", endDate),
-        orderBy("scheduledDate", "asc"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "COMPLETED"),
-        orderBy("completedAt", "desc"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("scheduledDate", ">=", weekStartDate),
-        where("scheduledDate", "<=", weekEndDate),
-        orderBy("scheduledDate", "asc"),
-      ),
-    ),
-    getDocsFromServer(
-      query(
-        jobs,
-        where("operationalStatus", "==", "COMPLETED"),
-        where("completedAt", ">=", Timestamp.fromDate(weekStart)),
-        where("completedAt", "<", Timestamp.fromDate(nextWeekStart)),
-        orderBy("completedAt", "desc"),
-      ),
-    ),
-  ]);
+  ] = await readDashboardPhase("core_reads", () => reads.getDashboardCore({
+    today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart,
+  }, read), observation);
   const propertiesById = Object.fromEntries(propertiesSnapshot.docs.map((property) => [
     property.id,
     property.data(),
@@ -231,11 +178,11 @@ export async function getOperationalDashboard() {
     ...recentlyCompletedJobs,
   ]);
   const [offeredJobOffers, issueGroups] = await Promise.all([
-    Promise.all(
+    readDashboardPhase("offers", () => Promise.all(
       offeredAttentionJobs.map(async (job) => {
         const [interestedOffers, pendingOffers] = await Promise.all([
-          getInterestedJobOffers(job.id),
-          getPendingJobOffers(job.id),
+          reads.getInterestedJobOffers(job.id, read),
+          reads.getPendingJobOffers(job.id, read),
         ]);
 
         return {
@@ -244,15 +191,15 @@ export async function getOperationalDashboard() {
           hasPendingOffer: pendingOffers.length > 0,
         };
       }),
-    ),
-    Promise.all(
+    ), observation),
+    readDashboardPhase("issues", () => Promise.all(
       issueCandidateJobs.map(async (job) => ({
         job,
-        issues: await getOpenJobIssues(job.id),
+        issues: await reads.getOpenJobIssues(job.id, read),
       })),
-    ),
+    ), observation),
   ]);
-  const cleanerNamesById = await getCleanerNamesById([
+  const cleanerNamesById = await readDashboardPhase("cleaner_names", () => reads.getCleanerNamesById([
     ...[...recentlyCompletedJobs, ...next48HoursJobs].flatMap((job) => [
       ...getAssignedCleanerIds(job),
       job.assignedCleanerId,
@@ -260,7 +207,7 @@ export async function getOperationalDashboard() {
     ...offeredJobOffers.flatMap(({ interestedOffers }) =>
       interestedOffers.map((offer) => offer.cleanerId),
     ),
-  ]);
+  ], read), observation);
 
   return {
     counts: {

@@ -31,6 +31,8 @@ export function useManagerAccess(user) {
     let outerDeadlineAt;
     let outerExpired = false;
     let verifying = false;
+    let sawOffline = navigator.onLine === false;
+    let onlineRecovered = false;
     let outerWatchdog;
     let watchdog;
     let lifecycleTimer;
@@ -177,7 +179,24 @@ export function useManagerAccess(user) {
       }, delay);
     }
     const onPageShow = () => lifecycleRetry("pageshow");
-    const onOnline = () => lifecycleRetry("online");
+    const onOffline = () => { sawOffline = true; };
+    const onOnline = () => {
+      // A real reconnection can open one new bounded window after the old
+      // window failed. Repeated wake/online signals alone cannot extend it.
+      if (!disposed && sawOffline && !onlineRecovered && !offline()
+        && (status === "offline" || status === "error")) {
+        onlineRecovered = true;
+        sawOffline = false;
+        clearTimeout(lifecycleTimer);
+        lifecycleTimer = undefined;
+        clearOuterDeadline();
+        outerExpired = false;
+        recordManagerAccessDiagnostic("lifecycle_retry", { attempt, reason: "online" });
+        startAttempt(true);
+        return;
+      }
+      lifecycleRetry("online");
+    };
     const onVisible = () => {
       if (document.visibilityState === "visible") lifecycleRetry("visible");
     };
@@ -186,6 +205,8 @@ export function useManagerAccess(user) {
       lifecycleTimer = undefined;
       clearOuterDeadline();
       outerExpired = false;
+      onlineRecovered = false;
+      sawOffline = offline();
       recordManagerAccessDiagnostic("manual_retry", { attempt, reason: "manual" });
       startAttempt(true);
     };
@@ -194,6 +215,7 @@ export function useManagerAccess(user) {
     startAttempt();
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       disposed = true;
@@ -203,6 +225,7 @@ export function useManagerAccess(user) {
       clearTimeout(lifecycleTimer);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [identity]);

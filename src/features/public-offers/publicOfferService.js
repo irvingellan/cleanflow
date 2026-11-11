@@ -1,4 +1,5 @@
 const publicOfferApiPath = "/api/public-offer";
+export const publicOfferLoadDeadlineMs = 15_000;
 
 export class PublicOfferRequestError extends Error {
   constructor(code) {
@@ -28,16 +29,29 @@ async function request(path, options) {
 
 export async function getPublicOffer(token) {
   const query = new URLSearchParams({ token });
-  const body = await request(`${publicOfferApiPath}?${query}`, {
-    headers: { Accept: "application/json" },
-    credentials: "omit",
-  });
-
-  if (!body.offer || typeof body.offer !== "object") {
-    throw new PublicOfferRequestError("request_failed");
+  const controller = new AbortController();
+  let timer;
+  try {
+    const body = await Promise.race([
+      request(`${publicOfferApiPath}?${query}`, {
+        headers: { Accept: "application/json" },
+        credentials: "omit",
+        signal: controller.signal,
+      }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new PublicOfferRequestError("request_failed"));
+          controller.abort();
+        }, publicOfferLoadDeadlineMs);
+      }),
+    ]);
+    if (!body.offer || typeof body.offer !== "object") {
+      throw new PublicOfferRequestError("request_failed");
+    }
+    return body.offer;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return body.offer;
 }
 
 export async function respondToPublicOffer({ token, status }) {

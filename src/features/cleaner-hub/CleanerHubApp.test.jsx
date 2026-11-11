@@ -1,9 +1,9 @@
-import { act, render, renderHook, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CleanerHubApp } from "./CleanerHubApp.jsx";
 import { localDateKey, addDaysToKey } from "./cleanerAgendaModel.js";
-import { serverVerifyIntervalMs, useCleanerHub } from "./useCleanerHub.js";
+import { cleanerStartupTimeoutMs, serverVerifyIntervalMs, useCleanerHub } from "./useCleanerHub.js";
 
 const today = localDateKey(new Date());
 const tomorrow = addDaysToKey(today, 1);
@@ -124,6 +124,134 @@ describe("CleanerHubApp (live data boundary)", () => {
     } finally {
       window.history.replaceState(null, "", previous);
     }
+  });
+
+  it("stops waiting for Auth without treating a silent session as signed out", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    service.subscribeCleanerSession.mockImplementation((callback) => {
+      handlers.session = callback;
+      return () => {};
+    });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    expect(screen.getByText("Carregando sua agenda…")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(cleanerStartupTimeoutMs));
+    expect(screen.getByRole("alert")).toHaveTextContent("Não conseguimos abrir sua agenda agora.");
+    expect(screen.queryByRole("heading", { name: "Entre na sua agenda" })).not.toBeInTheDocument();
+    expect(service.subscribeAgenda).not.toHaveBeenCalled();
+    expect(service.signOutCleaner).not.toHaveBeenCalled();
+
+    act(() => handlers.session({ status: "signed-out" }));
+    expect(screen.getByRole("heading", { name: "Entre na sua agenda" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("retries Auth on reconnect and ignores the abandoned observer", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    service.subscribeCleanerSession.mockImplementation((callback) => {
+      handlers.session = callback;
+      return () => {};
+    });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    const abandoned = handlers.session;
+    act(() => vi.advanceTimersByTime(cleanerStartupTimeoutMs));
+    act(() => window.dispatchEvent(new Event("offline")));
+    expect(screen.getByRole("alert")).toHaveTextContent("Sem internet.");
+    act(() => window.dispatchEvent(new Event("online")));
+    expect(service.subscribeCleanerSession).toHaveBeenCalledTimes(2);
+    act(() => abandoned({ status: "signed-out" }));
+    expect(screen.queryByRole("heading", { name: "Entre na sua agenda" })).not.toBeInTheDocument();
+    act(() => handlers.session({ status: "signed-out" }));
+    expect(screen.getByRole("heading", { name: "Entre na sua agenda" })).toBeInTheDocument();
+  });
+
+  it("keeps the agenda private until a delayed server membership confirms access", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    service.subscribeMembership.mockImplementation((_scope, callback) => {
+      handlers.membership = callback;
+      return () => {};
+    });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    act(() => vi.advanceTimersByTime(cleanerStartupTimeoutMs));
+    expect(screen.getByRole("alert")).toHaveTextContent("Não conseguimos abrir sua agenda agora.");
+    expect(screen.queryByText("Maple Example House")).not.toBeInTheDocument();
+    expect(service.signOutCleaner).not.toHaveBeenCalled();
+
+    act(() => handlers.membership({ state: "active", displayName: "Ana", preferredLanguage: "pt" }));
+    expect(screen.getByText("Agenda atualizada")).toBeInTheDocument();
+    expect(screen.getByText("Maple Example House")).toBeInTheDocument();
+  });
+
+  it("preserves the membership deadline across automatic agenda listener retries", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    service.subscribeMembership.mockImplementation(() => () => {});
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    for (const backoff of [2000, 4000, 8000]) {
+      act(() => handlers.agendaError("unavailable"));
+      act(() => vi.advanceTimersByTime(backoff));
+    }
+    expect(service.subscribeMembership).toHaveBeenCalledTimes(4);
+    expect(screen.getByText("Carregando sua agenda…")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(cleanerStartupTimeoutMs - 14000));
+    expect(screen.getByRole("alert")).toHaveTextContent("Não conseguimos abrir sua agenda agora.");
+  });
+
+  it("times out a cache-only agenda and retries the server subscription without reloading", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    const abandoned = handlers.agenda;
+    act(() => abandoned({ entries, fromCache: true }));
+    act(() => vi.advanceTimersByTime(cleanerStartupTimeoutMs));
+    expect(screen.getByRole("alert")).toHaveTextContent("Não conseguimos abrir sua agenda agora.");
+    expect(screen.queryByText("Maple Example House")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+    expect(service.subscribeAgenda).toHaveBeenCalledTimes(2);
+    expect(service.subscribeCleanerSession).toHaveBeenCalledTimes(1);
+    act(() => abandoned({ entries, fromCache: false }));
+    expect(screen.queryByText("Agenda atualizada")).not.toBeInTheDocument();
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    expect(screen.getByText("Agenda atualizada")).toBeInTheDocument();
+    expect(screen.getByText("Maple Example House")).toBeInTheDocument();
+  });
+
+  it("checks the original startup deadline when a suspended timer resumes", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    const resume = () => window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    act(resume);
+    expect(service.subscribeAgenda).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Carregando sua agenda…")).toBeInTheDocument();
+
+    // Move the wall clock without executing the timeout, as if the tab was suspended.
+    vi.setSystemTime(Date.now() + cleanerStartupTimeoutMs + 1);
+    act(resume);
+    expect(service.subscribeAgenda).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    expect(screen.getByText("Agenda atualizada")).toBeInTheDocument();
+  });
+
+  it("retries a stalled agenda after the browser restores the page", () => {
+    vi.useFakeTimers();
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => vi.advanceTimersByTime(cleanerStartupTimeoutMs));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    const restored = Object.assign(new Event("pageshow"), { persisted: true });
+    act(() => window.dispatchEvent(restored));
+    expect(service.subscribeAgenda).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    act(() => window.dispatchEvent(restored));
+    expect(service.subscribeAgenda).toHaveBeenCalledTimes(2);
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    expect(screen.getByText("Agenda atualizada")).toBeInTheDocument();
   });
 
   it("signs in once with a pasted access code, normalised", async () => {
