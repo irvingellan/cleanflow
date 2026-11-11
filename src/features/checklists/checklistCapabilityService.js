@@ -14,6 +14,8 @@ const issueChecklistCapabilityCall = httpsCallable(functions, "issueChecklistCap
 const revokeChecklistCapabilityCall = httpsCallable(functions, "revokeChecklistCapability");
 const publicChecklistApiPath = "/api/public-checklist";
 export const publicChecklistRequestTimeoutMilliseconds = 15_000;
+// A photo on a weak mobile signal needs longer than a small JSON request.
+export const publicChecklistUploadTimeoutMilliseconds = 60_000;
 export const maximumChecklistEvidenceSizeBytes = 5 * 1024 * 1024;
 export const acceptedChecklistEvidenceContentTypes = ["image/jpeg", "image/png", "image/webp"];
 
@@ -50,7 +52,8 @@ export async function revokeChecklistCapability(jobId) {
   return result.data?.capability || { state: "REVOKED" };
 }
 
-async function fetchPublicChecklist(input, init = {}, readResponse = async (response) => response) {
+async function fetchPublicChecklist(input, init = {}, readResponse = async (response) => response,
+  timeoutMilliseconds = publicChecklistRequestTimeoutMilliseconds) {
   const controller = new AbortController();
   const externalSignal = init.signal;
   const abort = () => controller.abort();
@@ -62,7 +65,7 @@ async function fetchPublicChecklist(input, init = {}, readResponse = async (resp
     timeoutId = setTimeout(() => {
       controller.abort();
       reject(new PublicChecklistRequestError("checklist_request_timeout", undefined, null, requestStage));
-    }, publicChecklistRequestTimeoutMilliseconds);
+    }, timeoutMilliseconds);
   });
   try {
     const request = (async () => {
@@ -240,7 +243,7 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
         throw new PublicChecklistRequestError(version === 2 ? photoErrorForStatus(response.status) : "checklist_photo_unavailable", response.status, null, "request");
       }
       return result;
-    });
+    }, publicChecklistUploadTimeoutMilliseconds);
     if (!Array.isArray(body.evidence) || !body.evidence.some((saved) => saved.requirementId === requirementId
       && (version !== 2 || (typeof body.evidenceId === "string" && saved.evidenceId === body.evidenceId)))
       || (version === 2 && (!Number.isInteger(body.evidenceRevision) || body.evidenceRevision < 0))) {

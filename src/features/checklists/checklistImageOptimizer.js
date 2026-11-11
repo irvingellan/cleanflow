@@ -1,12 +1,15 @@
-const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
-const MAX_PIXELS = 16_000_000;
+// Current phones save 24, 48 and 50 MP photos. The source is decoded once and
+// drawn into the 1920 px canvas, so these limits bound the phone's own file,
+// not what is uploaded.
+const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
+const MAX_PIXELS = 64_000_000;
 const MAX_EDGE = 1920;
 const BUDGET_MS = 20_000;
 const JPEG_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc4, 0xdb, 0xdd, 0xda]);
 const MESSAGES = {
   invalid_type: "Choose a JPEG, PNG or WebP photo. HEIC is not supported; export it as JPEG first.",
-  source_too_large: "Choose a photo of at most 20 MiB.",
-  pixels_exceeded: "Choose a photo with at most 16 million pixels.",
+  source_too_large: "Choose a photo of at most 40 MiB.",
+  pixels_exceeded: "Choose a photo with at most 64 million pixels.",
   invalid_image: "This photo is incomplete or its format does not match. Export it again.",
   decode_failed: "This browser could not open the photo. Export it as JPEG and try again.",
   encode_failed: "This browser could not optimize the photo. Try another photo.",
@@ -40,7 +43,10 @@ function jpegContainer(bytes, strip = false) {
     while (bytes[offset] === 255) offset++;
     const marker = bytes[offset++];
     if (marker === 0xd9) {
-      if (!frame || !scan || offset !== bytes.length) invalid();
+      if (!frame || !scan) invalid();
+      // Phones append depth maps, HDR gain maps or motion data after the image.
+      // The source is re-encoded, so that trailer is ignored and never uploaded.
+      if (offset !== bytes.length) { if (strip) invalid(); safe = false; }
       if (strip) parts.push(bytes.subarray(start, offset));
       return { ...frame, safe: safe && hasJfif, parts };
     }

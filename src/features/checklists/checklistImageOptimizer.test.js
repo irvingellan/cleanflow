@@ -52,9 +52,9 @@ describe("local checklist image optimizer", () => {
     }
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
-  it("rejects source bytes above 20 MiB before reading", async () => {
+  it("rejects source bytes above 40 MiB before reading", async () => {
     const read = vi.fn();
-    await expect(optimizeChecklistImage({ type: "image/jpeg", size: 20 * 1024 * 1024 + 1, arrayBuffer: read })).rejects.toHaveProperty("code", "checklist_photo_source_too_large");
+    await expect(optimizeChecklistImage({ type: "image/jpeg", size: 40 * 1024 * 1024 + 1, arrayBuffer: read })).rejects.toHaveProperty("code", "checklist_photo_source_too_large");
     expect(read).not.toHaveBeenCalled();
   });
   it("admits the exact 20 MiB byte boundary then rejects a partial source read",async()=>{
@@ -62,9 +62,26 @@ describe("local checklist image optimizer", () => {
     await expect(optimizeChecklistImage({type:"image/jpeg",size:20*1024*1024,arrayBuffer:read})).rejects.toHaveProperty("code","checklist_photo_invalid_image");
     expect(read).toHaveBeenCalledOnce();expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
-  it("rejects declared 16MP overflow before allocating a native decoder", async () => {
+  it.each([[5712, 4284, 1920, 1440], [8064, 6048, 1920, 1440], [8160, 6120, 1920, 1440]])("accepts a current phone photo of %sx%s and reduces it", async (width, height, wantedWidth, wantedHeight) => {
+    native({ width, height });
+    const result = await optimizeChecklistImage(file(jpeg(width, height, true)));
+    expect(result).toMatchObject({ width: wantedWidth, height: wantedHeight, contentType: "image/jpeg" });
+  });
+  it("accepts a phone JPEG with data appended after the image and never uploads that data", async () => {
+    native({ width: 100, height: 60 });
+    const picture = jpeg(100, 60, true);
+    const trailer = new Uint8Array(4096).fill(7);
+    const source = new Uint8Array(picture.length + trailer.length);
+    source.set(picture); source.set(trailer, picture.length);
+    const result = await optimizeChecklistImage(file(source));
+    expect(result.contentType).toBe("image/jpeg");
+    expect(result.blob.size).toBeLessThan(source.length - trailer.length + 1);
+    const sent = new Uint8Array(await result.blob.arrayBuffer());
+    expect(Array.from(sent.subarray(-2))).toEqual([255, 217]);
+  });
+  it("rejects declared 64MP overflow before allocating a native decoder", async () => {
     native();
-    await expect(optimizeChecklistImage(file(jpeg(4001, 4000)))).rejects.toHaveProperty("code", "checklist_photo_pixels_exceeded");
+    await expect(optimizeChecklistImage(file(jpeg(8001, 8000)))).rejects.toHaveProperty("code", "checklist_photo_pixels_exceeded");
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
   it("releases the decoder on native decode failure", async () => {
@@ -133,7 +150,7 @@ describe("local checklist image optimizer", () => {
   it("admits exact 16MP but rejects excessive PNG dimensions before decode", async () => {
     native({ width: 4000, height: 4000 });
     await expect(optimizeChecklistImage(file(jpeg(4000, 4000, true)))).resolves.toMatchObject({width:1920,height:1920});
-    const png = syntheticChecklistPng(1); png.writeUInt32BE(4001,16); png.writeUInt32BE(4000,20);
+    const png = syntheticChecklistPng(1); png.writeUInt32BE(8001,16); png.writeUInt32BE(8000,20);
     // CRC must be recomputed for the declared header to remain structurally valid.
     let crc=0xffffffff; for(const byte of png.subarray(12,29)){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^(crc&1?0xedb88320:0);}
     png.writeUInt32BE((crc^0xffffffff)>>>0,29);
@@ -144,7 +161,7 @@ describe("local checklist image optimizer", () => {
   it("rejects excessive WebP declared dimensions and animation before native decode", async()=>{
     native();
     const container=new Uint8Array(30); container.set([82,73,70,70,22,0,0,0,87,69,66,80,86,80,56,88,10,0,0,0]);
-    container.set([160,15,0,159,15,0],24); // 4001x4000
+    container.set([64,31,0,63,31,0],24); // 8001x8000
     await expect(optimizeChecklistImage(file(container,"image/webp"))).rejects.toHaveProperty("code","checklist_photo_pixels_exceeded");
     container[20]=2;
     await expect(optimizeChecklistImage(file(container,"image/webp"))).rejects.toHaveProperty("code","checklist_photo_invalid_type");

@@ -3,6 +3,7 @@ import {
   getPublicChecklist,
   maximumChecklistEvidenceSizeBytes,
   publicChecklistRequestTimeoutMilliseconds,
+  publicChecklistUploadTimeoutMilliseconds,
   prepareChecklistEvidenceUploadBody,
   readyPublicChecklistForReview,
   savePublicChecklistDraft,
@@ -258,7 +259,12 @@ describe("public checklist requests", () => {
 
     const request = uploadPublicChecklistEvidence({ token: "opaque-token", requirementId: "living-belongings", file });
     const timeoutExpectation = expect(request).rejects.toMatchObject({ code: "checklist_request_timeout", stage: "request" });
+    let settled = false;
+    request.catch(() => { settled = true; });
+    // A slow mobile upload gets longer than a small request before it is abandoned.
     await vi.advanceTimersByTimeAsync(publicChecklistRequestTimeoutMilliseconds);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(publicChecklistUploadTimeoutMilliseconds - publicChecklistRequestTimeoutMilliseconds);
     await timeoutExpectation;
     expect(fetchMock.mock.calls.filter(([, init]) => init.method === "PUT")).toHaveLength(1);
   });
