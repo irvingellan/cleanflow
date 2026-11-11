@@ -47,6 +47,8 @@ const {
   publicOffer,
   publicChecklist,
   publicClientReport,
+  publicClientPortal,
+  clientPortalAccess,
   rescheduleJob,
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
@@ -2092,6 +2094,112 @@ test("client report denies expired, unknown, malformed, and unauthorized manager
   await admin.doc(root + "/members/manager").delete();
   await assert.rejects(getClientReportCapability.run(request("manager", { jobId: "job" })), { code: "permission-denied" });
   await assert.rejects(revokeClientReport.run(request("manager", { jobId: "job" })), { code: "permission-denied" });
+});
+
+async function publicClientPortalGet(token, extraQuery = {}, method = "GET") {
+  const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, json(data) { this.body = data; return this; }, send(data) { this.body = data; return this; } };
+  await publicClientPortal({ method, query: { token, ...extraQuery } }, response);
+  return response;
+}
+
+test("client portal link shows one client only what the manager released and can be turned off", async () => {
+  const { runRef } = await prepareReadyClientReportRun();
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+  const later = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  await admin.doc(`${root}/clients/client-a`).set({ organizationId: org, name: "Owner A", email: "owner-a@example.test", notes: "private client note" });
+  await admin.doc(`${root}/clients/client-b`).set({ organizationId: org, name: "Owner B" });
+  await admin.doc(`${root}/properties/property`).update({ clientId: "client-a", accessInstructions: "gate code 4821" });
+  await admin.doc(`${root}/properties/property-b`).set({ organizationId: org, name: "Other Owner Property", clientId: "client-b" });
+  await admin.doc(`${root}/jobs/job`).update({ clientId: "client-a", scheduledDate: today, scheduledStart: "09:00", assignedCleanerName: "Private Cleaner" });
+  await admin.doc(`${root}/jobs/job-coming`).set({ organizationId: org, propertyId: "property", clientId: "client-a", scheduledDate: later, scheduledStart: "11:00", operationalStatus: "ASSIGNED", clientPrice: 777 });
+  await admin.doc(`${root}/jobs/job-b`).set({ organizationId: org, propertyId: "property-b", clientId: "client-b", scheduledDate: later, operationalStatus: "ASSIGNED" });
+
+  for (const [uid, anonymous, code] of [
+    [null, false, "unauthenticated"], ["outsider", false, "permission-denied"], ["other-manager", false, "permission-denied"],
+    ["cleaner", false, "permission-denied"], ["anonymous-member", true, "unauthenticated"],
+  ]) {
+    for (const action of ["get", "issue", "revoke"]) {
+      await assert.rejects(clientPortalAccess.run(request(uid, { clientId: "client-a", action }, anonymous)), { code });
+    }
+  }
+  await assert.rejects(clientPortalAccess.run(request("manager", { clientId: "client-a", action: "delete" })), { code: "invalid-argument" });
+  await assert.rejects(clientPortalAccess.run(request("manager", { clientId: "missing-client", action: "issue" })), { code: "failed-precondition" });
+  assert.deepEqual((await clientPortalAccess.run(request("manager", { clientId: "client-a", action: "get" }))).access, { state: "NONE" });
+
+  const { access } = await clientPortalAccess.run(request("manager", { clientId: "client-a", action: "issue" }));
+  assert.equal(access.state, "ACTIVE");
+  assert.match(access.token, /^[A-Za-z0-9_-]{43}$/);
+  const tokenHash = createHash("sha256").update(access.token).digest("hex");
+  const stored = (await admin.doc(`${root}/clients/client-a/portalAccess/active`).get()).data();
+  assert.equal(stored.tokenHash, tokenHash);
+  assert.equal(JSON.stringify(stored).includes(access.token), false);
+  assert.equal((await clientPortalAccess.run(request("manager", { clientId: "client-a", action: "get" }))).access.token, undefined);
+  // Browsers, including the manager's, never read the link records directly.
+  await assertFails(account("manager").firestore().doc(`${root}/clients/client-a/portalAccess/active`).get());
+  await assertFails(account("manager").firestore().doc(`clientPortalTokenLookups/${tokenHash}`).get());
+
+  // Before the manager releases a report the owner sees the schedule only.
+  let portal = await publicClientPortalGet(access.token);
+  assert.equal(portal.code, 200);
+  assert.equal(portal.headers["Cache-Control"], "no-store, private");
+  assert.equal(portal.body.portal.clientName, "Owner A");
+  assert.deepEqual(portal.body.portal.properties, [{ id: "property", name: "Fixture Property" }]);
+  assert.deepEqual(portal.body.portal.coming.map((visit) => visit.date), [today, later]);
+  assert.deepEqual(portal.body.portal.reports, []);
+  assert.equal((await publicClientPortalGet(access.token, { job: "job" })).code, 404);
+  assert.equal((await publicClientPortalGet(access.token, { job: "job", photo: "1" })).code, 404);
+
+  await createClientReport.run(request("manager", { jobId: "job" }));
+  // The report's own seven-day link expiring does not hide it from the portal.
+  await runRef.collection("clientReportCapabilities").doc("active").update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+  portal = await publicClientPortalGet(access.token);
+  assert.deepEqual(portal.body.portal.reports, [{ jobId: "job", propertyId: "property", propertyName: "Fixture Property", date: today, start: "09:00" }]);
+  const serialized = JSON.stringify(portal.body);
+  for (const secret of ["Private Cleaner", "4821", "777", "999", "manager-only", "owner-a@example.test", "private client note", "Other Owner Property", "job-b", "cleaner-a"]) {
+    assert.equal(serialized.includes(secret), false, `portal leaked ${secret}`);
+  }
+
+  const report = await publicClientPortalGet(access.token, { job: "job" });
+  assert.equal(report.code, 200);
+  assert.equal(report.body.report.propertyName, "Fixture Property");
+  assert.equal(report.body.report.issueNotes, "A lamp bulb needs replacement.");
+  for (const secret of ["private access instructions", "private code", "internal manager note", "private guest", "Cleaner-facing instruction."]) {
+    assert.equal(JSON.stringify(report.body).includes(secret), false, `report leaked ${secret}`);
+  }
+  const photo = await publicClientPortalGet(access.token, { job: "job", photo: "1" });
+  assert.equal(photo.code, 200);
+  assert.equal(photo.headers["Content-Type"], "image/jpeg");
+
+  // Another client's Job, an unknown Job and writes look like nothing is there.
+  assert.equal((await publicClientPortalGet(access.token, { job: "job-b" })).code, 404);
+  assert.equal((await publicClientPortalGet(access.token, { job: "job-b", photo: "1" })).code, 404);
+  assert.equal((await publicClientPortalGet(access.token, { job: "missing" })).code, 404);
+  assert.equal((await publicClientPortalGet(access.token, { job: "a/b" })).code, 404);
+  assert.equal((await publicClientPortalGet(access.token, {}, "POST")).code, 405);
+  assert.equal((await publicClientPortalGet("malformed")).code, 404);
+  assert.equal((await publicClientPortalGet(Buffer.alloc(32, 7).toString("base64url"))).code, 404);
+
+  // The manager turning the report off removes it from the portal.
+  await revokeClientReport.run(request("manager", { jobId: "job" }));
+  assert.deepEqual((await publicClientPortalGet(access.token)).body.portal.reports, []);
+  assert.equal((await publicClientPortalGet(access.token, { job: "job" })).code, 410);
+
+  // A new link turns the earlier one off; turning the link off closes the portal.
+  const replaced = (await clientPortalAccess.run(request("manager", { clientId: "client-a", action: "issue" }))).access;
+  assert.notEqual(replaced.token, access.token);
+  assert.equal((await publicClientPortalGet(access.token)).code, 410);
+  assert.equal((await publicClientPortalGet(replaced.token)).code, 200);
+  assert.equal((await clientPortalAccess.run(request("manager", { clientId: "client-a", action: "revoke" }))).access.state, "REVOKED");
+  assert.equal((await publicClientPortalGet(replaced.token)).code, 410);
+
+  // An expired link and an archived client are closed too.
+  const third = (await clientPortalAccess.run(request("manager", { clientId: "client-a", action: "issue" }))).access;
+  await admin.doc(`${root}/clients/client-a`).update({ archivedAt: Timestamp.now() });
+  assert.equal((await publicClientPortalGet(third.token)).code, 410);
+  await admin.doc(`${root}/clients/client-a`).update({ archivedAt: null });
+  assert.equal((await publicClientPortalGet(third.token)).code, 200);
+  await admin.doc(`clientPortalTokenLookups/${createHash("sha256").update(third.token).digest("hex")}`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
+  assert.equal((await publicClientPortalGet(third.token)).code, 410);
 });
 
 test("public capability GET/response remains independent of auth and only updates its resolved offer", async () => {

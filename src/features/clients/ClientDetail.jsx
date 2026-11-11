@@ -3,6 +3,7 @@ import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx"
 import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { assignedCleanerSummary } from "../jobs/assignmentPresentation.js";
+import { ClientPortalAccess } from "../client-portal/ClientPortalAccess.jsx";
 import {
   formatDate,
   formatOperationalStatus,
@@ -70,6 +71,8 @@ export function ClientDetail({
           {translate("properties.new")}
         </button>
       </div>
+
+      {client.id && !client.archivedAt && <ClientPortalAccess clientId={client.id} />}
 
       <section className="client-properties" aria-labelledby="client-properties-title">
         <h3 id="client-properties-title">{translate("clients.linkedProperties")}</h3>

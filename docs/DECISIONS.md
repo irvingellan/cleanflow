@@ -1163,3 +1163,39 @@ stays confined to Dashboard reads. Use the full synthetic fixture in
 WebKit and verify the affected devices before publication.
 
 [Firebase Firestore Lite SDK](https://firebase.google.com/docs/firestore/solutions/firestore-lite)
+
+## DEC-056 — Client portal: one private link per client, manager-released content
+
+**Context.** The design partner's clients are property owners who ask for
+the schedule, proof of each cleaning and supplies to restock. Until now the
+manager sent one report link per cleaning, valid for seven days.
+
+**Decision.** Each client can have one private, read-only portal link that
+the manager creates, copies and turns off from the client's page. The owner
+decided on a link without a password and on showing only what the manager
+releases.
+
+- The link opens `/portal`. It lists the client's active properties, the
+  cleanings scheduled for the next 60 days and, from the last 120 days, the
+  reports the manager released.
+- A report is released when the manager created its client report and has
+  not turned it off. The seven-day life of the report's own link does not
+  apply inside the portal. The report keeps the manager's presentation
+  choices: her note, whether cleaner notes are included, hidden photos.
+- The portal never carries cleaner names, access instructions, prices,
+  client contact details or internal notes. The projection is built from an
+  allow-list of fields.
+- Only the hash of the link is stored. The link is shown to the manager once.
+  Creating a new link turns the earlier one off. The link lasts 180 days.
+  An archived client's link stops working.
+- Two Functions: `clientPortalAccess` (manager callable: get, issue, revoke)
+  and `publicClientPortal` (public GET behind `/api/client-portal`). Link
+  records live under the client and in `clientPortalTokenLookups`; no browser
+  can read them.
+
+Invoices are not part of this version; they depend on the billing work.
+
+**Evidence.** `functions/src/clientPortalService.test.js`, the portal test in
+`security/managerAuthorization.test.mjs` (authorization, isolation between
+clients, release, replacement, revocation, expiry, leak checks) and the
+screen tests under `src/features/client-portal`.
