@@ -107,11 +107,11 @@ test("manager service with checklist reaches saved review, report, and completio
         await doneRadios.nth(index).check();
       }
 
-      const inventory = cleanerPage.locator(".public-checklist__inventory-item select");
+      const inventory = cleanerPage.locator('.public-checklist__inventory-item label[data-level="HIGH"]');
       const inventoryItemCount = await inventory.count();
       expect(inventoryItemCount).toBeGreaterThan(0);
       for (let index = 0; index < inventoryItemCount; index += 1) {
-        await inventory.nth(index).selectOption("HIGH");
+        await inventory.nth(index).click();
       }
       await expect(cleanerPage.locator(".public-checklist__save-status"))
         .toHaveClass(/public-checklist__save-status--saved/);

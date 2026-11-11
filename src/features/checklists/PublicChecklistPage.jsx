@@ -38,6 +38,14 @@ const inventoryAnswers = ["UNANSWERED", "LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"
 // Phase 5D.1 intentionally supports one frozen pilot evidence requirement only.
 const pilotPhotoRequirementId = "living-belongings";
 
+/** How much of one part is answered, with a check once it is all done. */
+function SectionCount({ done, total, translate }) {
+  if (!total) return null;
+  return <span className={`public-checklist__count${done === total ? " is-complete" : ""}`}>
+    {done === total && <span aria-hidden="true">✓ </span>}{translate("checklists.sectionProgress", { done, total })}
+  </span>;
+}
+
 function itemLabel(item, translate) {
   return item.label || translate(item.labelKey || item.id);
 }
@@ -145,11 +153,14 @@ function ChecklistAnswer({
   const missingAnswerId = `checklist-missing-${item.id}`;
 
   return (
-    <fieldset className={`public-checklist__item${missing ? " public-checklist__item--missing" : ""}`} aria-describedby={missing ? missingAnswerId : undefined}>
+    <fieldset className={`public-checklist__item public-checklist__item--task${value !== "UNANSWERED" ? " is-answered" : ""}${missing ? " public-checklist__item--missing" : ""}`} aria-describedby={missing ? missingAnswerId : undefined}>
       <legend>{label}</legend>
       <div className="public-checklist__answer-options">
         {answerValues.map((answer) => (
-          <label key={answer} className={value === answer ? "public-checklist__answer-option--selected" : ""}>
+          <label key={answer} data-answer={answer}
+            className={[value === answer ? "public-checklist__answer-option--selected" : "", answer === "UNANSWERED" ? "visually-hidden" : ""].join(" ").trim()}
+            // One tap marks the task; tapping the chosen answer again clears it.
+            onClick={(event) => { if (answer !== "UNANSWERED" && value === answer && !disabled) { event.preventDefault(); onChange("UNANSWERED"); } }}>
             <input
               type="radio"
               name={`checklist-${item.id}`}
@@ -470,6 +481,19 @@ export function PublicChecklistPage({ token }) {
           translate={translate}
         />
 
+        {!isReadOnly && (() => {
+          const tasks = checklist.sections.flatMap((section) => section.items);
+          const inventory = checklist.inventoryItems || [];
+          const total = tasks.length + inventory.length;
+          const done = tasks.filter((item) => (draft.checklistAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length
+            + inventory.filter((item) => (draft.inventoryAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length;
+          if (!total) return null;
+          return <div className="public-checklist__progress" data-testid="checklist-progress">
+            <p>{translate("checklists.overallProgress", { done, total })}</p>
+            <progress max={total} value={done} aria-label={translate("checklists.overallProgress", { done, total })} />
+          </div>;
+        })()}
+
         {isReadOnly && reviewHandoff}
 
         {!isReadOnly && (
@@ -524,7 +548,10 @@ export function PublicChecklistPage({ token }) {
 
         {checklist.sections.map((section) => (
           <section className="public-checklist__section" key={section.id} aria-labelledby={`public-section-${section.id}`}>
-            <h2 id={`public-section-${section.id}`}>{section.title || section.label || translate(section.titleKey || section.id)}</h2>
+            <h2 id={`public-section-${section.id}`} className="public-checklist__section-title">
+              <span>{section.title || section.label || translate(section.titleKey || section.id)}</span>
+              <SectionCount done={section.items.filter((item) => (draft.checklistAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length} total={section.items.length} translate={translate} />
+            </h2>
             {section.items.map((item) => (
               <ChecklistAnswer
                 key={item.id}
@@ -557,29 +584,35 @@ export function PublicChecklistPage({ token }) {
 
         {checklist.inventoryItems?.length > 0 && (
           <section className="public-checklist__section" aria-labelledby="public-checklist-inventory-title">
-            <h2 id="public-checklist-inventory-title">{translate("checklists.inventoryCount")}</h2>
+            <h2 id="public-checklist-inventory-title" className="public-checklist__section-title">
+              <span>{translate("checklists.inventoryCount")}</span>
+              <SectionCount done={checklist.inventoryItems.filter((item) => (draft.inventoryAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length} total={checklist.inventoryItems.length} translate={translate} />
+            </h2>
             <div className="public-checklist__inventory">
               {checklist.inventoryItems.map((item) => (
-                <div className="public-checklist__inventory-item" key={item.id}>
-                  <label htmlFor={`inventory-answer-${item.id}`}>{itemLabel(item, translate)}</label>
-                  <select
-                    id={`inventory-answer-${item.id}`}
-                    value={draft.inventoryAnswers?.[item.id] || "UNANSWERED"}
-                    disabled={isReadOnly}
-                    className={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? "public-checklist__control--missing" : undefined}
-                    ref={(node) => {
-                      if (node) fieldTargetsRef.current.set(`inventory:${item.id}`, node);
-                      else fieldTargetsRef.current.delete(`inventory:${item.id}`);
-                    }}
-                    aria-describedby={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? `inventory-missing-${item.id}` : undefined}
-                    onChange={(event) => queueChanges({ inventoryAnswers: { [item.id]: event.target.value } })}
-                  >
-                    {inventoryAnswers.map((answer) => <option key={answer} value={answer}>{translate(`checklists.inventory${answer}`)}</option>)}
-                  </select>
+                <fieldset key={item.id} aria-describedby={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? `inventory-missing-${item.id}` : undefined}
+                  className={`public-checklist__inventory-item${hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? " public-checklist__control--missing" : ""}`}>
+                  <legend>{itemLabel(item, translate)}</legend>
+                  <div className="public-checklist__levels">
+                    {inventoryAnswers.map((answer) => {
+                      const current = draft.inventoryAnswers?.[item.id] || "UNANSWERED";
+                      return <label key={answer} data-level={answer} className={answer === "UNANSWERED" ? "visually-hidden" : undefined}
+                        // One tap sets the level; tapping the chosen level again clears it.
+                        onClick={(event) => { if (answer !== "UNANSWERED" && current === answer && !isReadOnly) { event.preventDefault(); queueChanges({ inventoryAnswers: { [item.id]: "UNANSWERED" } }); } }}>
+                        <input type="radio" name={`inventory-answer-${item.id}`} value={answer} checked={current === answer} disabled={isReadOnly}
+                          ref={answer === "LOW" ? (node) => {
+                            if (node) fieldTargetsRef.current.set(`inventory:${item.id}`, node);
+                            else fieldTargetsRef.current.delete(`inventory:${item.id}`);
+                          } : undefined}
+                          onChange={() => queueChanges({ inventoryAnswers: { [item.id]: answer } })} />
+                        {translate(answer === "NEEDS_RESTOCK" ? "checklists.inventoryRestockShort" : `checklists.inventory${answer}`)}
+                      </label>;
+                    })}
+                  </div>
                   {hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) && (
                     <small className="public-checklist__missing-marker" id={`inventory-missing-${item.id}`}>{translate("checklists.inventoryRequiredBeforeReview")}</small>
                   )}
-                </div>
+                </fieldset>
               ))}
             </div>
           </section>
