@@ -1,14 +1,34 @@
 # CleanFlow — Current State
 
-## P0 startup reliability — local candidate (2026-11-10)
+<!-- cleanflow-engineering:begin -->
+## Unified Engineering checkpoint · 2026-11-11
 
-This isolated branch starts at verified live source `0f9735f`, independent of
-public main. Entry, Auth, manager verification, Dashboard and Cleaner Hub have
-bounded startup recovery and local stage diagnostics. The manager Dashboard
+- Issue #83 tracks consolidation. The local engineering candidate starts
+  from the Production source `0f9735f5641815f00f6ef0912621dee6cb62b9a8`.
+- Read-only Production verification matched Hosting `b66d088c9aaaa728`,
+  26 assets, 54 Function configurations and the sealed Rules and schedules.
+  The prior layout release points to the finalized `00bd608` rollback.
+- Irving confirmed that the public GitHub repository `irvingellan/cleanflow`
+  is the official source. GitHub `main` was verified at the Production
+  baseline `0f9735f` before integrating the engineering and startup PRs.
+- GitHub integration and Production deployment are separate. Production
+  publication requires Irving's explicit GO.
+- Local workflow and verification details are in
+  [Unified Engineering](engineering/UNIFIED_ENGINEERING.md). Dated
+  deployment notes below describe their original checkpoints.
+<!-- cleanflow-engineering:end -->
+
+## P0 startup reliability — GitHub candidate (2026-11-11)
+
+This candidate started at verified live source `0f9735f` and is based on
+the public GitHub integration line. Entry, Auth, manager verification,
+Dashboard and Cleaner Hub have bounded startup recovery and local stage
+diagnostics. The manager Dashboard
 uses Firestore Lite for one-time server reads after manager verification.
-Local public probes and Hosting asset retention cover the bundled entry. The affected physical devices and current
-field trigger still require confirmation. No rollout, infrastructure, Rules,
-Functions or data changes. See [startup reliability](P0_STARTUP_RELIABILITY.md).
+Local public probes and Hosting asset retention cover the bundled entry.
+The affected physical devices and field trigger still require confirmation.
+No rollout, infrastructure, Rules, Functions or data changes.
+See [startup reliability](P0_STARTUP_RELIABILITY.md).
 
 ## 2026-11-05 — Cleaner push test notices (Issue #85)
 

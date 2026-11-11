@@ -1,9 +1,43 @@
+import { readFileSync } from "node:fs";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 const projectId = "demo-cleanflow";
 const organizationId = "cleanflow-demo";
+const { emulators } = JSON.parse(readFileSync(new URL("../firebase.manager-e2e.json", import.meta.url), "utf8"));
+const emulatorProfiles = [
+  { firestore: emulators.firestore.port, auth: emulators.auth.port, functions: emulators.functions.port },
+  { firestore: 8080, auth: 9099, functions: 5001 },
+];
+
+function matchesEmulatorHost(host, port) {
+  return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
+}
+
+function configuredLocalPort(env, name, fallback) {
+  const value = env[`VITE_CLEANFLOW_EMULATOR_${name}_PORT`];
+  const port = value === undefined ? fallback : Number(value);
+  if (!Number.isInteger(port) || port <= 1024 || port >= 65536) {
+    throw new Error("Invalid local E2E port.");
+  }
+  return port;
+}
+
+export function managerE2ePorts(env = process.env) {
+  const configuredPorts = {
+    firestore: configuredLocalPort(env, "FIRESTORE", 8080),
+    auth: configuredLocalPort(env, "AUTH", 9099),
+    functions: configuredLocalPort(env, "FUNCTIONS", 5001),
+  };
+  return [configuredPorts, ...emulatorProfiles].find(({ firestore, auth }) =>
+    matchesEmulatorHost(env.FIRESTORE_EMULATOR_HOST, firestore)
+    && matchesEmulatorHost(env.FIREBASE_AUTH_EMULATOR_HOST, auth));
+}
+
+const activePorts = managerE2ePorts();
+export const e2eFirestorePort = activePorts?.firestore ?? configuredLocalPort(process.env, "FIRESTORE", 8080);
+export const e2eAuthPort = activePorts?.auth ?? configuredLocalPort(process.env, "AUTH", 9099);
 
 export const e2eManager = {
   email: "manager@cleanflow.e2e",
@@ -11,31 +45,15 @@ export const e2eManager = {
 };
 
 export function getE2eFirestore() {
+  requireLocalE2EEmulators();
   const app = getApps().find((candidate) => candidate.name === "cleanflow-e2e-test") ||
     initializeApp({ projectId }, "cleanflow-e2e-test");
 
   return getFirestore(app);
 }
 
-function configuredLocalPort(name, fallback) {
-  const value = process.env[`VITE_CLEANFLOW_EMULATOR_${name}_PORT`];
-  const port = value === undefined ? fallback : Number(value);
-  if (!Number.isInteger(port) || port <= 1024 || port >= 65536) throw new Error("Invalid local E2E port.");
-  return port;
-}
-
-export const e2eFirestorePort = configuredLocalPort("FIRESTORE", 8080);
-export const e2eAuthPort = configuredLocalPort("AUTH", 9099);
-
 export function requireLocalE2EEmulators() {
-  const allowedFirestoreHosts = new Set([`127.0.0.1:${e2eFirestorePort}`, `localhost:${e2eFirestorePort}`]);
-  const allowedAuthHosts = new Set([`127.0.0.1:${e2eAuthPort}`, `localhost:${e2eAuthPort}`]);
-
-  if (
-    !allowedFirestoreHosts.has(process.env.FIRESTORE_EMULATOR_HOST) ||
-    !allowedAuthHosts.has(process.env.FIREBASE_AUTH_EMULATOR_HOST) ||
-    process.env.GCLOUD_PROJECT !== projectId
-  ) {
+  if (process.env.GCLOUD_PROJECT !== projectId || !managerE2ePorts()) {
     throw new Error(
       "CleanFlow E2E fixtures require local demo-cleanflow Auth and Firestore emulators.",
     );
@@ -85,6 +103,7 @@ export default async function seedE2eFixtures({ managerOnly = false } = {}) {
     await member.set(membership);
     return;
   }
+
   const now = Timestamp.now();
   const cleaner = {
     name: "E2E Cleaner",
@@ -217,6 +236,7 @@ export default async function seedE2eFixtures({ managerOnly = false } = {}) {
         scheduledDate: localDateKey(3),
         operationalStatus: "UNASSIGNED",
         assignedCleanerIds: [],
+        requiredCleanerCount: 2,
         checklistContextRevision: 0,
       },
     ],

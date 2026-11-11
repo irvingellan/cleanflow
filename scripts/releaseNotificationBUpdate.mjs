@@ -11,6 +11,7 @@ import { checkedWebEnvironment, deployGroups, validReleaseVerification } from ".
 import { releaseToolchain, runReleaseSequence, stageReleaseInputs, verifyLiveAssets, verifyTransition, writeReleaseModes } from "./releaseNotificationA.mjs";
 import { pushTestFunction, releaseBSnapshot, releaseBSteps, transportFunctions, verifiedBReceipt, verifyBStep } from "./releaseNotificationB.mjs";
 import { inspectHostingBuild } from "./prepareHosting.mjs";
+import { assertOfficialReleaseHead, isManagerE2eScriptOnly } from "./releaseHostingScope.mjs";
 
 // Updates the published Release B pilot in place: the four cleaner push
 // Functions move to the new source (bound to the new SHA) and Hosting moves to
@@ -26,6 +27,7 @@ export const updateBranches = [
 /** Branches whose update moves the operations Functions too. */
 export const operationsBranches = ["claude/operations-evolution", "claude/client-report-v2", "claude/photo-viewer", "claude/photo-perf", "claude/photo-thumbnails", "claude/layout-wide"];
 const fullSha = /^[a-f0-9]{40}$/;
+const fullHash = /^[a-f0-9]{64}$/;
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const encode = (value) => JSON.stringify(value, null, 2) + "\n";
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -33,6 +35,20 @@ const hashFile = (file) => sha256(readFileSync(file));
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 const requireCondition = (condition, message) => { if (!condition) throw new Error(message); };
 const disabledWorker = "// Cleaner push is disabled for this build.\n";
+
+const canonicalUpdateBranch = (branch) => branch === "main" || branch === "";
+const reviewedUpdateBranch = (branch) => canonicalUpdateBranch(branch) || updateBranches.includes(branch);
+
+export function updateOperationsScope(branch, operations) {
+  requireCondition(reviewedUpdateBranch(branch), "Use official main or a reviewed update branch.");
+  if (canonicalUpdateBranch(branch)) {
+    requireCondition(typeof operations === "boolean", "A canonical update requires an explicit sealed scope.");
+    return operations;
+  }
+  const historicalScope = operationsBranches.includes(branch);
+  requireCondition(operations === historicalScope, "The sealed plan's scope does not match its historical branch.");
+  return historicalScope;
+}
 
 // Same order as the original pilot publish, without the Inbox step. The test
 // notice Function joins the first group so it exists before Hosting calls it.
@@ -100,7 +116,10 @@ export function stepReleaseModes(step, sha) {
     : { inboxMode: "enabled", cleanerPushMode: step.cleanerPushMode };
 }
 /** Server configuration an update must never change: Rules, indexes and Hosting/Functions config. */
-export const lockedServerPaths = ["firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json"];
+export const lockedServerPaths = [
+  "firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json", ".firebaserc",
+  "package.json", "package-lock.json", "vite.config.js", ":(glob).env*",
+];
 /** Earlier push-only updates were limited to these server files. */
 export const allowedServerPaths = [
   "functions/src/cleanerPushPilot.js", "functions/src/cleanerPushDevices.js", "functions/src/cleanerPush.test.js",
@@ -157,18 +176,37 @@ function packageDependenciesAt(sha) {
 }
 
 export function serverScopeChanges(previousSha, sha, { operations = false } = {}) {
-  const changed = git("diff", "--name-only", `${previousSha}..${sha}`, "--",
+  const changed = git("diff", "--no-renames", "--name-only", `${previousSha}..${sha}`, "--",
     "functions", ...lockedServerPaths).split("\n").filter(Boolean);
+  if (changed.includes("package.json") && isManagerE2eScriptOnly(
+    JSON.parse(git("show", `${previousSha}:package.json`)), JSON.parse(git("show", `${sha}:package.json`)),
+  )) changed.splice(changed.indexOf("package.json"), 1);
   const packageFiles = ["functions/package.json", "functions/package-lock.json"];
   const dependenciesReviewed = !changed.some((file) => packageFiles.includes(file))
     || dependencyChangesReviewed(packageDependenciesAt(previousSha), packageDependenciesAt(sha));
   return {
     changed,
     allowed: operations
-      ? dependenciesReviewed && changed.every((file) => (file.startsWith("functions/src/") || packageFiles.includes(file))
-        && !lockedServerPaths.includes(file))
+      ? dependenciesReviewed && changed.every((file) => file.startsWith("functions/src/") || packageFiles.includes(file))
       : changed.every((file) => allowedServerPaths.includes(file)),
   };
+}
+
+/** A cosmetic or test-only change must never renew Production Function revisions. */
+export function assertBackendUpdateScope(scope) {
+  requireCondition(scope.allowed, `Server-side change outside the reviewed update scope: ${scope.changed.join(", ")}`);
+  requireCondition(scope.changed.some((file) => file === "functions/package.json" || file === "functions/package-lock.json"
+    || (file.startsWith("functions/src/") && /\.[cm]?[jt]s$/.test(file)
+      && !/\.(?:test|spec)\.[cm]?[jt]s$/.test(file) && !/\/(?:__tests__|fixtures|__fixtures__)\//.test(file))),
+  "No deployable backend change. Use the Hosting-only release workflow.");
+}
+
+export function verifySealedBackendScope(action, previousSha, plan, operations) {
+  // A rollback reverses the owned publication, including historical plans with no backend delta.
+  if (action === "rollback") return;
+  const scope = serverScopeChanges(previousSha, plan.sha, { operations });
+  assertBackendUpdateScope(scope);
+  requireCondition(equal(scope.changed, plan.serverChanges), "The backend changes differ from the sealed plan.");
 }
 
 function artifact(manifestFile, dist, sha, hash) {
@@ -189,6 +227,8 @@ function artifact(manifestFile, dist, sha, hash) {
 
 /** Which sealed publication a review directory holds: the original B or an earlier update. */
 export function previousVariant(directory) {
+  requireCondition(!existsSync(join(directory, "release-plan-H.json")),
+    "A Hosting-only publication needs a separately reviewed backend baseline before any Release B update.");
   const update = existsSync(join(directory, "release-plan-U.json"));
   const original = existsSync(join(directory, "release-plan-B.json"));
   requireCondition(update !== original, "The previous directory must hold exactly one sealed publication.");
@@ -196,18 +236,21 @@ export function previousVariant(directory) {
 }
 
 /** The live publication: its sealed plan, COMPLETE receipt and reviewed build. */
-function readPrevious(directory) {
+export function readPrevious(directory) {
   const variant = previousVariant(directory);
   const planFile = join(directory, `release-plan-${variant}.json`);
   const plan = json(planFile);
   const planHash = hashFile(planFile);
   const receiptFile = join(directory, `publish-receipt-${variant}.json`);
   const receipt = json(receiptFile);
-  requireCondition(receipt.state === "COMPLETE" && receipt.action === "publish" && receipt.sha === plan.sha
+  requireCondition(plan.project === notificationProject && fullHash.test(plan.artifactHash || "") && receipt.schema === 1
+    && receipt.state === "COMPLETE" && receipt.action === "publish" && receipt.sha === plan.sha
     && receipt.planHash === planHash && receipt.artifactHash === plan.artifactHash,
   "The previous publication needs its exact COMPLETE receipt.");
-  requireCondition(variant === "B" || (plan.kind === "RELEASE_B_UPDATE" && updateBranches.includes(plan.branch)),
-    "The previous update plan is not a reviewed update.");
+  if (variant === "U") {
+    requireCondition(plan.kind === "RELEASE_B_UPDATE", "The previous update plan is not a reviewed update.");
+    updateOperationsScope(plan.branch, canonicalUpdateBranch(plan.branch) ? plan.operations : plan.operations === true);
+  }
   const build = artifact(join(directory, `hosting-manifest-${variant}.json`), join(directory, `assets-${variant}`), plan.sha, plan.artifactHash);
   checkTransportRelease(receipt.snapshot, plan.sha);
   return { plan, planHash, receipt, receiptHash: hashFile(receiptFile), build };
@@ -226,9 +269,8 @@ export function partialReconciliation({ attemptBytes, attemptPlanBytes, previous
     && ["DEPLOYING", "VERIFIED"].includes(attempt.state) && equal(attempt.snapshot, previousReceipt.snapshot)
     && typeof attempt.lockUpdateTime === "string",
   "Only an attempt stopped at its first step on the previous release can be reconciled.");
-  const reviewedSteps = attemptPlan.operations === true
-    ? updateStepsFor(Boolean(attemptPlan.previousHasTest), previousReceipt.snapshot)
-    : updateStepsFor(false);
+  const previousHasTest = Object.hasOwn(previousReceipt.snapshot.functions, pushTestFunction);
+  const reviewedSteps = updateStepsFor(previousHasTest, attemptPlan.operations === true ? previousReceipt.snapshot : null);
   requireCondition(equal(attemptPlan.steps, reviewedSteps) && attemptPlan.previous?.sha === previousReceipt.sha,
     "The stopped attempt is not a reviewed update of the previous release.");
   if (equal(live, previousReceipt.snapshot)) {
@@ -273,14 +315,18 @@ function checkBinding(production, plan, build) {
   "The dedicated cleaner app or Firebase Messaging APIs differ from the reviewed binding.");
 }
 
-async function prepare({ directory, previousDir, envDir, verification, baselineFile }) {
+async function prepare({ directory, previousDir, envDir, verification, baselineFile, operationsFlag }) {
   const sha = git("rev-parse", "HEAD");
   const previous = readPrevious(previousDir);
   const baseline = readBaseline(baselineFile, previous);
   requireCondition(validReleaseVerification(json(verification), sha), "The test receipt must pass for this exact SHA.");
-  const operations = operationsBranches.includes(git("branch", "--show-current"));
+  const branch = git("branch", "--show-current");
+  requireCondition(operationsFlag === undefined || canonicalUpdateBranch(branch), "--operations is for canonical update seals.");
+  const operations = updateOperationsScope(branch, canonicalUpdateBranch(branch)
+    ? operationsFlag === true : operationsBranches.includes(branch));
   const scope = serverScopeChanges(previous.plan.sha, sha, { operations });
-  requireCondition(scope.allowed, `Server-side change outside the reviewed update scope: ${scope.changed.join(", ")}`);
+  assertBackendUpdateScope(scope);
+  assertOfficialReleaseHead(root, previous.plan.sha, sha);
   const production = await readNotificationProduction("B");
   const live = releaseBSnapshot(production.report);
   requireCondition(production.report.releaseLock?.state === "AVAILABLE", "The Production release mutex is held.");
@@ -308,7 +354,7 @@ async function prepare({ directory, previousDir, envDir, verification, baselineF
   const previousHasTest = Object.hasOwn(previous.receipt.snapshot.functions, pushTestFunction);
   if (!baseline) checkPushTestFunction(live, previous.plan.sha, previousHasTest);
   const plan = {
-    schema: 1, kind: "RELEASE_B_UPDATE", project: notificationProject, branch: git("branch", "--show-current"), sha,
+    schema: 1, kind: "RELEASE_B_UPDATE", project: notificationProject, branch, sha,
     toolchain: releaseToolchain(), artifactHash: build.manifestHash,
     previous: { sha: previous.plan.sha, planHash: previous.planHash, receiptHash: previous.receiptHash, artifactHash: previous.plan.artifactHash },
     cleanerBinding: previous.plan.cleanerBinding, serverChanges: scope.changed,
@@ -326,8 +372,11 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
   const plan = json(planFile);
   const planHash = hashFile(planFile);
   requireCondition(exclusiveWindow && approval === `${action}:${planHash}`, "Execution needs the exact plan approval and an exclusive window.");
-  requireCondition(git("rev-parse", "HEAD") === plan.sha && git("branch", "--show-current") === plan.branch,
-    "Run from the sealed update SHA and branch.");
+  requireCondition(plan.schema === 1 && plan.kind === "RELEASE_B_UPDATE" && plan.project === notificationProject
+    && fullSha.test(plan.sha || "") && fullHash.test(plan.artifactHash || ""),
+    "Use the reviewed Release B update plan for Production.");
+  requireCondition(action === "rollback" || git("branch", "--show-current") === plan.branch,
+    "Publish from the sealed update branch.");
   const previous = readPrevious(previousDir);
   const baseline = readBaseline(baselineFile, previous);
   requireCondition((baseline?.hash ?? null) === (plan.baseline ?? null), "The reconciled baseline differs from the sealed plan.");
@@ -335,8 +384,9 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
     artifactHash: previous.plan.artifactHash }), "The previous publication differs from the sealed plan.");
   const current = artifact(join(directory, "hosting-manifest-U.json"), join(directory, "assets-U"), plan.sha, plan.artifactHash);
   const previousHasTest = Object.hasOwn(previous.receipt.snapshot.functions, pushTestFunction);
-  const operations = plan.operations === true;
-  requireCondition(operations === operationsBranches.includes(plan.branch), "The sealed plan's scope does not match its branch.");
+  const operations = updateOperationsScope(plan.branch, canonicalUpdateBranch(plan.branch) ? plan.operations : plan.operations === true);
+  verifySealedBackendScope(action, previous.plan.sha, plan, operations);
+  assertOfficialReleaseHead(root, previous.plan.sha, plan.sha, { action });
   requireCondition(plan.previousHasTest === previousHasTest
     && equal(plan.steps, updateStepsFor(previousHasTest, operations ? previous.receipt.snapshot : null)),
     "The sealed steps differ from the reviewed update steps.");
@@ -357,7 +407,8 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
     requireCondition(liveMatchesPrevious(previous, baseline, live), "Production differs from the previous COMPLETE receipt.");
   } else {
     const published = json(join(directory, "publish-receipt-U.json"));
-    requireCondition(published.state === "COMPLETE" && equal(published.snapshot, live), "Rollback needs the exact COMPLETE update receipt.");
+    requireCondition(verifiedBReceipt(published, { action: "publish", sha: plan.sha, planHash, artifactHash: plan.artifactHash, snapshot: live }),
+      "Rollback needs the exact COMPLETE update receipt.");
   }
   if (!(action === "publish" && baseline)) {
     checkTransportRelease(live, fromSha);
@@ -389,6 +440,7 @@ async function execute(action, { directory, previousDir, approval, exclusiveWind
         record(state, id, snapshot);
       },
       deploy(step) {
+        assertOfficialReleaseHead(root, previous.plan.sha, plan.sha, { action });
         if (step.cleanerPushMode) writeReleaseModes(workspace, stepReleaseModes(step, target.sha));
         changed = true;
         const cli = join(root, "node_modules/firebase-tools/lib/bin/firebase.js");
@@ -419,6 +471,11 @@ async function reconcile({ directory, previousDir, out, approval }) {
   const attemptFile = join(directory, "publish-receipt-U.json");
   const attemptBytes = readFileSync(attemptFile);
   const attemptPlanBytes = readFileSync(join(directory, "release-plan-U.json"));
+  const attemptPlan = JSON.parse(attemptPlanBytes);
+  if (canonicalUpdateBranch(attemptPlan.branch)) {
+    updateOperationsScope(attemptPlan.branch, attemptPlan.operations);
+    assertOfficialReleaseHead(root, previous.plan.sha, attemptPlan.sha, { action: "rollback" });
+  }
   const production = await readNotificationProduction("B");
   requireCondition(production.report.releaseLock?.state === "HELD", "The release mutex is not held by a stopped attempt.");
   const { record, lockUpdateTime } = partialReconciliation({
@@ -449,12 +506,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const { values } = parseArgs({ args, options: {
       dir: { type: "string" }, "previous-dir": { type: "string" }, "env-dir": { type: "string" }, verification: { type: "string" },
       approve: { type: "string" }, "exclusive-window": { type: "boolean" }, baseline: { type: "string" },
-      attempt: { type: "string" }, out: { type: "string" },
+      attempt: { type: "string" }, out: { type: "string" }, operations: { type: "boolean" },
     } });
     requireCondition(["seal", "publish", "rollback", "reconcile"].includes(action) && values.dir && values["previous-dir"],
       "Use seal|publish|rollback|reconcile with --dir and --previous-dir.");
-    requireCondition(updateBranches.includes(git("branch", "--show-current")) && !git("status", "--porcelain")
-      && realpathSync(process.cwd()) === root && process.versions.node.split(".")[0] === "22",
+    requireCondition((action === "rollback" || reviewedUpdateBranch(git("branch", "--show-current")))
+      && !git("status", "--porcelain") && realpathSync(process.cwd()) === root && process.versions.node.split(".")[0] === "22",
     "Use the clean update worktree on Node 22.");
     for (const name of ["FIREBASE_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS", "GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT",
       "FIREBASE_CONFIG", "FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST", "FUNCTIONS_EMULATOR"]) {
@@ -464,9 +521,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     requireCondition(relative(root, directory).startsWith(".tmp/"), "Use an ignored directory under .tmp/.");
     const previousDir = realpathSync(resolve(values["previous-dir"]));
     const baselineFile = values.baseline ? realpathSync(resolve(values.baseline)) : null;
+    requireCondition(action === "seal" || values.operations === undefined, "--operations is only valid when sealing a new plan.");
     if (action === "seal") {
       requireCondition(values["env-dir"] && values.verification, "Seal needs --env-dir and --verification.");
-      await prepare({ directory, previousDir, envDir: values["env-dir"], verification: realpathSync(resolve(values.verification)), baselineFile });
+      await prepare({ directory, previousDir, envDir: values["env-dir"], verification: realpathSync(resolve(values.verification)),
+        baselineFile, operationsFlag: values.operations });
     } else if (action === "reconcile") {
       requireCondition(values.out, "Reconcile needs --out; --dir is the stopped attempt's review directory.");
       await reconcile({ directory: realpathSync(directory), previousDir, out: resolve(values.out), approval: values.approve });

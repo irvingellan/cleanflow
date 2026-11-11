@@ -1,11 +1,10 @@
-# Startup reliability — local release candidate
+# Startup reliability — release candidate
 
 This candidate starts at verified Production source
 `0f9735f5641815f00f6ef0912621dee6cb62b9a8`, Hosting version
-`b66d088c9aaaa728`. Public GitHub main is not the release baseline. Work in an
-isolated checkout and use approved private source custody before any remote
-integration. [#83](https://github.com/irvingellan/cleanflow/issues/83) owns
-source reconciliation.
+`b66d088c9aaaa728`. The public GitHub `main` is the integration line. Verify
+the exact live version and sealed receipts before preparing a release.
+[#83](https://github.com/irvingellan/cleanflow/issues/83) tracks source reconciliation.
 
 The entry HTML has a fallback independent of the main JavaScript and CSS.
 The compiled stylesheet downloads without blocking that fallback's first

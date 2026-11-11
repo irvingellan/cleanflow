@@ -53,3 +53,6 @@ tmp/
 Thumbs.db
 logs/
 .private-emulator-origin.json
+
+# Local generated code graph
+graphify-out/
