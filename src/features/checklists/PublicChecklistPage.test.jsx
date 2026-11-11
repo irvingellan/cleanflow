@@ -161,7 +161,7 @@ describe("V2 multi-photo cleaner flow", () => {
     uploadPublicChecklistEvidence.mockRejectedValue({ code: "checklist_conflict", status: 409 });
     renderPage(); await screen.findByRole("heading", { name: "Cleaning checklist" });
     fireEvent.change(screen.getByLabelText("Choose photos"), { target: { files: [new File(["abc"], "private.jpg", { type: "image/jpeg" })] } });
-    await screen.findByRole("button", { name: "Discard selection" });
+    await screen.findByRole("button", { name: "Discard selection" }, { timeout: 12_000 }); // after the automatic retries
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("Finish, retry or discard pending photos before sending for review.")).toBeVisible();
@@ -170,7 +170,7 @@ describe("V2 multi-photo cleaner flow", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Discard selection" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     expect(await screen.findByRole("dialog")).toBeVisible();
-  });
+  }, 15_000);
   it("shows remote active-upload requirements without falsely marking saved required evidence missing", async () => {
     primeMulti([{ evidenceId: "required", requirementId: "living-belongings" }]);
     readyPublicChecklistForReview.mockRejectedValue({ status: 422, code: "checklist_requirements_missing", requirements: { pendingPhotoCount: 1, missingPhotoCount: 0, missingChecklistCount: 0, missingInventoryCount: 0 } });

@@ -1,20 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import { optimizeChecklistImage } from "./checklistImageOptimizer.js";
 import { getPublicChecklist, removePublicChecklistEvidence, uploadPublicChecklistEvidence } from "./checklistCapabilityService.js";
+import {
+  buildPublicChecklistPhotoUploadDiagnostic, createPublicChecklistDiagnosticId, getPublicChecklistSessionId,
+  publicChecklistPhotoFileType, publicChecklistPhotoSizeBucket, recordPublicChecklistPhotoUploadDiagnostic,
+} from "./publicChecklistLoadDiagnostics.js";
 
 const retainedByteLimit = 50 * 1024 * 1024;
-const sourceByteLimit = 20 * 1024 * 1024;
+const sourceByteLimit = 40 * 1024 * 1024;
+// A weak signal is the usual reason an upload fails. The server recognizes a
+// photo it already saved, so sending the same photo again is always safe.
+const transientUploadErrors = new Set(["checklist_request_timeout", "checklist_photo_unavailable", "checklist_conflict"]);
+const defaultUploadRetryDelays = [2_500, 6_000];
+const optimizationDiagnosticCodes = {
+  checklist_photo_invalid_type: "unsupported_type", checklist_photo_source_too_large: "file_too_large",
+  checklist_photo_pixels_exceeded: "file_too_large", checklist_photo_optimization_too_large: "file_too_large",
+  checklist_photo_optimization_timeout: "timeout",
+};
+/** A photo rejected on the phone never reaches the server, so report why. */
+function reportOptimizationFailure(file, error, startedAt) {
+  if (error?.code === "checklist_photo_optimization_cancelled") return;
+  recordPublicChecklistPhotoUploadDiagnostic(buildPublicChecklistPhotoUploadDiagnostic({
+    sessionId: getPublicChecklistSessionId(), requestId: createPublicChecklistDiagnosticId(), result: "error",
+    durationMs: Date.now() - startedAt, fileType: publicChecklistPhotoFileType(file?.type),
+    sizeBucket: publicChecklistPhotoSizeBucket(file?.size), stage: "preflight",
+    errorCode: optimizationDiagnosticCodes[error?.code] || "invalid_file",
+  }));
+}
+function pause(milliseconds, signal) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, milliseconds);
+    function done() { clearTimeout(timer); signal.removeEventListener("abort", done); resolve(); }
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
 const requiredPurpose = "living-belongings";
 const noop = () => {};
 
 /** Owns only transient inputs, one encoder/uploader, and revisioned safe evidence. */
 export function useChecklistPhotoGallery({ token, checklist, disabled = false, onEvidence = noop,
   optimize = optimizeChecklistImage, upload = uploadPublicChecklistEvidence,
-  refresh = getPublicChecklist, remove = removePublicChecklistEvidence }) {
+  refresh = getPublicChecklist, remove = removePublicChecklistEvidence,
+  uploadRetryDelays = defaultUploadRetryDelays, reportFailure = reportOptimizationFailure }) {
   const [, render] = useState(0);
   const scope = useRef(null);
   const options = useRef(null);
-  options.current = { checklist, disabled, onEvidence, optimize, upload, refresh, remove };
+  options.current = { checklist, disabled, onEvidence, optimize, upload, refresh, remove, uploadRetryDelays, reportFailure };
   const notify = (current) => { if (scope.current === current && !current.disposed) render((n) => n + 1); };
   const apply = (current, result) => {
     if (scope.current !== current || current.disposed || !Array.isArray(result?.evidence)
@@ -55,7 +86,10 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
         try {
           if (!item.blob) {
             item.state = "OPTIMIZING"; notify(current);
-            const optimized = await options.current.optimize(item.file, { signal: current.controller.signal });
+            const startedAt = Date.now();
+            let optimized;
+            try { optimized = await options.current.optimize(item.file, { signal: current.controller.signal }); }
+            catch (error) { options.current.reportFailure(item.file, error, startedAt); throw error; }
             if (scope.current !== current || current.disposed) return;
             item.file = null;
             item.blob = optimized.blob;
@@ -63,8 +97,20 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
           }
           if (!editable(current) || current.controller.signal.aborted) return;
           item.state = "UPLOADING"; notify(current);
-          const result = await options.current.upload({ token: current.token, requirementId: item.requirementId,
-            file: item.blob, version: 2, signal: current.controller.signal });
+          let result;
+          for (let attempt = 0; ; attempt++) {
+            try {
+              result = await options.current.upload({ token: current.token, requirementId: item.requirementId,
+                file: item.blob, version: 2, signal: current.controller.signal });
+              break;
+            } catch (error) {
+              const delay = options.current.uploadRetryDelays[attempt];
+              if (delay === undefined || !transientUploadErrors.has(error?.code || "checklist_photo_unavailable")
+                || scope.current !== current || current.disposed) throw error;
+              await pause(delay, current.controller.signal);
+              if (!editable(current) || current.controller.signal.aborted) return;
+            }
+          }
           if (scope.current !== current || current.disposed) return;
           if (!Number.isInteger(result?.evidenceRevision) || !result?.evidence?.some((photo) =>
             photo.evidenceId === result.evidenceId && photo.requirementId === item.requirementId)) throw { code: "checklist_response_invalid" };
@@ -110,6 +156,12 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
       const state = scope.current; const item = state?.local.find((p) => p.id === id);
       if (!editable(state) || item?.state !== "FAILED") return;
       item.state = "READY"; item.error = null; notify(state); pump(state);
+    },
+    retryAll() {
+      const state = scope.current;
+      if (!editable(state)) return;
+      for (const item of state.local) if (item.state === "FAILED") { item.state = "READY"; item.error = null; }
+      notify(state); pump(state);
     },
     async discard(id) {
       const state = scope.current; const item = state?.local.find((p) => p.id === id);

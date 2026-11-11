@@ -23,3 +23,7 @@
 .photo-requirements li.is-missing strong { color: var(--color-warning-text, #6f501d); }
 .photo-requirements li.is-done strong { color: var(--color-success, #3f705b); }
 .checklist-photo-gallery__formats { font-size: .875rem; color: var(--color-text-secondary, #52645b); }
+
+.checklist-photo-gallery__progress { display: grid; gap: 6px; justify-items: start; }
+.checklist-photo-gallery__progress p { margin: 0; font-weight: 600; }
+.checklist-photo-gallery__failed { color: var(--cf-danger, #b42318); }

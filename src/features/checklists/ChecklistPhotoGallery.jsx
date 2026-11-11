@@ -50,11 +50,18 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
   const select = (event) => { gallery.append(event.target.files || []); event.target.value = ""; };
   const saved = gallery.saved;
   const viewedPhoto = saved.find((item) => item.evidenceId === viewed);
+  const failed = gallery.local.filter((item) => item.state === "FAILED").length;
+  const sending = gallery.local.length - failed;
   return <div className={`checklist-photo-gallery public-checklist__photo${missing ? " public-checklist__photo--missing" : ""}`} ref={targetRef} tabIndex={-1} aria-live="polite">
     <p className="public-checklist__photo-required">{translate("checklists.photoRequired")}</p>
     <p>{translate("checklists.galleryGuidance")}</p>
     <PhotoRequirementList requirements={photoRequirements} saved={saved} example={requirementsAreExample} translate={translate} />
     <p className="checklist-photo-gallery__count">{translate("checklists.photoCount", { count: saved.length })}</p>
+    {(sending > 0 || failed > 0) && <div className="checklist-photo-gallery__progress" role="status" data-testid="photo-progress">
+      {sending > 0 && <p className="checklist-photo-gallery__sending">{translate("checklists.photosSending", { count: sending })}</p>}
+      {failed > 0 && <p className="checklist-photo-gallery__failed">{translate("checklists.photosNotSaved", { count: failed })}</p>}
+      {failed > 1 && !disabled && <button className="button" type="button" onClick={() => gallery.retryAll()}>{translate("checklists.retryAllPhotos")}</button>}
+    </div>}
     {!disabled && <>
       <div className="checklist-photo-gallery__actions">
         <label className="button" htmlFor={`${id}-camera`}>{translate("checklists.takePhoto")}</label>

@@ -13,11 +13,47 @@ function setup(overrides = {}) {
     optimize: async () => ({ blob: new Blob(["abc"], { type: "image/jpeg" }) }),
     upload: async ({ requirementId }) => { const item = photo(String(++revision), requirementId); saved.push(item); return { evidenceId: item.evidenceId, evidenceRevision: revision, evidence: [...saved] }; },
     refresh: async () => ({ checklist: { ...checklist, evidenceRevision: revision, evidence: [...saved] } }),
-    remove: async () => ({ removed: true, evidenceRevision: ++revision, evidence: [] }), ...overrides };
+    remove: async () => ({ removed: true, evidenceRevision: ++revision, evidence: [] }),
+    uploadRetryDelays: [], reportFailure: vi.fn(), ...overrides };
   return { ...renderHook((props) => useChecklistPhotoGallery(props), { initialProps: options }), options };
 }
 
 describe("sequential bounded photo gallery", () => {
+  it("sends a photo again by itself after a weak-signal failure", async () => {
+    let calls = 0;
+    const { result } = setup({ uploadRetryDelays: [0, 0],
+      upload: async ({ requirementId }) => {
+        if (++calls < 3) throw Object.assign(new Error("slow"), { code: "checklist_request_timeout" });
+        return { evidenceId: "1", evidenceRevision: 1, evidence: [photo("1", requirementId)] };
+      } });
+    act(() => result.current.append([file()]));
+    await waitFor(() => expect(result.current.saved).toHaveLength(1));
+    expect(calls).toBe(3);
+    expect(result.current.local).toHaveLength(0);
+  });
+  it("stops retrying by itself when the server refuses the photo", async () => {
+    const upload = vi.fn(async () => { throw Object.assign(new Error("full"), { code: "checklist_photo_limit" }); });
+    const { result } = setup({ uploadRetryDelays: [0, 0], upload });
+    act(() => result.current.append([file()]));
+    await waitFor(() => expect(result.current.local[0]?.state).toBe("FAILED"));
+    expect(upload).toHaveBeenCalledOnce();
+  });
+  it("reports a photo the phone could not prepare and retries all failed photos together", async () => {
+    let broken = true;
+    const reportFailure = vi.fn();
+    const { result } = setup({ reportFailure, optimize: async () => {
+      if (broken) throw Object.assign(new Error("big"), { code: "checklist_photo_pixels_exceeded" });
+      return { blob: new Blob(["abc"], { type: "image/jpeg" }) };
+    } });
+    act(() => result.current.append([file(), file()]));
+    await waitFor(() => expect(result.current.local.map((p) => p.state)).toEqual(["FAILED", "FAILED"]));
+    expect(reportFailure).toHaveBeenCalledTimes(2);
+    expect(reportFailure.mock.calls[0][1]).toHaveProperty("code", "checklist_photo_pixels_exceeded");
+    broken = false;
+    act(() => result.current.retryAll());
+    await waitFor(() => expect(result.current.saved).toHaveLength(2));
+    expect(result.current.local).toHaveLength(0);
+  });
   it("continues after one batch upload fails and retries only that retained photo", async () => {
     const optimized = ["first", "second", "third"].map((value) => new Blob([value], { type: "image/jpeg" }));
     const accepted = [];
