@@ -165,10 +165,13 @@ test("an operations update moves every non-push Function and its rollback remove
 });
 
 test("an operations update may change Functions source but never Rules, indexes or deploy config", () => {
-  const scope = serverScopeChanges("c3e957b73969a0e7e69fc4693e946469e0348e61", "HEAD", { operations: true });
+  const previousRelease = "c3e957b73969a0e7e69fc4693e946469e0348e61";
+  const operationsRelease = "03be7de7e933f90fcc992dc16387a4e55b51d748";
+  const scope = serverScopeChanges(previousRelease, operationsRelease, { operations: true });
   assert.ok(scope.allowed, scope.changed.join(","));
-  assert.ok(!scope.changed.some((file) => ["firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json"].includes(file)));
-  assert.equal(serverScopeChanges("c3e957b73969a0e7e69fc4693e946469e0348e61", "HEAD").allowed, false);
+  assert.ok(scope.changed.includes("functions/src/index.js"));
+  assert.ok(!scope.changed.some((file) => ["firestore.rules", "firestore.indexes.json", "storage.rules", "firebase.json", "vite.config.js"].includes(file)));
+  assert.equal(serverScopeChanges(previousRelease, operationsRelease).allowed, false);
 });
 
 test("every reviewed operations step writes valid runtime modes", () => {
@@ -236,7 +239,7 @@ test("an operations update may only add reviewed, exact server dependencies", as
 
 
 test("reject a cosmetic historical release or a test-only backend diff before preparing deployment", () => {
-  const mixedBuildChange = serverScopeChanges("4ec289e", "0e36437");
+  const mixedBuildChange = serverScopeChanges("4ec289e", "0e36437", { operations: true });
   assert.ok(mixedBuildChange.changed.includes("vite.config.js"));
   assert.throws(() => assertBackendUpdateScope(mixedBuildChange), /outside the reviewed/);
   const layout = serverScopeChanges("00bd608", "0f9735f", { operations: true });
