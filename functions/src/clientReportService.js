@@ -307,28 +307,22 @@ export async function revokeClientReportForManager(database, {
   });
 }
 
-async function resolvePublicClientReport(database, { organizationId, tokenHash, now = new Date() }) {
-  if (!tokenHashPattern.test(tokenHash || "")) throw new HttpsError("not-found", "Report not found.");
-  const lookupSnapshot = await lookupReference(database, tokenHash).get();
-  if (!lookupSnapshot.exists) throw new HttpsError("not-found", "Report not found.");
-  const lookup = lookupSnapshot.data();
-  if (lookup.status !== "ACTIVE") throw new HttpsError("failed-precondition", "Report is unavailable.");
-  if (lookup.organizationId !== organizationId || !validPathId(lookup.jobId) || !validPathId(lookup.runId)) {
-    throw new HttpsError("not-found", "Report not found.");
-  }
-  const jobRef = jobReference(database, organizationId, lookup.jobId);
-  const runRef = runReference(database, organizationId, lookup.jobId, lookup.runId);
+/**
+ * Reads one report from the frozen Run. `admit` decides whether the report's
+ * own link state allows this reader; everything else is checked here.
+ */
+async function loadReportAt(database, { organizationId, jobId, runId, admit }) {
+  const jobRef = jobReference(database, organizationId, jobId);
+  const runRef = runReference(database, organizationId, jobId, runId);
   const draftRef = runRef.collection("drafts").doc("current");
   const evidenceRef = runRef.collection("evidence").doc(pilotChecklistPhotoRequirementId);
-  const capabilityRef = capabilityReference(database, organizationId, lookup.jobId, lookup.runId);
+  const capabilityRef = capabilityReference(database, organizationId, jobId, runId);
   const [job, run, draft, evidence, capability] = await Promise.all([
     jobRef.get(), runRef.get(), draftRef.get(), evidenceRef.get(), capabilityRef.get(),
   ]);
   if (!job.exists || !run.exists || !capability.exists) throw new HttpsError("not-found", "Report not found.");
   const capabilityData = capability.data();
-  const lookupExpiry = lookup.expiresAt?.toMillis?.();
-  if (capabilityData.tokenHash !== tokenHash || clientReportCapabilityState(capabilityData, now) !== "ACTIVE"
-    || !lookupExpiry || lookupExpiry <= now.getTime() || run.data().status !== "READY_FOR_REVIEW") {
+  if (!admit(capabilityData) || run.data().status !== "READY_FOR_REVIEW") {
     throw new HttpsError("failed-precondition", "Report is unavailable.");
   }
   const draftData = draft.exists ? draft.data() : null;
@@ -340,7 +334,58 @@ async function resolvePublicClientReport(database, { organizationId, tokenHash, 
     ? (await runRef.collection("evidenceState").doc("current").get()).data() : null;
   const report = projectClientReport(run.data(), draftData, gallery || (evidence.exists ? evidence.data() : null),
     storedPresentation(capabilityData));
-  return { report, run: run.data(), evidence: evidence.exists ? evidence.data() : null, gallery, location: lookup };
+  return { report, job: job.data(), run: run.data(), evidence: evidence.exists ? evidence.data() : null, gallery };
+}
+
+async function resolvePublicClientReport(database, { organizationId, tokenHash, now = new Date() }) {
+  if (!tokenHashPattern.test(tokenHash || "")) throw new HttpsError("not-found", "Report not found.");
+  const lookupSnapshot = await lookupReference(database, tokenHash).get();
+  if (!lookupSnapshot.exists) throw new HttpsError("not-found", "Report not found.");
+  const lookup = lookupSnapshot.data();
+  if (lookup.status !== "ACTIVE") throw new HttpsError("failed-precondition", "Report is unavailable.");
+  if (lookup.organizationId !== organizationId || !validPathId(lookup.jobId) || !validPathId(lookup.runId)) {
+    throw new HttpsError("not-found", "Report not found.");
+  }
+  const lookupExpiry = lookup.expiresAt?.toMillis?.();
+  const result = await loadReportAt(database, { organizationId, jobId: lookup.jobId, runId: lookup.runId,
+    admit: (capability) => capability.tokenHash === tokenHash && clientReportCapabilityState(capability, now) === "ACTIVE"
+      && Boolean(lookupExpiry) && lookupExpiry > now.getTime() });
+  return { ...result, location: lookup };
+}
+
+/**
+ * A report the manager has released to the client: she created its client
+ * report and has not turned it off. The seven-day life of the report's own
+ * link does not apply to the client portal.
+ */
+export function clientReportReleased(capability) {
+  return capability?.status === "ACTIVE";
+}
+
+/** The released report of one Job, for a reader already authorized for that Job. */
+export async function loadReleasedClientReport(database, { organizationId, jobId, runId = initialRunId }) {
+  if (!validPathId(jobId)) throw new HttpsError("not-found", "Report not found.");
+  return loadReportAt(database, { organizationId, jobId, runId, admit: clientReportReleased });
+}
+
+function reportPhoto(result, { evidenceId, variant, storage }) {
+  if (result.run.evidencePolicy?.version === 2) {
+    const photo = selectMultiPhotoEvidence(result.gallery, { evidenceId });
+    if (!photo || reportHiddenEvidenceIds(result.run).has(photo.evidenceId)) throw new HttpsError("not-found", "Report photo not found.");
+    return downloadSavedChecklistEvidence(result.run, photo, { storage, variant });
+  }
+  if (evidenceId !== undefined) throw new HttpsError("not-found", "Report photo not found.");
+  if (!result.report.hasPhoto || !result.evidence) throw new HttpsError("not-found", "Report photo not found.");
+  return downloadSavedChecklistEvidence(result.run, result.evidence, { storage, variant });
+}
+
+export async function downloadReleasedClientReportPhoto(database, { organizationId, jobId, evidenceId, variant, storage }) {
+  return reportPhoto(await loadReleasedClientReport(database, { organizationId, jobId }), { evidenceId, variant, storage });
+}
+
+/** Whether the manager released the report of this Job; one read. */
+export async function clientReportReleasedForJob(database, { organizationId, jobId, runId = initialRunId }) {
+  return clientReportReleased((await capabilityReference(database, organizationId, jobId, runId).get()).data());
 }
 
 export async function loadPublicClientReport(database, options) {
@@ -351,15 +396,7 @@ export async function loadPublicClientReport(database, options) {
 export async function downloadPublicClientReportPhoto(database, {
   organizationId, tokenHash, evidenceId, variant, now = new Date(), storage,
 }) {
-  const result = await resolvePublicClientReport(database, { organizationId, tokenHash, now });
-  if (result.run.evidencePolicy?.version === 2) {
-    const photo = selectMultiPhotoEvidence(result.gallery, { evidenceId });
-    if (!photo || reportHiddenEvidenceIds(result.run).has(photo.evidenceId)) throw new HttpsError("not-found", "Report photo not found.");
-    return downloadSavedChecklistEvidence(result.run, photo, { storage, variant });
-  }
-  if (evidenceId !== undefined) throw new HttpsError("not-found", "Report photo not found.");
-  if (!result.report.hasPhoto || !result.evidence) throw new HttpsError("not-found", "Report photo not found.");
-  return downloadSavedChecklistEvidence(result.run, result.evidence, { storage, variant });
+  return reportPhoto(await resolvePublicClientReport(database, { organizationId, tokenHash, now }), { evidenceId, variant, storage });
 }
 
 /**

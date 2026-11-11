@@ -11,13 +11,13 @@ function textFor(entry, translate) {
 
 const restockAnswers = new Set(["NEEDS_RESTOCK", "LOW"]);
 
-function ReportPhoto({ token, translate, evidenceId, className = "client-report__photo", loading = "lazy", thumbnail = false }) {
+function ReportPhoto({ token, translate, evidenceId, photoUrl, className = "client-report__photo", loading = "lazy", thumbnail = false }) {
   const [hasError, setHasError] = useState(false);
   if (hasError) return <p className="client-report__photo-error">{translate("clientReport.photoUnavailable")}</p>;
   return (
     <img
       className={className}
-      src={publicClientReportPhotoUrl(token, evidenceId, { thumbnail })}
+      src={photoUrl(token, evidenceId, { thumbnail })}
       loading={loading}
       decoding="async"
       alt={translate("clientReport.savedEvidence")}
@@ -27,8 +27,11 @@ function ReportPhoto({ token, translate, evidenceId, className = "client-report_
   );
 }
 
-/** Public, read-only report projection. All content is fetched from the server's frozen Run data. */
-export function PublicClientReportPage({ token }) {
+/**
+ * Public, read-only report projection. All content is fetched from the server's frozen Run data.
+ * The client portal shows the same report through its own link, with a way back to the list.
+ */
+export function PublicClientReportPage({ token, loadReport = getPublicClientReport, photoUrl = publicClientReportPhotoUrl, onBack = null }) {
   const { language, setLanguage, translate } = useTranslation();
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,15 +41,15 @@ export function PublicClientReportPage({ token }) {
   const [viewerIndex, setViewerIndex] = useState(null);
   const closeViewer = useCallback(() => setViewerIndex(null), []);
   const evidenceIds = report?.evidence?.map((item) => item.evidenceId) || [undefined];
-  const photoSrc = useCallback((index) => publicClientReportPhotoUrl(token, evidenceIds[index]), [token, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
-  const photoPlaceholder = useCallback((index) => publicClientReportPhotoUrl(token, evidenceIds[index], { thumbnail: true }), [token, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const photoSrc = useCallback((index) => photoUrl(token, evidenceIds[index]), [token, photoUrl, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const photoPlaceholder = useCallback((index) => photoUrl(token, evidenceIds[index], { thumbnail: true }), [token, photoUrl, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let current = true;
     setIsLoading(true);
     setErrorKind(null);
     setReport(null);
-    getPublicClientReport(token).then((result) => {
+    loadReport(token).then((result) => {
       if (current) setReport(result);
     }).catch((error) => {
       if (current) setErrorKind(error?.retryable === false ? "permanent" : "retryable");
@@ -54,7 +57,7 @@ export function PublicClientReportPage({ token }) {
       if (current) setIsLoading(false);
     });
     return () => { current = false; };
-  }, [token, attempt]);
+  }, [token, attempt, loadReport]);
 
   if (isLoading) {
     return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate("clientReport.loading")} status="status" /></section></main>;
@@ -74,6 +77,7 @@ export function PublicClientReportPage({ token }) {
               {translate("clientReport.retry")}
             </button>
           )}
+          {onBack && <button className="button button--secondary" type="button" onClick={onBack}>{translate("clientPortal.backToList")}</button>}
         </section>
       </main>
     );
@@ -88,6 +92,7 @@ export function PublicClientReportPage({ token }) {
       <article className="panel public-checklist client-report" aria-labelledby="client-report-title">
         <header className="public-checklist__header client-report__header">
           <div>
+            {onBack && <button className="button button--text client-report__back" type="button" onClick={onBack}>‹ {translate("clientPortal.backToList")}</button>}
             <p className="client-report__badge">{translate("clientReport.completedBadge")}</p>
             <h1 id="client-report-title" className="panel__title">{translate(report.titleKey || "clientReport.title")}</h1>
             {report.propertyName && <p className="client-report__property">{report.propertyName}</p>}
@@ -158,7 +163,7 @@ export function PublicClientReportPage({ token }) {
                 <li key={item.evidenceId || "single"}>
                   <button type="button" className="client-report__thumb" onClick={() => setViewerIndex(index)}
                     aria-label={translate("clientReport.openPhoto", { index: index + 1 })}>
-                    <ReportPhoto token={token} translate={translate} evidenceId={item.evidenceId} className="client-report__thumb-image" thumbnail />
+                    <ReportPhoto token={token} translate={translate} evidenceId={item.evidenceId} photoUrl={photoUrl} className="client-report__thumb-image" thumbnail />
                   </button>
                 </li>
               ))}

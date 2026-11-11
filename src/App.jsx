@@ -43,6 +43,7 @@ import { ChecklistRunDetail } from "./features/checklists/ChecklistRunDetail.jsx
 import { PublicChecklistPage } from "./features/checklists/PublicChecklistPage.jsx";
 import { CleanerHubApp } from "./features/cleaner-hub/CleanerHubApp.jsx";
 import { PublicClientReportPage } from "./features/checklists/PublicClientReportPage.jsx";
+import { PublicClientPortalPage } from "./features/client-portal/PublicClientPortalPage.jsx";
 import { PublicOfferAssignmentAcknowledgment } from "./features/public-offers/PublicOfferAssignmentAcknowledgment.jsx";
 import { PublicOfferCompensation } from "./features/public-offers/PublicOfferCompensation.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
@@ -150,13 +151,22 @@ function publicClientReportTokenFromSearch(
   return new URLSearchParams(search).get("t") || "";
 }
 
+function publicClientPortalTokenFromSearch(
+  pathname = window.location.pathname,
+  search = window.location.search,
+) {
+  if (pathname.replace(/\/+$/, "") !== "/portal") return null;
+  return new URLSearchParams(search).get("t") || "";
+}
+
 function App() {
   const publicOfferToken = publicOfferTokenFromPathname();
   const isPublicOfferRoute = publicOfferToken !== null;
   const publicChecklistToken = publicChecklistTokenFromSearch();
   const isPublicChecklistRoute = publicChecklistToken !== null;
   const publicClientReportToken = publicClientReportTokenFromSearch();
-  const isPublicClientReportRoute = publicClientReportToken !== null;
+  const isPublicClientPortalRoute = publicClientPortalTokenFromSearch() !== null;
+  const isPublicClientReportRoute = publicClientReportToken !== null || isPublicClientPortalRoute;
   const isChecklistPreviewRoute = isChecklistPreviewPath();
   // Cleaner Hub has its own Firebase app/session; the manager session is never read there.
   const isCleanerHubRoute = isCleanerHubPath();
@@ -180,6 +190,7 @@ function App() {
   }
 
   if (isPublicClientReportRoute) {
+    if (isPublicClientPortalRoute) return <ThemeProvider><PublicClientPortalPage token={publicClientPortalTokenFromSearch()} /></ThemeProvider>;
     return <ThemeProvider><PublicClientReportPage token={publicClientReportToken} /></ThemeProvider>;
   }
 

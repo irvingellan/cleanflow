@@ -1,0 +1,19 @@
+.client-portal__section { display: grid; gap: 10px; padding-top: 18px; border-top: 1px solid var(--cf-border); }
+.client-portal__section h2 { margin: 0; font-size: 1.0625rem; }
+.client-portal__list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.client-portal__row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 56px; padding: 10px 12px; border: 1px solid var(--cf-border); border-radius: 12px; background: var(--cf-surface);
+}
+.client-portal__row > div { display: grid; gap: 2px; min-width: 0; }
+.client-portal__row span { color: var(--cf-text-secondary); font-size: 0.9375rem; overflow-wrap: anywhere; }
+.client-portal__row .button { flex: none; min-height: 44px; }
+.client-portal__empty { margin: 0; color: var(--cf-text-secondary); }
+.client-portal__properties { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.client-portal__properties li { padding: 6px 12px; border: 1px solid var(--cf-border); border-radius: 999px; font-size: 0.9375rem; }
+.client-report__back { display: flex; width: fit-content; align-items: center; min-height: 44px; padding-left: 0; }
+.client-portal-access { display: grid; gap: 10px; }
+.client-portal-access__link { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.client-portal-access__link input { flex: 1 1 240px; min-height: 44px; min-width: 0; }
+.client-portal-access__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media print { .client-report__back { display: none; } }

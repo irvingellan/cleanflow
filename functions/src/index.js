@@ -106,6 +106,10 @@ import {
   setReportPhotoVisibilityForManager,
 } from "./clientReportService.js";
 import {
+  downloadPublicClientPortalPhoto, getClientPortalForManager, issueClientPortalForManager,
+  loadPublicClientPortal, loadPublicClientPortalReport, revokeClientPortalForManager,
+} from "./clientPortalService.js";
+import {
   calculateManagerReminder,
   claimReminderDelivery,
   managerReminderPayload,
@@ -1083,6 +1087,30 @@ export const revokeClientReport = onCall(
   },
 );
 
+/**
+ * The manager reads, creates (or replaces) and turns off one client's portal
+ * link. The link itself is returned only when it is created.
+ */
+export const clientPortalAccess = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const clientId = request.data?.clientId;
+    const action = request.data?.action;
+    if (action === "issue") {
+      const token = newChecklistCapabilityToken();
+      return { access: await issueClientPortalForManager(db, {
+        organizationId, clientId, actorUid: request.auth.uid, token, tokenHash: hashToken(token),
+      }) };
+    }
+    if (action === "revoke") {
+      return { access: await revokeClientPortalForManager(db, { organizationId, clientId, actorUid: request.auth.uid }) };
+    }
+    if (action !== "get") throw new HttpsError("invalid-argument", "Client portal request is invalid.");
+    return { access: await getClientPortalForManager(db, { organizationId, clientId }) };
+  },
+);
+
 async function activeManagerPushDevices(targetOrganizationId = organizationId) {
   return loadEligibleManagerPushDevices(db, targetOrganizationId);
 }
@@ -1645,6 +1673,42 @@ export const publicClientReport = onRequest(
           : 500;
       if (status === 500) logger.error("Unable to load public client report.", { code: error?.code || "unknown" });
       sendPublicError(response, status, "client_report_unavailable");
+    }
+  },
+);
+
+/** The client portal is a read-only bearer link scoped to one client by its hashed lookup. */
+export const publicClientPortal = onRequest(
+  { region: "us-central1", invoker: "public" },
+  async (request, response) => {
+    const token = request.query.token;
+    if (request.method !== "GET" || !validToken(token)) {
+      sendPublicError(response, request.method !== "GET" ? 405 : 404, "client_portal_unavailable");
+      return;
+    }
+    try {
+      const tokenHash = hashToken(token);
+      const jobId = request.query.job;
+      if (request.query.photo === "1") {
+        const photo = await downloadPublicClientPortalPhoto(db, {
+          organizationId, tokenHash, jobId, evidenceId: request.query.evidenceId,
+          variant: request.query.thumb === "1" ? "thumbnail" : undefined,
+        });
+        configureResponse(response);
+        response.set("Content-Type", photo.contentType);
+        response.set("Content-Disposition", "inline");
+        response.status(200).send(photo.bytes);
+        return;
+      }
+      const body = jobId === undefined
+        ? { portal: await loadPublicClientPortal(db, { organizationId, tokenHash }) }
+        : { report: await loadPublicClientPortalReport(db, { organizationId, tokenHash, jobId }) };
+      configureResponse(response);
+      response.status(200).json(body);
+    } catch (error) {
+      const status = error?.code === "not-found" ? 404 : error?.code === "failed-precondition" ? 410 : 500;
+      if (status === 500) logger.error("Unable to load the client portal.", { code: error?.code || "unknown" });
+      sendPublicError(response, status, "client_portal_unavailable");
     }
   },
 );
