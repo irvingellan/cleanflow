@@ -183,3 +183,74 @@
     border-radius: 0;
   }
 }
+
+/* Cleaner checklist: one tap per task, one tap per stock level. */
+.public-checklist__progress {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  gap: 6px;
+  margin: 0 -4px;
+  padding: 10px 4px;
+  background: var(--cf-surface);
+  border-bottom: 1px solid var(--cf-border);
+}
+.public-checklist__progress p { margin: 0; font-size: 0.875rem; font-weight: 700; color: var(--cf-text-secondary); }
+.public-checklist__progress progress { width: 100%; height: 8px; accent-color: var(--cf-brand); }
+
+.public-checklist__section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.public-checklist__count { font-size: 0.875rem; font-weight: 700; color: var(--cf-text-secondary); white-space: nowrap; }
+.public-checklist__count.is-complete { color: var(--cf-brand-text); }
+
+.public-checklist__item--task { display: block; padding: 10px 12px; }
+.public-checklist__item--task::after { content: ""; display: block; clear: both; }
+.public-checklist__item--task > legend { float: left; width: calc(100% - 60px); padding: 0; min-height: 48px; display: flex; align-items: center; }
+.public-checklist__item--task > .public-checklist__answer-options { display: contents; }
+.public-checklist__item--task label[data-answer="DONE"] {
+  float: right;
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 0;
+  gap: 0;
+  position: relative;
+}
+.public-checklist__item--task label[data-answer="DONE"] input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.public-checklist__item--task label[data-answer="DONE"]::before { content: ""; font-size: 1.375rem; font-weight: 700; }
+.public-checklist__item--task label[data-answer="DONE"]:has(input:checked) { background: var(--cf-brand); border-color: var(--cf-brand); }
+.public-checklist__item--task label[data-answer="DONE"]:has(input:checked)::before { content: "✓"; color: var(--cf-on-brand, #fff); }
+.public-checklist__item--task label[data-answer="DONE"]:has(input:focus-visible) { outline: 2px solid var(--cf-brand); outline-offset: 2px; }
+.public-checklist__item--task label[data-answer="NOT_APPLICABLE"] { clear: both; float: left; min-height: 36px; margin-top: 6px; padding: 0 12px; font-size: 0.875rem; }
+.public-checklist__item--task.is-answered > legend { color: var(--cf-text-secondary); }
+.public-checklist__item--task > :not(legend):not(.public-checklist__answer-options) { clear: both; }
+.public-checklist__item--task > .public-checklist__missing-marker { padding-top: 6px; }
+
+.public-checklist .public-checklist__inventory { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+fieldset.public-checklist__inventory-item { margin: 0; padding: 0; border: 0; }
+fieldset.public-checklist__inventory-item > legend { padding: 0; margin-bottom: 6px; font-size: 0.9375rem; font-weight: 700; color: var(--cf-heading, inherit); }
+.public-checklist__levels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.public-checklist__levels label:not(.visually-hidden) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 1px solid var(--cf-border-input);
+  border-radius: 10px;
+  background: var(--cf-surface);
+  color: var(--cf-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+.public-checklist__levels label input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.public-checklist__levels label:has(input:checked) { border-color: var(--cf-brand); background: var(--cf-surface-selected); color: var(--cf-brand-text); }
+.public-checklist__levels label[data-level="NEEDS_RESTOCK"]:has(input:checked) { border-color: var(--cf-warning-text); color: var(--cf-warning-text); background: var(--cf-warning-bg, var(--cf-surface-selected)); }
+.public-checklist__levels label:has(input:focus-visible) { outline: 2px solid var(--cf-brand); outline-offset: 2px; }
+fieldset.public-checklist__inventory-item.public-checklist__control--missing .public-checklist__levels label:not(.visually-hidden) { border-color: var(--color-error-text); }

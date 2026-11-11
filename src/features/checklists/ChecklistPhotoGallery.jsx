@@ -54,7 +54,11 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
   const sending = gallery.local.length - failed;
   return <div className={`checklist-photo-gallery public-checklist__photo${missing ? " public-checklist__photo--missing" : ""}`} ref={targetRef} tabIndex={-1} aria-live="polite">
     <p className="public-checklist__photo-required">{translate("checklists.photoRequired")}</p>
-    <p>{translate("checklists.galleryGuidance")}</p>
+    <details className="checklist-photo-gallery__help">
+      <summary>{translate("checklists.photoHelpTitle")}</summary>
+      <p>{translate("checklists.galleryGuidance")}</p>
+      {!disabled && <p>{translate("checklists.photoReplacementHelp")}</p>}
+    </details>
     <PhotoRequirementList requirements={photoRequirements} saved={saved} example={requirementsAreExample} translate={translate} />
     <p className="checklist-photo-gallery__count">{translate("checklists.photoCount", { count: saved.length })}</p>
     {(sending > 0 || failed > 0) && <div className="checklist-photo-gallery__progress" role="status" data-testid="photo-progress">
@@ -70,7 +74,6 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
         <input id={`${id}-library`} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={select} />
       </div>
       <p className="checklist-photo-gallery__formats">{translate("checklists.galleryFormats")}</p>
-      <p>{translate("checklists.photoReplacementHelp")}</p>
       <button className="button button--secondary" type="button" disabled={gallery.refreshing} onClick={() => gallery.refreshSaved()}>{translate("checklists.refreshPhotos")}</button>
     </>}
     {gallery.refreshing && <p role="status">{translate("checklists.photoRefreshing")}</p>}

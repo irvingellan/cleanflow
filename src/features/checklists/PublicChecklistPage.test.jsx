@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { checklistDraftRecoveryStoragePrefix } from "./checklistDraftRecovery.js";
 
+// One stock item is a group of one-tap levels.
+const stock = (level, item = "Hand soap") => within(screen.getByRole("group", { name: item })).getByRole("radio", { name: level });
+
 const mocks = vi.hoisted(() => ({
   getPublicChecklist: vi.fn(),
   readyPublicChecklistForReview: vi.fn(),
@@ -243,7 +246,7 @@ describe("PublicChecklistPage", () => {
       fireEvent.click(within(itemFieldset(label)).getByLabelText("Done"));
       await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
     }
-    fireEvent.change(screen.getByLabelText("Hand soap"), { target: { value: "HIGH" } });
+    fireEvent.click(stock("High"));
     await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
     fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [new File([new Uint8Array([0xff, 0xd8, 0xff])], "synthetic.jpg", { type: "image/jpeg" })] } });
     await screen.findByText("Photo saved");
@@ -363,7 +366,7 @@ describe("PublicChecklistPage", () => {
     expect(await screen.findByRole("heading", { name: "Cleaning checklist" })).toBeVisible();
     expect(within(itemFieldset("Make the bed")).queryByLabelText("Not applicable")).not.toBeInTheDocument();
     expect(within(itemFieldset("Check the pool")).getByLabelText("Not applicable")).toBeVisible();
-    expect(screen.getByLabelText("Hand soap")).toHaveValue("UNANSWERED");
+    expect(stock("Not answered")).toBeChecked();
     expect(screen.getByText("Use the frozen instructions.")).toBeVisible();
     expect(savePublicChecklistDraft).not.toHaveBeenCalled();
     expect(screen.queryByText("Answer this item before sending for review.")).not.toBeInTheDocument();
@@ -559,6 +562,24 @@ describe("PublicChecklistPage", () => {
     expect(screen.getByText("Compatibles: JPEG, PNG o WebP. HEIC/HEIF no es compatible.")).toBeVisible();
   });
 
+  it("marks a task with one tap, clears it with a second tap and shows the progress", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    const total = screen.getAllByRole("radio", { name: "Done" }).length + 1;
+    expect(within(screen.getByTestId("checklist-progress")).getByText(`0 of ${total} answered`)).toBeVisible();
+
+    const done = within(itemFieldset("Make the bed")).getByLabelText("Done");
+    fireEvent.click(done);
+    await waitFor(() => expect(done).toBeChecked());
+    expect(within(screen.getByTestId("checklist-progress")).getByText(`1 of ${total} answered`)).toBeVisible();
+
+    fireEvent.click(done.closest("label"));
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenLastCalledWith(expect.objectContaining({
+      changes: { checklistAnswers: { bed: "UNANSWERED" } },
+    })));
+    expect(within(itemFieldset("Make the bed")).getByLabelText("Not answered")).toBeChecked();
+  });
+
   it("optimistically saves checklist and inventory choices through the capability API", async () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
@@ -570,7 +591,7 @@ describe("PublicChecklistPage", () => {
     })));
     expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeChecked();
 
-    fireEvent.change(screen.getByLabelText("Hand soap"), { target: { value: "NEEDS_RESTOCK" } });
+    fireEvent.click(stock("Restock"));
     await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenLastCalledWith(expect.objectContaining({
       baseRevision: 1,
       changes: { inventoryAnswers: { soap: "NEEDS_RESTOCK" } },
@@ -652,7 +673,7 @@ describe("PublicChecklistPage", () => {
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
     fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Done"));
-    fireEvent.change(screen.getByLabelText("Hand soap"), { target: { value: "LOW" } });
+    fireEvent.click(stock("Low"));
     expect(savePublicChecklistDraft).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -808,7 +829,8 @@ describe("PublicChecklistPage", () => {
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    expect(screen.getByText("Saved answers and notes will become read-only. This does not mark the job completed. Your manager will review the saved checklist.")).toBeVisible();
+    // The confirmation opens once the saved state has settled.
+    expect(await screen.findByText("Saved answers and notes will become read-only. This does not mark the job completed. Your manager will review the saved checklist.")).toBeVisible();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledWith(expect.objectContaining({
@@ -817,7 +839,7 @@ describe("PublicChecklistPage", () => {
     expect(await screen.findByText("This checklist is read-only. Your manager can now review the saved checklist.")).toBeVisible();
     expect(screen.getByText("Assigned cleaner: Assigned Cleaner Example")).toBeVisible();
     expect(within(itemFieldset("Make the bed")).getByLabelText("Done")).toBeDisabled();
-    expect(screen.getByLabelText("Hand soap")).toBeDisabled();
+    expect(stock("High")).toBeDisabled();
     expect(screen.getByLabelText("Other notes")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Send checklist for review" })).not.toBeInTheDocument();
   });
@@ -890,7 +912,7 @@ describe("PublicChecklistPage", () => {
 
     fireEvent.click(within(itemFieldset("Check under beds and furniture")).getByLabelText("Done"));
     fireEvent.click(within(itemFieldset("Check the pool")).getByLabelText("Not applicable"));
-    fireEvent.change(screen.getByLabelText("Hand soap"), { target: { value: "HIGH" } });
+    fireEvent.click(stock("High"));
     await waitFor(() => expect(screen.queryByText("Choose an inventory level before sending for review.")).not.toBeInTheDocument());
     expect(within(itemFieldset("Check under beds and furniture")).queryByText("Answer this item before sending for review.")).not.toBeInTheDocument();
     await waitFor(() => expect(within(itemFieldset("Check the pool")).queryByText("Answer this item before sending for review.")).not.toBeInTheDocument());

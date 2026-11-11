@@ -39,7 +39,7 @@ test('real Auth → callable → public checklist → persisted review → manag
     const radio=radios.nth(i),key=(await radio.getAttribute('name')).slice('checklist-'.length);
     await radio.check();await expect.poll(async()=>((await draftRef.get()).data().checklistAnswers[key]),{timeout:15000}).toBe('DONE');
   }
-  const selects=page.locator('.public-checklist__inventory-item select');for(let i=0;i<await selects.count();i++)await selects.nth(i).selectOption('HIGH');
+  const levels=page.locator('.public-checklist__inventory-item label[data-level="HIGH"]');for(let i=0;i<await levels.count();i++)await levels.nth(i).click();
   await expect(page.locator('.public-checklist__save-status')).toHaveClass(/--saved/);
   await page.locator('input[type="file"]').nth(1).setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(page.getByText('Photo saved',{exact:true})).toBeVisible();
   const evidence=(await runRef.collection('evidence').doc('living-belongings').get()).data();

@@ -24,7 +24,7 @@ export default defineConfig((environment) => {
         if (id !== managerFirestore) return;
         return `
           import { initializeFirestore } from "firebase/firestore";
-          export { connectFirestoreEmulator } from "firebase/firestore";
+          export { connectFirestoreEmulator, initializeFirestore } from "firebase/firestore";
           export const getFirestore = (app) => initializeFirestore(app, { experimentalForceLongPolling: true });
         `;
       },

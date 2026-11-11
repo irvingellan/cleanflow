@@ -75,6 +75,16 @@ for (const theme of themes) {
       await page.goto(`/checklist?t=${encodeURIComponent(fixture.checklistToken)}`);
       await page.waitForTimeout(1500);
       await shot(page, `${phase}-cleaner-${width}-${theme}-4-checklist`);
+      // A partly answered checklist: done tasks, one not applicable, stock levels.
+      if (width === 390 && await page.locator('label[data-answer="DONE"]').count()) {
+        for (const index of [0, 1, 2, 4]) await page.locator('label[data-answer="DONE"]').nth(index).click();
+        await page.locator('label[data-answer="NOT_APPLICABLE"]').first().click();
+        for (const [index, level] of [[0, "HIGH"], [1, "MEDIUM"], [2, "NEEDS_RESTOCK"], [3, "LOW"]]) {
+          await page.locator(".public-checklist__inventory-item").nth(index).locator(`label[data-level="${level}"]`).click();
+        }
+        await page.waitForTimeout(1200);
+        await shot(page, `${phase}-cleaner-${width}-${theme}-4b-checklist-in-progress`);
+      }
     }
     await context.close();
   });

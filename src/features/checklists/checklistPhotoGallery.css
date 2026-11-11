@@ -27,3 +27,5 @@
 .checklist-photo-gallery__progress { display: grid; gap: 6px; justify-items: start; }
 .checklist-photo-gallery__progress p { margin: 0; font-weight: 600; }
 .checklist-photo-gallery__failed { color: var(--cf-danger, #b42318); }
+.checklist-photo-gallery__help summary { cursor: pointer; font-weight: 600; min-height: 32px; }
+.checklist-photo-gallery__help p { margin: 6px 0 0; }
