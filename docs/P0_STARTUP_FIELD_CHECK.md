@@ -109,9 +109,41 @@ Copy only the returned text and the completed observation card. The expression
 makes no network request and never reads URL, account, clipboard, cookies or
 operational data. If there is no existing Inspector access, use only the card.
 
-A compiled loopback demo is suitable for native Safari on its own host. Its
-Firebase emulator connections use that device's loopback interface. A second
-device therefore needs its own approved synthetic setup to test authenticated
-flows. Opening a public entry on a second device can still establish whether
-the document and its assets render there. Test the installed iPhone Home Screen
-app in its existing window when recording a field incident.
+## Synthetic preview on the Mac
+
+After the operator agrees to the test, use an approved clean checkout with
+Node 22, Java 21, the locked dependencies and the local Firestore emulator
+binary available. From the repository root:
+
+```sh
+node scripts/runStartupFieldPreview.mjs
+```
+
+The command compiles the exact checkout, starts Auth and Firestore for
+`demo-cleanflow`, seeds the existing synthetic fixture and serves the
+preview at `http://127.0.0.1:4237/`. Both emulators and the preview listen
+on loopback. The browser policy allows only the preview and those emulator
+endpoints. Wait for the ready line and verify the commit and environment
+at `/version.json`. Stop the command with Ctrl+C when the test is finished.
+If a local port is occupied, keep the existing process and reschedule or use
+another approved checkout host.
+
+Open a new private Safari window, sign in with the local manager defined
+in `e2e/globalSetup.js` and verify that the Dashboard shows fictitious
+properties and team assignments. Use the same origin and window to
+exercise session restoration. Record the first useful screen and elapsed
+time for each scenario:
+
+| Scenario | Expected observation |
+| --- | --- |
+| Initial open and login | Sign-in appears, followed by a populated Dashboard after server-confirmed access. |
+| Second tab with saved session | The Dashboard opens with the existing synthetic account. |
+| Return after actual sleep | The same document finishes or displays its bounded recovery state. Record whether the data returns without a manual refresh. |
+| Network interruption and return | Recheck this against the consented field observation. The local loopback server is still reachable with Wi-Fi off, so use the lab fault-injection results for a controlled comparison. |
+
+Close the private window after the test. No real account or notification
+delivery is needed. A second device's loopback belongs to that device.
+Testing authenticated flows on an iPhone requires a separately approved
+synthetic network path. For the field incident, observe the existing
+iPhone Home Screen app with the operator before any reinstall or profile
+change.
