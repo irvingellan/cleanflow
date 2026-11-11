@@ -93,7 +93,10 @@ describe separate mechanisms to compare with those observations. In a local
 two-tab test, a held Firebase Auth IndexedDB transaction stalled the second
 tab with and without a saved synthetic session. Closing the holding tab
 allowed the pending observer to finish in the same document. The Auth
-watchdog gives a bounded error while the SDK remains blocked.
+watchdog gives a bounded error while the SDK remains blocked. Use the opt-in
+[Auth IndexedDB qualification](../e2e/auth-idb/README.md) to check the current
+behavior and require saved-session recovery while the lock is still held
+when qualifying the upstream fix in a stable SDK.
 
 Before any approved release, recheck the exact live version and review both
 sealed directories against the source and Hosting configuration. Run anonymous
