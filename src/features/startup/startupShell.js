@@ -175,6 +175,25 @@
     openWhenReady();
   }
 
+  function acknowledgeLegacyWorker() {
+    // The retained rollback worker can still reload pages that miss its
+    // acknowledgement. Answer before Auth, React and CSS can block startup.
+    try {
+      const workers = navigator.serviceWorker;
+      if (!workers) return;
+      const acknowledge = (target) => {
+        try { target?.postMessage({ type: "CLEANFLOW_UPDATE_CLIENT_READY" }); } catch { /* advisory */ }
+      };
+      workers.addEventListener("message", (event) => {
+        if (event.data?.type === "CLEANFLOW_UPDATE_AVAILABLE") acknowledge(event.source);
+      });
+      workers.addEventListener("controllerchange", () => acknowledge(workers.controller));
+      acknowledge(workers.controller);
+    } catch {
+      // Private or restricted contexts can deny access to the worker API.
+    }
+  }
+
   window.__cleanflowStartup = {
     mounted() {
       if (reactMounted) return;
@@ -186,6 +205,7 @@
     workerFailed: () => record("worker_registration_error"),
   };
   record("html_ready");
+  acknowledgeLegacyWorker();
   watchdog = setTimeout(() => expire(true), budget);
   window.addEventListener("error", onError, true);
   document.addEventListener("load", onStyleLoad, true);

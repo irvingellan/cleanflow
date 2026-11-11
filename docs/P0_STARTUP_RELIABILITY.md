@@ -54,6 +54,13 @@ exercises the signed-in data. Use [retention preparation](../scripts/prepareStar
 to build local, hash-verified forward and compatible rollback files. Only hashed
 assets cross versions; entry HTML, version markers, manifests and workers do not.
 Older pages can then still fetch their script even after the Hosting switch.
+The root worker still takes control and announces an available build. It no
+longer navigates an open document during activation. The older worker's
+fallback navigation could replace a usable document with a network error,
+including during login or unfinished work. The entry HTML acknowledges older
+workers before React commits so a rollback does not interrupt the candidate
+document. The root worker still has no fetch handler or operational cache.
+Dedicated notification workers keep their existing routes and behavior.
 
 Local browser commands, with Node 22 and Java 21 installed:
 

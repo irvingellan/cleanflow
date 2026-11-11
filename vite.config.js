@@ -130,17 +130,12 @@ firebase.messaging();
 
 function rootWorkerSource(buildId) {
   return `const buildId = ${JSON.stringify(buildId)};
-const acknowledgedClients = new Set();
 
 self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "CLEANFLOW_UPDATE_CLIENT_READY" && event.source?.id) {
-    acknowledgedClients.add(event.source.id);
-  }
-
   if (event.data?.type === "CLEANFLOW_SKIP_WAITING") {
     self.skipWaiting();
   }
@@ -155,16 +150,8 @@ self.addEventListener("activate", (event) => {
       client.postMessage({ type: "CLEANFLOW_UPDATE_AVAILABLE", buildId });
     });
 
-    // Older installed builds cannot acknowledge the update message. Reload them once so this
-    // update protocol can take over; current builds acknowledge and show their own prompt.
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const currentWindows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-
-    await Promise.all(
-      currentWindows
-        .filter((client) => !acknowledgedClients.has(client.id))
-        .map((client) => client.navigate(client.url).catch(() => undefined)),
-    );
+    // A worker cannot know whether a page has unfinished work or can reach
+    // Hosting. Let an open document keep running through the worker update.
   })());
 });
 

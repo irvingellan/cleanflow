@@ -270,32 +270,52 @@ export async function probeBrowser(origin, engine, { timeoutMs = 15_000, viewpor
   }
 }
 
-async function main() {
+const runnerError = "PROBE_CONFIGURATION_OR_RUNNER_ERROR";
+
+async function runPhase(check) {
+  try {
+    return await check();
+  } catch {
+    return { ok: false, issue: runnerError };
+  }
+}
+
+export async function runProbeCli(args, { httpCheck = probeHttp, browserCheck = probeBrowser, write = console.log } = {}) {
   const { values } = parseArgs({
+    args,
     options: {
-      host: { type: "string", default: "web.app" },
+      host: { type: "string" },
+      "all-hosts": { type: "boolean" },
       browser: { type: "string" },
       "expected-build": { type: "string" },
     },
   });
-  if (!hosts.includes(values.host) || (values.browser && !engines.includes(values.browser)) ||
+  if ((values.host !== undefined && (values["all-hosts"] || !hosts.includes(values.host))) ||
+      (values.browser && !engines.includes(values.browser)) ||
       (values["expected-build"] && !fullSha.test(values["expected-build"]))) {
     throw new Error("Invalid probe arguments.");
   }
-  const origin = `https://${projectId}.${values.host}`;
   const startedAt = new Date().toISOString();
-  const [http, browser] = await Promise.all([
-    probeHttp(origin, { expectedBuild: values["expected-build"] }),
-    values.browser ? probeBrowser(origin, values.browser) : { skipped: true },
-  ]);
-  const ok = http.ok && (browser.skipped || browser.ok);
-  console.log(JSON.stringify({ startedAt, origin, ok, http, browser }));
-  process.exitCode = browser.issue === "BROWSER_UNAVAILABLE" ? 2 : ok ? 0 : 1;
+  const selectedHosts = values["all-hosts"] ? hosts : [values.host ?? "web.app"];
+  const statuses = await Promise.all(selectedHosts.map(async (host) => {
+    const origin = `https://${projectId}.${host}`;
+    const [http, browser] = await Promise.all([
+      runPhase(() => httpCheck(origin, { expectedBuild: values["expected-build"] })),
+      values.browser ? runPhase(() => browserCheck(origin, values.browser)) : { skipped: true },
+    ]);
+    const ok = http.ok && (browser.skipped || browser.ok);
+    write(JSON.stringify({ startedAt, origin, ok, http, browser }));
+    if (http.issue === runnerError || browser.issue === runnerError || browser.issue === "BROWSER_UNAVAILABLE") return 2;
+    return ok ? 0 : 1;
+  }));
+  return Math.max(...statuses);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(() => {
-    console.log(JSON.stringify({ ok: false, issue: "PROBE_CONFIGURATION_OR_RUNNER_ERROR" }));
+  runProbeCli(process.argv.slice(2)).then((status) => {
+    process.exitCode = status;
+  }).catch(() => {
+    console.log(JSON.stringify({ ok: false, issue: runnerError }));
     process.exitCode = 2;
   });
 }

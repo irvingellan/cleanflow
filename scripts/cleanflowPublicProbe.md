@@ -5,15 +5,19 @@ Run from the repository root with Node 22 and the locked repository dependencies
 ```sh
 node scripts/cleanflowPublicProbe.mjs
 node scripts/cleanflowPublicProbe.mjs --host firebaseapp.com
-node scripts/cleanflowPublicProbe.mjs --browser webkit
+node scripts/cleanflowPublicProbe.mjs --all-hosts
+node scripts/cleanflowPublicProbe.mjs --all-hosts --browser webkit
 node scripts/cleanflowPublicProbe.mjs --browser chromium
 ```
 
-The CLI accepts only the two Production Firebase Hosting origins. Each invocation
-prints one JSON record with the UTC sample time, origin, phase, build ID, elapsed
-times, HTTP status and allowlisted outcome codes. Exit status 1 means a probe
-failed. Exit status 2 means the runner or invocation failed. An unavailable
-browser is a runner problem and is identified by `BROWSER_UNAVAILABLE`.
+The CLI accepts only the two Production Firebase Hosting origins. The default
+checks `web.app`. Use either `--all-hosts` or a specific `--host`. Each sampled
+origin prints one JSON line with the UTC sample time, build ID, elapsed times,
+HTTP status and allowlisted outcomes for each phase. Exit status 0 means all
+requested checks passed, 1 means at least one probe failed, and 2 means a runner
+or invocation error. A runner error takes precedence over a probe failure in the
+exit status. The JSON lines keep both results. An unavailable browser reports
+`BROWSER_UNAVAILABLE`.
 
 | Phase | Pass condition | Coverage |
 | --- | --- | --- |
@@ -27,15 +31,26 @@ for routine availability sampling.
 
 ## Schedule proposal
 
-The repository contains the runnable probe and commands. No schedule is active.
-Use a scheduler on an existing approved runner to run both HTTP commands every
-5 minutes. Run the WebKit browser command every 30 minutes from a runner with the
-Playwright WebKit build for the locked version. Chromium can confirm a WebKit
-failure or act as a comparison browser. Set a 60-second outer job deadline and
-keep one invocation per host and phase active at a time. A second approved
-vantage point helps distinguish a local route or CDN edge from a wider failure.
-Review Hosting transfer after the first day before increasing browser frequency.
-HTTP asset checks use HEAD to keep routine traffic small.
+On an existing Linux runner with Node 22, GNU `timeout`, and the locked
+Playwright WebKit browser, adapt this crontab example to the runner's checkout,
+Node executable, and writable log directory. Both jobs check the two aliases.
+The WebKit job starts two minutes after a regular HTTP job so the 60-second
+deadlines leave time between them.
+
+```cron
+CLEANFLOW_PROBE_REPO=/opt/cleanflow
+CLEANFLOW_PROBE_NODE=/usr/local/bin/node
+CLEANFLOW_PROBE_LOG_DIR=/var/log/cleanflow
+*/5 * * * * cd "$CLEANFLOW_PROBE_REPO" && /usr/bin/timeout -k 5s 60s "$CLEANFLOW_PROBE_NODE" scripts/cleanflowPublicProbe.mjs --all-hosts >> "$CLEANFLOW_PROBE_LOG_DIR/http.ndjson"
+2,32 * * * * cd "$CLEANFLOW_PROBE_REPO" && /usr/bin/timeout -k 5s 60s "$CLEANFLOW_PROBE_NODE" scripts/cleanflowPublicProbe.mjs --all-hosts --browser webkit >> "$CLEANFLOW_PROBE_LOG_DIR/webkit.ndjson"
+```
+
+Have the runner record the exit status and flag an invocation with a missing
+origin line or a timeout status as a runner error. In another scheduler use
+the same commands and a 60-second job deadline. Chromium can confirm a WebKit
+failure. A second runner region can help isolate a local network or CDN edge.
+Check Hosting transfer before increasing the browser frequency. HTTP asset
+checks use HEAD to keep routine traffic small.
 
 Retain the JSON records for 30 days in the runner's restricted logs. Associate
 the runner region with each stream. The probe records no raw response body, page

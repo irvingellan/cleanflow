@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
-import { probeBrowser, probeHttp } from "./cleanflowPublicProbe.mjs";
+import { fileURLToPath } from "node:url";
+import { probeBrowser, probeHttp, runProbeCli } from "./cleanflowPublicProbe.mjs";
 
 const buildId = "a".repeat(40);
 const deploymentId = `${buildId}-cleaner-push`;
@@ -132,6 +134,76 @@ test("rejects a query-bearing asset reference without requesting or recording th
     assert.equal(requests.some(({ url }) => url.includes("token=")), false);
     assert.equal(JSON.stringify(result).includes("token="), false);
   });
+});
+
+const primaryOrigin = "https://clean-flow-prototipo.web.app";
+const secondaryOrigin = "https://clean-flow-prototipo.firebaseapp.com";
+
+test("samples both fixed aliases in one job and preserves the individual HTTP outcomes", async () => {
+  await withFixture({}, async (healthy) => {
+    await withFixture({ assetFallback: true }, async (broken) => {
+      const records = [];
+      const fixtures = new Map([[primaryOrigin, healthy], [secondaryOrigin, broken]]);
+      const status = await runProbeCli(["--all-hosts", "--expected-build", buildId], {
+        httpCheck: (origin, options) => probeHttp(fixtures.get(origin), options),
+        browserCheck: () => assert.fail("HTTP-only job attempted to start a browser"),
+        write: (line) => records.push(JSON.parse(line)),
+      });
+      assert.equal(status, 1);
+      const byOrigin = new Map(records.map((record) => [record.origin, record]));
+      assert.equal(records.length, 2);
+      assert.equal(byOrigin.get(primaryOrigin).http.buildId, buildId);
+      assert.equal(byOrigin.get(primaryOrigin).ok, true);
+      assert.equal(byOrigin.get(secondaryOrigin).ok, false);
+      assert.equal(byOrigin.get(secondaryOrigin).http.rows.find(({ path }) => path === entryAsset).issue, "WRONG_CONTENT_TYPE");
+      assert.ok(records.every(({ browser: phase }) => phase.skipped));
+    });
+  });
+});
+
+test("an unavailable browser or thrown runner error does not discard either alias's phases", async () => {
+  const records = [];
+  const status = await runProbeCli(["--all-hosts", "--browser", "webkit"], {
+    httpCheck: (origin) => {
+      if (origin === secondaryOrigin) throw new Error("private fixture detail");
+      return { ok: false, rows: [{ issue: "HTTP_STATUS" }] };
+    },
+    browserCheck: (origin, engine) => ({
+      engine, ok: origin === secondaryOrigin,
+      ...(origin === primaryOrigin ? { issue: "BROWSER_UNAVAILABLE" } : {}),
+    }),
+    write: (line) => records.push(line),
+  });
+  assert.equal(status, 2);
+  assert.equal(records.length, 2);
+  assert.ok(records.every((line) => !line.includes("private fixture detail")));
+  const byOrigin = new Map(records.map((line) => {
+    const record = JSON.parse(line);
+    return [record.origin, record];
+  }));
+  assert.equal(byOrigin.get(primaryOrigin).http.rows[0].issue, "HTTP_STATUS");
+  assert.equal(byOrigin.get(primaryOrigin).browser.issue, "BROWSER_UNAVAILABLE");
+  assert.equal(byOrigin.get(secondaryOrigin).http.issue, "PROBE_CONFIGURATION_OR_RUNNER_ERROR");
+  assert.equal(byOrigin.get(secondaryOrigin).browser.engine, "webkit");
+  assert.equal(byOrigin.get(secondaryOrigin).browser.ok, true);
+});
+
+test("keeps the default alias and reports a conflicting CLI selection as a runner error", async () => {
+  const origins = [];
+  const status = await runProbeCli([], {
+    httpCheck: (origin) => {
+      origins.push(origin);
+      return { ok: true };
+    },
+    write: () => {},
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(origins, [primaryOrigin]);
+
+  const cli = fileURLToPath(new URL("./cleanflowPublicProbe.mjs", import.meta.url));
+  const invalid = spawnSync(process.execPath, [cli, "--all-hosts", "--host", "web.app"], { encoding: "utf8", timeout: 5000 });
+  assert.equal(invalid.status, 2);
+  assert.deepEqual(JSON.parse(invalid.stdout), { ok: false, issue: "PROBE_CONFIGURATION_OR_RUNNER_ERROR" });
 });
 
 const browser = process.env.CLEANFLOW_PROBE_TEST_BROWSER;
