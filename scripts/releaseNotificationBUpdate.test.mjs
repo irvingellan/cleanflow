@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runReleaseSequence, verifyTransition, writeReleaseModes } from "./releaseNotificationA.mjs";
-import { transportFunctions, verifyBStep } from "./releaseNotificationB.mjs";
+import { transportFunctions, verifiedBReceipt, verifyBStep } from "./releaseNotificationB.mjs";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  checkPushTestFunction, checkTransportRelease, deploymentArgs, stepReleaseModes, previousVariant, serverScopeChanges, updateSteps, updateStepsFor,
+  assertBackendUpdateScope, checkPushTestFunction, checkTransportRelease, deploymentArgs, stepReleaseModes, previousVariant, serverScopeChanges, updateOperationsScope, updateSteps, updateStepsFor, verifySealedBackendScope,
 } from "./releaseNotificationBUpdate.mjs";
 
 const oldSha = "a".repeat(40);
@@ -66,7 +66,7 @@ test("the update sequence advances revisions and rebinds the release", async () 
 });
 
 test("the reviewed update only changes the pilot check on the server", () => {
-  const scope = serverScopeChanges("4ec289ec0ac4785f56cd4e33830f152287ec1cd0", "0e36437");
+  const scope = serverScopeChanges("0e36437^", "0e36437");
   assert.ok(scope.allowed, scope.changed.join(","));
   assert.ok(scope.changed.includes("functions/src/cleanerPushPilot.js"));
 });
@@ -82,6 +82,8 @@ test("an update chains from either the original B publication or an earlier upda
   assert.equal(previousVariant(make("release-plan-U.json")), "U");
   assert.throws(() => previousVariant(make()), /exactly one/);
   assert.throws(() => previousVariant(make("release-plan-B.json", "release-plan-U.json")), /exactly one/);
+  assert.throws(() => previousVariant(make("release-plan-H.json")), /separately reviewed backend baseline/);
+  assert.throws(() => previousVariant(make("release-plan-U.json", "release-plan-H.json")), /separately reviewed backend baseline/);
 });
 
 test("the rebind update only changes device registration on the server", () => {
@@ -230,4 +232,46 @@ test("an operations update may only add reviewed, exact server dependencies", as
   assert.equal(dependencyChangesReviewed(base, { ...base, sharp: "0.33.5" }), false);
   assert.equal(dependencyChangesReviewed(base, { "firebase-admin": "^14.0.0" }), false);
   assert.equal(dependencyChangesReviewed(base, base), true);
+});
+
+
+test("reject a cosmetic historical release or a test-only backend diff before preparing deployment", () => {
+  const mixedBuildChange = serverScopeChanges("4ec289e", "0e36437");
+  assert.ok(mixedBuildChange.changed.includes("vite.config.js"));
+  assert.throws(() => assertBackendUpdateScope(mixedBuildChange), /outside the reviewed/);
+  const layout = serverScopeChanges("00bd608", "0f9735f", { operations: true });
+  assert.deepEqual(layout.changed, []);
+  assert.throws(() => assertBackendUpdateScope(layout), /No deployable backend change/);
+  assert.throws(() => assertBackendUpdateScope({ allowed: true, changed: ["functions/src/index.test.js"] }), /No deployable backend change/);
+  assert.throws(() => assertBackendUpdateScope({ allowed: false, changed: ["firebase.json", "functions/src/index.js"] }), /outside the reviewed/);
+  assert.doesNotThrow(() => assertBackendUpdateScope({ allowed: true, changed: ["functions/src/index.js"] }));
+});
+
+test("canonical B updates seal an explicit scope while historical scopes remain pinned", () => {
+  for (const branch of ["main", ""]) {
+    assert.equal(updateOperationsScope(branch, false), false);
+    assert.equal(updateOperationsScope(branch, true), true);
+    assert.throws(() => updateOperationsScope(branch), /explicit sealed scope/);
+  }
+  assert.equal(updateOperationsScope("claude/cleaner-push-rebind", false), false);
+  assert.equal(updateOperationsScope("claude/operations-evolution", true), true);
+  assert.throws(() => updateOperationsScope("claude/cleaner-push-rebind", true), /historical branch/);
+  assert.throws(() => updateOperationsScope("claude/operations-evolution", false), /historical branch/);
+  assert.throws(() => updateOperationsScope("codex/unreviewed", true), /reviewed update branch/);
+});
+
+test("B rollback matches the completed publication, plan, artifact and exact live snapshot", () => {
+  const binding = { action: "publish", sha: newSha, planHash: "plan", artifactHash: "artifact", snapshot: live };
+  const receipt = { ...binding, schema: 1, state: "COMPLETE" };
+  assert.equal(verifiedBReceipt(receipt, binding), true);
+  for (const wrong of [{ state: "DEPLOYING" }, { sha: oldSha }, { planHash: "other" }, { artifactHash: "other" },
+    { action: "rollback" }, { snapshot: { ...live, rules: { id: "changed" } } }]) {
+    assert.equal(verifiedBReceipt({ ...receipt, ...wrong }, binding), false);
+  }
+});
+
+test("a sealed historical layout publication can roll back despite having no backend delta", () => {
+  const plan = { sha: "0f9735f", serverChanges: [] };
+  assert.throws(() => verifySealedBackendScope("publish", "00bd608", plan, true), /No deployable backend change/);
+  assert.doesNotThrow(() => verifySealedBackendScope("rollback", "00bd608", plan, true));
 });

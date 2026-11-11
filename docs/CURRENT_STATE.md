@@ -1,5 +1,23 @@
 # CleanFlow — Current State
 
+<!-- cleanflow-engineering:begin -->
+## Unified Engineering checkpoint · 2026-11-11
+
+- Issue #83 tracks consolidation. The local engineering candidate starts
+  from the Production source `0f9735f5641815f00f6ef0912621dee6cb62b9a8`.
+- Read-only Production verification matched Hosting `b66d088c9aaaa728`,
+  26 assets, 54 Function configurations and the sealed Rules and schedules.
+  The prior layout release points to the finalized `00bd608` rollback.
+- Irving confirmed that the public GitHub repository `irvingellan/cleanflow`
+  is the official source. GitHub `main` was verified at the Production
+  baseline `0f9735f` before integrating the engineering and startup PRs.
+- GitHub integration and Production deployment are separate. Production
+  publication requires Irving's explicit GO.
+- Local workflow and verification details are in
+  [Unified Engineering](engineering/UNIFIED_ENGINEERING.md). Dated
+  deployment notes below describe their original checkpoints.
+<!-- cleanflow-engineering:end -->
+
 ## 2026-11-05 — Cleaner push test notices (Issue #85)
 
 `claude/cleaner-push-test-button` adds one callable, `cleanerPushTest`:
