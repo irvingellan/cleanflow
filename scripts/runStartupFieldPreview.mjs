@@ -57,13 +57,24 @@ async function serve(directory) {
 function run(args, env) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, { cwd: root, env, stdio: "inherit", detached: true });
-    const interrupt = () => child.kill("SIGINT");
-    const terminate = () => child.kill("SIGTERM");
+    const signalGroup = (signal) => {
+      if (!child.pid) return;
+      try {
+        // Firebase starts the preview through a shell. Stop the entire
+        // isolated process group so the preview cannot keep listening.
+        process.kill(-child.pid, signal);
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    };
+    const interrupt = () => signalGroup("SIGINT");
+    const terminate = () => signalGroup("SIGTERM");
     process.on("SIGINT", interrupt);
     process.on("SIGTERM", terminate);
     child.once("close", (code) => {
       process.off("SIGINT", interrupt);
       process.off("SIGTERM", terminate);
+      terminate();
       resolve(code ?? 1);
     });
     child.once("error", reject);
