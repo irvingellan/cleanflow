@@ -3,7 +3,7 @@ import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
-import { getChecklistEvidence, setReportPhotoVisibility } from "./checklistRunService.js";
+import { correctChecklistAnswer, getChecklistEvidence, setReportPhotoVisibility } from "./checklistRunService.js";
 import { ClientReportControls } from "./ClientReportControls.jsx";
 import { ChecklistPhotoGrid } from "./ChecklistPhotoGrid.jsx";
 
@@ -83,7 +83,7 @@ function AttentionNames({ title, items, emptyMessage, translate }) {
 export function ChecklistRunDetail({
   job, checklistRun, isRefreshing = false, hasRefreshError = false, onRefresh, onBack,
   loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete, onAbandonAndComplete,
-  onSubmitForReview, setPhotoVisibility = setReportPhotoVisibility,
+  onSubmitForReview, setPhotoVisibility = setReportPhotoVisibility, correctAnswer = correctChecklistAnswer,
 }) {
   const { language, translate } = useTranslation();
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
@@ -134,6 +134,35 @@ export function ChecklistRunDetail({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hiddenOverrides, setHiddenOverrides] = useState({});
   const [photoVisibilityError, setPhotoVisibilityError] = useState(false);
+  // One answer at a time can be open for correction: "checklist:<id>" or "inventory:<id>".
+  const [correcting, setCorrecting] = useState(null);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState(false);
+  const canCorrect = isReadyForReview && !job.archivedAt && typeof onRefresh === "function";
+  const saveCorrection = async (kind, itemId, answer) => {
+    setSavingCorrection(true); setCorrectionError(false);
+    try { await correctAnswer(job.id, kind, itemId, answer); setCorrecting(null); await onRefresh(); }
+    catch { setCorrectionError(true); }
+    finally { setSavingCorrection(false); }
+  };
+  const answerRow = (kind, item) => {
+    const key = `${kind}:${item.id}`; const prefix = kind === "inventory" ? "checklists.inventory" : "checklists.answer";
+    const options = kind === "inventory" ? ["LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"] : ["DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
+    return <li key={item.id} className={item.correctedByManager ? "is-corrected" : undefined}>
+      <span>{checklistLabel(item, translate)}</span>
+      <strong>{translate(`${prefix}${item.answer || "UNANSWERED"}`)}</strong>
+      {item.correctedByManager && <small className="checklist-run__corrected">{translate("checklists.correctedByManager", { answer: translate(`${prefix}${item.cleanerAnswer || "UNANSWERED"}`) })}</small>}
+      {canCorrect && correcting !== key && <button className="button button--text checklist-run__correct" type="button" onClick={() => { setCorrectionError(false); setCorrecting(key); }}>{translate("checklists.correctAnswer")}</button>}
+      {canCorrect && correcting === key && <div className="checklist-run__correction" role="group" aria-label={translate("checklists.correctAnswerFor", { item: checklistLabel(item, translate) })}>
+        {options.filter((answer) => answer !== item.answer).map((answer) => (
+          <button key={answer} className="button button--small" type="button" disabled={savingCorrection} onClick={() => saveCorrection(kind, item.id, answer)}>{translate(`${prefix}${answer}`)}</button>
+        ))}
+        {item.correctedByManager && <button className="button button--small button--secondary" type="button" disabled={savingCorrection} onClick={() => saveCorrection(kind, item.id, null)}>{translate("checklists.undoCorrection")}</button>}
+        <button className="button button--small button--secondary" type="button" disabled={savingCorrection} onClick={() => setCorrecting(null)}>{translate("common.cancel")}</button>
+        {correctionError && <p className="form-error" role="alert">{translate("checklists.correctionError")}</p>}
+      </div>}
+    </li>;
+  };
 
   // FB07: hiding keeps the evidence; the client report no longer shows it.
   async function togglePhotoInReport(item) {
@@ -342,12 +371,7 @@ export function ChecklistRunDetail({
         <section className="checklist-run__section" aria-labelledby={`run-section-${section.id}`} key={section.id}>
           <h3 id={`run-section-${section.id}`}>{section.title || translate(section.titleKey || section.id)}</h3>
           <ul className="checklist-run__answers">
-            {section.items?.map((item) => (
-              <li key={item.id}>
-                <span>{checklistLabel(item, translate)}</span>
-                <strong>{translate(`checklists.answer${item.answer || "UNANSWERED"}`)}</strong>
-              </li>
-            ))}
+            {section.items?.map((item) => answerRow("checklist", item))}
           </ul>
         </section>
       ))}
@@ -356,12 +380,7 @@ export function ChecklistRunDetail({
         <section className="checklist-run__section" aria-labelledby="checklist-saved-inventory-title">
           <h3 id="checklist-saved-inventory-title">{translate("checklists.inventoryCount")}</h3>
           <ul className="checklist-run__answers">
-            {checklistRun.inventoryItems.map((item) => (
-              <li key={item.id}>
-                <span>{checklistLabel(item, translate)}</span>
-                <strong>{translate(`checklists.inventory${item.answer || "UNANSWERED"}`)}</strong>
-              </li>
-            ))}
+            {checklistRun.inventoryItems.map((item) => answerRow("inventory", item))}
           </ul>
         </section>
       )}

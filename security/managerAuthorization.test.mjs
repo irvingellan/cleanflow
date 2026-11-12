@@ -49,6 +49,7 @@ const {
   publicClientReport,
   publicClientPortal,
   clientPortalAccess,
+  correctChecklistAnswer,
   rescheduleJob,
 } = await import("../functions/src/index.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
@@ -2101,6 +2102,58 @@ async function publicClientPortalGet(token, extraQuery = {}, method = "GET") {
   await publicClientPortal({ method, query: { token, ...extraQuery } }, response);
   return response;
 }
+
+test("a manager corrects a cleaner's answer without rewriting it, and the client report follows", async () => {
+  const { runRef } = await prepareReadyClientReportRun();
+  const correction = { jobId: "job", kind: "inventory", itemId: "hand-soap", answer: "HIGH" };
+  for (const [uid, anonymous, code] of [
+    [null, false, "unauthenticated"], ["outsider", false, "permission-denied"], ["other-manager", false, "permission-denied"],
+    ["cleaner", false, "permission-denied"], ["anonymous-member", true, "unauthenticated"],
+  ]) {
+    await assert.rejects(correctChecklistAnswer.run(request(uid, correction, anonymous)), { code });
+  }
+  for (const invalid of [
+    { ...correction, kind: "notes" }, { ...correction, answer: "UNANSWERED" }, { ...correction, answer: "DONE" },
+    { ...correction, itemId: "a/b" }, { ...correction, itemId: "__proto__.x" },
+    { jobId: "job", kind: "checklist", itemId: "bed-remake", answer: "HIGH" },
+  ]) {
+    await assert.rejects(correctChecklistAnswer.run(request("manager", invalid)), { code: "invalid-argument" });
+  }
+  await assert.rejects(correctChecklistAnswer.run(request("manager", { ...correction, itemId: "no-such-item" })), { code: "not-found" });
+
+  const draftBefore = (await runRef.collection("drafts").get()).docs.map((doc) => JSON.stringify(doc.data()));
+  assert.deepEqual(await correctChecklistAnswer.run(request("manager", correction)), { kind: "inventory", itemId: "hand-soap", corrected: true, answer: "HIGH" });
+  const stored = (await runRef.get()).data().managerCorrections.inventory["hand-soap"];
+  assert.equal(stored.answer, "HIGH");
+  assert.equal(stored.byUid, "manager");
+  // The cleaner's saved answers are untouched.
+  assert.deepEqual((await runRef.collection("drafts").get()).docs.map((doc) => JSON.stringify(doc.data())), draftBefore);
+
+  let view = (await getChecklistRun.run(request("manager", { jobId: "job" }))).run;
+  let soap = view.inventoryItems.find((item) => item.id === "hand-soap");
+  assert.deepEqual([soap.answer, soap.cleanerAnswer, soap.correctedByManager], ["HIGH", "NEEDS_RESTOCK", true]);
+  assert.equal(view.inventoryItems.find((item) => item.id === "client-tea").correctedByManager, undefined);
+
+  const link = await createClientReport.run(request("manager", { jobId: "job" }));
+  let report = (await publicClientReportGet(link.token)).body.report;
+  assert.equal(report.inventoryItems.find((item) => item.label === "Tea").answer, "LOW");
+  assert.equal(report.inventoryItems.some((item) => item.answer === "NEEDS_RESTOCK"), false);
+  assert.equal(JSON.stringify(report).includes("managerCorrections"), false);
+  assert.equal(JSON.stringify(report).includes("cleanerAnswer"), false);
+
+  // Undoing the correction brings the cleaner's answer back everywhere.
+  assert.deepEqual(await correctChecklistAnswer.run(request("manager", { ...correction, answer: null })), { kind: "inventory", itemId: "hand-soap", corrected: false });
+  soap = (await getChecklistRun.run(request("manager", { jobId: "job" }))).run.inventoryItems.find((item) => item.id === "hand-soap");
+  assert.deepEqual([soap.answer, soap.correctedByManager], ["NEEDS_RESTOCK", undefined]);
+  report = (await publicClientReportGet(link.token)).body.report;
+  assert.equal(report.inventoryItems.some((item) => item.answer === "NEEDS_RESTOCK"), true);
+
+  // A checklist the cleaner is still filling cannot be corrected.
+  await runRef.update({ status: "DRAFT" });
+  await assert.rejects(correctChecklistAnswer.run(request("manager", correction)), { code: "failed-precondition" });
+  // Browsers never write corrections directly.
+  await assertFails(account("manager").firestore().doc(`${root}/jobs/job/checklistRuns/initial`).update({ "managerCorrections.inventory.hand-soap": { answer: "LOW" } }));
+});
 
 test("client portal link shows one client only what the manager released and can be turned off", async () => {
   const { runRef } = await prepareReadyClientReportRun();

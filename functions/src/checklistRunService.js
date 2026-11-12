@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { applyManagerCorrections, managerCorrection } from "./checklistManagerCorrection.js";
 import { HttpsError } from "firebase-functions/v2/https";
 import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
 import { checklistDraftReviewRequirements, projectChecklistDraftForRead } from "./checklistDraftService.js";
@@ -27,6 +28,10 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
   const definition = run?.resolvedDefinition || {};
   const sections = Array.isArray(definition.sections) ? definition.sections : [];
   const draftProjection = projectChecklistDraftForRead(run, draft);
+  const corrected = applyManagerCorrections(run, draftProjection);
+  // The cleaner's own answer stays visible next to a manager correction.
+  const withCorrection = (kind, itemId, saved) => (managerCorrection(run, kind, itemId)
+    ? { correctedByManager: true, cleanerAnswer: saved || "UNANSWERED" } : {});
   const requiredPhotoTypes = Array.isArray(definition.requiredPhotoTypes)
     ? definition.requiredPhotoTypes
       .filter((photoType) => typeof photoType?.id === "string" && typeof photoType?.label === "string")
@@ -66,14 +71,17 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
         id: typeof item?.id === "string" ? item.id : "",
         labelKey: typeof item?.labelKey === "string" ? item.labelKey : null,
         label: typeof item?.label === "string" ? item.label : null,
-        answer: draftProjection.checklistAnswers?.[item?.id] || "UNANSWERED",
+        ...(item?.canBeNotApplicable === true ? { canBeNotApplicable: true } : {}),
+        answer: corrected.checklistAnswers?.[item?.id] || "UNANSWERED",
+        ...withCorrection("checklist", item?.id, draftProjection.checklistAnswers?.[item?.id]),
       })),
     })),
     inventoryItems: (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => ({
       id: typeof item?.id === "string" ? item.id : "",
       labelKey: typeof item?.labelKey === "string" ? item.labelKey : null,
       label: typeof item?.label === "string" ? item.label : null,
-      answer: draftProjection.inventoryAnswers?.[item?.id] || "UNANSWERED",
+      answer: corrected.inventoryAnswers?.[item?.id] || "UNANSWERED",
+      ...withCorrection("inventory", item?.id, draftProjection.inventoryAnswers?.[item?.id]),
     })),
     checklistItemCount: sections.reduce(
       (count, section) => count + (Array.isArray(section?.items) ? section.items.length : 0),

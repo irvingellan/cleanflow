@@ -4816,3 +4816,13 @@ h1 {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* Manager correction of a cleaner's answer: the controls sit under the row. */
+.checklist-run__answers li { flex-wrap: wrap; }
+.checklist-run__answers li > span { flex: 1 1 60%; }
+.checklist-run__corrected { flex: 1 1 100%; color: var(--color-text-secondary); font-size: 0.82rem; }
+.checklist-run__answers li.is-corrected strong { color: var(--color-brand-text); }
+.checklist-run__correct { flex: 0 0 auto; min-height: 32px; padding: 0 4px; font-size: 0.82rem; }
+.checklist-run__correction { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.checklist-run__correction .form-error { flex: 1 1 100%; margin: 0; }
+@media print { .checklist-run__correct, .checklist-run__correction { display: none; } }

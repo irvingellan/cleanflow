@@ -105,6 +105,7 @@ import {
   revokeClientReportForManager,
   setReportPhotoVisibilityForManager,
 } from "./clientReportService.js";
+import { correctChecklistAnswerForManager } from "./checklistManagerCorrection.js";
 import {
   downloadPublicClientPortalPhoto, getClientPortalForManager, issueClientPortalForManager,
   loadPublicClientPortal, loadPublicClientPortalReport, revokeClientPortalForManager,
@@ -1037,6 +1038,19 @@ export const setReportPhotoVisibility = onCall(
     return setReportPhotoVisibilityForManager(db, {
       organizationId, jobId, evidenceId: request.data?.evidenceId, hidden: request.data?.hidden,
       reason: request.data?.reason, actorUid: request.auth.uid,
+    });
+  },
+);
+
+export const correctChecklistAnswer = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    const jobId = request.data?.jobId;
+    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
+    return correctChecklistAnswerForManager(db, {
+      organizationId, jobId, kind: request.data?.kind, itemId: request.data?.itemId,
+      answer: request.data?.answer ?? null, actorUid: request.auth.uid,
     });
   },
 );
