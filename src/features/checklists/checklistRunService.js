@@ -29,6 +29,12 @@ export async function submitChecklistRunForReview(jobId, baseRevision) {
   return result.data;
 }
 
+/** Correct one answer the cleaner got wrong; `answer: null` undoes the correction. */
+export async function correctChecklistAnswer(jobId, kind, itemId, answer) {
+  const result = await httpsCallable(functions, "correctChecklistAnswer")({ jobId, kind, itemId, answer });
+  return result.data;
+}
+
 /** FB07: hide one saved photo from the client report (or show it again). It stays as evidence. */
 export async function setReportPhotoVisibility(jobId, evidenceId, hidden, reason = "") {
   const result = await httpsCallable(functions, "setReportPhotoVisibility")({ jobId, evidenceId, hidden, reason });

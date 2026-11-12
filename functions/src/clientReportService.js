@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { applyManagerCorrections } from "./checklistManagerCorrection.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertChecklistDraftReadyForReview } from "./checklistDraftService.js";
@@ -106,18 +107,20 @@ export function projectClientReport(run, draft, evidence, presentationInput = {}
   if (run.readyForReviewDraftRevision !== normalizedDraft.revision) {
     throw new HttpsError("failed-precondition", "The saved checklist revision is unavailable.");
   }
+  // The client sees the answers as the manager corrected them.
+  const answers = applyManagerCorrections(run, normalizedDraft);
   const definition = run.resolvedDefinition || {};
   const sections = (Array.isArray(definition.sections) ? definition.sections : []).map((section) => ({
     ...(typeof section?.title === "string" && section.title.trim() ? { title: section.title.trim() } : {}),
     ...(typeof section?.titleKey === "string" && section.titleKey.trim() ? { titleKey: section.titleKey.trim() } : {}),
     items: (Array.isArray(section?.items) ? section.items : []).map((item) => ({
       ...visibleLabel(item),
-      answer: validAnswer(normalizedDraft.checklistAnswers?.[item.id], checklistAnswers),
+      answer: validAnswer(answers.checklistAnswers?.[item.id], checklistAnswers),
     })),
   }));
   const inventoryItems = (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => ({
     ...visibleLabel(item),
-    answer: validAnswer(normalizedDraft.inventoryAnswers?.[item.id], inventoryAnswers),
+    answer: validAnswer(answers.inventoryAnswers?.[item.id], inventoryAnswers),
   }));
   const galleryPhotos = run.evidencePolicy?.version === 2 ? visiblePhotos(run, evidence) : null;
   const hasPhoto = galleryPhotos ? galleryPhotos.length > 0

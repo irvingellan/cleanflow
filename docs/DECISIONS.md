@@ -1199,3 +1199,21 @@ Invoices are not part of this version; they depend on the billing work.
 `security/managerAuthorization.test.mjs` (authorization, isolation between
 clients, release, replacement, revocation, expiry, leak checks) and the
 screen tests under `src/features/client-portal`.
+
+## DEC-057 — Manager corrections are a layer over the cleaner's answers
+
+**Status:** Implemented on `claude/manager-corrects-checklist`, not deployed.
+
+**Context.** A cleaner sometimes answers a checklist item wrongly (for example a
+supply marked as missing). The manager needs the client report to be right, and
+the record of what the cleaner actually answered must survive.
+
+**Decision.** The callable `correctChecklistAnswer` stores
+`managerCorrections.{checklist|inventory}.{itemId} = { answer, byUid, at }` on the
+Checklist Run. The cleaner's draft is never rewritten. Manager views show the
+corrected answer with the cleaner's original next to it; the client report shows
+only the corrected answer. A correction can be undone, and is allowed only on a
+Run that was sent for review. Browsers cannot write the field.
+
+**Consequences.** One more Function in Production. Notes and photos are not
+correctable through this path; photos keep their own hide-from-report control.

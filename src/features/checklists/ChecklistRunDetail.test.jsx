@@ -205,6 +205,33 @@ describe("ChecklistRunDetail", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it("lets the manager correct a cleaner's answer on a Run sent for review, and undo it", async () => {
+    const correctAnswer = vi.fn().mockResolvedValue({ corrected: true });
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const run = (soap) => ({ id: "initial", status: "READY_FOR_REVIEW", property: { id: "p", name: "P" }, sections: [],
+      inventoryItems: [{ id: "hand-soap", label: "Hand soap", ...soap }, { id: "tea", label: "Tea", answer: "LOW" }] });
+    const view = (soap, extra = {}) => <TranslationProvider>
+      <ChecklistRunDetail job={{ id: "job-1", propertyName: "Job Property", scheduledDate: "2026-09-20" }} checklistRun={{ ...run(soap), ...extra }}
+        onBack={vi.fn()} onRefresh={onRefresh} correctAnswer={correctAnswer} />
+    </TranslationProvider>;
+    const { rerender } = render(view({ answer: "NEEDS_RESTOCK" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Correct" })[0]);
+    const group = screen.getByRole("group", { name: "Correct the answer for Hand soap" });
+    expect(within(group).queryByRole("button", { name: "Needs restock" })).not.toBeInTheDocument();
+    fireEvent.click(within(group).getByRole("button", { name: "High" }));
+    await waitFor(() => expect(correctAnswer).toHaveBeenCalledWith("job-1", "inventory", "hand-soap", "HIGH"));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+
+    rerender(view({ answer: "HIGH", correctedByManager: true, cleanerAnswer: "NEEDS_RESTOCK" }));
+    expect(screen.getByText("Corrected by you. The cleaner answered: Needs restock")).toBeVisible();
+    fireEvent.click(screen.getAllByRole("button", { name: "Correct" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Undo correction" }));
+    await waitFor(() => expect(correctAnswer).toHaveBeenLastCalledWith("job-1", "inventory", "hand-soap", null));
+
+    // A checklist the cleaner is still filling offers no correction.
+    rerender(view({ answer: "NEEDS_RESTOCK" }, { status: "DRAFT" }));
+    expect(screen.queryByRole("button", { name: "Correct" })).not.toBeInTheDocument();
+  });
   it("shows a cleaner-ready Run and its acknowledged draft without manager editing controls", () => {
     renderChecklistRun({
       status: "READY_FOR_REVIEW",
