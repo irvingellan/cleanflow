@@ -1,4 +1,6 @@
 const PREVIEW_EDGE = 320;
+// A decode that never answers is abandoned, so its memory is released.
+const PREVIEW_TIMEOUT_MS = 8_000;
 
 /**
  * A small local picture of a photo the phone just prepared, so the cleaner sees
@@ -12,7 +14,10 @@ export async function createChecklistPhotoPreview(blob) {
     source = URL.createObjectURL(blob);
     const image = new Image();
     image.decoding = "async"; image.src = source;
-    await image.decode();
+    let timer;
+    try {
+      await Promise.race([image.decode(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("preview timeout")), PREVIEW_TIMEOUT_MS); })]);
+    } finally { clearTimeout(timer); }
     const ratio = Math.min(1, PREVIEW_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
     canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));

@@ -54,6 +54,22 @@ describe("sequential bounded photo gallery", () => {
     await waitFor(() => expect(result.current.saved).toHaveLength(2));
     expect(result.current.local).toHaveLength(0);
   });
+  it("saves every photo even when the small picture never becomes ready", async () => {
+    const { result } = setup({ preview: () => new Promise(() => {}) });
+    act(() => result.current.append([file(), file(), file()]));
+    await waitFor(() => expect(result.current.saved).toHaveLength(3));
+    expect(result.current.local).toHaveLength(0);
+    expect(result.current.pendingCount).toBe(0);
+  });
+  it("shows the small picture when it becomes ready after the photo was saved", async () => {
+    const pending = deferred();
+    const { result } = setup({ preview: () => pending.promise });
+    act(() => result.current.append([file()]));
+    await waitFor(() => expect(result.current.saved).toHaveLength(1));
+    expect(result.current.previewFor(result.current.saved[0].evidenceId)).toBeNull();
+    await act(async () => pending.resolve("blob:picture"));
+    expect(result.current.previewFor(result.current.saved[0].evidenceId)).toBe("blob:picture");
+  });
   it("discards every failed photo in one step and keeps the saved ones", async () => {
     let calls = 0;
     const { result } = setup({ optimize: async () => {

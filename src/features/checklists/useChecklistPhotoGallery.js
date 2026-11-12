@@ -98,9 +98,18 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
             item.file = null;
             item.blob = optimized.blob;
             if (!(item.blob instanceof Blob)) throw { code: "checklist_photo_invalid_image" };
-            const picture = await Promise.resolve(options.current.preview(item.blob)).catch(() => null);
-            if (scope.current !== current || current.disposed) { releaseChecklistPhotoPreview(picture); return; }
-            item.preview = picture || null; notify(current);
+            // The small picture is a convenience. It is made in the background and
+            // never holds the upload back, even if the browser never answers.
+            const pictured = item;
+            Promise.resolve().then(() => options.current.preview(pictured.blob)).catch(() => null).then((picture) => {
+              if (!picture) return;
+              if (scope.current !== current || current.disposed || pictured.discarded) return releaseChecklistPhotoPreview(picture);
+              if (pictured.savedId) {
+                if (!current.saved.some((photo) => photo.evidenceId === pictured.savedId)) return releaseChecklistPhotoPreview(picture);
+                releaseChecklistPhotoPreview(current.previews.get(pictured.savedId)); current.previews.set(pictured.savedId, picture);
+              } else pictured.preview = picture;
+              notify(current);
+            });
           }
           if (!editable(current) || current.controller.signal.aborted) return;
           item.state = "UPLOADING"; notify(current);
@@ -122,6 +131,7 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
           if (!Number.isInteger(result?.evidenceRevision) || !result?.evidence?.some((photo) =>
             photo.evidenceId === result.evidenceId && photo.requirementId === item.requirementId)) throw { code: "checklist_response_invalid" };
           apply(current, result);
+          item.savedId = result.evidenceId;
           if (item.preview) { releaseChecklistPhotoPreview(current.previews.get(result.evidenceId)); current.previews.set(result.evidenceId, item.preview); item.preview = null; }
           item.blob = null; item.file = null;
           current.local = current.local.filter((p) => p !== item);
@@ -175,7 +185,7 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
     async discard(id) {
       const state = scope.current; const item = state?.local.find((p) => p.id === id);
       if (!editable(state) || !["FAILED", "READY"].includes(item?.state)) return;
-      item.file = null; item.blob = null; releaseChecklistPhotoPreview(item.preview);
+      item.file = null; item.blob = null; item.discarded = true; releaseChecklistPhotoPreview(item.preview);
       state.local = state.local.filter((p) => p !== item);
       notify(state);
       // An uncertain upload may already be saved. Discard releases local bytes,
@@ -186,7 +196,7 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
     async discardFailed() {
       const state = scope.current;
       if (!editable(state) || !state.local.some((p) => p.state === "FAILED")) return;
-      for (const item of state.local) if (item.state === "FAILED") { item.file = null; item.blob = null; releaseChecklistPhotoPreview(item.preview); }
+      for (const item of state.local) if (item.state === "FAILED") { item.file = null; item.blob = null; item.discarded = true; releaseChecklistPhotoPreview(item.preview); }
       state.local = state.local.filter((p) => p.state !== "FAILED");
       notify(state);
       await refreshSaved();
