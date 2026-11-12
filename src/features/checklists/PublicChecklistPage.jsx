@@ -508,7 +508,8 @@ export function PublicChecklistPage({ token }) {
               ? "checklists.completionIncomplete"
               : isV2 && (gallery.pendingCount > 0 || gallery.refreshing) ? "checklists.completionSaving"
               : saveState === checklistSaveStates.SAVED ? "checklists.completionReady" : "checklists.completionSaving")}</h2>
-            <p>{translate(saveState === checklistSaveStates.SAVED ? "checklists.draftNotSubmitted" : "checklists.draftPending")}</p>
+            {/* Both wordings reserve their height, so saving an answer never moves the list below. */}
+            <p className="public-checklist__steady" data-alternate={translate(saveState === checklistSaveStates.SAVED ? "checklists.draftPending" : "checklists.draftNotSubmitted")}><span>{translate(saveState === checklistSaveStates.SAVED ? "checklists.draftNotSubmitted" : "checklists.draftPending")}</span></p>
             {missingItems.length > 0 ? (
               <>
                 {!hasAttemptedValidation && <p>{translate("checklists.reviewValidationSummary", { checklist: missingChecklistCount, inventory: missingInventoryCount, photos: missingPhotoCount })}</p>}

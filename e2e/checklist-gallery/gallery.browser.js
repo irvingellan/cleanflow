@@ -29,6 +29,21 @@ test("native multiple selection appends camera later and respects mobile control
   const sizes = await page.locator(".checklist-photo-gallery .button").evaluateAll((elements) => elements.map((el) => el.getBoundingClientRect().height));
   expect(sizes.every((size) => size >= 44)).toBe(true);
   await expect(page.locator(".checklist-photo-gallery img")).toHaveCount(0);
+  // Each saved photo shows its own picture in the grid, made on the phone.
+  await expect(page.locator(".checklist-photo-tile.is-saved .checklist-photo-tile__picture")).toHaveCount(3);
+  if (process.env.GALLERY_SHOT) await page.locator(".checklist-photo-gallery").screenshot({ path: process.env.GALLERY_SHOT });
+});
+
+test("answering a task does not move the list while the answer is saved", async ({ page }) => {
+  const target = page.locator('.public-checklist__item--task label[data-answer="DONE"]').first();
+  const top = async () => Math.round((await target.boundingBox()).y + await page.evaluate(() => scrollY));
+  await page.evaluate(() => { globalThis.syntheticSaveDelay = 500; });
+  const tops = [await top()];
+  for (let tap = 0; tap < 2; tap++) {
+    await target.click();
+    for (let i = 0; i < 20; i++) { tops.push(await top()); await page.waitForTimeout(120); }
+  }
+  expect(new Set(tops).size, `positions seen: ${tops.join(",")}`).toBe(1);
 });
 
 test("twenty saved photos load no images until explicit view; READY is read-only", async ({ page }) => {

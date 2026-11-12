@@ -110,6 +110,7 @@ describe("V2 multi-photo cleaner flow", () => {
       return { checklist: { ...checklistB, status: "READY_FOR_REVIEW" }, draft: acknowledgedDraft };
     });
     const { rerender } = renderPage("token-a");
+    fireEvent.click(await screen.findByRole("button", { name: "View photo" }));
     await screen.findByRole("button", { name: "Remove photo" });
     expect(screen.getByText("Synthetic property A")).toBeVisible();
     rerender(<TranslationProvider><PublicChecklistPage token="token-b" /></TranslationProvider>);
@@ -158,6 +159,7 @@ describe("V2 multi-photo cleaner flow", () => {
     mocks.remove.mockResolvedValue({ removed: true, evidenceRevision: 2, evidence: [] });
     getPublicChecklist.mockImplementation(async () => ({ checklist: initial, draft: acknowledgedDraft }));
     renderPage(); await screen.findByRole("heading", { name: "Cleaning checklist" });
+    fireEvent.click(await screen.findByRole("button", { name: "View photo" }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove photo" }));
     await waitFor(() => expect(screen.queryByText("Photo saved")).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
