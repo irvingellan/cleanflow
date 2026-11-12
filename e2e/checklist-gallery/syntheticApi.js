@@ -12,6 +12,8 @@ reset();
 export const getPublicChecklist = async () => ({ checklist: structuredClone(checklist), draft: structuredClone(draft) });
 export const publicChecklistEvidenceUrl = (_token, _purpose, evidenceId) => `/api/synthetic-photo?evidenceId=${evidenceId}`;
 export const savePublicChecklistDraft = async ({ changes }) => {
+  // A test can slow the save down to watch the page while an answer is being saved.
+  if (globalThis.syntheticSaveDelay) await new Promise((resolve) => setTimeout(resolve, globalThis.syntheticSaveDelay));
   draft = { ...draft, ...changes, revision: draft.revision + 1 }; return { revision: draft.revision, draft: structuredClone(draft) };
 };
 export const readyPublicChecklistForReview = async () => { checklist.status = "READY_FOR_REVIEW"; return getPublicChecklist(); };

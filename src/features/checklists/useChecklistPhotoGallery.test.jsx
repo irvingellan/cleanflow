@@ -54,6 +54,19 @@ describe("sequential bounded photo gallery", () => {
     await waitFor(() => expect(result.current.saved).toHaveLength(2));
     expect(result.current.local).toHaveLength(0);
   });
+  it("discards every failed photo in one step and keeps the saved ones", async () => {
+    let calls = 0;
+    const { result } = setup({ optimize: async () => {
+      if (++calls > 1) throw Object.assign(new Error("no"), { code: "checklist_photo_invalid_image" });
+      return { blob: new Blob(["abc"], { type: "image/jpeg" }) };
+    } });
+    act(() => result.current.append([file(), file(), file()]));
+    await waitFor(() => expect(result.current.local.map((p) => p.state)).toEqual(["FAILED", "FAILED"]));
+    await act(async () => result.current.discardFailed());
+    expect(result.current.local).toHaveLength(0);
+    expect(result.current.saved).toHaveLength(1);
+    expect(result.current.pendingCount).toBe(0);
+  });
   it("continues after one batch upload fails and retries only that retained photo", async () => {
     const optimized = ["first", "second", "third"].map((value) => new Blob([value], { type: "image/jpeg" }));
     const accepted = [];

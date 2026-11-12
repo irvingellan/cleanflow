@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { optimizeChecklistImage } from "./checklistImageOptimizer.js";
+import { createChecklistPhotoPreview, releaseChecklistPhotoPreview } from "./checklistPhotoPreview.js";
 import { getPublicChecklist, removePublicChecklistEvidence, uploadPublicChecklistEvidence } from "./checklistCapabilityService.js";
 import {
   buildPublicChecklistPhotoUploadDiagnostic, createPublicChecklistDiagnosticId, getPublicChecklistSessionId,
@@ -41,11 +42,12 @@ const noop = () => {};
 export function useChecklistPhotoGallery({ token, checklist, disabled = false, onEvidence = noop,
   optimize = optimizeChecklistImage, upload = uploadPublicChecklistEvidence,
   refresh = getPublicChecklist, remove = removePublicChecklistEvidence,
-  uploadRetryDelays = defaultUploadRetryDelays, reportFailure = reportOptimizationFailure }) {
+  uploadRetryDelays = defaultUploadRetryDelays, reportFailure = reportOptimizationFailure,
+  preview = createChecklistPhotoPreview }) {
   const [, render] = useState(0);
   const scope = useRef(null);
   const options = useRef(null);
-  options.current = { checklist, disabled, onEvidence, optimize, upload, refresh, remove, uploadRetryDelays, reportFailure };
+  options.current = { checklist, disabled, onEvidence, optimize, upload, refresh, remove, uploadRetryDelays, reportFailure, preview };
   const notify = (current) => { if (scope.current === current && !current.disposed) render((n) => n + 1); };
   const apply = (current, result) => {
     if (scope.current !== current || current.disposed || !Array.isArray(result?.evidence)
@@ -59,13 +61,15 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
 
   useEffect(() => {
     const current = { token, local: [], saved: checklist?.evidence || [], revision: checklist?.evidenceRevision || 0,
-      error: null, busy: false, refreshing: false, removing: new Map(), removalIds: new Map(), controller: new AbortController(), disposed: false };
+      error: null, busy: false, refreshing: false, removing: new Map(), removalIds: new Map(), previews: new Map(), controller: new AbortController(), disposed: false };
     scope.current = current;
     notify(current);
     return () => {
       current.disposed = true;
       current.controller.abort();
-      for (const item of current.local) { item.file = null; item.blob = null; }
+      for (const item of current.local) { item.file = null; item.blob = null; releaseChecklistPhotoPreview(item.preview); }
+      for (const url of current.previews.values()) releaseChecklistPhotoPreview(url);
+      current.previews.clear();
       current.local = [];
     };
   }, [token]);
@@ -94,6 +98,9 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
             item.file = null;
             item.blob = optimized.blob;
             if (!(item.blob instanceof Blob)) throw { code: "checklist_photo_invalid_image" };
+            const picture = await Promise.resolve(options.current.preview(item.blob)).catch(() => null);
+            if (scope.current !== current || current.disposed) { releaseChecklistPhotoPreview(picture); return; }
+            item.preview = picture || null; notify(current);
           }
           if (!editable(current) || current.controller.signal.aborted) return;
           item.state = "UPLOADING"; notify(current);
@@ -115,6 +122,7 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
           if (!Number.isInteger(result?.evidenceRevision) || !result?.evidence?.some((photo) =>
             photo.evidenceId === result.evidenceId && photo.requirementId === item.requirementId)) throw { code: "checklist_response_invalid" };
           apply(current, result);
+          if (item.preview) { releaseChecklistPhotoPreview(current.previews.get(result.evidenceId)); current.previews.set(result.evidenceId, item.preview); item.preview = null; }
           item.blob = null; item.file = null;
           current.local = current.local.filter((p) => p !== item);
         } catch (error) {
@@ -131,7 +139,8 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
   return {
     getSnapshot: () => ({ saved: scope.current?.saved || [], pendingCount: (scope.current?.local.length || 0) + (scope.current?.removing.size || 0) }),
     saved: current?.saved || [],
-    local: (current?.local || []).map(({ id, requirementId, state, error }) => ({ id, requirementId, state, error })),
+    local: (current?.local || []).map(({ id, requirementId, state, error, preview: picture }) => ({ id, requirementId, state, error, preview: picture || null })),
+    previewFor: (evidenceId) => scope.current?.previews.get(evidenceId) || null,
     pendingCount: (current?.local.length || 0) + (current?.removing.size || 0),
     error: current?.error, refreshing: current?.refreshing || false,
     removing: new Set(current?.removing.keys() || []),
@@ -166,11 +175,20 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
     async discard(id) {
       const state = scope.current; const item = state?.local.find((p) => p.id === id);
       if (!editable(state) || !["FAILED", "READY"].includes(item?.state)) return;
-      item.file = null; item.blob = null;
+      item.file = null; item.blob = null; releaseChecklistPhotoPreview(item.preview);
       state.local = state.local.filter((p) => p !== item);
       notify(state);
       // An uncertain upload may already be saved. Discard releases local bytes,
       // never claims server deletion; refresh reveals the persisted gallery.
+      await refreshSaved();
+    },
+    /** Drops every photo that failed, in one step, so the checklist can be sent. */
+    async discardFailed() {
+      const state = scope.current;
+      if (!editable(state) || !state.local.some((p) => p.state === "FAILED")) return;
+      for (const item of state.local) if (item.state === "FAILED") { item.file = null; item.blob = null; releaseChecklistPhotoPreview(item.preview); }
+      state.local = state.local.filter((p) => p.state !== "FAILED");
+      notify(state);
       await refreshSaved();
     },
     refreshSaved,
@@ -183,6 +201,7 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
       try { const result = await options.current.remove({ token: state.token, evidenceId, mutationId, signal: state.controller.signal });
         if (result?.removed !== true || result.evidence?.some((p) => p.evidenceId === evidenceId)) throw { code: "checklist_response_invalid" };
         apply(state, result);
+        releaseChecklistPhotoPreview(state.previews.get(evidenceId)); state.previews.delete(evidenceId);
         state.removalIds.delete(evidenceId);
       } catch (error) { if (scope.current === state && !state.disposed) state.error = error?.code || "checklist_photo_unavailable"; }
       finally { state.removing.delete(evidenceId); notify(state); }

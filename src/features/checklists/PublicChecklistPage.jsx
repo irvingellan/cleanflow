@@ -438,7 +438,13 @@ export function PublicChecklistPage({ token }) {
     remotePendingPhotos={reviewRequirements?.pendingPhotoCount || 0}
     onCheckReadiness={() => {
       const validate = () => {
-        if (isV2 && gallery.getSnapshot().pendingCount > 0) { setHasAttemptedValidation(true); return false; }
+        if (isV2 && gallery.getSnapshot().pendingCount > 0) {
+          // Photos still sending or not saved block the review; take the cleaner to them.
+          setHasAttemptedValidation(true);
+          const target = fieldTargetsRef.current.get(`photo:${pilotPhotoRequirementId}`);
+          requestAnimationFrame(() => { target?.scrollIntoView?.({ behavior: "smooth", block: "start" }); target?.focus?.({ preventScroll: true }); });
+          return false;
+        }
         const missing = isV2 ? missingItems.filter((item) => item.kind !== "photo").length > 0
           || !gallery.getSnapshot().saved.some((item) => item.requirementId === pilotPhotoRequirementId) : missingItems.length > 0;
         if (!missing && canReviewRef.current) return true;
@@ -502,7 +508,8 @@ export function PublicChecklistPage({ token }) {
               ? "checklists.completionIncomplete"
               : isV2 && (gallery.pendingCount > 0 || gallery.refreshing) ? "checklists.completionSaving"
               : saveState === checklistSaveStates.SAVED ? "checklists.completionReady" : "checklists.completionSaving")}</h2>
-            <p>{translate(saveState === checklistSaveStates.SAVED ? "checklists.draftNotSubmitted" : "checklists.draftPending")}</p>
+            {/* Both wordings reserve their height, so saving an answer never moves the list below. */}
+            <p className="public-checklist__steady" data-alternate={translate(saveState === checklistSaveStates.SAVED ? "checklists.draftPending" : "checklists.draftNotSubmitted")}><span>{translate(saveState === checklistSaveStates.SAVED ? "checklists.draftNotSubmitted" : "checklists.draftPending")}</span></p>
             {missingItems.length > 0 ? (
               <>
                 {!hasAttemptedValidation && <p>{translate("checklists.reviewValidationSummary", { checklist: missingChecklistCount, inventory: missingInventoryCount, photos: missingPhotoCount })}</p>}

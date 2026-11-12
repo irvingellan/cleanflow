@@ -1,7 +1,30 @@
 .checklist-photo-gallery { min-width: 0; overflow-wrap: anywhere; }
-.checklist-photo-gallery__list { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .65rem; }
-.checklist-photo-gallery__list li { min-width: 0; border: 1px solid var(--color-border, #d5dce0); border-radius: .6rem; padding: .75rem; }
-.checklist-photo-gallery__list p { margin: .4rem 0; }
+.checklist-photo-gallery__list { list-style: none; padding: 0; margin: 1rem 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: .5rem; }
+.checklist-photo-gallery__list p { margin: 0; }
+/* One tile per photo; it fills in with the picture and its state while sending. */
+.checklist-photo-tile { min-width: 0; display: grid; gap: .2rem; align-content: start; font-size: .75rem; line-height: 1.25; color: var(--cf-text-secondary, #52645b); }
+.checklist-photo-gallery .checklist-photo-tile__face { position: relative; display: block; width: 100%; min-height: 0; aspect-ratio: 1; padding: 0; border: 1px solid var(--cf-border, #d5dce0); border-radius: .6rem; overflow: hidden; background: var(--cf-surface-subtle, #f3f6f4); color: inherit; font: inherit; }
+button.checklist-photo-tile__face { cursor: pointer; }
+.checklist-photo-tile__picture { position: absolute; inset: 0; background-size: cover; background-position: center; }
+.checklist-photo-tile__number { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.25rem; font-weight: 700; }
+.checklist-photo-tile__mark { position: absolute; right: .3rem; bottom: .3rem; width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center; font-size: .8rem; font-weight: 800; color: #fff; }
+.checklist-photo-tile__mark:empty { display: none; }
+.checklist-photo-tile.is-saved .checklist-photo-tile__mark { background: var(--cf-success, #3f705b); }
+.checklist-photo-tile.is-failed .checklist-photo-tile__mark { background: var(--cf-danger, #b42318); }
+.checklist-photo-tile.is-failed .checklist-photo-tile__face { border: 2px solid var(--cf-danger, #b42318); }
+.checklist-photo-tile.is-failed .checklist-photo-tile__state { color: var(--cf-danger, #b42318); font-weight: 600; }
+.checklist-photo-tile.is-ready .checklist-photo-tile__face { opacity: .55; }
+.checklist-photo-tile.is-optimizing .checklist-photo-tile__face::after,
+.checklist-photo-tile.is-uploading .checklist-photo-tile__face::after { content: ""; position: absolute; right: .3rem; bottom: .3rem; width: 1.2rem; height: 1.2rem; border-radius: 50%; border: 3px solid var(--cf-brand, #3f705b); border-right-color: transparent; background: transparent; animation: checklist-photo-spin .9s linear infinite; }
+@keyframes checklist-photo-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .checklist-photo-tile__face::after { animation: none !important; } }
+.checklist-photo-tile__label { overflow-wrap: anywhere; }
+/* An opened tile takes the whole row and shows the photo, or what went wrong. */
+.checklist-photo-tile.is-open { grid-column: 1 / -1; grid-template-columns: 92px minmax(0, 1fr); column-gap: .6rem; padding: .6rem; border: 1px solid var(--cf-border-strong, #b8c9c1); border-radius: .6rem; font-size: .875rem; }
+.checklist-photo-tile.is-open .checklist-photo-tile__face { grid-row: 1 / span 2; }
+.checklist-photo-tile__detail { grid-column: 1 / -1; display: grid; gap: .5rem; margin-top: .4rem; color: var(--cf-text, inherit); }
+.checklist-photo-tile__detail img { width: 100%; border-radius: .5rem; }
+.checklist-photo-gallery__progress progress { width: 100%; height: 8px; accent-color: var(--cf-brand, #3f705b); }
 .checklist-photo-gallery__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .checklist-photo-gallery .button, .checklist-photo-view { min-height: 44px; min-width: 44px; max-width: 100%; white-space: normal; }
 .checklist-photo-gallery label.button { cursor: pointer; display: inline-flex; align-items: center; }
@@ -25,6 +48,7 @@
 .checklist-photo-gallery__formats { font-size: .875rem; color: var(--color-text-secondary, #52645b); }
 
 .checklist-photo-gallery__progress { display: grid; gap: 6px; justify-items: start; }
+.checklist-photo-gallery__progress progress { justify-self: stretch; }
 .checklist-photo-gallery__progress p { margin: 0; font-weight: 600; }
 .checklist-photo-gallery__failed { color: var(--cf-danger, #b42318); }
 .checklist-photo-gallery__help summary { cursor: pointer; font-weight: 600; min-height: 32px; }

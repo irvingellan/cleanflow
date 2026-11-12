@@ -254,3 +254,10 @@ fieldset.public-checklist__inventory-item > legend { padding: 0; margin-bottom: 
 .public-checklist__levels label[data-level="NEEDS_RESTOCK"]:has(input:checked) { border-color: var(--cf-warning-text); color: var(--cf-warning-text); background: var(--cf-warning-bg, var(--cf-surface-selected)); }
 .public-checklist__levels label:has(input:focus-visible) { outline: 2px solid var(--cf-brand); outline-offset: 2px; }
 fieldset.public-checklist__inventory-item.public-checklist__control--missing .public-checklist__levels label:not(.visually-hidden) { border-color: var(--color-error-text); }
+
+/* Saving an answer swaps texts and a button above the list. Their space is
+   reserved so the list does not jump on phones without scroll anchoring. */
+.public-checklist__save-status .public-checklist__save-actions { min-height: var(--cf-control-sm); }
+.public-checklist__steady { display: grid; }
+.public-checklist__steady > span { grid-area: 1 / 1; }
+.public-checklist__steady::after { content: attr(data-alternate); grid-area: 1 / 1; visibility: hidden; }
