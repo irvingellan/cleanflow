@@ -2965,6 +2965,13 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.client-report__summary > div { position: relative; }
+.client-report__summary-link { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.client-report__summary-link::before { content: ""; position: absolute; inset: 0; border-radius: 12px; }
+.client-report__summary-link::after { content: "›"; color: var(--color-text-secondary); font-weight: 400; }
+.client-report__summary-link:focus-visible::before { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+@media print { .client-report__summary-link::after { content: none; } }
+
 .client-report__summary > div.is-attention {
   border-color: var(--color-warning-text);
   background: var(--color-status-warning-bg);

@@ -31,7 +31,7 @@ test("native multiple selection appends camera later and respects mobile control
   await expect(page.locator(".checklist-photo-gallery img")).toHaveCount(0);
   // Each saved photo shows its own picture in the grid, made on the phone.
   await expect(page.locator(".checklist-photo-tile.is-saved .checklist-photo-tile__picture")).toHaveCount(3);
-  if (process.env.GALLERY_SHOT) await page.locator(".checklist-photo-gallery").screenshot({ path: process.env.GALLERY_SHOT });
+  if (process.env.GALLERY_SHOT) await page.screenshot({ path: process.env.GALLERY_SHOT, fullPage: true });
 });
 
 test("answering a task does not move the list while the answer is saved", async ({ page }) => {
