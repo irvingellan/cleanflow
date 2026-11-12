@@ -133,19 +133,26 @@ describe("local checklist image optimizer", () => {
     expect(result.blob.size).toBeLessThan(encoded.size);
     expect(Buffer.from(await result.blob.arrayBuffer())).toEqual(Buffer.from(await original.arrayBuffer()));
   });
-  it("never retains private metadata or silently enlarges a non-fallback image", async () => {
+  it("sends the re-encoded copy of a small photo that grows, never the original with its metadata", async () => {
     // More structural pixel bytes, not metadata, are needed to force output growth.
     const source = file(jpeg(2, 2, true));
     const larger = cleanJpeg.slice();
     const scan = larger.findIndex((value, i) => value === 255 && larger[i + 1] === 217);
     const largePixels = file(new Uint8Array([...larger.slice(0, scan), ...new Uint8Array(200).fill(1), ...larger.slice(scan)]));
     native({ encode: () => largePixels });
-    await expect(optimizeChecklistImage(source)).rejects.toHaveProperty("code", "checklist_photo_optimization_too_large");
+    const result = await optimizeChecklistImage(source);
+    expect(result.optimizedBytes).toBeGreaterThan(source.size);
+    expect(result.contentType).toBe("image/jpeg");
+    const sent = Buffer.from(await result.blob.arrayBuffer());
+    expect(sent.equals(Buffer.from(await source.arrayBuffer()))).toBe(false);
+    expect(sent.includes(Buffer.from("Exif"))).toBe(false);
   });
   it("does not fall back to a JPEG whose color interpretation has no JFIF declaration", async () => {
     const source = file(new Uint8Array([...cleanJpeg.slice(0, 2), ...cleanJpeg.slice(20)]));
     native({ encode: () => file(cleanJpeg) });
-    await expect(optimizeChecklistImage(source)).rejects.toHaveProperty("code", "checklist_photo_optimization_too_large");
+    const result = await optimizeChecklistImage(source);
+    expect(Buffer.from(await result.blob.arrayBuffer()).equals(Buffer.from(await source.arrayBuffer()))).toBe(false);
+    expect(result.optimizedBytes).toBeGreaterThan(source.size);
   });
   it("admits exact 16MP but rejects excessive PNG dimensions before decode", async () => {
     native({ width: 4000, height: 4000 });

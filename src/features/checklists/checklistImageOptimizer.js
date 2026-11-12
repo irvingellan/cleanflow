@@ -5,6 +5,8 @@ const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 const MAX_PIXELS = 64_000_000;
 const MAX_EDGE = 1920;
 const BUDGET_MS = 20_000;
+// The server accepts photos of at most 5 MiB.
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const JPEG_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc4, 0xdb, 0xdd, 0xda]);
 const MESSAGES = {
   invalid_type: "Choose a JPEG, PNG or WebP photo. HEIC is not supported; export it as JPEG first.",
@@ -15,7 +17,7 @@ const MESSAGES = {
   encode_failed: "This browser could not optimize the photo. Try another photo.",
   optimization_timeout: "Photo optimization took too long. Try a smaller photo.",
   optimization_cancelled: "Photo optimization was cancelled.",
-  optimization_too_large: "This photo cannot be optimized without increasing its size. Export it as JPEG and try again.",
+  optimization_too_large: "This photo is still too large after optimization. Export it as JPEG and try again.",
 };
 function failure(reason) {
   return Object.assign(new Error(MESSAGES[reason]), { name: "ChecklistImageOptimizationError", code: `checklist_photo_${reason}` });
@@ -229,6 +231,7 @@ export async function optimizeChecklistImage(file, { signal } = {}) {
     context.drawImage(image, 0, 0, width, height);
     check();
     const fallback = admitted.safe && scale === 1 && decoded.width === admitted.width && decoded.height === admitted.height;
+    let smallest;
     for (const quality of [0.85, 0.8, 0.75]) {
       let encoded = await new Promise((resolve, reject) => {
         try { canvas.toBlob(blob => { if (active) resolve(blob); }, "image/jpeg", quality); }
@@ -250,7 +253,12 @@ export async function optimizeChecklistImage(file, { signal } = {}) {
         return { blob, originalBytes: file.size, optimizedBytes: blob.size, width, height, contentType: blob.type };
       }
       // Only retain this candidate until the next iteration; no candidate list.
+      smallest = encoded;
     }
+    // A small, already compressed photo (a messaging-app copy, an edited photo)
+    // can grow when re-encoded. The re-encoded copy carries no metadata and is
+    // far below the server limit, so it is sent instead of refusing the photo.
+    if (smallest.size <= MAX_UPLOAD_BYTES) return { blob: smallest, originalBytes: file.size, optimizedBytes: smallest.size, width, height, contentType: smallest.type };
     throw failure("optimization_too_large");
   };
   try {

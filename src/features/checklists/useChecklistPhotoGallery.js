@@ -173,6 +173,15 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
       // never claims server deletion; refresh reveals the persisted gallery.
       await refreshSaved();
     },
+    /** Drops every photo that failed, in one step, so the checklist can be sent. */
+    async discardFailed() {
+      const state = scope.current;
+      if (!editable(state) || !state.local.some((p) => p.state === "FAILED")) return;
+      for (const item of state.local) if (item.state === "FAILED") { item.file = null; item.blob = null; }
+      state.local = state.local.filter((p) => p.state !== "FAILED");
+      notify(state);
+      await refreshSaved();
+    },
     refreshSaved,
     async removeSaved(evidenceId) {
       const state = scope.current;

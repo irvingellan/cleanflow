@@ -49,7 +49,6 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
   const id = useId(); const [viewed, setViewed] = useState(null);
   const select = (event) => { gallery.append(event.target.files || []); event.target.value = ""; };
   const saved = gallery.saved;
-  const viewedPhoto = saved.find((item) => item.evidenceId === viewed);
   const failed = gallery.local.filter((item) => item.state === "FAILED").length;
   const sending = gallery.local.length - failed;
   return <div className={`checklist-photo-gallery public-checklist__photo${missing ? " public-checklist__photo--missing" : ""}`} ref={targetRef} tabIndex={-1} aria-live="polite">
@@ -60,11 +59,12 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
       {!disabled && <p>{translate("checklists.photoReplacementHelp")}</p>}
     </details>
     <PhotoRequirementList requirements={photoRequirements} saved={saved} example={requirementsAreExample} translate={translate} />
-    <p className="checklist-photo-gallery__count">{translate("checklists.photoCount", { count: saved.length })}</p>
+    <p className="checklist-photo-gallery__count">{translate(saved.length === 1 ? "checklists.photoCountOne" : "checklists.photoCount", { count: saved.length })}</p>
     {(sending > 0 || failed > 0) && <div className="checklist-photo-gallery__progress" role="status" data-testid="photo-progress">
       {sending > 0 && <p className="checklist-photo-gallery__sending">{translate("checklists.photosSending", { count: sending })}</p>}
       {failed > 0 && <p className="checklist-photo-gallery__failed">{translate("checklists.photosNotSaved", { count: failed })}</p>}
       {failed > 1 && !disabled && <button className="button" type="button" onClick={() => gallery.retryAll()}>{translate("checklists.retryAllPhotos")}</button>}
+      {failed > 0 && !disabled && <button className="button button--secondary" type="button" onClick={() => gallery.discardFailed()}>{translate("checklists.discardFailedPhotos", { count: failed })}</button>}
     </div>}
     {!disabled && <>
       <div className="checklist-photo-gallery__actions">
@@ -87,6 +87,7 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
           <button className="button button--secondary" type="button" onClick={() => setViewed((current) => current === item.evidenceId ? null : item.evidenceId)}>{translate(viewed === item.evidenceId ? "checklists.hidePhoto" : "checklists.viewPhoto")}</button>
           {!disabled && <button className="button button--secondary" type="button" disabled={gallery.removing.has(item.evidenceId)} onClick={() => gallery.removeSaved(item.evidenceId)}>{translate("checklists.removePhoto")}</button>}
         </div>
+        {viewed === item.evidenceId && <img key={`${token}:${viewed}`} className="public-checklist__photo-preview" src={publicChecklistEvidenceUrl(token, item.requirementId, item.evidenceId)} alt={translate("checklists.savedPhoto")} referrerPolicy="no-referrer" />}
       </li>)}
       {gallery.local.map((item, index) => <li key={item.id}>
         <span>{translate("checklists.photoNumber", { count: saved.length + index + 1 })} · {translate(item.requirementId === "living-belongings" ? "checklists.photoRequired" : "checklists.additionalPhoto")}</span>
@@ -98,6 +99,5 @@ export function ChecklistPhotoGallery({ gallery, token, disabled, missing, targe
           </div>}</>}
       </li>)}
     </ol>
-    {viewedPhoto && <img key={`${token}:${viewed}`} className="public-checklist__photo-preview" src={publicChecklistEvidenceUrl(token, viewedPhoto.requirementId, viewedPhoto.evidenceId)} alt={translate("checklists.savedPhoto")} loading="lazy" referrerPolicy="no-referrer" />}
   </div>;
 }

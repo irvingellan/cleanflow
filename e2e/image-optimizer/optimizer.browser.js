@@ -108,3 +108,22 @@ for (const [width,height,trailer] of [[5712,4284,0],[8064,6048,0],[8160,6120,0],
     assertMetadataSafeChecklistImage(Buffer.from(result.output,"base64"),result.type);
   });
 }
+// A messaging-app copy or an edited photo is small and heavily compressed, so
+// re-encoding makes it larger. It was refused; it must be saved, clean.
+test("small heavily compressed photo that grows when re-encoded is still saved clean",async({page})=>{
+  const result=await page.evaluate(async()=>{
+    const width=1600,height=1200,canvas=document.createElement("canvas");canvas.width=width;canvas.height=height;
+    const context=canvas.getContext("2d");
+    for(let i=0;i<6000;i++){context.fillStyle=`hsl(${i*47%360} ${40+i%50}% ${30+i%45}%)`;context.fillRect((i*811)%width,(i*577)%height,40+i%60,30+i%40);}
+    const picture=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.3));
+    canvas.width=0;canvas.height=0;
+    const source=new Blob([picture,new Uint8Array(64).fill(7)],{type:"image/jpeg"});
+    const optimized=await window.optimizerHarness.optimizeChecklistImage(source);
+    return {sourceBytes:source.size,optimizedBytes:optimized.optimizedBytes,width:optimized.width,height:optimized.height,type:optimized.contentType,
+      output:await window.optimizerHarness.serializedBlob(optimized.blob)};
+  });
+  expect(result.sourceBytes).toBeLessThan(1024*1024);
+  expect(result.optimizedBytes).toBeGreaterThan(result.sourceBytes);expect(result.optimizedBytes).toBeLessThan(5*1024*1024);
+  expect(result.width).toBe(1600);expect(result.height).toBe(1200);expect(result.type).toBe("image/jpeg");
+  assertMetadataSafeChecklistImage(Buffer.from(result.output,"base64"),result.type);
+});

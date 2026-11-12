@@ -147,6 +147,11 @@ describe("V2 multi-photo cleaner flow", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.queryByText("private-name.jpg")).not.toBeInTheDocument();
     expect(checklist.evidence).toHaveLength(0);
+    // The photo opens inside its own card, not after the end of the list.
+    const second = screen.getAllByRole("button", { name: "View photo" })[1];
+    fireEvent.click(second);
+    expect(second.closest("li").querySelector("img")).toBeInTheDocument();
+    expect(screen.getAllByRole("img")).toHaveLength(1);
   });
   it("required removal restores missing status and failed optional selection blocks review until explicit discard", async () => {
     const initial = primeMulti([{ evidenceId: "required", requirementId: "living-belongings" }]);
