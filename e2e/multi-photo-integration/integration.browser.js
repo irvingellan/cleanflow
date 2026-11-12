@@ -72,6 +72,7 @@ test('actual gallery, retry, private storage, review, manager and client report'
       await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(2);
       await assertStored(run, 2);
       await page.unroute('**/api/public-checklist?*');
+      await page.getByRole('button', { name: 'View photo', exact: true }).first().click();
       await page.getByRole('button', { name: 'Remove photo', exact: true }).first().click();
       stage = 'remove-required-reload';
       await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(1);
