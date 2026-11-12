@@ -31,7 +31,23 @@ test("native multiple selection appends camera later and respects mobile control
   await expect(page.locator(".checklist-photo-gallery img")).toHaveCount(0);
   // Each saved photo shows its own picture in the grid, made on the phone.
   await expect(page.locator(".checklist-photo-tile.is-saved .checklist-photo-tile__picture")).toHaveCount(3);
-  if (process.env.GALLERY_SHOT) await page.locator(".checklist-photo-gallery").screenshot({ path: process.env.GALLERY_SHOT });
+  if (process.env.GALLERY_SHOT) await page.screenshot({ path: process.env.GALLERY_SHOT, fullPage: true });
+});
+
+test("photos are saved even when the browser never finishes making the small picture", async ({ page }) => {
+  const jpeg = await page.evaluate(async () => {
+    const canvas = document.createElement("canvas"); canvas.width = 800; canvas.height = 600;
+    const context = canvas.getContext("2d"); context.fillStyle = "#ccd"; context.fillRect(0, 0, 800, 600);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", .9));
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  });
+  // The optimizer loads photos with onload; only the small picture uses decode().
+  await page.evaluate(() => { HTMLImageElement.prototype.decode = () => new Promise(() => {}); });
+  const input = { name: "synthetic.jpg", mimeType: "image/jpeg", buffer: Buffer.from(jpeg) };
+  await page.getByLabel("Choose photos").setInputFiles([input, input, input]);
+  await expect(page.getByText("Photo saved", { exact: true })).toHaveCount(3, { timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Send checklist for review" })).toBeEnabled();
+  await expect(page.locator(".checklist-photo-tile__picture")).toHaveCount(0);
 });
 
 test("answering a task does not move the list while the answer is saved", async ({ page }) => {

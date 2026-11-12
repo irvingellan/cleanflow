@@ -154,6 +154,18 @@ describe("V2 multi-photo cleaner flow", () => {
     expect(second.closest("li").querySelector("img")).toBeInTheDocument();
     expect(screen.getAllByRole("img")).toHaveLength(1);
   });
+  it("keeps the photos in their own section after the notes, with a pointer on the photo task", async () => {
+    const initial = primeMulti([{ evidenceId: "required", requirementId: "living-belongings" }]);
+    getPublicChecklist.mockImplementation(async () => ({ checklist: initial, draft: acknowledgedDraft }));
+    renderPage(); await screen.findByRole("heading", { name: "Cleaning checklist" });
+    const photos = screen.getByRole("heading", { name: /^Photos/ });
+    const notes = screen.getByRole("heading", { name: "Notes" });
+    expect(notes.compareDocumentPosition(photos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(photos.closest("section").querySelector(".checklist-photo-gallery")).toBeInTheDocument();
+    const pointer = screen.getByRole("link", { name: "Add the photos at the end of the checklist" });
+    expect(pointer).toHaveAttribute("href", "#public-checklist-photos-section");
+    expect(pointer.closest("fieldset").querySelector(".checklist-photo-gallery")).not.toBeInTheDocument();
+  });
   it("required removal restores missing status and failed optional selection blocks review until explicit discard", async () => {
     const initial = primeMulti([{ evidenceId: "required", requirementId: "living-belongings" }]);
     mocks.remove.mockResolvedValue({ removed: true, evidenceRevision: 2, evidence: [] });
@@ -257,11 +269,11 @@ describe("PublicChecklistPage", () => {
     await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
     fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [new File([new Uint8Array([0xff, 0xd8, 0xff])], "synthetic.jpg", { type: "image/jpeg" })] } });
     await screen.findByText("Photo saved");
-    expect(screen.getByText("These requirements now appear complete. Send again so the server can check the saved version.")).toBeVisible();
+    expect(screen.getByText("Everything is filled in now. Tap “Send checklist for review” at the end.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     await screen.findByText(/Checklist submitted\./);
-    expect(screen.queryByText("These requirements now appear complete. Send again so the server can check the saved version.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Everything is filled in now. Tap “Send checklist for review” at the end.")).not.toBeInTheDocument();
     expect(document.querySelector('.public-checklist__validation-summary')).not.toBeInTheDocument();
   });
 
@@ -927,7 +939,7 @@ describe("PublicChecklistPage", () => {
     const photo = new File([new Uint8Array([0xff, 0xd8, 0xff])], "under-bed.jpg", { type: "image/jpeg" });
     fireEvent.change(document.querySelectorAll('input[type="file"]')[0], { target: { files: [photo] } });
     await waitFor(() => expect(screen.queryByText("Required photo is not saved yet.")).not.toBeInTheDocument());
-    expect(screen.getByText("These requirements now appear complete. Send again so the server can check the saved version.")).toBeVisible();
+    expect(screen.getByText("Everything is filled in now. Tap “Send checklist for review” at the end.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Go to first missing item" })).not.toBeInTheDocument();
   });
 
@@ -966,7 +978,7 @@ describe("PublicChecklistPage", () => {
     await screen.findByRole("heading", { name: "Cleaning checklist" });
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
-    await screen.findByText("These requirements now appear complete. Send again so the server can check the saved version.");
+    await screen.findByText("Everything is filled in now. Tap “Send checklist for review” at the end.");
 
     fireEvent.change(screen.getByLabelText("Other notes"), { target: { value: "Reviewed again" } });
     await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());

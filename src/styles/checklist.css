@@ -261,3 +261,10 @@ fieldset.public-checklist__inventory-item.public-checklist__control--missing .pu
 .public-checklist__steady { display: grid; }
 .public-checklist__steady > span { grid-area: 1 / 1; }
 .public-checklist__steady::after { content: attr(data-alternate); grid-area: 1 / 1; visibility: hidden; }
+
+/* The photo task points to the photos section at the end of the checklist. */
+.public-checklist__photo-pointer { clear: both; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding-top: 8px; font-size: 0.875rem; }
+.public-checklist__photo-pointer a { color: var(--cf-brand-text); font-weight: 600; min-height: 32px; display: inline-flex; align-items: center; }
+.public-checklist__photo-pointer--missing a { color: var(--color-error-text); }
+/* Room for the round back-to-top button, so it never covers the send button. */
+.checklist-public-page { padding-bottom: 84px; }

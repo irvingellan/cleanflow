@@ -176,7 +176,11 @@ function ChecklistAnswer({
       </div>
       {missing && <p className="public-checklist__missing-marker" id={missingAnswerId}>{translate("checklists.answerRequiredBeforeReview")}</p>}
       {item.requiresPhoto && item.id === pilotPhotoRequirementId && (
-        gallery ? <ChecklistPhotoGallery gallery={gallery} token={token} disabled={disabled} missing={photoMissing} targetRef={photoTargetRef} translate={translate} photoRequirements={photoRequirements} requirementsAreExample={photoRequirementsAreExample} /> : <ChecklistPhoto
+        // Photos have their own section at the end; the task only points to it.
+        gallery ? <p className={`public-checklist__photo-pointer${photoMissing ? " public-checklist__photo-pointer--missing" : ""}`}>
+          <span className="public-checklist__photo-required">{translate("checklists.photoRequired")}</span>
+          <a href="#public-checklist-photos-section">{translate("checklists.photosAtEnd")}</a>
+        </p> : <ChecklistPhoto
           item={item}
           token={token}
           evidence={evidence}
@@ -423,6 +427,14 @@ export function PublicChecklistPage({ token }) {
   const missingChecklistCount = missingItems.filter((item) => item.kind === "checklist").length;
   const missingInventoryCount = missingItems.filter((item) => item.kind === "inventory").length;
   const missingPhotoCount = missingItems.filter((item) => item.kind === "photo").length;
+  const photoItem = checklist.sections.flatMap((section) => section.items).find((item) => item.requiresPhoto && item.id === pilotPhotoRequirementId);
+  const failedPhotos = isV2 ? gallery.local.filter((item) => item.state === "FAILED").length : 0;
+  const sendingPhotos = isV2 ? gallery.local.length - failedPhotos : 0;
+  const moveToPhotos = () => {
+    const target = fieldTargetsRef.current.get(`photo:${pilotPhotoRequirementId}`);
+    target?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    target?.focus?.({ preventScroll: true });
+  };
   const moveToFirstMissing = () => {
     const target = fieldTargetsRef.current.get(missingItems[0]?.key);
     target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
@@ -441,8 +453,7 @@ export function PublicChecklistPage({ token }) {
         if (isV2 && gallery.getSnapshot().pendingCount > 0) {
           // Photos still sending or not saved block the review; take the cleaner to them.
           setHasAttemptedValidation(true);
-          const target = fieldTargetsRef.current.get(`photo:${pilotPhotoRequirementId}`);
-          requestAnimationFrame(() => { target?.scrollIntoView?.({ behavior: "smooth", block: "start" }); target?.focus?.({ preventScroll: true }); });
+          requestAnimationFrame(moveToPhotos);
           return false;
         }
         const missing = isV2 ? missingItems.filter((item) => item.kind !== "photo").length > 0
@@ -506,8 +517,10 @@ export function PublicChecklistPage({ token }) {
           <section className="public-checklist__completion" aria-labelledby="checklist-completion-title" aria-live="polite">
             <h2 id="checklist-completion-title">{translate(isSubmittingReview ? "checklists.sendForReviewSending" : missingItems.length > 0
               ? "checklists.completionIncomplete"
+              : failedPhotos > 0 ? "checklists.completionPhotosFailed"
+              : sendingPhotos > 0 ? "checklists.completionPhotosSending"
               : isV2 && (gallery.pendingCount > 0 || gallery.refreshing) ? "checklists.completionSaving"
-              : saveState === checklistSaveStates.SAVED ? "checklists.completionReady" : "checklists.completionSaving")}</h2>
+              : saveState === checklistSaveStates.SAVED ? "checklists.completionReady" : "checklists.completionSaving", { count: failedPhotos })}</h2>
             {/* Both wordings reserve their height, so saving an answer never moves the list below. */}
             <p className="public-checklist__steady" data-alternate={translate(saveState === checklistSaveStates.SAVED ? "checklists.draftPending" : "checklists.draftNotSubmitted")}><span>{translate(saveState === checklistSaveStates.SAVED ? "checklists.draftNotSubmitted" : "checklists.draftPending")}</span></p>
             {missingItems.length > 0 ? (
@@ -515,7 +528,8 @@ export function PublicChecklistPage({ token }) {
                 {!hasAttemptedValidation && <p>{translate("checklists.reviewValidationSummary", { checklist: missingChecklistCount, inventory: missingInventoryCount, photos: missingPhotoCount })}</p>}
                 {!hasAttemptedValidation && <button className="button button--secondary" type="button" onClick={moveToFirstMissing}>{translate("checklists.goToFirstMissingItem")}</button>}
               </>
-            ) : saveState === checklistSaveStates.SAVED && (!isV2 || gallery.pendingCount === 0) && <><p>{translate("checklists.completionReadyHelp")}</p><a className="button button--secondary" href="#checklist-review-handoff-title">{translate("checklists.goToSendStep")}</a></>}
+            ) : failedPhotos > 0 ? <><p>{translate("checklists.completionPhotosFailedHelp")}</p><button className="button button--secondary" type="button" onClick={moveToPhotos}>{translate("checklists.goToPhotos")}</button></>
+            : saveState === checklistSaveStates.SAVED && (!isV2 || gallery.pendingCount === 0) && <><p>{translate("checklists.completionReadyHelp")}</p><a className="button button--secondary" href="#checklist-review-handoff-title">{translate("checklists.goToSendStep")}</a></>}
           </section>
         )}
 
@@ -548,7 +562,9 @@ export function PublicChecklistPage({ token }) {
                 </button>
               </>
             ) : (
-              <p>{translate("checklists.reviewValidationNowComplete")}</p>
+              isV2 && gallery.pendingCount > 0
+                ? <><p>{translate("checklists.completionPhotosFailedHelp")}</p><button className="button button--secondary" type="button" onClick={moveToPhotos}>{translate("checklists.goToPhotos")}</button></>
+                : <p>{translate("checklists.reviewValidationNowComplete")}</p>
             )}
           </section>
         )}
@@ -653,6 +669,24 @@ export function PublicChecklistPage({ token }) {
           <section className="public-checklist__future-note" aria-labelledby="public-checklist-photos-title">
             <h2 id="public-checklist-photos-title">{translate("checklists.requiredPhotos")}</h2>
             <p>{translate("checklists.photosLater")}</p>
+          </section>
+        )}
+
+        {isV2 && photoItem && (
+          <section className="public-checklist__section" id="public-checklist-photos-section" aria-labelledby="public-checklist-photos-section-title">
+            <h2 id="public-checklist-photos-section-title" className="public-checklist__section-title">
+              <span>{translate("checklists.photosSectionTitle")}</span>
+            </h2>
+            <ChecklistPhotoGallery gallery={gallery} token={token} disabled={isReadOnly || isSubmittingReview}
+              missing={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `photo:${photoItem.id}`)}
+              targetRef={(node) => {
+                if (node) fieldTargetsRef.current.set(`photo:${photoItem.id}`, node);
+                else fieldTargetsRef.current.delete(`photo:${photoItem.id}`);
+              }}
+              translate={translate}
+              // FB06: optional frozen list from the Run (proposed contract). Absent on current Runs.
+              photoRequirements={Array.isArray(checklist.photoRequirements) ? checklist.photoRequirements : null}
+              requirementsAreExample={checklist.photoRequirementsSample === true} />
           </section>
         )}
 

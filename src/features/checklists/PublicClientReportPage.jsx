@@ -85,6 +85,13 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
 
   const photos = report.evidence?.length > 0 ? report.evidence : report.hasPhoto ? [{ evidenceId: undefined }] : [];
   const summary = report.summary;
+  // A summary number takes the reader to the part of the report it counts.
+  const jump = (id, value, available, openTasks = false) => available
+    ? <button type="button" className="client-report__summary-link" onClick={() => {
+      if (openTasks) setShowAllTasks(true);
+      requestAnimationFrame(() => { const target = document.getElementById(id); target?.scrollIntoView?.({ behavior: "smooth", block: "start" }); target?.focus?.({ preventScroll: true }); });
+    }}>{value}</button>
+    : value;
   const restock = (report.inventoryItems || []).filter((item) => restockAnswers.has(item.answer));
 
   return (
@@ -115,15 +122,15 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
           <dl className="client-report__summary" aria-label={translate("clientReport.summaryLabel")}>
             <div>
               <dt>{translate("clientReport.summaryTasks")}</dt>
-              <dd>{translate("clientReport.summaryTasksValue", { done: summary.tasksDone, total: summary.tasksTotal - summary.tasksNotApplicable })}</dd>
+              <dd>{jump("client-report-tasks", translate("clientReport.summaryTasksValue", { done: summary.tasksDone, total: summary.tasksTotal - summary.tasksNotApplicable }), report.sections?.length > 0 || report.inventoryItems?.length > 0, true)}</dd>
             </div>
             <div>
               <dt>{translate("clientReport.summaryPhotos")}</dt>
-              <dd>{summary.photoCount}</dd>
+              <dd>{jump("client-report-photos", summary.photoCount, photos.length > 0)}</dd>
             </div>
             <div className={summary.restockCount > 0 ? "is-attention" : ""}>
               <dt>{translate("clientReport.summaryRestock")}</dt>
-              <dd>{summary.restockCount}</dd>
+              <dd>{jump("client-report-attention", summary.restockCount, restock.length > 0)}</dd>
             </div>
           </dl>
         )}
@@ -136,7 +143,7 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
         )}
 
         {(report.issueNotes || restock.length > 0) && (
-          <section className="client-report__section client-report__attention">
+          <section className="client-report__section client-report__attention" id="client-report-attention" tabIndex={-1}>
             <h2>{translate("clientReport.attentionTitle")}</h2>
             {report.issueNotes && <p>{report.issueNotes}</p>}
             {restock.length > 0 && (
@@ -156,7 +163,7 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
         )}
 
         {photos.length > 0 && (
-          <section className="client-report__section">
+          <section className="client-report__section" id="client-report-photos" tabIndex={-1}>
             <h2>{translate("clientReport.photosTitle", { count: photos.length })}</h2>
             <ul className="client-report__gallery">
               {photos.map((item, index) => (
@@ -179,7 +186,7 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
         )}
 
         {(report.sections?.length > 0 || report.inventoryItems?.length > 0) && (
-          <section className="client-report__section">
+          <section className="client-report__section" id="client-report-tasks" tabIndex={-1}>
             <div className="client-report__tasks-header">
               <h2>{translate("clientReport.allTasksTitle")}</h2>
               <button className="button button--text client-report__toggle" type="button" aria-expanded={showAllTasks}

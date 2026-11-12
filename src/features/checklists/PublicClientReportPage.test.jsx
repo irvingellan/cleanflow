@@ -61,6 +61,11 @@ describe("PublicClientReportPage", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 
     expect(screen.queryByText("Sanitize toilet, sink, and shower")).not.toBeVisible();
+    // The "tasks done" number opens the full task list.
+    fireEvent.click(screen.getByRole("button", { name: "1 of 1" }));
+    expect(screen.getByText("Sanitize toilet, sink, and shower")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Hide tasks" }));
+    expect(screen.queryByText("Sanitize toilet, sink, and shower")).not.toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
     expect(screen.getByText("Sanitize toilet, sink, and shower")).toBeVisible();
     expect(screen.getByText("Done")).toBeVisible();
