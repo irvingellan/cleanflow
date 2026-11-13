@@ -16,7 +16,7 @@ customer data, rules, IAM, billing, providers, domain or deployed Function.
 | Weekly Close | V0 already published; snapshots, REAL completed Jobs and conservative cleaner-paid evidence | Issue-56 branch adds explicit period/client selection and bounded cursor/context queries. Complete and partial totals remain distinct. |
 | Invoices / client payments | Planned domain, no authoritative receipt or invoice model | Not implemented in this increment. Hour approval, frozen charges, partial-payment ledger and transactional double-billing prevention are the next independent financial slice. |
 | Notifications | PR #97 result logs, durable Inbox, authorized device/session claims and pilot | Issue-85 branch repairs dropped provider counts/codes and exposes aggregate audit-write outcome. No new sending policy. Physical display remains unknown. |
-| Offers / assignments | Manual interest remains distinct; authenticated single-vacancy automatic code/tests already integrated, activation gated | Do not rebuild V1. Multiple vacancies, mixed assignment and vacancy reopening need explicit product rules before activation. |
+| Offers / assignments | Manual interest remains distinct. DEC-049 manual capacity already supports 1–10 cleaners and reopening; single-vacancy automatic code/tests are integrated, activation gated | Do not rebuild these paths. Automatic multi-vacancy, mixed assignment and automatic reopening need separate contracts; the rejected hard-start gate is not the manual-capacity state. |
 | Owner portal | PR #93 / DEC-056, single revocable client capability, allowlisted report projection | Issue-42 branch makes direct report/photo scope match current Property ownership and date window; resumed pages revalidate. Release still means an unrevoked client report. |
 | Manager correction | PR #96 / DEC-057, correction layer preserves original cleaner answer | Reused by reports; no change to this policy or real checklist answers. |
 | End-to-end laboratory | Existing manager/cleaner security and browser suites | Photo slice exercises actual native upload, lost confirmation, review, manager read, report and portal. Weekly Close has its own real emulator scenario. Reservation suggestions are a local adapter; no claim of a full live reservation-to-payment journey. |
@@ -47,7 +47,12 @@ into main. Main integration and Production authorization remain separate.
 
 All use `scope:full` where the existing narrow presentation classifier requires
 it. That label describes review scope and never authorizes a broad backend deploy.
-The combined runtime backend scope is five existing Functions, never all 57.
+The combined runtime backend scope is five existing Functions: `sendTodayExecutionReminder`,
+`sendTomorrowPlanningReminder`, `notifyManagersOperationalEvent`,
+`notifyCleanerInboxEvent` and `publicClientPortal`. Preserve the other 52.
+The new CI steps require optimizer, synthetic gallery and PWA entry checks;
+the actual multi-photo emulator runner and Weekly Close scenario remain separate
+local gates and are not silently claimed as CI coverage.
 
 ## Reproducible measurements and limits
 
@@ -122,7 +127,9 @@ The current baseline receipt remains in the original P0 worktree under
 `.tmp/release-notification-logs-ae77040-20261113`. Its Hosting version is
 `e0c32adf8eaafaea`; the earlier retained `783b9c9` rollback is `4e86fe75cf39237c`.
 Revalidate those snapshots at the next actual release. They are not a seal of
-a newly integrated Autopilot source.
+a newly integrated Autopilot source. Backend rollback is mixed: use the four
+notification revisions sealed by ae77040 and the portal revision sealed by the
+783b9c9 receipt. The historical Hosting rollback is not a newly prepared package.
 
 Physical acceptance still requires consent and a legitimate workflow on the
 2020 Intel MacBook Air (quad-core i5 1.1 GHz, 16 GB, Sequoia) and iPhone/Android.
