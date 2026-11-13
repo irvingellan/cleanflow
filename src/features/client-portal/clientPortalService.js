@@ -84,4 +84,4 @@ async function getJson(url, field, { signal } = {}) {
 }
 
 export const getPublicClientPortal = (token, options) => getJson(requestUrl(token), "portal", options);
-export const getPublicClientPortalReport = (token, jobId) => getJson(requestUrl(token, { job: jobId }), "report");
+export const getPublicClientPortalReport = (token, jobId, options) => getJson(requestUrl(token, { job: jobId }), "report", options);

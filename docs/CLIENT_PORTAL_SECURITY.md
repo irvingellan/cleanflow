@@ -15,9 +15,13 @@ lifetime and policy. No new role, collection, Function, Rule or index is added.
   Property/client binding and a valid service date within the last 120 days.
   The emulator exercises the actual public handler for report, photo and thumbnail.
 - A restored portal could continue showing a report after the link was revoked.
-  Two component regressions failed on the baseline. Page hide/restore and tab
-  suspension now clear old content, cancel the old request and revalidate.
-  A generation guard rejects responses from before suspension.
+  Page hide and tab suspension now cancel pending JSON reads while leaving
+  the current view in place. Restoration revalidates the portal and any open
+  report in the background. An older request cannot overwrite a newer one.
+  A transient failure keeps the last successful view. A permanent portal
+  denial removes the private content. A permanent report denial closes its
+  photos and shows the report unavailable state with a way back to the list.
+  The report endpoint decides access even if the capped list omits the Job.
 - Fetch/body parsing have a 15-second deadline. A suspended event loop cannot
   accept a response after its wall-clock deadline, and cancellation clears the
   pending timer even when the transport ignores abort.
@@ -41,7 +45,7 @@ application behavior; they are not physical Safari/BFCache acceptance.
 Run the portal unit/component tests with:
 
 ```sh
-npm test -- functions/src/clientPortalService.test.js src/features/client-portal
+npm test -- functions/src/clientPortalService.test.js src/features/client-portal src/features/checklists/PublicClientReportPage.test.jsx
 ```
 
 The existing manager security suite also covers Property transfer/archive,
@@ -55,9 +59,9 @@ stage retained forward/rollback Hosting packages, and prepare the exact prior
 rollback would restore the reproduced scope flaw, so prefer a corrected forward
 release if possible. No rollback or deployment is performed by this PR.
 
-For Claude: no redesign or CSS change. Background/resume returns to the portal
-list while current access is checked. Independently shared report pages remain
-outside this frontend change. Review that minimal transition before publication.
+For Claude: resume keeps the current report and photos visible while access
+is checked, with the existing unavailable messages on permanent denial. The
+independent report link retains its own reader and access policy.
 
 References: [DEC-056](DECISIONS.md#dec-056--client-portal-one-private-link-per-client-manager-released-content),
 [BFCache and sensitive state](https://web.dev/articles/bfcache).

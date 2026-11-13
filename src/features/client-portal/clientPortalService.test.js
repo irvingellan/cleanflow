@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPublicClientPortal } from "./clientPortalService.js";
+import { getPublicClientPortal, getPublicClientPortalReport } from "./clientPortalService.js";
 
 vi.mock("firebase/functions", () => ({ httpsCallable: vi.fn(() => vi.fn()) }));
 vi.mock("../../services/firebase/client.js", () => ({ functions: {} }));
@@ -54,5 +54,19 @@ describe("portal reads across network suspension", () => {
     expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
       cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
     }));
+  });
+
+  it("applies the same abort and no-store transport to the selected portal report", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    const controller = new AbortController();
+    const request = getPublicClientPortalReport("fixture", "synthetic-job", { signal: controller.signal });
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ code: "client_report_cancelled" });
+    expect(fetch).toHaveBeenCalledWith("/api/client-portal?token=fixture&job=synthetic-job", expect.objectContaining({
+      cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
+    }));
+    expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
