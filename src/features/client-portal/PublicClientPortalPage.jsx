@@ -34,17 +34,45 @@ export function PublicClientPortalPage({ token }) {
   const closeReport = useCallback(() => setOpenJobId(null), []);
 
   useEffect(() => {
-    let current = true;
-    setIsLoading(true);
-    setErrorKind(null);
-    getPublicClientPortal(token).then((result) => {
-      if (current) setPortal(result);
-    }).catch((error) => {
-      if (current) setErrorKind(error?.retryable === false ? "permanent" : "retryable");
-    }).finally(() => {
-      if (current) setIsLoading(false);
-    });
-    return () => { current = false; };
+    let generation = 0;
+    let controller;
+    let suspended = false;
+    const invalidate = () => {
+      generation += 1;
+      controller?.abort();
+      setPortal(null);
+      setOpenJobId(null);
+      setIsLoading(true);
+      setErrorKind(null);
+    };
+    const load = () => {
+      invalidate();
+      const expected = generation;
+      controller = new AbortController();
+      getPublicClientPortal(token, { signal: controller.signal }).then((result) => {
+        if (generation === expected) setPortal(result);
+      }).catch((error) => {
+        if (generation === expected) setErrorKind(error?.retryable === false ? "permanent" : "retryable");
+      }).finally(() => {
+        if (generation === expected) setIsLoading(false);
+      });
+    };
+    const hide = () => { suspended = true; invalidate(); };
+    const show = (event) => {
+      if (event.persisted || suspended) { suspended = false; load(); }
+    };
+    const visibility = () => document.visibilityState === "hidden" ? hide() : show({});
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
+    document.addEventListener("visibilitychange", visibility);
+    load();
+    return () => {
+      generation += 1;
+      controller?.abort();
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener("pageshow", show);
+      document.removeEventListener("visibilitychange", visibility);
+    };
   }, [token, attempt]);
 
   if (openJobId) return <PublicClientReportPage token={token} loadReport={loadReport} photoUrl={photoUrl} onBack={closeReport} />;

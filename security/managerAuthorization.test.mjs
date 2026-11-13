@@ -2047,6 +2047,7 @@ test("client report links expose only saved Run content and support replace, pho
   const photo = await publicClientReportGet(issued.token, { photo: "1" });
   assert.equal(photo.code, 200);
   assert.equal(photo.headers["Content-Type"], "image/jpeg");
+
   assert.deepEqual(photo.body, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   assert.deepEqual((await publicClientReportGet(issued.token)).body, loaded.body);
   const [jobAfter, runAfter, draftAfter, evidenceAfter, capabilityAfter, lookupAfter] = await Promise.all([
@@ -2222,6 +2223,22 @@ test("client portal link shows one client only what the manager released and can
   const photo = await publicClientPortalGet(access.token, { job: "job", photo: "1" });
   assert.equal(photo.code, 200);
   assert.equal(photo.headers["Content-Type"], "image/jpeg");
+
+  // A historical Job client snapshot cannot bypass the portal's current Property scope.
+  const propertyRef = admin.doc(`${root}/properties/property`);
+  for (const change of [{ clientId: "client-b" }, { clientId: "client-a", archivedAt: Timestamp.now() }]) {
+    await propertyRef.update(change);
+    assert.deepEqual((await publicClientPortalGet(access.token)).body.portal.reports, []);
+    for (const parameters of [{ job: "job" }, { job: "job", photo: "1" }, { job: "job", photo: "1", thumb: "1" }]) {
+      assert.equal((await publicClientPortalGet(access.token, parameters)).code, 404);
+    }
+  }
+  await propertyRef.update({ clientId: "client-a", archivedAt: null });
+  assert.equal((await publicClientPortalGet(access.token, { job: "job" })).code, 200);
+  // A remembered direct URL cannot exceed the history window advertised by the portal.
+  await admin.doc(`${root}/jobs/job`).update({ scheduledDate: "2020-01-01" });
+  assert.equal((await publicClientPortalGet(access.token, { job: "job" })).code, 404);
+  await admin.doc(`${root}/jobs/job`).update({ scheduledDate: today });
 
   // Another client's Job, an unknown Job and writes look like nothing is there.
   assert.equal((await publicClientPortalGet(access.token, { job: "job-b" })).code, 404);

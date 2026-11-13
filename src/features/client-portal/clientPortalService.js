@@ -33,8 +33,23 @@ export function publicClientPortalPhotoUrl(token, jobId, evidenceId, { thumbnail
   return requestUrl(token, { job: jobId, photo: "1", ...(evidenceId ? { evidenceId } : {}), ...(thumbnail ? { thumb: "1" } : {}) });
 }
 
-async function getJson(url, field) {
+async function getJson(url, field, { signal } = {}) {
   const controller = new AbortController();
+  const expiresAt = Date.now() + clientReportRequestTimeoutMilliseconds;
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) controller.abort();
+  const checkCurrent = () => {
+    if (controller.signal.aborted || Date.now() >= expiresAt) {
+      throw new ClientReportRequestError("client_report_timeout");
+    }
+  };
+  let onAbort;
+  const cancelled = new Promise((_, reject) => {
+    onAbort = () => reject(new ClientReportRequestError("client_report_cancelled"));
+    controller.signal.addEventListener("abort", onAbort, { once: true });
+    if (controller.signal.aborted) onAbort();
+  });
   let timeout;
   const deadline = new Promise((_, reject) => {
     timeout = setTimeout(() => {
@@ -43,24 +58,30 @@ async function getJson(url, field) {
     }, clientReportRequestTimeoutMilliseconds);
   });
   try {
-    return await Promise.race([deadline, (async () => {
+    return await Promise.race([deadline, cancelled, (async () => {
+      checkCurrent();
       const response = await fetch(url, {
         headers: { Accept: "application/json" }, credentials: "omit", cache: "no-store",
         referrerPolicy: "no-referrer", signal: controller.signal,
       });
+      checkCurrent();
       if (!response.ok) {
         throw new ClientReportRequestError("client_report_unavailable", {
           retryable: response.status !== 404 && response.status !== 410, status: response.status,
         });
       }
       const body = await response.json().catch(() => null);
+      checkCurrent();
       if (!body?.[field] || typeof body[field] !== "object") throw new ClientReportRequestError("client_report_response_invalid");
       return body[field];
     })()]);
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
+    controller.signal.removeEventListener("abort", onAbort);
+    controller.abort();
   }
 }
 
-export const getPublicClientPortal = (token) => getJson(requestUrl(token), "portal");
+export const getPublicClientPortal = (token, options) => getJson(requestUrl(token), "portal", options);
 export const getPublicClientPortalReport = (token, jobId) => getJson(requestUrl(token, { job: jobId }), "report");

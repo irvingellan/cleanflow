@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { PublicClientPortalPage } from "./PublicClientPortalPage.jsx";
@@ -32,7 +32,7 @@ describe("client portal page", () => {
   it("shows the coming cleanings, the released reports and the properties", async () => {
     renderPage();
     expect(await screen.findByRole("heading", { name: "Owner Example" })).toBeVisible();
-    expect(getPublicClientPortal).toHaveBeenCalledWith("synthetic-token");
+    expect(getPublicClientPortal).toHaveBeenCalledWith("synthetic-token", { signal: expect.any(AbortSignal) });
     expect(screen.getByRole("heading", { name: "Coming cleanings" })).toBeVisible();
     expect(screen.getByText(/14:30/)).toBeVisible();
     expect(screen.getByRole("button", { name: /Open the report for Seaside House/ })).toBeVisible();
@@ -70,5 +70,25 @@ describe("client portal page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
     await waitFor(() => expect(getPublicClientPortal).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("heading", { name: "Owner Example" })).toBeVisible();
+  });
+
+  it("revalidates a restored page and removes a revoked report already open", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Open the report for Seaside House/ }));
+    expect(await screen.findByText("All good.")).toBeVisible();
+    getPublicClientPortal.mockRejectedValue({ retryable: false });
+    fireEvent(window, new PageTransitionEvent("pageshow", { persisted: true }));
+    expect(await screen.findByText(/This link is no longer available/)).toBeVisible();
+    expect(screen.queryByText("All good.")).not.toBeInTheDocument();
+  });
+
+  it("does not let a pre-suspension response replace a revalidated portal", async () => {
+    let stale;
+    getPublicClientPortal.mockImplementationOnce(() => new Promise((resolve) => { stale = resolve; }));
+    renderPage();
+    fireEvent(window, new PageTransitionEvent("pageshow", { persisted: true }));
+    expect(await screen.findByRole("heading", { name: "Owner Example" })).toBeVisible();
+    await act(async () => stale({ ...portal, clientName: "Stale owner" }));
+    expect(screen.queryByText("Stale owner")).not.toBeInTheDocument();
   });
 });
