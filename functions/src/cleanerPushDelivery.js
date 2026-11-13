@@ -153,9 +153,11 @@ function perDeviceOutcome(result) {
 async function recordOutcome(reference, patch, logger) {
   try {
     await reference.update(patch);
+    return true;
   } catch {
     // The claim persists as UNKNOWN even if the final audit write fails.
     logger?.error?.("Cleaner notification outcome could not be recorded.");
+    return false;
   }
 }
 
@@ -192,8 +194,17 @@ export async function processCleanerNotification({ database, organizationId, cle
       stages: [...stages, "PUSH_ATTEMPTED", "UNKNOWN"],
     };
   }
-  await recordOutcome(reference, {
+  const auditRecorded = await recordOutcome(reference, {
     ...outcome, pendingProviderResult: false, attemptedAt, completedAt: FieldValue.serverTimestamp(),
   }, logger);
-  return { deliveryStatus: outcome.deliveryStatus };
+  // The event wrapper logs only aggregate evidence. Provider acceptance is not display.
+  return {
+    deliveryStatus: outcome.deliveryStatus, targetDeviceCount: devices.length,
+    acceptedByFcmDevices: outcome.acceptedByFcmDevices ?? null,
+    rejectedDevices: outcome.rejectedDevices ?? null,
+    unknownDevices: outcome.unknownDevices, auditRecorded,
+    ...(outcome.failureCode ? { failureCode: outcome.failureCode } : {}),
+    ...(outcome.invalidated !== undefined ? { invalidated: outcome.invalidated } : {}),
+    ...(outcome.invalidDeviceCleanupFailed !== undefined ? { invalidDeviceCleanupFailed: outcome.invalidDeviceCleanupFailed } : {}),
+  };
 }

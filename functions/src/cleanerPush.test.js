@@ -7,6 +7,7 @@ import {
 import { processCleanerNotification } from "./cleanerPushDelivery.js";
 import { isCleanerPushEnabledProfile, isCleanerPushPilotApproval, resolveCleanerPushMode } from "./cleanerPushPilot.js";
 import { managerFcmTimeoutMs } from "./managerFcmDelivery.js";
+import { notificationOutcomeLog } from "./notificationOutcomeLog.js";
 import { awaitCleanerPushTest, cleanerPushOverview, pushTestLimits, requestCleanerPushTest } from "./cleanerPushTest.js";
 
 const organizationId = "synthetic-org";
@@ -121,6 +122,17 @@ const batch = (...responses) => ({
 afterEach(() => vi.useRealTimers());
 
 describe("cleaner device lifecycle", () => {
+  it("distinguishes failed audit persistence from provider acceptance without a resend", async () => {
+    const f = fixture({ beforeReceiptUpdate: () => { throw new Error("synthetic write failure"); } });
+    await register(f);
+    const sendFcm = vi.fn(async () => batch(accepted));
+    const result = notificationOutcomeLog(await deliver(f, sendFcm));
+    expect(result).toMatchObject({ deliveryStatus: "FCM_ACCEPTED", acceptedByFcmDevices: 1,
+      targetDeviceCount: 1, auditRecorded: false });
+    await deliver(f, sendFcm);
+    expect(sendFcm).toHaveBeenCalledTimes(1);
+    expect(f.records.get(eventPath)).toMatchObject({ processingState: "STORED" });
+  });
   it("keeps two installations independently active and repeats enrollment without changing the binding", async () => {
     const f = fixture();
     const first = await register(f);
@@ -217,7 +229,12 @@ describe("cleaner FCM dispatch", () => {
     await register(f, { ...registration, deviceId: "synthetic-other-cleaner-install", token: `${registration.token}-other-account` }, other);
     const sendFcm = vi.fn().mockResolvedValue(batch(invalid, accepted));
 
-    await Promise.all([deliver(f, sendFcm), deliver(f, sendFcm)]);
+    const results = await Promise.all([deliver(f, sendFcm), deliver(f, sendFcm)]);
+    const logged = results.map(notificationOutcomeLog);
+    expect(logged).toContainEqual({ deliveryStatus: "PARTIAL", targetDeviceCount: 2,
+      acceptedByFcmDevices: 1, rejectedDevices: 1, unknownDevices: 0,
+      invalidated: 1, invalidDeviceCleanupFailed: false, auditRecorded: true });
+    expect(JSON.stringify(logged)).not.toMatch(/synthetic-fcm-registration-token|synthetic-provider-accepted|cleaner-a|synthetic-installation|devices|stages/);
     expect(sendFcm).toHaveBeenCalledTimes(1);
     const messages = sendFcm.mock.calls[0][0];
     expect(messages.map(({ token, data }) => [token, data.cleanerBindingId])).toEqual([
@@ -247,7 +264,9 @@ describe("cleaner FCM dispatch", () => {
     const sendFcm = vi.fn(() => new Promise(() => {}));
     const pending = deliver(f, sendFcm);
     await vi.advanceTimersByTimeAsync(managerFcmTimeoutMs + 1);
-    await pending;
+    expect(notificationOutcomeLog(await pending)).toMatchObject({ deliveryStatus: "UNKNOWN",
+      targetDeviceCount: 1, acceptedByFcmDevices: null, rejectedDevices: null,
+      unknownDevices: 1, failureCode: "deadline-exceeded", auditRecorded: true });
     await deliver(f, sendFcm);
     expect(sendFcm).toHaveBeenCalledTimes(1);
     expect(f.records.get(deliveryPath)).toMatchObject({
@@ -318,7 +337,7 @@ describe("cleaner push pilot test notice", () => {
     f.records.set(eventPath, { ...testEvent, createdAt: Timestamp.now() });
     const sendFcm = vi.fn(async () => batch(accepted));
 
-    await expect(deliver(f, sendFcm)).resolves.toEqual({ deliveryStatus: "FCM_ACCEPTED" });
+    await expect(deliver(f, sendFcm)).resolves.toMatchObject({ deliveryStatus: "FCM_ACCEPTED", acceptedByFcmDevices: 1 });
     const [messages] = sendFcm.mock.calls[0];
     expect(messages).toHaveLength(1);
     expect(JSON.stringify(messages)).not.toContain("private-property-marker");
