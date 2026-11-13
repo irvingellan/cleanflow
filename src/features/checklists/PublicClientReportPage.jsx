@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PhotoLightbox } from "../../components/PhotoLightbox.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
@@ -27,29 +27,19 @@ function ReportPhoto({ token, translate, evidenceId, photoUrl, className = "clie
   );
 }
 
-/**
- * Public, read-only report projection. All content is fetched from the server's frozen Run data.
- * The client portal shows the same report through its own link, with a way back to the list.
- */
-export function PublicClientReportPage({ token, loadReport = getPublicClientReport, photoUrl = publicClientReportPhotoUrl, onBack = null }) {
-  const { language, setLanguage, translate } = useTranslation();
+/** Public, read-only report opened through its independent link. */
+export function PublicClientReportPage({ token }) {
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorKind, setErrorKind] = useState(null);
   const [attempt, setAttempt] = useState(0);
-  const [showAllTasks, setShowAllTasks] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(null);
-  const closeViewer = useCallback(() => setViewerIndex(null), []);
-  const evidenceIds = report?.evidence?.map((item) => item.evidenceId) || [undefined];
-  const photoSrc = useCallback((index) => photoUrl(token, evidenceIds[index]), [token, photoUrl, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
-  const photoPlaceholder = useCallback((index) => photoUrl(token, evidenceIds[index], { thumbnail: true }), [token, photoUrl, evidenceIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let current = true;
     setIsLoading(true);
     setErrorKind(null);
     setReport(null);
-    loadReport(token).then((result) => {
+    getPublicClientReport(token).then((result) => {
       if (current) setReport(result);
     }).catch((error) => {
       if (current) setErrorKind(error?.retryable === false ? "permanent" : "retryable");
@@ -57,7 +47,30 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
       if (current) setIsLoading(false);
     });
     return () => { current = false; };
-  }, [token, attempt, loadReport]);
+  }, [token, attempt]);
+
+  return <ClientReportView token={token} report={report} isLoading={isLoading} errorKind={errorKind}
+    onRetry={() => setAttempt((value) => value + 1)} photoUrl={publicClientReportPhotoUrl} />;
+}
+
+/** The standalone link and portal reuse the same read-only report presentation. */
+export function ClientReportView({ token, report, isLoading, errorKind, onRetry, photoUrl, onBack = null }) {
+  const { language, setLanguage, translate } = useTranslation();
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [viewerEvidenceId, setViewerEvidenceId] = useState(null);
+  const photos = useMemo(() => report?.evidence?.length > 0
+    ? report.evidence : report?.hasPhoto ? [{ evidenceId: undefined }] : [], [report]);
+  const evidenceKey = JSON.stringify(photos.map((photo) => photo.evidenceId ?? ""));
+  const evidenceIds = useMemo(() => JSON.parse(evidenceKey), [evidenceKey]);
+  const viewerIndex = evidenceIds.indexOf(viewerEvidenceId);
+  const closeViewer = useCallback(() => setViewerEvidenceId(null), []);
+  const photoSrc = useCallback((index) => photoUrl(token, evidenceIds[index] || undefined), [token, photoUrl, evidenceIds]);
+  const photoPlaceholder = useCallback((index) => photoUrl(token, evidenceIds[index] || undefined, { thumbnail: true }), [token, photoUrl, evidenceIds]);
+  const openViewer = useCallback((index) => setViewerEvidenceId(evidenceIds[index]), [evidenceIds]);
+
+  useEffect(() => {
+    if (viewerIndex < 0) closeViewer();
+  }, [viewerIndex, closeViewer]);
 
   if (isLoading) {
     return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate("clientReport.loading")} status="status" /></section></main>;
@@ -73,7 +86,7 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
             isError
           />
           {retryable && (
-            <button className="button button--primary" type="button" onClick={() => setAttempt((value) => value + 1)}>
+            <button className="button button--primary" type="button" onClick={onRetry}>
               {translate("clientReport.retry")}
             </button>
           )}
@@ -83,7 +96,6 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
     );
   }
 
-  const photos = report.evidence?.length > 0 ? report.evidence : report.hasPhoto ? [{ evidenceId: undefined }] : [];
   const summary = report.summary;
   // A summary number takes the reader to the part of the report it counts.
   const jump = (id, value, available, openTasks = false) => available
@@ -168,7 +180,7 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
             <ul className="client-report__gallery">
               {photos.map((item, index) => (
                 <li key={item.evidenceId || "single"}>
-                  <button type="button" className="client-report__thumb" onClick={() => setViewerIndex(index)}
+                  <button type="button" className="client-report__thumb" onClick={() => openViewer(index)}
                     aria-label={translate("clientReport.openPhoto", { index: index + 1 })}>
                     <ReportPhoto token={token} translate={translate} evidenceId={item.evidenceId} photoUrl={photoUrl} className="client-report__thumb-image" thumbnail />
                   </button>
@@ -226,8 +238,8 @@ export function PublicClientReportPage({ token, loadReport = getPublicClientRepo
           </section>
         )}
       </article>
-      {viewerIndex !== null && photos[viewerIndex] && (
-        <PhotoLightbox count={photos.length} index={viewerIndex} getSrc={photoSrc} getPlaceholderSrc={photoPlaceholder} onIndexChange={setViewerIndex}
+      {viewerIndex >= 0 && (
+        <PhotoLightbox count={photos.length} index={viewerIndex} getSrc={photoSrc} getPlaceholderSrc={photoPlaceholder} onIndexChange={openViewer}
           onClose={closeViewer} translate={translate} alt={translate("clientReport.savedEvidence")} />
       )}
     </main>

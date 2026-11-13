@@ -1,6 +1,61 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
-import { clientPortalAccessState, projectClientPortal } from "./clientPortalService.js";
+import { clientPortalAccessState, projectClientPortal, loadPublicClientPortalReport, downloadPublicClientPortalPhoto } from "./clientPortalService.js";
+import { loadReleasedClientReport, downloadReleasedClientReportPhoto } from "./clientReportService.js";
+
+vi.mock("./clientReportService.js", () => ({
+  clientReportReleasedForJob: vi.fn(),
+  loadReleasedClientReport: vi.fn(async () => ({ report: { propertyName: "Allowed house" } })),
+  downloadReleasedClientReportPhoto: vi.fn(async () => ({ bytes: "synthetic" })),
+}));
+
+describe("portal direct report and photo authorization", () => {
+  const now = new Date("2026-11-13T20:00:00Z");
+  const tokenHash = "a".repeat(64);
+  const organizationId = "synthetic-org";
+  function database({ property = {}, job = {} } = {}) {
+    const expiresAt = Timestamp.fromMillis(now.getTime() + 86_400_000);
+    const root = `organizations/${organizationId}`;
+    const data = new Map([
+      [`clientPortalTokenLookups/${tokenHash}`, { organizationId, clientId: "owner", status: "ACTIVE", expiresAt }],
+      [`${root}/clients/owner`, { name: "Owner" }],
+      [`${root}/clients/owner/portalAccess/active`, { status: "ACTIVE", tokenHash, expiresAt }],
+      [`${root}/properties/house`, property === null ? null : { clientId: "owner", ...property }],
+      [`${root}/jobs/visit`, { clientId: "owner", propertyId: "house", scheduledDate: "2026-11-13", ...job }],
+    ]);
+    const ref = (path) => ({
+      collection: (id) => ({ doc: (id2) => ref(`${path}/${id}/${id2}`) }),
+      get: async () => ({ exists: Boolean(data.get(path)), data: () => data.get(path) }),
+    });
+    return { doc: ref, collection: (id) => ({ doc: (id2) => ref(`${id}/${id2}`) }) };
+  }
+  const request = { organizationId, tokenHash, jobId: "visit", now };
+
+  it.each([
+    ["reassigned property", { property: { clientId: "other-owner" } }],
+    ["archived property", { property: { archivedAt: Timestamp.now() } }],
+    ["missing property", { property: null }],
+    ["unbound property", { job: { propertyId: "" } }],
+    ["invalid property path", { job: { propertyId: "another/path" } }],
+    ["older than portal window", { job: { scheduledDate: "2026-01-01" } }],
+    ["future report", { job: { scheduledDate: "2026-11-14" } }],
+    ["invalid service date", { job: { scheduledDate: "2026-02-31" } }],
+  ])("denies %s before loading any report or Storage bytes", async (_, changes) => {
+    vi.clearAllMocks();
+    const db = database(changes);
+    await expect(loadPublicClientPortalReport(db, request)).rejects.toMatchObject({ code: "not-found" });
+    await expect(downloadPublicClientPortalPhoto(db, { ...request, evidenceId: "evidence", storage: {} })).rejects.toMatchObject({ code: "not-found" });
+    expect(loadReleasedClientReport).not.toHaveBeenCalled();
+    expect(downloadReleasedClientReportPhoto).not.toHaveBeenCalled();
+  });
+
+  it("allows current ownership and the inclusive oldest report date", async () => {
+    const date = new Date(now); date.setUTCDate(date.getUTCDate() - 120);
+    const db = database({ job: { scheduledDate: date.toISOString().slice(0, 10) } });
+    await expect(loadPublicClientPortalReport(db, request)).resolves.toEqual({ propertyName: "Allowed house" });
+    await expect(downloadPublicClientPortalPhoto(db, { ...request, storage: {} })).resolves.toEqual({ bytes: "synthetic" });
+  });
+});
 
 const today = "2026-11-11";
 const property = (id, name, extra = {}) => ({
