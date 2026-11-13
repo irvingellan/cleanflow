@@ -22,6 +22,13 @@ const tokenHashPattern = /^[a-f0-9]{64}$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const timePattern = /^\d{2}:\d{2}$/;
 
+function reportDateAllowed(value, today) {
+  if (!datePattern.test(value || "")) return false;
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    && value >= shiftDate(today, -clientPortalPastDays) && value <= today;
+}
+
 function validPathId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 256 && !value.includes("/");
 }
@@ -185,22 +192,32 @@ export async function loadPublicClientPortal(database, { organizationId, tokenHa
     organization(database, organizationId).collection("properties").where("clientId", "==", clientId).get(),
     clientJobs(database, { organizationId, clientId, today }),
   ]);
-  const candidates = jobs.filter((job) => !job.archivedAt && job.scheduledDate <= today).slice(0, maximumReports);
+  const properties = propertySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  const allowedPropertyIds = new Set(properties.filter((property) => !property.archivedAt).map((property) => property.id));
+  const candidates = jobs.filter((job) => !job.archivedAt && allowedPropertyIds.has(job.propertyId)
+    && reportDateAllowed(job.scheduledDate, today)).slice(0, maximumReports);
   const released = await Promise.all(candidates.map((job) => clientReportReleasedForJob(database, { organizationId, jobId: job.id })
     .catch(() => false)));
   return projectClientPortal({
     client, jobs, today,
-    properties: propertySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    properties,
     releasedJobIds: new Set(candidates.filter((_, index) => released[index]).map((job) => job.id)),
   });
 }
 
-/** The Job must belong to the link's client; a wrong Job looks like a missing one. */
+/** Direct report/photo requests obey the same current ownership and date scope as the list. */
 async function authorizeClientPortalJob(database, { organizationId, tokenHash, jobId, now }) {
   const { clientId } = await resolveClientPortal(database, { organizationId, tokenHash, now });
   if (!validPathId(jobId)) throw new HttpsError("not-found", "Report not found.");
   const job = (await organization(database, organizationId).collection("jobs").doc(jobId).get()).data();
-  if (!job || job.archivedAt || job.clientId !== clientId) throw new HttpsError("not-found", "Report not found.");
+  if (!job || job.archivedAt || job.clientId !== clientId || !validPathId(job.propertyId)
+    || !reportDateAllowed(job.scheduledDate, operatingDate(now.getTime()))) {
+    throw new HttpsError("not-found", "Report not found.");
+  }
+  const property = (await organization(database, organizationId).collection("properties").doc(job.propertyId).get()).data();
+  if (!property || property.archivedAt || property.clientId !== clientId) {
+    throw new HttpsError("not-found", "Report not found.");
+  }
 }
 
 export async function loadPublicClientPortalReport(database, { organizationId, tokenHash, jobId, now = new Date() }) {

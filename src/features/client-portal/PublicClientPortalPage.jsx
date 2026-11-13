@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
-import { PublicClientReportPage } from "../checklists/PublicClientReportPage.jsx";
+import { ClientReportView } from "../checklists/PublicClientReportPage.jsx";
 import { getPublicClientPortal, getPublicClientPortalReport, publicClientPortalPhotoUrl } from "./clientPortalService.js";
+import { usePortalRead } from "./usePortalRead.js";
 import "./clientPortal.css";
 
 function Visit({ visit, language, translate, children }) {
@@ -18,36 +19,29 @@ function Visit({ visit, language, translate, children }) {
   );
 }
 
-/**
- * A property owner's private page: their properties, the coming cleanings and
- * the reports the manager released. Read-only; everything comes from the server.
- */
+function PortalReport({ token, jobId, onBack }) {
+  const read = useCallback((signal) => getPublicClientPortalReport(token, jobId, { signal }), [token, jobId]);
+  const photoUrl = useCallback((portalToken, evidenceId, options) => publicClientPortalPhotoUrl(portalToken, jobId, evidenceId, options), [jobId]);
+  const { data: report, isLoading, errorKind, retry } = usePortalRead(read);
+  return <ClientReportView token={token} report={report} photoUrl={photoUrl} onBack={onBack}
+    isLoading={isLoading} errorKind={errorKind} onRetry={retry} />;
+}
+
+/** A portal link owns a separate read-only view for each token. */
 export function PublicClientPortalPage({ token }) {
+  return <PortalPage key={token} token={token} />;
+}
+
+function PortalPage({ token }) {
   const { language, setLanguage, translate } = useTranslation();
-  const [portal, setPortal] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorKind, setErrorKind] = useState(null);
-  const [attempt, setAttempt] = useState(0);
   const [openJobId, setOpenJobId] = useState(null);
-  const loadReport = useCallback((portalToken) => getPublicClientPortalReport(portalToken, openJobId), [openJobId]);
-  const photoUrl = useCallback((portalToken, evidenceId, options) => publicClientPortalPhotoUrl(portalToken, openJobId, evidenceId, options), [openJobId]);
+  const read = useCallback((signal) => getPublicClientPortal(token, { signal }), [token]);
+  const { data: portal, isLoading, errorKind, retry } = usePortalRead(read);
   const closeReport = useCallback(() => setOpenJobId(null), []);
 
-  useEffect(() => {
-    let current = true;
-    setIsLoading(true);
-    setErrorKind(null);
-    getPublicClientPortal(token).then((result) => {
-      if (current) setPortal(result);
-    }).catch((error) => {
-      if (current) setErrorKind(error?.retryable === false ? "permanent" : "retryable");
-    }).finally(() => {
-      if (current) setIsLoading(false);
-    });
-    return () => { current = false; };
-  }, [token, attempt]);
-
-  if (openJobId) return <PublicClientReportPage token={token} loadReport={loadReport} photoUrl={photoUrl} onBack={closeReport} />;
+  // The list is capped; its omission of a Job does not settle direct report access.
+  // A permanent error on the portal link takes priority over the report's state.
+  if (openJobId && portal) return <PortalReport key={openJobId} token={token} jobId={openJobId} onBack={closeReport} />;
 
   if (isLoading) {
     return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate("clientPortal.loading")} status="status" /></section></main>;
@@ -59,7 +53,7 @@ export function PublicClientPortalPage({ token }) {
         <section className="panel">
           <StateCard message={translate(retryable ? "clientPortal.loadRetryable" : "clientPortal.unavailable")} status="alert" isError />
           {retryable && (
-            <button className="button button--primary" type="button" onClick={() => setAttempt((value) => value + 1)}>
+            <button className="button button--primary" type="button" onClick={retry}>
               {translate("clientReport.retry")}
             </button>
           )}
