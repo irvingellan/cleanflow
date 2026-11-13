@@ -196,6 +196,52 @@ describe("sequential bounded photo gallery", () => {
     expect(result.current.saved.map((p) => p.evidenceId)).toEqual(["accepted"]);
   });
 
+  it("keeps a lost receipt retryable without rejecting the last free slot after refresh", async () => {
+    const saved = Array.from({ length: 18 }, (_, index) => photo(String(index), index ? "additional" : "living-belongings"));
+    const current = { ...checklist, evidenceRevision: 18, evidence: saved };
+    const accepted = photo("accepted");
+    const last = photo("last");
+    const optimized = new Blob(["abc"], { type: "image/jpeg" });
+    const nextOptimized = new Blob(["def"], { type: "image/jpeg" });
+    const optimize = vi.fn().mockResolvedValueOnce({ blob: optimized }).mockResolvedValueOnce({ blob: nextOptimized });
+    const upload = vi.fn().mockRejectedValueOnce(new TypeError("synthetic response lost after commit"))
+      .mockResolvedValueOnce({ evidenceId: "last", evidenceRevision: 20, evidence: [...saved, accepted, last] })
+      .mockResolvedValueOnce({ duplicate: true, evidenceId: "accepted", evidenceRevision: 20, evidence: [...saved, accepted, last] });
+    const refresh = vi.fn().mockResolvedValue({ checklist: { ...current, evidenceRevision: 19, evidence: [...saved, accepted] } });
+    const { result } = setup({ checklist: current, optimize, upload, refresh });
+
+    act(() => result.current.append([file()]));
+    await waitFor(() => expect(result.current.local[0]?.state).toBe("FAILED"));
+    const failedId = result.current.local[0].id;
+
+    await act(async () => result.current.refreshSaved());
+    expect(result.current.saved).toHaveLength(19);
+    expect(result.current.pendingCount).toBe(1);
+    expect(upload).toHaveBeenCalledOnce();
+
+    act(() => result.current.append([file()]));
+    expect(result.current.error).toBeNull();
+    await waitFor(() => expect(result.current.saved).toHaveLength(20));
+
+    act(() => result.current.retry(failedId));
+    await waitFor(() => expect(result.current.pendingCount).toBe(0));
+    expect(result.current.saved).toEqual([...saved, accepted, last]);
+    expect(upload.mock.calls.map(([request]) => request.file)).toEqual([optimized, nextOptimized, optimized]);
+    expect(optimize).toHaveBeenCalledTimes(2);
+  });
+
+  it("bounds retained failed selections and keeps the pending count visible", async () => {
+    const limited = { ...checklist, evidencePolicy: { version: 2, maxPhotos: 2 } };
+    const optimize = vi.fn().mockRejectedValue(new Error("synthetic invalid photo"));
+    const { result } = setup({ checklist: limited, optimize });
+    act(() => result.current.append([file(), file()]));
+    await waitFor(() => expect(result.current.local.map((item) => item.state)).toEqual(["FAILED", "FAILED"]));
+    act(() => result.current.append([file()]));
+    expect(result.current.error).toBe("checklist_photo_limit");
+    expect(result.current.pendingCount).toBe(2);
+    expect(optimize).toHaveBeenCalledTimes(2);
+  });
+
   it("does not call a different required photo saved without the accepted identity", async () => {
     const { result } = setup({ upload: async () => ({ evidenceId: "absent", evidenceRevision: 1, evidence: [photo("other", "living-belongings")] }) });
     act(() => result.current.append([file()]));
