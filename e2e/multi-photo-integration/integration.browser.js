@@ -1,31 +1,44 @@
 import { test, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { assertFails, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { syntheticChecklistPng } from '../../security/syntheticChecklistImages.mjs';
-import { createManager, createRun, read, upload, mutate, completeAnswers, assertStored, assertPrivateProjection, expire, checklistUrl, bucket } from './fixtures.js';
-const output = '.superpowers/sdd/2026-10-13-checklist-multi-photo-v1/integration-artifacts';
+import { createManager, createRun, read, upload, mutate, completeAnswers, assertStored, assertPrivateProjection, expire, checklistUrl, hostingOrigin, managerHarnessOrigin } from './fixtures.js';
+const output = '.tmp/issue-81';
 const checks = {};
 let stage = 'initial';
 async function safeTest(name, task) {
   stage = name;
   try { await task(); checks[name] = true; } catch (error) {
-    save('failure-location.json', { stage, errorType: error.name, sourceLines: (error.stack?.match(/integration\.browser\.js:\d+:\d+/g) || []) });
+    save(`failure-${stage}.json`, { stage, errorType: error.name, sourceLines: (error.stack?.match(/integration\.browser\.js:\d+:\d+/g) || []) });
     throw new Error(`isolated-validation-failed-at-${stage}`);
   }
 }
 function save(name, result) { fs.mkdirSync(output, { recursive: true }); fs.writeFileSync(path.join(output, name), JSON.stringify(result, null, 2)); }
-test.beforeEach(async ({ page }) => {
-  await page.route('**/*', route => {
-    const u = new URL(route.request().url());
-    if (['data:', 'blob:'].includes(u.protocol)) return route.continue();
-    if (u.hostname === '127.0.0.1' && ['5012', '4214'].includes(u.port)) return route.continue();
-    return route.abort();
+const photoInput = red => ({ name: 'synthetic.png', mimeType: 'image/png', buffer: syntheticChecklistPng(red) });
+const evidenceIds = gallery => gallery.evidence.map(photo => photo.evidenceId);
+function restrictBrowser(page) {
+  return page.route('**/*', route => {
+    const url = new URL(route.request().url());
+    return ['data:', 'blob:'].includes(url.protocol) || [hostingOrigin, managerHarnessOrigin].includes(url.origin)
+      ? route.continue() : route.abort();
   });
-});
-test('actual gallery, retry, private storage, review, manager and client report', async ({ page, context }, info) => {
+}
+async function openPhoto(page, name) {
+  await page.getByRole('button', { name, exact: true }).click();
+  await expect(page.locator('.photo-lightbox__image.is-loaded')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.photo-lightbox')).toHaveCount(0);
+}
+async function getPublic(api, token, query = {}) {
+  const response = await fetch(`${hostingOrigin}/api/${api}?${new URLSearchParams({ token, ...query })}`);
+  assert.equal(response.status, 200);
+  return query.photo ? Buffer.from(await response.arrayBuffer()) : response.json();
+}
+test.beforeEach(({ page }) => restrictBrowser(page));
+test('actual 50-photo gallery, review, manager, report, and owner portal', async ({ page, context }, info) => {
   let run, call; const browser = info.project.name;
   try {
     await safeTest('auth-new-run-policy', async () => { call = await createManager(); run = await createRun(call); });
@@ -33,86 +46,68 @@ test('actual gallery, retry, private storage, review, manager and client report'
       assert.equal((await mutate(run, { action: 'READY_FOR_REVIEW', submissionId: randomUUID(), baseRevision: 0 })).status, 422);
       assert.equal((await run.runRef.get()).data().status, 'DRAFT');
     });
-    await safeTest('real-native-browser-one-two-ten-twenty', async () => {
+    await safeTest('native-browser-one-two-ten-twenty-fifty', async () => {
       await page.goto(`/checklist?t=${encodeURIComponent(run.token)}`);
       await expect(page.getByRole('heading', { name: 'Cleaning checklist' })).toBeVisible();
-      const input = red => ({ name: 'synthetic.png', mimeType: 'image/png', buffer: syntheticChecklistPng(red) });
-      await page.getByLabel('Choose photos', { exact: true }).setInputFiles(input(20));
-      stage = 'first-native-upload';
-      await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(1);
-      await assertStored(run, 1);
-      // Real lost-response injection: continue through the actual server/Storage
-      // commit, then interrupt only delivery. Retry must reconcile accepted bytes.
-      let dropped = false;
-      let bodyCaptureUnavailable = false;
-      await page.route('**/api/public-checklist?*', async route => {
-        if (route.request().method() === 'PUT' && !dropped) {
-          dropped = true;
-          // WebKit Playwright does not expose this Blob request body. The known
-          // valid tiny PNG is retained byte-for-byte by the actual optimizer;
-          // forward those exact fixture bytes only for this loss-injection.
-          // All ordinary/batch uploads use untouched native browser transport.
-          const captured = route.request().postDataBuffer();
-          bodyCaptureUnavailable = !captured?.length;
-          const actual = await route.fetch({ postData: captured?.length ? captured : syntheticChecklistPng(21) });
-          assert.equal(actual.status(), 200); await route.abort('failed');
-        } else await route.continue();
+      const choose = page.getByLabel('Choose photos', { exact: true });
+      const saved = page.getByText('Photo saved', { exact: true });
+      const measures = [];
+      let uploadRequests = 0;
+      page.on('request', request => {
+        if (request.method() === 'PUT' && request.url().includes('/api/public-checklist')) uploadRequests++;
       });
-      await page.getByLabel('Take photo', { exact: true }).setInputFiles(input(21));
-      stage = 'lost-upload-delivery';
-      await expect(page.getByRole('button', { name: 'Retry photo', exact: true })).toBeVisible();
-      await assertStored(run, 2);
-      await page.getByRole('button', { name: 'Send checklist for review', exact: true }).click();
-      await expect(page.getByRole('dialog')).toHaveCount(0);
-      const retryResponse = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/api/public-checklist'));
-      await page.getByRole('button', { name: 'Retry photo', exact: true }).click();
-      stage = 'exact-blob-retry';
-      const retryReceipt = await (await retryResponse).json();
-      assert.equal(retryReceipt.duplicate, true);
-      await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(2);
-      await assertStored(run, 2);
-      await page.unroute('**/api/public-checklist?*');
-      await page.getByRole('button', { name: 'View photo', exact: true }).first().click();
-      await page.getByRole('button', { name: 'Remove photo', exact: true }).first().click();
-      stage = 'remove-required-reload';
-      await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(1);
-      assert.equal((await read(run)).body.checklist.evidence.some(p => p.requirementId === 'living-belongings'), false);
-      await page.reload(); await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(1);
-      await page.getByLabel('Choose photos', { exact: true }).setInputFiles(input(22));
-      stage = 'replace-required';
-      await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(2);
-      for (const target of [10, 20]) {
-        stage = `batch-${target}-native-upload`;
-        const before = (await read(run)).body.checklist.evidence.length;
-        await page.getByLabel('Choose photos', { exact: true }).setInputFiles(Array.from({ length: target - before }, (_, i) => input(target * 3 + i)));
-        await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(target, { timeout: 60000 });
-        const state = await assertStored(run, target);
-        for (const photo of state.photos) {
-          const [bytes] = await bucket.file(photo.storagePath).download();
-          assert.ok([21, 22, ...Array.from({ length: 8 }, (_, i) => 30 + i), ...Array.from({ length: 10 }, (_, i) => 60 + i)].some(red => bytes.equals(syntheticChecklistPng(red))));
-        }
-      }
-      const before = await read(run); assertPrivateProjection(before.body);
-      const savedOrder = before.body.checklist.evidence.map(photo => photo.evidenceId);
+      let previous = 0;
+      const measure = async (count, requested = count) => {
+        const previousRequests = uploadRequests;
+        const files = Array.from({ length: requested - previous }, (_, index) => photoInput(previous + index + 1));
+        const started = performance.now();
+        await choose.setInputFiles(files);
+        await expect(saved).toHaveCount(count, { timeout: 90_000 });
+        const selectionToSavedMs = Math.round(performance.now() - started);
+        const uploaded = (await read(run)).body.checklist.evidence;
+        assert.equal(uploaded.length, count);
+        const requests = uploadRequests - previousRequests;
+        assert.equal(requests, count - previous);
+        measures.push({ count, requested, requests, totalRequests: uploadRequests, selectionToSavedMs,
+          selectedBytes: files.reduce((sum, file) => sum + file.buffer.length, 0),
+          uploadedPhotoBodyBytes: uploaded.slice(previous).reduce((sum, photo) => sum + photo.sizeBytes, 0),
+          totalUploadedPhotoBodyBytes: uploaded.reduce((sum, photo) => sum + photo.sizeBytes, 0) });
+        previous = count;
+      };
+      for (const count of [1, 2, 10, 20, 40, 50]) await measure(count);
+      const state = await assertStored(run, 50);
+      assert.deepEqual(state.photos.map(photo => photo.contentHash).sort(),
+        Array.from({ length: 50 }, (_, index) => createHash('sha256').update(syntheticChecklistPng(index + 1)).digest('hex')).sort());
+      const before = await read(run);
+      assertPrivateProjection(before.body);
+      const order = evidenceIds(before.body.checklist);
       await page.reload();
-      await expect(page.getByText('Photo saved', { exact: true })).toHaveCount(20);
-      assert.deepEqual((await read(run)).body.checklist.evidence.map(photo => photo.evidenceId), savedOrder);
-      const displayedOrder = [];
-      for (let index = 0; index < 20; index++) {
-        await page.locator('.checklist-photo-gallery__list li').nth(index).getByRole('button', { name: 'View photo', exact: true }).click();
-        const source = await page.locator('.checklist-photo-gallery img').getAttribute('src');
-        displayedOrder.push(new URL(source, page.url()).searchParams.get('evidenceId'));
+      await expect(saved).toHaveCount(50);
+      assert.deepEqual(evidenceIds((await read(run)).body.checklist), order);
+      for (const index of [0, 49]) {
+        await page.locator('.checklist-photo-gallery__list li').nth(index)
+          .getByRole('button', { name: 'View photo', exact: true }).click();
+        await expect.poll(async () => {
+          const source = await page.locator('.checklist-photo-gallery img').getAttribute('src');
+          return new URL(source, page.url()).searchParams.get('evidenceId');
+        }).toBe(order[index]);
       }
-      assert.deepEqual(displayedOrder, savedOrder);
-      assert.equal((await upload(run, syntheticChecklistPng(201))).status, 413);
-      const duplicate = await upload(run, syntheticChecklistPng(21)); assert.equal(duplicate.status, 200); assert.equal(duplicate.body.duplicate, true);
-      assert.equal((await upload(run, syntheticChecklistPng(21), 'living-belongings')).status, 409);
-      await assertStored(run, 20);
-      await page.locator('.checklist-photo-gallery').screenshot({ path: path.join(output, `${browser}-gallery.png`) });
-      save(`${browser}-loss-injection.json`, { environment: 'local-disposable-emulators',
-        lostResponseInjectionKnownFixtureBodyFallback: bodyCaptureUnavailable,
-        explicitNativeRetryDuplicateProvesExactOptimizedFixtureBytes: retryReceipt.duplicate === true,
-        ordinaryAndBatchBrowserTransportUnmodified: true });
+      // Select 15 more photos (65 total). The client sends only the ten remaining slots.
+      await measure(60, 65);
+      await expect(page.getByText(/^Photo capacity was reached/)).toBeVisible();
+      const sixty = await assertStored(run, 60);
+      assert.deepEqual(sixty.photos.slice(0, 50).map(photo => photo.evidenceId), order);
+      assert.equal((await upload(run, syntheticChecklistPng(65))).status, 413);
+      // Keep the downstream report fixture at exactly 50, and verify that deletion survives reload.
+      for (const photo of sixty.photos.slice(50)) {
+        const removal = await mutate(run, { action: 'REMOVE_EVIDENCE', mutationId: randomUUID(), evidenceId: photo.evidenceId });
+        assert.equal(removal.status, 200);
+      }
+      await page.reload();
+      await expect(saved).toHaveCount(50);
+      assert.deepEqual(evidenceIds((await read(run)).body.checklist), order);
+      save(`${browser}-upload-timing.json`, { environment: 'disposable-loopback', maxPhotos: 60, maxTotalBytes: 120 * 1024 * 1024,
+        measures, overLimitStatus: 413 });
     });
     await safeTest('pending-required-review-receipt-idempotent-readonly', async () => {
       assert.equal((await completeAnswers(run)).status, 200);
@@ -138,44 +133,67 @@ test('actual gallery, retry, private storage, review, manager and client report'
       await expect(page.getByLabel('Choose photos', { exact: true })).toHaveCount(0);
       await expect(page.locator('input[value="DONE"]').first()).toBeDisabled();
     });
-    await safeTest('authorized-manager-real-projection-and-all-photos', async () => {
-      const manager = await call('getChecklistRun', { jobId: run.jobId }); assertPrivateProjection(manager); assert.equal(manager.run.evidence.length, 20);
+    await safeTest('authorized-manager-real-projection-and-photos', async () => {
+      const manager = await call('getChecklistRun', { jobId: run.jobId });
+      assertPrivateProjection(manager);
+      assert.equal(manager.run.evidence.length, 50);
       await assert.rejects(call('getChecklistRun', { jobId: run.jobId }, false));
       const managerPage = await context.newPage();
-      await managerPage.route('**/*', route => { const u = new URL(route.request().url()); return ['blob:', 'data:'].includes(u.protocol) || u.hostname === '127.0.0.1' && u.port === '4214' ? route.continue() : route.abort(); });
-      let fetched = 0;
-      await managerPage.exposeFunction('actualManagerEvidence', async data => { fetched++; return call('getChecklistEvidence', data); });
-      await managerPage.exposeFunction('actualManagerCallable', (name, data) => call(name, data));
-      await managerPage.goto('http://127.0.0.1:4214/e2e/multi-photo-integration/index.html');
-      await managerPage.evaluate(projection => window.renderAuthorizedManager(projection), { job: { id: run.jobId, operationalStatus: 'ASSIGNED', propertyName: 'Synthetic Integration Property' }, run: manager.run });
-      await expect(managerPage.getByRole('button', { name: 'View photo', exact: true })).toHaveCount(20); assert.equal(fetched, 0);
-      for (let i = 0; i < 20; i++) {
-        // After switching, the previously selected row regains its view button.
-        await managerPage.locator('.checklist-run__evidence').nth(i).getByRole('button', { name: 'View photo', exact: true }).click();
-        await expect.poll(() => managerPage.locator('.checklist-run__evidence img').evaluateAll(images => images.filter(i => i.complete && i.naturalWidth > 0).length)).toBe(1);
+      try {
+        await restrictBrowser(managerPage);
+        const fullRequests = new Set();
+        await managerPage.exposeFunction('actualManagerEvidence', async data => {
+          if (data.variant === 'full') fullRequests.add(data.evidenceId);
+          return call('getChecklistEvidence', data);
+        });
+        await managerPage.exposeFunction('actualManagerCallable', (name, data) => call(name, data));
+        await managerPage.goto(`${managerHarnessOrigin}/e2e/multi-photo-integration/index.html`);
+        await managerPage.evaluate(projection => window.renderAuthorizedManager(projection), {
+          job: { id: run.jobId, operationalStatus: 'ASSIGNED', propertyName: 'Synthetic Integration Property' }, run: manager.run,
+        });
+        await expect(managerPage.getByRole('button', { name: /^Open photo \d+:/ })).toHaveCount(50);
+        assert.equal(fullRequests.size, 0);
+        for (const index of [0, 49]) {
+          await openPhoto(managerPage, new RegExp(`^Open photo ${index + 1}:`));
+          assert.ok(fullRequests.has(manager.run.evidence[index].evidenceId));
+        }
+      } finally {
+        await managerPage.close();
       }
-      assert.equal(fetched, 20);
-      await managerPage.locator('#checklist-evidence-title').locator('..').screenshot({ path: path.join(output, `${browser}-manager-gallery.png`) });
-      await managerPage.close();
     });
-    await safeTest('client-report-all-saved-images', async () => {
-      const report = await call('createClientReport', { jobId: run.jobId }); assert.ok(report.token);
-      const response = await fetch(`http://127.0.0.1:5012/api/client-report?${new URLSearchParams({ token: report.token })}`);
-      const data = await response.json(); assertPrivateProjection(data); assert.equal(data.report.evidence.length, 20);
-      assert.deepEqual(data.report.evidence.map(photo => photo.evidenceId), (await read(run)).body.checklist.evidence.map(photo => photo.evidenceId));
-      for (const photo of data.report.evidence) {
-        const response = await fetch(`http://127.0.0.1:5012/api/client-report?${new URLSearchParams({ token: report.token, photo: '1', evidenceId: photo.evidenceId })}`);
-        assert.equal(response.status, 200); assert.equal((await response.arrayBuffer()).byteLength, photo.sizeBytes);
+    await safeTest('client-report-and-owner-portal-saved-images', async () => {
+      const report = await call('createClientReport', { jobId: run.jobId });
+      assert.ok(report.token);
+      const direct = await getPublic('client-report', report.token);
+      assertPrivateProjection(direct);
+      const order = evidenceIds((await read(run)).body.checklist);
+      assert.deepEqual(evidenceIds(direct.report), order);
+      const { access } = await call('clientPortalAccess', { clientId: run.clientId, action: 'issue' });
+      const portal = await getPublic('client-portal', access.token);
+      assertPrivateProjection(portal);
+      assert.ok(portal.portal.reports.some(entry => entry.jobId === run.jobId));
+      const owner = await getPublic('client-portal', access.token, { job: run.jobId });
+      assertPrivateProjection(owner);
+      assert.deepEqual(evidenceIds(owner.report), order);
+      for (const photo of [owner.report.evidence[0], owner.report.evidence.at(-1)]) {
+        const params = { photo: '1', evidenceId: photo.evidenceId };
+        const [standalone, throughPortal] = await Promise.all([
+          getPublic('client-report', report.token, params),
+          getPublic('client-portal', access.token, { ...params, job: run.jobId }),
+        ]);
+        assert.equal(standalone.length, photo.sizeBytes);
+        assert.deepEqual(throughPortal, standalone);
       }
       await page.goto(`/client-report?t=${encodeURIComponent(report.token)}`);
-      await expect(page.locator('.client-report__photo')).toHaveCount(20);
-      for (let i = 0; i < 20; i++) { await page.locator('.client-report__photo').nth(i).scrollIntoViewIfNeeded(); await expect.poll(() => page.locator('.client-report__photo').nth(i).evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true); }
+      await expect(page.getByRole('button', { name: /^Open photo \d+$/ })).toHaveCount(50);
+      await openPhoto(page, 'Open photo 1');
+      await openPhoto(page, 'Open photo 50');
       assert.equal((await run.jobRef.get()).data().operationalStatus, 'ASSIGNED');
     });
     await safeTest('direct-new-namespace-firestore-storage-denied', async () => {
-      const env = await initializeTestEnvironment({ projectId: 'demo-cleanflow', firestore: { host: '127.0.0.1', port: 8081 }, storage: { host: '127.0.0.1', port: 9198 } });
+      const env = await initializeTestEnvironment({ projectId: 'demo-cleanflow', firestore: { host: '127.0.0.1', port: 18480 }, storage: { host: '127.0.0.1', port: 19499 } });
       try {
-        const state = await assertStored(run, 20);
+        const state = (await run.runRef.collection('evidenceState').doc('current').get()).data();
         for (const actor of [env.authenticatedContext(call.uid), env.unauthenticatedContext()]) {
           for (const namespace of ['evidenceState', 'evidenceContent', 'evidenceRemovals']) {
             const doc = actor.firestore().doc(`${run.runRef.path}/${namespace}/synthetic`);
@@ -202,7 +220,83 @@ test('actual gallery, retry, private storage, review, manager and client report'
     throw new Error(`actual-integration-RED-${stage}`);
   }
 });
-test('real HTTP quota races, invalid images, historical V1 and upload benchmarks', async ({ page }, info) => {
+test('historical 20-photo Run keeps one free slot after a saved receipt is lost', async ({ page }, info) => {
+  await safeTest('lost-receipt-refresh-at-historical-capacity', async () => {
+    const call = await createManager();
+    const run = await createRun(call, { historicalV2: true });
+    const initial = (await read(run)).body.checklist;
+    assert.deepEqual(initial.evidencePolicy, { version: 2, maxPhotos: 20, maxTotalBytes: 50 * 1024 * 1024 });
+    for (let index = 1; index <= 18; index++) {
+      const seeded = await upload(run, syntheticChecklistPng(index), index === 1 ? 'living-belongings' : 'additional');
+      assert.equal(seeded.status, 200);
+    }
+    await page.goto(`/checklist?t=${encodeURIComponent(run.token)}`);
+    const choose = page.getByLabel('Choose photos', { exact: true });
+    const saved = page.getByText('Photo saved', { exact: true });
+    const retry = page.getByRole('button', { name: 'Retry photo', exact: true });
+    await expect(saved).toHaveCount(18);
+
+    let putRequests = 0;
+    page.on('request', request => {
+      if (request.method() === 'PUT' && request.url().includes('/api/public-checklist')) putRequests++;
+    });
+    const api = '**/api/public-checklist?*';
+    const fixture = syntheticChecklistPng(19);
+    let committedId;
+    let capturedBrowserBody = false;
+    const dropReceipt = async route => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      if (!committedId) {
+        // WebKit may omit Blob bytes in Playwright's route API. The byte-exact
+        // idempotent receipt on the native retry below independently verifies identity.
+        const captured = route.request().postDataBuffer();
+        capturedBrowserBody = Boolean(captured?.length);
+        const response = await route.fetch({ postData: capturedBrowserBody ? captured : fixture });
+        assert.equal(response.status(), 200);
+        ({ evidenceId: committedId } = await response.json());
+        assert.equal(typeof committedId, 'string');
+      }
+      await route.abort('failed');
+    };
+    await page.route(api, dropReceipt);
+    await choose.setInputFiles(photoInput(19));
+    await expect(retry).toBeVisible({ timeout: 20_000 });
+    assert.ok(committedId);
+    const serverBefore = await assertStored(run, 19);
+    const beforeRefresh = putRequests;
+    const refresh = page.waitForResponse(response => response.request().method() === 'GET' && response.url().includes('/api/public-checklist'));
+    await page.getByRole('button', { name: 'Refresh saved photos', exact: true }).click();
+    assert.equal((await refresh).status(), 200);
+    await expect(saved).toHaveCount(19);
+    await expect(retry).toBeVisible();
+    assert.equal(putRequests, beforeRefresh);
+    assert.deepEqual(await assertStored(run, 19), serverBefore);
+    await page.unroute(api, dropReceipt);
+
+    await choose.setInputFiles(photoInput(20));
+    await expect(saved).toHaveCount(20);
+    assert.equal(putRequests - beforeRefresh, 1);
+    await expect(retry).toBeVisible();
+    const full = await assertStored(run, 20);
+    const receipt = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/api/public-checklist'));
+    await retry.click();
+    const response = await receipt;
+    assert.equal(response.status(), 200);
+    const result = await response.json();
+    assert.equal(result.duplicate, true);
+    assert.equal(result.evidenceId, committedId);
+    await expect(retry).toHaveCount(0);
+    await expect(saved).toHaveCount(20);
+    assert.equal(putRequests - beforeRefresh, 2);
+    assert.deepEqual(await assertStored(run, 20), full);
+    assert.equal((await upload(run, fixture, 'living-belongings')).status, 409);
+    assert.equal((await upload(run, syntheticChecklistPng(21))).status, 413);
+    save(`${info.project.name}-loss-injection.json`, { commitConfirmed: true, capturedBrowserBody, beforeRefresh,
+      refreshUploadRequests: 0, finalNewUploadRequests: 1, explicitRetryUploadRequests: 1, duplicateAtCapacity: true });
+  });
+});
+
+test('real HTTP quota races, invalid images, and historical V1', async ({ page }, info) => {
   const result = { browser: info.project.name }; let stage = 'auth';
   try {
     const call = await createManager();
@@ -223,21 +317,13 @@ test('real HTTP quota races, invalid images, historical V1 and upload benchmarks
     const revision = (await read(legacy)).body.draft.revision;
     assert.equal((await mutate(legacy, { action: 'READY_FOR_REVIEW', submissionId: randomUUID(), baseRevision: revision })).status, 200);
     const report = await call('createClientReport', { jobId: legacy.jobId });
-    const reportResponse = await fetch(`http://127.0.0.1:5012/api/client-report?${new URLSearchParams({ token: report.token })}`);
-    const projection = await reportResponse.json(); assert.equal(projection.report.hasPhoto, true); assert.equal(projection.report.evidence, undefined);
-    await page.goto(`/client-report?t=${encodeURIComponent(report.token)}`); await expect(page.locator('.client-report__photo')).toHaveCount(1);
-    await page.locator('.client-report__photo').scrollIntoViewIfNeeded(); await expect.poll(() => page.locator('.client-report__photo').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+    const projection = await getPublic('client-report', report.token);
+    assert.equal(projection.report.hasPhoto, true);
+    assert.equal(projection.report.evidence, undefined);
+    await page.goto(`/client-report?t=${encodeURIComponent(report.token)}`);
+    await expect(page.locator('.client-report__thumb-image')).toHaveCount(1);
+    await openPhoto(page, 'Open photo 1');
     result.historicalPolicyAbsentAndReportImage = true;
-    stage = 'warm-upload-benchmarks';
-    const fixtureBrowser = info.project.name.startsWith('chromium') ? 'chromium' : 'webkit';
-    const run = await createRun(call); const rows = [];
-    for (const caseName of ['camera-jpeg', 'label', 'low-light']) {
-      const base = `.superpowers/sdd/2026-10-13-checklist-multi-photo-v1/optimizer-benchmarks/${fixtureBrowser}/${caseName}`;
-      const bytes = fs.readFileSync(`${base}-optimized.jpg`), csv = fs.readFileSync(`${base}.csv`, 'utf8').trim().split('\n');
-      const before = performance.now(), response = await upload(run, bytes, rows.length ? 'additional' : 'living-belongings', 'image/jpeg');
-      const elapsed = performance.now() - before; assert.equal(response.status, 200); await assertStored(run, rows.length + 1);
-      rows.push({ fixture: caseName, optimizedBytes: bytes.length, uploadToAcknowledgedMs: Number(elapsed.toFixed(1)), optimizerCsvHeader: csv[0], optimizerCsvRow: csv[1], thermalOrIPhoneProof: false, environment: 'warm-local-loopback-disposable-emulators' });
-    }
-    result.uploadBenchmarks = rows; save(`${info.project.name}-actual-api.json`, result);
+    save(`${info.project.name}-actual-api.json`, result);
   } catch { save(`${info.project.name}-actual-api.json`, { ...result, status: 'RED', failedStage: stage }); throw new Error(`actual-api-RED-${stage}`); }
 });
