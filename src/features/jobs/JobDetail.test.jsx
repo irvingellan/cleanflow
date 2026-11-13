@@ -548,7 +548,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(writeText.mock.calls[0][0]).not.toContain("Private street address");
     expect(writeText.mock.calls[0][0]).not.toContain("Internal property note");
     expect(writeText.mock.calls[0][0]).not.toContain("350");
-    expect(screen.getByRole("button", { name: "Message copied" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Message copied" })).toBeVisible();
 
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -617,7 +617,7 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.click(within(preview).getByRole("button", { name: "Copy reminder" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(writeText.mock.calls[0][0]).toBe(message.textContent);
-    expect(screen.getByRole("button", { name: "Message copied" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Message copied" })).toBeVisible();
 
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
