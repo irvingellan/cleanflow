@@ -847,6 +847,7 @@ describe("PublicChecklistPage", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send checklist for review" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     // The confirmation opens once the saved state has settled.
     expect(await screen.findByText("Saved answers and notes will become read-only. This does not mark the job completed. Your manager will review the saved checklist.")).toBeVisible();

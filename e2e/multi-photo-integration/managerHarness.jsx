@@ -8,8 +8,8 @@ const root = createRoot(document.getElementById('root'));
 // explicit image selections to the same real callable. No synthetic API/result.
 window.renderAuthorizedManager = (projection) => root.render(<TranslationProvider><ChecklistRunDetail
   job={projection.job} checklistRun={projection.run} onBack={() => {}}
-  loadEvidence={async (jobId, requirementId, evidenceId) => {
-    const result = await window.actualManagerEvidence({ jobId, ...(evidenceId ? { evidenceId } : { requirementId }) });
+  loadEvidence={async (jobId, requirementId, evidenceId, options) => {
+    const result = await window.actualManagerEvidence({ jobId, ...(evidenceId ? { evidenceId } : { requirementId }), variant: options?.variant });
     return new Blob([Uint8Array.from(atob(result.base64), c => c.charCodeAt(0))], { type: result.contentType });
   }}
 /></TranslationProvider>);

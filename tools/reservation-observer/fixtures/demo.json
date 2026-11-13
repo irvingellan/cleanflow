@@ -1,0 +1,54 @@
+{
+  "mode": "SHADOW_ONLY",
+  "projectId": "demo-cleanflow",
+  "organizationId": "synthetic-intake",
+  "properties": [
+    { "id": "property-alpha", "timeZone": "America/New_York", "minimumTurnoverMinutes": 180 },
+    { "id": "property-beta", "timeZone": "America/New_York", "minimumTurnoverMinutes": 180 }
+  ],
+  "jobs": [
+    {
+      "id": "job-alpha",
+      "propertyId": "property-alpha",
+      "scheduledDate": "2026-12-05",
+      "operationalStatus": "ASSIGNED",
+      "assigned": true,
+      "checklistStarted": false,
+      "manuallyEdited": false,
+      "archived": false
+    }
+  ],
+  "sources": [
+    {
+      "id": "hospitable-alpha",
+      "provider": "HOSPITABLE",
+      "listingExternalId": "listing-alpha",
+      "propertyIds": ["property-alpha"],
+      "completeSnapshot": true,
+      "eventKinds": [
+        { "uid": "synthetic-alpha-stay", "kind": "BOOKING" },
+        { "uid": "synthetic-alpha-block", "kind": "BLOCK" },
+        { "uid": "synthetic-alpha-owner", "kind": "OWNER_STAY" }
+      ]
+    },
+    {
+      "id": "guesty-alpha",
+      "provider": "GUESTY",
+      "propertyIds": ["property-alpha"],
+      "eventKinds": [{ "uid": "synthetic-guesty-stay", "kind": "BOOKING" }]
+    },
+    {
+      "id": "hospitable-beta",
+      "provider": "HOSPITABLE",
+      "propertyIds": ["property-beta"],
+      "eventKinds": [{ "uid": "synthetic-beta-stay", "kind": "BOOKING" }]
+    }
+  ],
+  "snapshots": [
+    { "sourceId": "hospitable-alpha", "observedAt": "2026-11-01T12:00:00Z", "file": "alpha-initial.ics" },
+    { "sourceId": "hospitable-alpha", "observedAt": "2026-11-02T12:00:00Z", "result": "ERROR" },
+    { "sourceId": "hospitable-alpha", "observedAt": "2026-11-03T12:00:00Z", "file": "alpha-updated.ics" },
+    { "sourceId": "guesty-alpha", "observedAt": "2026-11-03T12:00:00Z", "file": "alpha-alternate.ics" },
+    { "sourceId": "hospitable-beta", "observedAt": "2026-11-03T12:00:00Z", "file": "beta.ics" }
+  ]
+}
