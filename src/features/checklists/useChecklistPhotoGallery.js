@@ -158,12 +158,19 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
       const state = scope.current;
       if (!editable(state)) return;
       state.error = null;
+      const maxPhotos = Math.min(60, options.current.checklist.evidencePolicy.maxPhotos);
       for (const file of Array.from(files)) {
         // FB05: a selected File is a lazy handle to the phone's file; only an
         // optimized photo waiting to upload holds memory. Counting original
         // sizes stopped a 16-photo selection at the 50 MB queue limit.
         const retained = state.local.reduce((sum, p) => sum + (p.blob?.size || 0), 0);
-        if (state.saved.length + state.local.length >= Math.min(60, options.current.checklist.evidencePolicy.maxPhotos)) { state.error = "checklist_photo_limit"; break; }
+        // A failed receipt can already be represented in the saved gallery after a refresh.
+        // Keep it retryable without charging it twice, and bound the local queue separately.
+        const active = state.local.filter((item) => item.state !== "FAILED").length;
+        if (state.saved.length + active >= maxPhotos || state.local.length >= maxPhotos) {
+          state.error = "checklist_photo_limit";
+          break;
+        }
         if (file.size > sourceByteLimit) { state.error = "checklist_photo_source_too_large"; continue; }
         if (retained + file.size > retainedByteLimit) { state.error = "checklist_photo_queue_limit"; break; }
         const occupied = [...state.saved, ...state.local].some((p) => p.requirementId === requiredPurpose);
