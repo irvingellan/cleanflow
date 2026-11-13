@@ -106,6 +106,7 @@ import {
   setReportPhotoVisibilityForManager,
 } from "./clientReportService.js";
 import { correctChecklistAnswerForManager } from "./checklistManagerCorrection.js";
+import { notificationOutcomeLog } from "./notificationOutcomeLog.js";
 import {
   downloadPublicClientPortalPhoto, getClientPortalForManager, issueClientPortalForManager,
   loadPublicClientPortal, loadPublicClientPortalReport, revokeClientPortalForManager,
@@ -1136,11 +1137,12 @@ export const notifyManagersOperationalEvent = onDocumentCreated(
   },
   async (event) => {
     if (!event.data) return;
-    await processManagerOperationalNotification({
+    const outcome = await processManagerOperationalNotification({
       database: db, deliveryReference: event.data.ref,
       organizationId: event.params.orgId, jobId: event.params.jobId, eventId: event.params.eventId,
       sendFcm: (messages) => liveMessaging().sendEach(messages), logger,
     });
+    logger.info("Manager operational notification processed.", notificationOutcomeLog(outcome));
   },
 );
 
@@ -1248,10 +1250,13 @@ export async function processManagerReminderWindow(type, { now = new Date() } = 
     return { ...reminder, skipped: "already-claimed" };
   }
 
-  return processClaimedManagerReminder({
+  const outcome = await processClaimedManagerReminder({
     ...claim, reminder, logger,
     dispatch: () => dispatchManagerReminder({ provider, reminder, sendFcm: sendFcmManagerReminderNotification }),
   });
+  // The outcome line went missing on 2026-11-04; without it the log cannot say whether a reminder was sent.
+  logger.info("Manager reminder delivery processed.", notificationOutcomeLog(outcome));
+  return outcome;
 }
 
 export const sendTomorrowPlanningReminder = onSchedule(
@@ -1898,10 +1903,11 @@ export const notifyCleanerInboxEvent = onDocumentCreated(
     if (!event.data) return;
     const mode = cleanerPushMode();
     if (mode === "disabled") return;
-    await processCleanerNotification({
+    const outcome = await processCleanerNotification({
       database: db, organizationId: event.params.orgId, cleanerId: event.params.cleanerId,
       eventId: event.params.eventId, sendFcm: (messages) => liveMessaging().sendEach(messages), logger, mode,
     });
+    logger.info("Cleaner notification processed.", notificationOutcomeLog(outcome));
   },
 );
 
