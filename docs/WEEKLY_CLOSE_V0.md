@@ -1,6 +1,7 @@
 # Weekly Close V0 — read-only review
 
-Issue #56, selectively ported from `6d2de2b` onto current main `ff14c2b`.
+Issue #56. The original preview was selectively ported from `6d2de2b`
+onto the then-current main `ff14c2b`.
 Preview route: `/weekly-close-preview`, behind existing manager authorization,
 reachable from the read-only Preview entry in Payouts. Back clears the route;
 refresh/deep-link preserves the view and Payouts navigation.
@@ -53,11 +54,12 @@ balance or approved billable hours and does not estimate either.
 - Legacy paid evidence requires one reciprocal payout link, one Job, matching
   amount/cleaner/organization, PAID and valid paid timestamp. A batch has no
   immutable per-Job allocation. v2/team payout status stays UNKNOWN.
-- Job and payout reads use `getDocsFromServer` and reject cached/pending-write
-  snapshots. Name/context reads reuse current services for display only, never
-  financial proof. Loading fails visibly after 15 seconds; refresh retries and
-  late period responses cannot populate another selection. Cancellation stops subsequent
-  pages and contextual batches after any in-flight SDK read settles.
+- Reconciliation uses Firestore Lite with the signed-in manager's Firebase app.
+  These reads go directly to the server without cache or locally pending writes.
+  Name/context reads provide labels. Loading fails visibly after 15 seconds.
+  Refresh retries and late responses cannot populate another selection.
+  Cancellation stops subsequent pages and contextual batches after any
+  in-flight SDK read settles.
 
 ## Data-gap report / questions requiring product evidence
 
@@ -89,9 +91,19 @@ It checks manager and anonymous access, period navigation, client filtering,
 exact totals, EN/PT/ES across five viewport sizes, and unchanged synthetic Job
 and Payout records. For 201 fixtures over two dates it verifies that 200 loaded
 records yield a known subtotal and that selecting the second date yields a
-complete total for its 101 services. The emulator build and all 1,789 unit tests
-passed. The Job query uses only `scheduledDate` range/order and the payout
+complete total for its 101 services. The Job query uses only
+`scheduledDate` range/order and the payout
 queries use existing single fields.
+
+In local WebKit, both the baseline `ae77040` and the first bounded reader
+stalled on the full Firestore SDK's Watch channel. The local requests reported
+access-control errors while the manager shell had already opened. Forcing
+long polling in the emulator recovered that read. The feature now uses an
+authenticated one-shot transport shared with Dashboard, so financial results
+no longer depend on a Watch subscription. The separate browser scenario
+counts known local WebChannel errors on reload and fails on other page errors
+or any failed financial assertion. This comparison used synthetic data and a
+local WebKit engine.
 
 Initial V0 release validation: 69 focused tests; full unit suite 103 files / 1,041 tests;
 78 security/emulator tests; Scenario Runner FAST 1/1, repeat-3 3/3 and mobile

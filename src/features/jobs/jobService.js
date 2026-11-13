@@ -6,7 +6,6 @@ import {
   getDoc,
   getDocFromServer,
   getDocs,
-  getDocsFromServer,
   limit,
   onSnapshot,
   orderBy,
@@ -18,7 +17,13 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import {
+  collection as serverCollection, getDocs as getServerDocs, limit as serverLimit,
+  orderBy as serverOrderBy, query as serverQuery, startAfter as serverStartAfter,
+  where as serverWhere,
+} from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
+import { serverFirestore } from "../../services/firebase/serverReads.js";
 import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import {
@@ -77,17 +82,17 @@ const maxServicePeriodJobs = 200;
 
 /** Cursor includes the document ID, so jobs on the same date cannot be skipped. */
 export async function getServicePeriodJobs({ start, end }, { signal } = {}) {
+  const records = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
   const jobs = [];
   let cursor;
   for (let offset = 0; offset < maxServicePeriodJobs; offset += servicePeriodPageSize) {
     signal?.throwIfAborted();
     const isLastPage = offset + servicePeriodPageSize === maxServicePeriodJobs;
-    const snapshot = await getDocsFromServer(query(jobsCollection(),
-      where("scheduledDate", ">=", start), where("scheduledDate", "<=", end),
-      orderBy("scheduledDate", "asc"), ...(cursor ? [startAfter(cursor)] : []),
-      limit(servicePeriodPageSize + Number(isLastPage))));
+    const snapshot = await getServerDocs(serverQuery(records,
+      serverWhere("scheduledDate", ">=", start), serverWhere("scheduledDate", "<=", end),
+      serverOrderBy("scheduledDate", "asc"), ...(cursor ? [serverStartAfter(cursor)] : []),
+      serverLimit(servicePeriodPageSize + Number(isLastPage))));
     signal?.throwIfAborted();
-    if (snapshot.metadata?.fromCache || snapshot.metadata?.hasPendingWrites) throw new Error("Unconfirmed weekly Jobs");
     jobs.push(...snapshot.docs.slice(0, servicePeriodPageSize).map(jobFromSnapshot));
     if (snapshot.docs.length < servicePeriodPageSize || isLastPage) {
       return { jobs, coverage: { limit: maxServicePeriodJobs, scanned: jobs.length, truncated: snapshot.docs.length > servicePeriodPageSize } };

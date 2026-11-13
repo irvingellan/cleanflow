@@ -3,15 +3,14 @@ import {
   collection,
   deleteField,
   doc,
-  documentId,
   getDocs,
-  getDocsFromServer,
   query,
   serverTimestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -40,11 +39,8 @@ export async function getProperties({ includeArchived = false } = {}) {
 
 /** One document-ID batch for read-only service reconciliation. */
 export async function getPropertySummariesById(ids) {
-  if (ids.length === 0) return [];
-  if (ids.length > 30) throw new RangeError("At most 30 IDs per context query.");
-  const snapshot = await getDocsFromServer(query(propertiesCollection(), where(documentId(), "in", ids)));
-  if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) throw new Error("Unconfirmed service reconciliation context");
-  return snapshot.docs.map((row) => {
+  const records = await getServerRecordsById(organizationId, "properties", ids);
+  return records.map((row) => {
     const { name, clientId } = row.data();
     return { id: row.id, name, clientId };
   });

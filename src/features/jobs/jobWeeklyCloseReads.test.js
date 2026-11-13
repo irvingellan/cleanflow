@@ -2,21 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const firebase = vi.hoisted(() => ({
   addDoc: vi.fn(), collection: vi.fn(), deleteField: vi.fn(), doc: vi.fn(),
-  getDoc: vi.fn(), getDocs: vi.fn(), getDocsFromServer: vi.fn(), limit: vi.fn(),
+  getDoc: vi.fn(), getDocs: vi.fn(), getServerDocs: vi.fn(), limit: vi.fn(),
   orderBy: vi.fn(), query: vi.fn(), runTransaction: vi.fn(), serverTimestamp: vi.fn(),
   startAfter: vi.fn(), updateDoc: vi.fn(), where: vi.fn(),
 }));
 
 vi.mock("firebase/firestore", () => ({ ...firebase, Timestamp: { fromDate: vi.fn() } }));
+vi.mock("firebase/firestore/lite", () => ({ ...firebase, getDocs: firebase.getServerDocs }));
 vi.mock("../../services/firebase/client.js", () => ({ db: { test: true } }));
+vi.mock("../../services/firebase/serverReads.js", () => ({ serverFirestore: () => ({ test: true }) }));
 
 import { getServicePeriodJobs } from "./jobService.js";
 
 describe("bounded server-backed service-period Job read", () => {
-  it.each([{ fromCache: true }, { hasPendingWrites: true }])("rejects unconfirmed snapshots: %j", async metadata => {
-    firebase.getDocsFromServer.mockResolvedValue({ docs: [], metadata });
-    await expect(getServicePeriodJobs({ start: "2026-09-21", end: "2026-09-27" })).rejects.toThrow("Unconfirmed");
-  });
   beforeEach(() => {
     vi.clearAllMocks();
     firebase.collection.mockImplementation((_db, ...path) => path.join("/"));
@@ -35,10 +33,10 @@ describe("bounded server-backed service-period Job read", () => {
   it("uses ordered inclusive bounds and snapshot cursors across jobs with the same date", async () => {
     const first = docs(0, 50);
     const second = docs(50, 50);
-    firebase.getDocsFromServer.mockResolvedValueOnce({ docs: first })
+    firebase.getServerDocs.mockResolvedValueOnce({ docs: first })
       .mockResolvedValueOnce({ docs: second }).mockResolvedValueOnce({ docs: docs(100, 25) });
     const result = await getServicePeriodJobs(range);
-    expect(firebase.getDocsFromServer).toHaveBeenNthCalledWith(1, {
+    expect(firebase.getServerDocs).toHaveBeenNthCalledWith(1, {
       path: "organizations/cleanflow-demo/jobs",
       constraints: [
         { type: "where", field: "scheduledDate", operation: ">=", value: "2026-09-21" },
@@ -55,11 +53,11 @@ describe("bounded server-backed service-period Job read", () => {
   });
 
   it.each([50, 51])("checks for more data while exposing at most 200 Jobs (last read: %i)", async (lastPage) => {
-    firebase.getDocsFromServer.mockResolvedValueOnce({ docs: docs(0, 50) })
+    firebase.getServerDocs.mockResolvedValueOnce({ docs: docs(0, 50) })
       .mockResolvedValueOnce({ docs: docs(50, 50) }).mockResolvedValueOnce({ docs: docs(100, 50) })
       .mockResolvedValueOnce({ docs: docs(150, lastPage) });
     const result = await getServicePeriodJobs(range);
-    expect(firebase.getDocsFromServer).toHaveBeenCalledTimes(4);
+    expect(firebase.getServerDocs).toHaveBeenCalledTimes(4);
     expect(firebase.limit.mock.calls).toEqual([[50], [50], [50], [51]]);
     expect(result.jobs).toHaveLength(200);
     expect(result.jobs.at(-1).id).toBe("job-199");
@@ -70,14 +68,14 @@ describe("bounded server-backed service-period Job read", () => {
     "bounds the Job reads for %i matching documents to %i requests and %i returned documents",
     async (matching, requests, returned) => {
       let fetched = 0;
-      firebase.getDocsFromServer.mockImplementation(async ({ constraints }) => {
+      firebase.getServerDocs.mockImplementation(async ({ constraints }) => {
         const { amount } = constraints.find(({ type }) => type === "limit");
         const page = docs(fetched, Math.min(matching - fetched, amount));
         fetched += page.length;
         return { docs: page };
       });
       const result = await getServicePeriodJobs(range);
-      expect(firebase.getDocsFromServer).toHaveBeenCalledTimes(requests);
+      expect(firebase.getServerDocs).toHaveBeenCalledTimes(requests);
       expect(fetched).toBe(returned);
       expect(result.coverage.scanned).toBe(Math.min(matching, 200));
       expect(result.coverage.truncated).toBe(matching > 200);
@@ -86,12 +84,12 @@ describe("bounded server-backed service-period Job read", () => {
 
   it("stops further pages when the active selection is cancelled", async () => {
     const controller = new AbortController();
-    firebase.getDocsFromServer.mockImplementationOnce(async () => {
+    firebase.getServerDocs.mockImplementationOnce(async () => {
       controller.abort();
       return { docs: docs(0, 50) };
     });
     await expect(getServicePeriodJobs(range, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
-    expect(firebase.getDocsFromServer).toHaveBeenCalledTimes(1);
+    expect(firebase.getServerDocs).toHaveBeenCalledTimes(1);
   });
 
   it("leaves REAL/archive/lifecycle exclusions to the deterministic model, preserving the read", async () => {
@@ -100,7 +98,7 @@ describe("bounded server-backed service-period Job read", () => {
       { id: "demo", data: { dataProvenance: "DEMO" } },
       { id: "active", data: { dataProvenance: "REAL", operationalStatus: "ASSIGNED" } },
     ];
-    firebase.getDocsFromServer.mockResolvedValue({ docs: records.map((record) => ({
+    firebase.getServerDocs.mockResolvedValue({ docs: records.map((record) => ({
       id: record.id, data: () => record.data,
     })) });
     const { jobs } = await getServicePeriodJobs({ start: "2026-09-21", end: "2026-09-27" });
@@ -112,13 +110,13 @@ describe("bounded server-backed service-period Job read", () => {
   });
 
   it("reports a complete empty period after an empty server read", async () => {
-    firebase.getDocsFromServer.mockResolvedValue({ docs: [] });
+    firebase.getServerDocs.mockResolvedValue({ docs: [] });
     await expect(getServicePeriodJobs({ start: "2026-09-21", end: "2026-09-27" })).resolves.toEqual({ jobs: [], coverage: { limit: 200, scanned: 0, truncated: false } });
   });
 
   it("rejects a failed server read instead of presenting cached data as financial proof", async () => {
     const failure = new Error("Server read unavailable");
-    firebase.getDocsFromServer.mockRejectedValue(failure);
+    firebase.getServerDocs.mockRejectedValue(failure);
     firebase.getDocs.mockResolvedValue({ docs: [{ id: "cached", data: () => ({}) }] });
     await expect(getServicePeriodJobs({ start: "2026-09-21", end: "2026-09-27" })).rejects.toBe(failure);
     expect(firebase.getDocs).not.toHaveBeenCalled();

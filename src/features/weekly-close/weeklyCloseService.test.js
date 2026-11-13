@@ -3,13 +3,13 @@ import { loadWeeklyClose } from "./weeklyCloseService.js";
 import { getServicePeriodJobs } from "../jobs/jobService.js";
 import { getClientSummariesById } from "../clients/clientService.js";
 import { getPropertySummariesById } from "../properties/propertyService.js";
-import { getCleanerNamesById } from "../cleaners/cleanerService.js";
+import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import { getPayoutEvidenceForJobs } from "../payouts/payoutService.js";
 
 vi.mock("../jobs/jobService.js", () => ({ getServicePeriodJobs: vi.fn() }));
 vi.mock("../clients/clientService.js", () => ({ getClientSummariesById: vi.fn() }));
 vi.mock("../properties/propertyService.js", () => ({ getPropertySummariesById: vi.fn() }));
-vi.mock("../cleaners/cleanerService.js", () => ({ getCleanerNamesById: vi.fn() }));
+vi.mock("../../services/firebase/serverReads.js", () => ({ getServerRecordsById: vi.fn() }));
 vi.mock("../payouts/payoutService.js", async (importOriginal) => ({
   ...await importOriginal(), getPayoutEvidenceForJobs: vi.fn(),
 }));
@@ -29,7 +29,7 @@ beforeEach(() => {
   getServicePeriodJobs.mockResolvedValue(window([job]));
   getClientSummariesById.mockResolvedValue([{ id: "client", name: "Example Client", notes: "PRIVATE_CLIENT_NOTE" }]);
   getPropertySummariesById.mockResolvedValue([{ id: "property", name: "Example Property", keyCodeInfo: "PRIVATE_ACCESS", defaultClientPrice: 999 }]);
-  getCleanerNamesById.mockResolvedValue({ cleaner: "Example Cleaner" });
+  getServerRecordsById.mockResolvedValue([{ id: "cleaner", data: () => ({ name: "Example Cleaner" }) }]);
   getPayoutEvidenceForJobs.mockResolvedValue([]);
 });
 
@@ -49,8 +49,7 @@ describe("Weekly Close read-only service boundary", () => {
     getServicePeriodJobs.mockResolvedValue(window([job, team, { ...job, id: "archived", archivedAt: {} }, { ...job, id: "demo", dataProvenance: "DEMO" }, { ...job, id: "assigned", operationalStatus: "ASSIGNED" }]));
     const result = await loadWeeklyClose(period);
     expect(getPayoutEvidenceForJobs).toHaveBeenCalledExactlyOnceWith([job, team]);
-    expect(getCleanerNamesById).toHaveBeenCalledTimes(1);
-    expect(getCleanerNamesById.mock.calls[0][0]).toEqual(expect.arrayContaining(["cleaner", "a", "b"]));
+    expect(getServerRecordsById).toHaveBeenCalledExactlyOnceWith("cleanflow-demo", "cleaners", ["cleaner", "a", "b"]);
     expect(result.jobs.find((row) => row.id === "team").payoutStatus).toBe("UNKNOWN");
     expect(result.overall.completedServiceCount).toBe(2);
   });

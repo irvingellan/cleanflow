@@ -4,10 +4,15 @@ import { getPropertySummariesById } from "../properties/propertyService.js";
 
 const firestore = vi.hoisted(() => ({
   collection: vi.fn(), documentId: () => "__name__", where: vi.fn(), query: vi.fn(),
-  getDocsFromServer: vi.fn(), getDocs: vi.fn(), addDoc: vi.fn(), updateDoc: vi.fn(),
+  getServerDocs: vi.fn(), getDocs: vi.fn(), addDoc: vi.fn(), updateDoc: vi.fn(),
 }));
 vi.mock("firebase/firestore", () => firestore);
-vi.mock("../../services/firebase/client.js", () => ({ db: {} }));
+vi.mock("firebase/firestore/lite", () => ({
+  ...firestore, getDocs: firestore.getServerDocs, getFirestore: () => ({}), setLogLevel: vi.fn(),
+}));
+vi.mock("../../services/firebase/client.js", () => ({
+  db: {}, firebaseApp: {}, useFirebaseEmulators: false,
+}));
 
 describe.each([
   ["clients", getClientSummariesById, { id: "context", name: "Example" }],
@@ -21,12 +26,11 @@ describe.each([
   });
 
   it("projects only the context fields on a bounded server query", async () => {
-    firestore.getDocsFromServer.mockResolvedValue({
-      metadata: {},
+    firestore.getServerDocs.mockResolvedValue({
       docs: [{ id: "context", data: () => ({ name: "Example", clientId: "linked-client", privateNotes: "Excluded" }) }],
     });
     await expect(read(["context"])).resolves.toEqual([projected]);
-    expect(firestore.getDocsFromServer).toHaveBeenCalledExactlyOnceWith([
+    expect(firestore.getServerDocs).toHaveBeenCalledExactlyOnceWith([
       `organizations/cleanflow-demo/${collection}`, ["__name__", "in", ["context"]],
     ]);
     expect(firestore.getDocs).not.toHaveBeenCalled();
@@ -37,11 +41,12 @@ describe.each([
   it("never opens a full collection for zero IDs or an invalid batch", async () => {
     await expect(read([])).resolves.toEqual([]);
     await expect(read(Array.from({ length: 31 }, (_, index) => `id-${index}`))).rejects.toThrow(RangeError);
-    expect(firestore.getDocsFromServer).not.toHaveBeenCalled();
+    expect(firestore.getServerDocs).not.toHaveBeenCalled();
   });
 
-  it.each([{ fromCache: true }, { hasPendingWrites: true }])("rejects unconfirmed context %j", async (metadata) => {
-    firestore.getDocsFromServer.mockResolvedValue({ docs: [], metadata });
-    await expect(read(["context"])).rejects.toThrow("Unconfirmed");
+  it("surfaces server failure without reading cached context", async () => {
+    firestore.getServerDocs.mockRejectedValue(new Error("unavailable"));
+    await expect(read(["context"])).rejects.toThrow("unavailable");
+    expect(firestore.getDocs).not.toHaveBeenCalled();
   });
 });

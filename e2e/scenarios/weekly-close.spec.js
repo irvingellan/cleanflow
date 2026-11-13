@@ -79,11 +79,22 @@ async function applyDates(root, start, end, language = "en") {
   await root.getByRole("button", { name: periodMessage(language, "apply"), exact: true }).click();
 }
 
-test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
+function isEmulatorWebChannelError(message, browserName) {
+  if (browserName !== "webkit") return false;
+  return /^(?:Fetch API cannot load http:\/\/)?\/?127\.0\.0\.1:\d+\/google\.firestore\.v1\.Firestore\/(Listen|Write)\/channel\?\S+ due to access control checks\.$/.test(message);
+}
+
+test("weekly-close", async ({ page, browser, browserName, baseURL }, testInfo) => {
   const fixture = await step(0, "Seed synthetic Weekly Close fixtures", () => seedWeeklyCloseFixture(testInfo));
   const before = await weeklyCloseDomainSnapshot(fixture);
   const runtimeErrors = [];
-  page.on("pageerror", (error) => runtimeErrors.push(error.message));
+  let unrelatedEmulatorWebChannelErrors = 0;
+  page.on("pageerror", (error) => {
+    // On WebKit, unrelated realtime subscriptions can report local CORS during
+    // a page reload. The Weekly Close result still requires server-only reads.
+    if (isEmulatorWebChannelError(error.message, browserName)) unrelatedEmulatorWebChannelErrors += 1;
+    else runtimeErrors.push(error.message);
+  });
   try {
     await step(10, "Anonymous route does not expose financial data", async () => {
       const anonymous = await browser.newContext({ baseURL, serviceWorkers: "block" });
@@ -177,13 +188,15 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
         for (const viewport of viewports) {
           await page.setViewportSize(viewport);
           await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-          const dimensions = await page.evaluate(() => ({
-            viewportWidth: window.innerWidth,
-            documentWidth: document.documentElement.scrollWidth,
-            bodyWidth: document.body.scrollWidth,
-          }));
-          expect(dimensions.documentWidth).toBeLessThanOrEqual(viewport.width);
-          expect(dimensions.bodyWidth).toBeLessThanOrEqual(viewport.width);
+          let dimensions;
+          await expect.poll(async () => {
+            dimensions = await page.evaluate(() => ({
+              viewportWidth: window.innerWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              bodyWidth: document.body.scrollWidth,
+            }));
+            return Math.max(dimensions.documentWidth, dimensions.bodyWidth);
+          }, { message: `${language} layout at ${viewport.width}px` }).toBeLessThanOrEqual(viewport.width);
           const bounds = await root.boundingBox();
           expect(bounds.x).toBeGreaterThanOrEqual(0);
           expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
@@ -198,6 +211,12 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
     await step(100, "All seeded Job and Payout values remain unchanged", async () => {
       expect(await weeklyCloseDomainSnapshot(fixture)).toEqual(before);
       expect(runtimeErrors).toEqual([]);
+      if (unrelatedEmulatorWebChannelErrors) {
+        await testInfo.attach("emulator-webchannel-cors-count", {
+          body: JSON.stringify({ count: unrelatedEmulatorWebChannelErrors }),
+          contentType: "application/json",
+        });
+      }
     });
   } finally { await cleanupWeeklyCloseFixture(fixture); }
 });
