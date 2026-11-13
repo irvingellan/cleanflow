@@ -161,7 +161,11 @@ test("additional-device Hub sessions coexist, enrollment paths are private, and 
     return { responses: [{ success: true, messageId: "synthetic-switch-accepted" }], successCount: 1, failureCount: 0 };
   };
   assert.deepEqual(await dispatch(cleanerA, oldOwnerEvent.id, provider), { skipped: "NO_ACTIVE_DEVICES" });
-  assert.deepEqual(await dispatch(cleanerB, newOwnerEvent.id, provider), { deliveryStatus: "FCM_ACCEPTED" });
+  assert.deepEqual(await dispatch(cleanerB, newOwnerEvent.id, provider), {
+    deliveryStatus: "FCM_ACCEPTED", targetDeviceCount: 1, acceptedByFcmDevices: 1,
+    rejectedDevices: 0, unknownDevices: 0, invalidated: 0,
+    invalidDeviceCleanupFailed: false, auditRecorded: true,
+  });
   assert.equal(batches.length, 1);
   assert.deepEqual(batches[0].map(({ token, data }) => [token, data.cleanerBindingId]),
     [[switched.token, switchedRegistration.bindingId]]);
@@ -272,7 +276,11 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
       successCount: 1, failureCount: 1,
     };
   };
-  assert.deepEqual(await dispatch(cleanerA, event.id, partialProvider), { deliveryStatus: "PARTIAL" });
+  assert.deepEqual(await dispatch(cleanerA, event.id, partialProvider), {
+    deliveryStatus: "PARTIAL", targetDeviceCount: 2, acceptedByFcmDevices: 1,
+    rejectedDevices: 0, unknownDevices: 1, invalidated: 0,
+    invalidDeviceCleanupFailed: false, auditRecorded: true,
+  });
   await dispatch(cleanerA, event.id, partialProvider);
   await dispatch(cleanerB, event.id, partialProvider);
   await dispatch(cleanerA, event.id, partialProvider, "foreign-synthetic-org");
@@ -314,7 +322,11 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
     return { responses: messages.map(() => ({ success: true, messageId: "synthetic-award-accepted" })),
       successCount: messages.length, failureCount: 0 };
   };
-  assert.deepEqual(await dispatch(cleanerA, assigned.id, acceptedProvider), { deliveryStatus: "FCM_ACCEPTED" });
+  assert.deepEqual(await dispatch(cleanerA, assigned.id, acceptedProvider), {
+    deliveryStatus: "FCM_ACCEPTED", targetDeviceCount: 2, acceptedByFcmDevices: 2,
+    rejectedDevices: 0, unknownDevices: 0, invalidated: 0,
+    invalidDeviceCleanupFailed: false, auditRecorded: true,
+  });
   assert.deepEqual(await open(primary, assigned.id), { state: "opened", destination: { kind: "JOB", jobId: jobs[0].id } });
   assert.deepEqual(await open(other, assigned.id), { state: "unavailable", destination: null });
   assert.deepEqual(await open(primary, event.id), { state: "unavailable", destination: null });
@@ -343,7 +355,11 @@ test("rotation in flight preserves the replacement; delayed cancelled and revoke
       successCount: 0, failureCount: 2,
     };
   };
-  assert.deepEqual(await dispatch(cleanerA, event.id, ambiguousProvider), { deliveryStatus: "UNKNOWN" });
+  assert.deepEqual(await dispatch(cleanerA, event.id, ambiguousProvider), {
+    deliveryStatus: "UNKNOWN", targetDeviceCount: 2, acceptedByFcmDevices: 0,
+    rejectedDevices: 1, unknownDevices: 1, invalidated: 0,
+    invalidDeviceCleanupFailed: false, auditRecorded: true,
+  });
   assert.deepEqual(await status(first, rotated), { state: "active", registrationRevision: previous.registrationRevision + 1 });
   assert.deepEqual(await deactivate(first, installationA, previous), { deactivated: false });
   const result = (await receiptReference(event.id).get()).data();
@@ -399,7 +415,11 @@ test("only the latest reschedule attempts delivery and cancellation can notify w
 
   assert.deepEqual(await dispatch(cleanerA, staleEvent.id, provider), { skipped: "STALE_EVENT" });
   assert.equal((await receiptReference(staleEvent.id).get()).data().targetDeviceCount, 0);
-  assert.deepEqual(await dispatch(cleanerA, latestEvent.id, provider), { deliveryStatus: "FCM_ACCEPTED" });
+  assert.deepEqual(await dispatch(cleanerA, latestEvent.id, provider), {
+    deliveryStatus: "FCM_ACCEPTED", targetDeviceCount: 1, acceptedByFcmDevices: 1,
+    rejectedDevices: 0, unknownDevices: 0, invalidated: 0,
+    invalidDeviceCleanupFailed: false, auditRecorded: true,
+  });
   assert.deepEqual(await open(auth, latestEvent.id), { state: "opened", destination: { kind: "JOB", jobId } });
 
   const managerClient = environment.authenticatedContext("synthetic-manager", manager({}).auth.token).firestore();
@@ -410,7 +430,11 @@ test("only the latest reschedule attempts delivery and cancellation can notify w
   await recordTransition(latest, "synthetic-cancel-assignment");
   const cancelled = (await inboxReference(cleanerA).where("type", "==", "CANCELLED").get()).docs;
   assert.equal(cancelled.length, 1);
-  assert.deepEqual(await dispatch(cleanerA, cancelled[0].id, provider), { deliveryStatus: "FCM_ACCEPTED" });
+  assert.deepEqual(await dispatch(cleanerA, cancelled[0].id, provider), {
+    deliveryStatus: "FCM_ACCEPTED", targetDeviceCount: 1, acceptedByFcmDevices: 1,
+    rejectedDevices: 0, unknownDevices: 0, invalidated: 0,
+    invalidDeviceCleanupFailed: false, auditRecorded: true,
+  });
   await dispatch(cleanerA, cancelled[0].id, provider);
   assert.equal(attempts.length, 2);
   for (const [index, event] of [latestEvent, cancelled[0]].entries()) {
