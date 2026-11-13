@@ -72,13 +72,28 @@ export function subscribeToJob(jobId, onChange) {
   }, () => { /* The existing Job Detail reload remains available on a listen error. */ });
 }
 
-/** Complete service-week read; never substitute cache or a capped worklist. */
-export async function getServiceWeekJobs({ start, end }) {
-  const snapshot = await getDocsFromServer(query(jobsCollection(),
-    where("scheduledDate", ">=", start), where("scheduledDate", "<=", end),
-    orderBy("scheduledDate", "asc")));
-  if (snapshot.metadata?.fromCache || snapshot.metadata?.hasPendingWrites) throw new Error("Unconfirmed weekly Jobs");
-  return snapshot.docs.map(jobFromSnapshot);
+const servicePeriodPageSize = 50;
+const maxServicePeriodJobs = 200;
+
+/** Cursor includes the document ID, so jobs on the same date cannot be skipped. */
+export async function getServicePeriodJobs({ start, end }, { signal } = {}) {
+  const jobs = [];
+  let cursor;
+  for (let offset = 0; offset < maxServicePeriodJobs; offset += servicePeriodPageSize) {
+    signal?.throwIfAborted();
+    const isLastPage = offset + servicePeriodPageSize === maxServicePeriodJobs;
+    const snapshot = await getDocsFromServer(query(jobsCollection(),
+      where("scheduledDate", ">=", start), where("scheduledDate", "<=", end),
+      orderBy("scheduledDate", "asc"), ...(cursor ? [startAfter(cursor)] : []),
+      limit(servicePeriodPageSize + Number(isLastPage))));
+    signal?.throwIfAborted();
+    if (snapshot.metadata?.fromCache || snapshot.metadata?.hasPendingWrites) throw new Error("Unconfirmed weekly Jobs");
+    jobs.push(...snapshot.docs.slice(0, servicePeriodPageSize).map(jobFromSnapshot));
+    if (snapshot.docs.length < servicePeriodPageSize || isLastPage) {
+      return { jobs, coverage: { limit: maxServicePeriodJobs, scanned: jobs.length, truncated: snapshot.docs.length > servicePeriodPageSize } };
+    }
+    cursor = snapshot.docs.at(-1);
+  }
 }
 
 function currentLocalDate(date = new Date()) {

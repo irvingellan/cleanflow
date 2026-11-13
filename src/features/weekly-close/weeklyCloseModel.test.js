@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildWeeklyClose, previousServiceWeek, serviceWeekForDate, shiftServiceWeek,
+  buildWeeklyClose, previousServiceWeek, servicePeriod, serviceWeekForDate, shiftServiceWeek,
 } from "./weeklyCloseModel.js";
 
 const weekStart = "2026-09-21";
@@ -252,5 +252,20 @@ describe("weekly close payout evidence", () => {
     const sourcePayout = Object.freeze(paid({ jobIds: Object.freeze(["job-1"]) }));
     expect(() => close(Object.freeze([sourceJob]), { payouts: Object.freeze([sourcePayout]) })).not.toThrow();
     expect(sourceJob.payoutId).toBe("payout-1");
+  });
+});
+
+describe("explicit period bounds", () => {
+  it("accepts inclusive 31-day ranges and leap days", () => {
+    expect(servicePeriod({ start: "2028-02-28", end: "2028-03-29" })).toEqual({ start: "2028-02-28", end: "2028-03-29" });
+    expect(servicePeriod({ start: "2028-02-29", end: "2028-02-29" })).toMatchObject({ end: "2028-02-29" });
+  });
+  it.each([
+    { start: "2026-02-30", end: "2026-03-01" },
+    { start: "2026-10-03", end: "2026-10-02" },
+    { start: "2026-10-01", end: "2026-11-01" },
+    { start: "2026-10-01", end: "" },
+  ])("rejects invalid or wider ranges: %j", (period) => {
+    expect(() => servicePeriod(period)).toThrow(RangeError);
   });
 });

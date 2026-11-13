@@ -3,8 +3,10 @@ import {
   collection,
   deleteField,
   doc,
+  documentId,
   getDoc,
   getDocs,
+  getDocsFromServer,
   query,
   serverTimestamp,
   updateDoc,
@@ -34,6 +36,18 @@ export async function getClients({ includeArchived = false } = {}) {
     ...clientDocument.data(),
     id: clientDocument.id,
   })), includeArchived);
+}
+
+/** One document-ID batch for read-only service reconciliation. */
+export async function getClientSummariesById(ids) {
+  if (ids.length === 0) return [];
+  if (ids.length > 30) throw new RangeError("At most 30 IDs per context query.");
+  const snapshot = await getDocsFromServer(query(clientsCollection(), where(documentId(), "in", ids)));
+  if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) throw new Error("Unconfirmed service reconciliation context");
+  return snapshot.docs.map((row) => {
+    const { name } = row.data();
+    return { id: row.id, name };
+  });
 }
 
 /** Name and contact of one client, for sending a report from the manager's own apps. */

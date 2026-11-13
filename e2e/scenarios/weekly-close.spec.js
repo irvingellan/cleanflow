@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test, expect, step, loginManager } from "./support.js";
+import { periodMessage } from "../../src/features/weekly-close/weeklyClosePeriodMessages.js";
 import { formatPrice } from "../../src/lib/presentation.js";
 import { translateInLanguage } from "../../src/i18n/translations.js";
 import {
@@ -58,7 +59,7 @@ async function verifyFinancialRows(root, language) {
   // subtotals reconcile with the available rows, never fabricated zero values.
   await expect(metric(root, translate, "clientCharges").locator("dd")).toHaveText(translate("weeklyClose.incomplete"));
   await expect(metric(root, translate, "clientCharges")).toContainText(translate("weeklyClose.pendingService", { count: 1 }));
-  await expect(root.locator(".weekly-close-attention")).toContainText(translate("weeklyClose.attentionSummary", { count: 4 }));
+  await expect(root.locator(".weekly-close-attention")).toContainText(periodMessage(language, "attention", { count: 4 }));
   await expect(metric(root, translate, "clientCharges")).toContainText(currency(870));
   await expect(metric(root, translate, "grossOperationalMargin")).toContainText(translate("weeklyClose.pendingServices", { count: 2 }));
   await expect(metric(root, translate, "grossOperationalMargin")).not.toContainText(translate("weeklyClose.pendingServices", { count: 4 }));
@@ -70,6 +71,12 @@ async function verifyFinancialRows(root, language) {
   const visibleRows = await root.locator(".weekly-close-job").allTextContents();
   expect(visibleRows.every((value) => !/Excluded |Outside /.test(value))).toBe(true);
   await expect(root.getByRole("button", { name: /invoice|record payment|mark paid/i })).toHaveCount(0);
+}
+
+async function applyDates(root, start, end, language = "en") {
+  await root.getByLabel(periodMessage(language, "start"), { exact: true }).fill(start);
+  await root.getByLabel(periodMessage(language, "end"), { exact: true }).fill(end);
+  await root.getByRole("button", { name: periodMessage(language, "apply"), exact: true }).click();
 }
 
 test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
@@ -102,29 +109,55 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
       await page.getByRole("button", { name: "Weekly close · Preview", exact: true }).click();
       await page.reload();
       await expect(page.locator(".weekly-close-preview")).toBeVisible();
-      await page.getByLabel("Week starting", { exact: true }).fill("2026-09-21");
+      await applyDates(page.locator(".weekly-close-preview"), "2026-09-21", "2026-09-27");
       await verifyFinancialRows(page.locator(".weekly-close-preview"), "en");
     });
     await step(40, "Week selection and refresh are deterministic read-only actions", async () => {
       const root = page.locator(".weekly-close-preview");
       await root.getByRole("button", { name: "This week", exact: true }).click();
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-28");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-28");
       await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("1");
       await root.getByRole("button", { name: "Previous week", exact: true }).click();
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-21");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-21");
       await verifyFinancialRows(root, "en");
-      await root.getByLabel("Week starting", { exact: true }).fill("2026-09-24");
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-21");
+      await applyDates(root, "2026-09-24", "2026-09-25");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-24");
+      await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("2");
+      await applyDates(root, "2026-09-21", "2026-09-27");
       await root.getByRole("button", { name: "Refresh", exact: true }).click();
       await verifyFinancialRows(root, "en");
       await root.getByRole("button", { name: "Previous week", exact: true }).click();
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-14");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-14");
       await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("1");
-      await root.getByLabel("Week starting", { exact: true }).fill("2026-09-07");
+      await applyDates(root, "2026-09-07", "2026-09-13");
       await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("0");
       await expect(root.locator(".weekly-close-client")).toHaveCount(0);
-      await root.getByLabel("Week starting", { exact: true }).fill("2026-09-21");
+      await applyDates(root, "2026-09-21", "2026-09-27");
       await verifyFinancialRows(root, "en");
+    });
+    await step(50, "Client selection narrows the loaded service rows and totals", async () => {
+      const root = page.locator(".weekly-close-preview");
+      await root.getByLabel("Client", { exact: true }).selectOption({ label: "Weekly Client Alpha" });
+      await expect(root.locator(".weekly-close-client")).toHaveCount(1);
+      await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("2");
+      await expect(root.locator(".weekly-close-client")).toContainText("Weekly Client Alpha");
+      await root.getByLabel("Client", { exact: true }).selectOption("");
+      await verifyFinancialRows(root, "en");
+    });
+    await step(55, "Dense dates remain partial and a narrower range restores complete totals", async () => {
+      const root = page.locator(".weekly-close-preview");
+      const count = root.locator(".weekly-close-metrics > div").first().locator("dd");
+      const charges = metric(root, (key) => translateInLanguage("en", key), "clientCharges");
+      const partial = root.getByText(/Partial results.*200 Job records/);
+      await applyDates(root, "2026-10-10", "2026-10-11");
+      await expect(partial).toBeVisible();
+      await expect(count).toHaveText("200");
+      await expect(charges.locator("dd")).toHaveText("Incomplete");
+      await expect(charges).toContainText("$200.00");
+      await applyDates(root, "2026-10-11", "2026-10-11");
+      await expect(count).toHaveText("101");
+      await expect(charges.locator("dd")).toHaveText("$101.00");
+      await expect(partial).toHaveCount(0);
     });
     await step(60, "Visual matrix: EN/PT/ES across desktop, tablet and phone", async () => {
       const directory = resolve("test-results/weekly-close", `run-${testInfo.repeatEachIndex}`);
@@ -139,7 +172,7 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
         const root = page.locator(".weekly-close-preview");
         const translate = (key) => translateInLanguage(language, key);
         await expect(root.getByRole("heading", { name: translate("weeklyClose.title"), exact: true })).toBeVisible();
-        await root.getByLabel(translate("weeklyClose.weekStarting"), { exact: true }).fill("2026-09-21");
+        await applyDates(root, "2026-09-21", "2026-09-27", language);
         await verifyFinancialRows(root, language);
         for (const viewport of viewports) {
           await page.setViewportSize(viewport);

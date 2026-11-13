@@ -3,28 +3,45 @@ import { BackButton, StateCard } from "../../components/UiPrimitives.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { formatDate, formatPrice } from "../../lib/presentation.js";
-import { previousServiceWeek, serviceWeekForDate, shiftServiceWeek } from "./weeklyCloseModel.js";
+import { previousServiceWeek, servicePeriod, shiftServiceWeek } from "./weeklyCloseModel.js";
 import { loadWeeklyClose } from "./weeklyCloseService.js";
+import { periodMessage } from "./weeklyClosePeriodMessages.js";
 
 const loadDeadlineMs = 15_000;
 
 /** Manager-only reconciliation; no invoice, payment or record-editing controls. */
 export function WeeklyClosePreview({ onBack }) {
   const { language, translate } = useTranslation();
-  const [weekStart, setWeekStart] = useState(() => previousServiceWeek().start);
+  const [period, setPeriod] = useState(previousServiceWeek);
+  const [dates, setDates] = useState(period);
+  const [invalidDates, setInvalidDates] = useState(false);
+  const [selectedClient, setSelectedClient] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [model, setModel] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const t = (key, replacements) => periodMessage(language, key, replacements);
+  const applyPeriod = (next) => {
+    setDates(next);
+    setInvalidDates(false);
+    if (next.start === period.start && next.end === period.end) return;
+    setSelectedClient("");
+    setIsLoading(true);
+    setHasError(false);
+    setModel(null);
+    setPeriod(next);
+  };
 
   useEffect(() => {
     let current = true;
     let pending = true;
     let timer;
+    const controller = new AbortController();
     const expiresAt = Date.now() + loadDeadlineMs;
     const checkDeadline = () => {
       if (current && pending && Date.now() >= expiresAt) {
         current = false;
+        controller.abort();
         clearTimeout(timer);
         setModel(null);
         setHasError(true);
@@ -39,11 +56,17 @@ export function WeeklyClosePreview({ onBack }) {
     setHasError(false);
     setModel(null);
     const deadline = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error("weekly-close-timeout")), loadDeadlineMs);
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("weekly-close-timeout"));
+      }, loadDeadlineMs);
     });
-    Promise.race([loadWeeklyClose(weekStart), deadline]).then((result) => {
+    Promise.race([loadWeeklyClose(period, { signal: controller.signal }), deadline]).then((result) => {
       if (Date.now() >= expiresAt) throw new Error("weekly-close-timeout");
-      if (current) setModel(result);
+      if (current) {
+        setModel(result);
+        setSelectedClient((key) => result.clients.some((client) => client.key === key) ? key : "");
+      }
     }).catch(() => {
       if (current) setHasError(true);
     }).finally(() => {
@@ -52,22 +75,25 @@ export function WeeklyClosePreview({ onBack }) {
       if (current) setIsLoading(false);
     });
     return () => {
-      current = false; clearTimeout(timer);
+      current = false; controller.abort(); clearTimeout(timer);
       window.removeEventListener("pageshow", checkDeadline);
       window.removeEventListener("online", checkDeadline);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [weekStart, refreshKey]);
+  }, [period, refreshKey]);
 
-  const week = serviceWeekForDate(weekStart);
+  const activeClient = model?.clients.find((client) => client.key === selectedClient);
+  const visibleClients = activeClient ? [activeClient] : model?.clients;
+  const totals = activeClient || model?.overall;
+  const isPartial = model?.coverage?.truncated === true;
   const money = (amount) => amount === null || amount === undefined
     ? translate("weeklyClose.unknown") : formatPrice(amount, translate, language);
-  const metrics = model ? [
-    ["clientCharges", model.overall.clientCharges, model.overall.knownClientCharges],
-    ["cleanerPayoutTotal", model.overall.cleanerPayoutTotal, model.overall.knownCleanerPayoutTotal],
-    ["cleanerPaidTotal", model.overall.cleanerPaidTotal, model.overall.knownCleanerPaidTotal],
-    ["cleanerOutstandingTotal", model.overall.cleanerOutstandingTotal, model.overall.knownCleanerOutstandingTotal],
-    ["grossOperationalMargin", model.overall.grossOperationalMargin, model.overall.knownGrossOperationalMargin],
+  const metrics = totals ? [
+    ["clientCharges", totals.clientCharges, totals.knownClientCharges],
+    ["cleanerPayoutTotal", totals.cleanerPayoutTotal, totals.knownCleanerPayoutTotal],
+    ["cleanerPaidTotal", totals.cleanerPaidTotal, totals.knownCleanerPaidTotal],
+    ["cleanerOutstandingTotal", totals.cleanerOutstandingTotal, totals.knownCleanerOutstandingTotal],
+    ["grossOperationalMargin", totals.grossOperationalMargin, totals.knownGrossOperationalMargin],
   ] : [];
   const aggregateMoney = (amount) => amount === null
     ? translate("weeklyClose.incomplete") : money(amount);
@@ -76,7 +102,12 @@ export function WeeklyClosePreview({ onBack }) {
     : key === "grossOperationalMargin" ? totals.missingGrossMarginCount : totals.unknownPayoutCount;
   const pendingCopy = (count) => translate(count === 1
     ? "weeklyClose.pendingService" : "weeklyClose.pendingServices", { count });
-  const exclusionCount = model ? Object.values(model.excluded).reduce((total, count) => total + count, 0) : 0;
+  const exclusionCount = model && !activeClient ? Object.values(model.excluded).reduce((total, count) => total + count, 0) : 0;
+  const applyDates = (event) => {
+    event.preventDefault();
+    try { applyPeriod(servicePeriod(dates)); }
+    catch { setInvalidDates(true); }
+  };
 
   return (
     <section className="panel weekly-close-preview" aria-labelledby="weekly-close-title">
@@ -85,51 +116,75 @@ export function WeeklyClosePreview({ onBack }) {
         <div>
           <p className="eyebrow">{translate("weeklyClose.preview")}</p>
           <h2 id="weekly-close-title">{translate("weeklyClose.title")}</h2>
-          <p className="weekly-close-dates">{formatDate(week.start, translate, language)} – {formatDate(week.end, translate, language)}</p>
+          <p className="weekly-close-dates">{formatDate(period.start, translate, language)} – {formatDate(period.end, translate, language)}</p>
         </div>
         <button className="button button--secondary" type="button" disabled={isLoading}
           onClick={() => setRefreshKey((key) => key + 1)}>{translate("weeklyClose.refresh")}</button>
       </header>
-      <p className="weekly-close-note">{translate("weeklyClose.rule")}</p>
-      <div className="weekly-close-controls">
+      <p className="weekly-close-note">{t("dateRule")}</p>
+      <form className="weekly-close-controls" onSubmit={applyDates} noValidate>
         <button className="button button--secondary" type="button"
-          onClick={() => setWeekStart(shiftServiceWeek(weekStart, -1).start)}>{translate("weeklyClose.previous")}</button>
-        <button className="button button--secondary" type="button" onClick={() => {
-          setWeekStart(shiftServiceWeek(previousServiceWeek().start, 1).start);
-        }}>{translate("weeklyClose.thisWeek")}</button>
-        <label>{translate("weeklyClose.weekStarting")}
-          <input type="date" value={weekStart} onChange={(event) => {
-            if (event.target.value) setWeekStart(serviceWeekForDate(event.target.value).start);
+          onClick={() => applyPeriod(shiftServiceWeek(period.start, -1))}>{translate("weeklyClose.previous")}</button>
+        <button className="button button--secondary" type="button"
+          onClick={() => applyPeriod(shiftServiceWeek(previousServiceWeek().start, 1))}>{translate("weeklyClose.thisWeek")}</button>
+        <label>{t("start")}
+          <input type="date" value={dates.start} aria-invalid={invalidDates} onChange={(event) => {
+            const start = event.target.value;
+            setDates((old) => ({ ...old, start }));
+            setInvalidDates(false);
           }} />
         </label>
-      </div>
+        <label>{t("end")}
+          <input type="date" value={dates.end} aria-invalid={invalidDates} onChange={(event) => {
+            const end = event.target.value;
+            setDates((old) => ({ ...old, end }));
+            setInvalidDates(false);
+          }} />
+        </label>
+        <button className="button button--secondary" type="submit">{t("apply")}</button>
+      </form>
+      {invalidDates && <StateCard message={t("invalidPeriod")} status="alert" isError />}
       <p className="weekly-close-note">{translate("weeklyClose.externalPayments")}</p>
-      {isLoading && <StateCard message={translate("weeklyClose.loading")} status="status" />}
-      {hasError && <StateCard message={translate("weeklyClose.error")} status="alert" isError />}
+      {isLoading && <StateCard message={t("loading")} status="status" />}
+      {hasError && <StateCard message={t("error")} status="alert" isError />}
       {model && !isLoading && !hasError && <>
+        {isPartial && <p role="status" className="weekly-close-attention">{t("partial", { limit: model.coverage.limit })}</p>}
+        {model.clients.length > 0 && <div className="weekly-close-controls">
+          <div>
+            <label htmlFor="weekly-close-client-filter">{t("client")}</label>
+            <select id="weekly-close-client-filter" value={selectedClient} aria-describedby="weekly-close-client-scope"
+              onChange={(event) => setSelectedClient(event.target.value)}>
+              <option value="">{t("allClients")}</option>
+              {model.clients.map((client) => (
+                <option key={client.key} value={client.key}>{client.clientName || t("unnamedClient")}</option>
+              ))}
+            </select>
+          </div>
+          <small id="weekly-close-client-scope">{t("clientScope")}</small>
+        </div>}
         <dl className="weekly-close-metrics">
-          <div><dt>{translate("weeklyClose.completedServiceCount")}</dt><dd>{model.overall.completedServiceCount}</dd></div>
+          <div><dt>{isPartial ? t("loadedCount") : translate("weeklyClose.completedServiceCount")}</dt><dd>{totals.completedServiceCount}</dd></div>
           {metrics.map(([key, amount, known]) => <div key={key}>
             <dt>{translate(`weeklyClose.${key}`)}</dt><dd>{aggregateMoney(amount)}</dd>
             {amount === null && <small>{translate("weeklyClose.knownSubtotal", { amount: money(known) })}</small>}
-            {amount === null && pendingCount(model.overall, key) > 0 && <small>{pendingCopy(pendingCount(model.overall, key))}</small>}
+            {amount === null && pendingCount(totals, key) > 0 && <small>{pendingCopy(pendingCount(totals, key))}</small>}
           </div>)}
         </dl>
-        <p className={model.overall.attentionCount > 0 ? "weekly-close-attention" : "weekly-close-note"} role="status">
-          {model.overall.attentionCount > 0
-            ? translate("weeklyClose.attentionSummary", { count: model.overall.attentionCount })
+        {(!isPartial || totals.attentionCount > 0) && <p className={totals.attentionCount > 0 ? "weekly-close-attention" : "weekly-close-note"} role="status">
+          {totals.attentionCount > 0
+            ? t("attention", { count: totals.attentionCount })
             : translate("weeklyClose.completeData")}
-          {model.overall.unknownPayoutCount > 0 && ` ${translate("weeklyClose.unknownPayoutSummary", { count: model.overall.unknownPayoutCount })}`}
-        </p>
+          {totals.unknownPayoutCount > 0 && ` ${translate("weeklyClose.unknownPayoutSummary", { count: totals.unknownPayoutCount })}`}
+        </p>}
         <p className="weekly-close-note">{translate("weeklyClose.marginNote")}</p>
         {exclusionCount > 0 && <details className="weekly-close-exclusions">
           <summary>{translate("weeklyClose.excludedSummary", { count: exclusionCount })}</summary>
           <ul>{Object.entries(model.excluded).filter(([, count]) => count > 0).map(([reason, count]) =>
             <li key={reason}>{translate(`weeklyClose.excluded.${reason}`, { count })}</li>)}</ul>
         </details>}
-        {model.overall.completedServiceCount === 0 && <StateCard message={translate("weeklyClose.empty")} status="status" />}
+        {totals.completedServiceCount === 0 && <StateCard message={t(isPartial ? "emptyPartial" : "empty")} status="status" />}
         <div className="weekly-close-clients">
-          {model.clients.map((client) => <details className="weekly-close-client" key={client.key}>
+          {visibleClients.map((client) => <details className="weekly-close-client" key={client.key}>
             <summary>
               <span><strong>{client.clientName || translate("weeklyClose.unnamedClient")}</strong>
                 <small>{translate("weeklyClose.services", { count: client.serviceCount })}
