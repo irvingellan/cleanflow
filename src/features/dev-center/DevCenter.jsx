@@ -3,6 +3,7 @@ import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { NotificationDiagnostics } from "./NotificationDiagnostics.jsx";
+import { SystemStatusPanel } from "./SystemStatusPanel.jsx";
 import { NotificationChannelDiagnostics } from "../notifications/NotificationChannelDiagnostics.jsx";
 
 const scenarios = [
@@ -82,7 +83,9 @@ export function DevCenter({
       </header>
 
       <div className="dev-center__results">{results}</div>
-
+      <SystemStatusPanel />
+      {/* Demo data only works in the emulator or Sandbox; Production hides it. */}
+      {canMutate && (
       <section className="cf-block dev-center__block" aria-labelledby="dev-center-demo-title">
         <div className="cf-block__header">
           <div>
@@ -139,6 +142,7 @@ export function DevCenter({
           </>
         )}
       </section>
+      )}
 
       <section className="cf-block dev-center__block" aria-labelledby="dev-center-reminder-title">
         <div className="cf-block__header">

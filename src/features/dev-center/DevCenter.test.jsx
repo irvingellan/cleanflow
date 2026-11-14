@@ -122,7 +122,7 @@ describe("DevCenter action states", () => {
     expect(screen.queryAllByRole("button", { name: "Generate" })).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Clear demo data" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset test data to Quick Demo" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Demo data" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Demo data" })).not.toBeInTheDocument();
   });
 
   it("never grants mutation UI solely because the environment is Sandbox", () => {
