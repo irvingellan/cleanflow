@@ -989,6 +989,14 @@ single slot in the same transaction as the canonical Assignment and its audit
 event. The manager's direct assignment reads the same roster. The public link
 prompts authentication and holds no assignment authority.
 
+**Multi-slot contract draft (2026-11-13).** New versioned batches freeze a
+capacity from 1 to 10. Each valid authenticated acceptance reserves one slot
+and records its own Assignment and notification in the same transaction.
+The marker closes the batch permanently when full or after a direct manager
+override. Previous batches retain their stored interpretation. The UI may
+default to the automatic option only when the manager can choose an eligible
+new Job and explicitly submits the selected distribution mode.
+
 **Consequences.** No migration for manual Offers. The immutable batch and
 close marker prevent later retries or removal from reopening old offers. The
 existing agenda projection converges after the commit. Per-recipient closed

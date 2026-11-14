@@ -2,10 +2,10 @@ import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertSessionForMutation } from "./cleanerHubAccess.js";
 import { notificationRevision, notificationRoster } from "./cleanerNotificationEvents.js";
-import { isAutomaticOfferJob } from "./firstAcceptWins.js";
+import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
 import {
-  cleanerInbox, cleanerInboxTypes as cleanerTypes, inboxEventVersion, inboxReceipt, isInboxId,
+  automaticOfferNotice, cleanerInbox, cleanerInboxTypes as cleanerTypes, inboxEventVersion, inboxReceipt, isInboxId,
   managerInboxCollection, managerInboxTypes as managerTypes, offerInboxGeneration, validInboxSegment,
 } from "./notificationInboxEvents.js";
 import { publicOfferState } from "./publicOfferResponseService.js";
@@ -110,11 +110,18 @@ function projectAuthorizedTarget(organization, event, identity, job, offer, { fo
     return { destination: { kind: "OFFER", jobId: event.jobId }, serviceLabel: safeServiceLabel(job) };
   }
   if (!rosterIncludesCleaner) return null;
-  if (forPush && (job.operationalStatus === "COMPLETED"
-    || (event.type === cleanerTypes.rescheduled
-      ? notificationRevision(job.scheduleRevision) !== event.scheduleRevision
-      : notificationRevision(job.checklistContextRevision) !== event.contextRevision))) return null;
+  if (forPush && (job.operationalStatus === "COMPLETED" || !currentCleanerPushEvent(job, event))) return null;
   return { destination: { kind: "JOB", jobId: event.jobId }, serviceLabel: safeServiceLabel(job) };
+}
+
+function currentCleanerPushEvent(job, event) {
+  if (event.type === cleanerTypes.rescheduled) return notificationRevision(job.scheduleRevision) === event.scheduleRevision;
+  // Later winners advance the checklist context revision but do not invalidate a
+  // teammate's still-active acceptance on the same schedule.
+  if (event.type === cleanerTypes.automatic && validInboxSegment(event.automaticAssignmentId)) {
+    return notificationRevision(job.scheduleRevision) === event.scheduleRevision;
+  }
+  return notificationRevision(job.checklistContextRevision) === event.contextRevision;
 }
 
 async function authorizedTarget(transaction, organization, event, identity, options = {}) {
@@ -127,7 +134,12 @@ async function authorizedTarget(transaction, organization, event, identity, opti
   const job = jobRef ? (await transaction.get(jobRef)).data() : null;
   const offerRef = targetOfferReference(jobRef, job, event, organization.id);
   const offer = offerRef ? (await transaction.get(offerRef)).data() : null;
-  return projectAuthorizedTarget(organization, event, normalized, job, offer, options);
+  const target = projectAuthorizedTarget(organization, event, normalized, job, offer, options);
+  if (!target || !options.forPush || event.type !== cleanerTypes.automatic || !validInboxSegment(event.automaticAssignmentId)) return target;
+  const assignment = (await transaction.get(jobRef.collection("assignments").doc(event.automaticAssignmentId))).data();
+  return assignment?.isActive === true && assignment.assignmentMethod === FIRST_ACCEPT_WINS
+    && assignment.organizationId === organization.id && assignment.jobId === event.jobId
+    && assignment.cleanerId === identity.cleanerId ? target : null;
 }
 
 /** Rechecks the current source before a device attempt. Device authorization is separate. */
@@ -200,6 +212,7 @@ export async function listNotificationInboxForRequest(database, { organizationId
     const items = entries.map(({ id, event }, index) => {
       const target = projectAuthorizedTarget(organization, event, identity, jobs[index],
         offers.get(offerRefs[index]?.path), { now });
+      const notice = target && identity.role === managerRole ? automaticOfferNotice(event.type, event.automaticOffer) : null;
       return {
         id,
         type: event.type,
@@ -208,6 +221,7 @@ export async function listNotificationInboxForRequest(database, { organizationId
         read: Boolean(records.get(receiptRefs[index].path)?.readAt),
         openable: Boolean(target),
         serviceLabel: target?.serviceLabel ?? null,
+        ...(notice ? { automaticOffer: notice } : {}),
       };
     });
     return { items, unreadCount: items.filter((item) => !item.read).length, hasOlder, nextCursor };

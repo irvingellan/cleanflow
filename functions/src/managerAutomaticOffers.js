@@ -3,8 +3,10 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
 import {
   FIRST_ACCEPT_WINS,
+  automaticOfferBatchVersion,
+  automaticOfferCapacity,
   checklistContextRevision,
-  emptySingleOfferRoster,
+  emptyAutomaticOfferRoster,
 } from "./firstAcceptWins.js";
 
 const lifetimeMs = 7 * 24 * 60 * 60 * 1000;
@@ -45,10 +47,12 @@ export async function createAutomaticJobOffersForManager(database, {
     const job = jobSnapshot.data();
     if (!job) throw new HttpsError("not-found", "Job not found.");
     const revision = checklistContextRevision(job);
+    const capacity = automaticOfferCapacity(job);
     if (job.organizationId !== organizationId || job.schemaVersion !== 2
       || job.operationalStatus !== "UNASSIGNED" || job.archivedAt
       || job.offerDistributionMode != null || job.firstAcceptClaim || job.offerDistributionClosedAt
-      || !emptySingleOfferRoster(job) || revision === null || revision >= Number.MAX_SAFE_INTEGER
+      || Object.hasOwn(job, "automaticOfferBatch") || !emptyAutomaticOfferRoster(job)
+      || capacity === null || revision === null || revision > Number.MAX_SAFE_INTEGER - capacity
       || !priorOffers.empty || !priorAssignments.empty) {
       throw new HttpsError("failed-precondition", "This Job is ineligible for automatic offers.");
     }
@@ -71,6 +75,7 @@ export async function createAutomaticJobOffersForManager(database, {
         cleanerName: cleaner.data().name.trim(),
         status: "PENDING",
         offerDistributionMode: FIRST_ACCEPT_WINS,
+        automaticOfferBatchVersion,
         offeredChecklistContextRevision: revision,
         offeredPropertyName: typeof job.propertyName === "string" ? job.propertyName : null,
         offeredScheduledDate: typeof job.scheduledDate === "string" ? job.scheduledDate : null,
@@ -83,6 +88,7 @@ export async function createAutomaticJobOffersForManager(database, {
     transaction.update(jobRef, {
       operationalStatus: "OFFERED",
       offerDistributionMode: FIRST_ACCEPT_WINS,
+      automaticOfferBatch: { version: automaticOfferBatchVersion, capacity, openingContextRevision: revision, currentContextRevision: revision },
       offeredAt: FieldValue.serverTimestamp(),
       offerDistributionByUid: actorUid,
     });

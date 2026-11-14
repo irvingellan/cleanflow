@@ -1,6 +1,32 @@
 # First Accept Wins V1
 
-**Issue #86 · Local release candidate · Production pilot still runs Cleaner Hub V1.**
+**Issue #86 · GitHub single-slot contract and local multi-slot draft.**
+
+Production build `b4821d3` has 57 Functions. The administrative inventory
+returned no `createAutomaticJobOffers` Function. The first delivery of that
+writer needs a separately reviewed release. The contract below describes
+existing unversioned batches. The multi-slot implementation has its own
+additive rules.
+
+## Multi-slot contract draft
+
+- The option starts checked for an eligible new Job while the reviewed feature
+  mode is enabled. Managers can choose manual distribution before sending.
+- New automatic batches freeze a capacity of 1–10 and a versioned opening
+  context. A valid acceptance atomically adds one canonical Assignment and
+  stores its identity on the recipient's Offer. Ordinary checklist revision
+  changes from these acceptances do not invalidate the remaining recipients.
+- Once the roster fills, a durable close marker prevents reopening that
+  batch. A manager's direct override also closes the automatic batch.
+  Subsequent roster correction stays within the frozen capacity.
+- Each accepted Assignment has its own durable manager notice. Filling
+  the batch adds one distinct notice. Replayed delivery reuses its receipt.
+- Keep the unversioned single-slot interpretation and existing manual Offers.
+  New Job and Offer metadata stays server-owned. Revalidate with Rules and
+  browser integration before opening this branch for review.
+
+The draft awaits Rules integration, the full concurrency matrix and joint
+review of pending offers after a schedule change.
 
 The source baseline is release `a593daf636024d6830bf89c75bd7f6353b4b759f` with its
 documentation checkpoint `5469a32a3d7890b7a4e00ad0031ca1be8f09595b`. The 14
