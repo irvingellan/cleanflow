@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { buildCleanerAgenda } from "./cleanerAgendaModel.js";
@@ -51,5 +51,20 @@ describe("CleanerAgendaView", () => {
     fireEvent.click(screen.getByRole("button", { name: /completed|concluídas/i }));
     const group = screen.getByRole("article", { name: "Ana Example" });
     expect(within(group).getAllByText(/90/).length).toBeGreaterThan(0);
+  });
+});
+
+describe("CleanerAgendaView load deadline", () => {
+  it("shows the error instead of loading forever when a read never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      loadCleanerAgenda.mockImplementation(() => new Promise(() => {}));
+      render(<TranslationProvider><CleanerAgendaView onBack={() => {}} onOpenJob={() => {}} /></TranslationProvider>);
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      expect(screen.getByText(/could not be loaded|não foi possível carregar/i)).toBeTruthy();
+      expect(screen.queryByText(/loading these dates|carregando essas datas/i)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

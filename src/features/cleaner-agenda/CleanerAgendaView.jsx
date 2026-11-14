@@ -105,7 +105,12 @@ export function CleanerAgendaView({ onBack, onOpenJob }) {
     setIsLoading(true);
     setHasError(false);
     setModel(null);
-    loadCleanerAgenda(period, { signal: controller.signal }).then((result) => {
+    // A Firestore read can stay pending forever on a bad connection; the
+    // deadline must end the wait itself, not only the next page read.
+    const deadline = new Promise((_, reject) => {
+      controller.signal.addEventListener("abort", () => reject(new Error("agenda-load-aborted")), { once: true });
+    });
+    Promise.race([loadCleanerAgenda(period, { signal: controller.signal }), deadline]).then((result) => {
       if (current) setModel(result);
     }).catch(() => {
       if (current) setHasError(true);
