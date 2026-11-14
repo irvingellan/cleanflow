@@ -24,7 +24,32 @@ const messages = {
   "inboxEmpty": ["Nenhum aviso na Caixa de entrada.", "Your Inbox has no notifications.", "Tu bandeja de entrada no tiene avisos."],
   "inboxUnavailable": ["Não foi possível verificar a Caixa de entrada.", "Could not verify your Inbox.", "No se pudo verificar tu bandeja de entrada."],
   "unknownOutcomes": ["Resultado desconhecido", "Unknown outcome", "Resultado desconocido"],
+  "you": ["você", "you", "tú"],
+  "thisBrowser": ["este navegador", "this browser", "este navegador"],
+  "installedApp": ["app instalado", "installed app", "app instalada"],
+  "oldDevices": ["Aparelhos antigos ou desativados ({count})", "Old or inactive devices ({count})", "Dispositivos antiguos o inactivos ({count})"],
+  // Cleaner push: plain language for the server codes.
+  "cleaner.NEW_OFFER": ["Nova oferta", "New offer", "Nueva oferta"],
+  "cleaner.ASSIGNED": ["Serviço atribuído", "Service assigned", "Servicio asignado"],
+  "cleaner.UNASSIGNED": ["Removida do serviço", "Removed from service", "Retirada del servicio"],
+  "cleaner.CANCELLED": ["Serviço cancelado", "Service cancelled", "Servicio cancelado"],
+  "cleaner.RESCHEDULED": ["Serviço remarcado", "Service rescheduled", "Servicio reprogramado"],
+  "cleaner.PILOT_TEST": ["Teste da cleaner", "Cleaner test", "Prueba de la cleaner"],
+  "cleaner.FCM_ACCEPTED": ["Enviado ao celular", "Sent to the phone", "Enviado al celular"],
+  "cleaner.PARTIAL": ["Enviado a parte dos aparelhos", "Sent to some devices", "Enviado a algunos dispositivos"],
+  "cleaner.FAILED": ["Falhou", "Failed", "Falló"],
+  "cleaner.RECIPIENT_INELIGIBLE": ["Não enviado: a cleaner não tem acesso ativo ao app. O aviso ficou só registrado.", "Not sent: the cleaner has no active app access. The notice was only recorded.", "No enviado: la cleaner no tiene acceso activo a la app. El aviso solo quedó registrado."],
+  "cleaner.NO_ACTIVE_DEVICES": ["Não enviado: a cleaner não ativou avisos no celular. Ficou na caixa de entrada do app.", "Not sent: the cleaner has not turned on phone notices. It stayed in the app inbox.", "No enviado: la cleaner no activó avisos en el celular. Quedó en la bandeja de la app."],
+  "cleaner.STALE_EVENT": ["Não enviado: o serviço mudou antes do envio.", "Not sent: the service changed before sending.", "No enviado: el servicio cambió antes del envío."],
+  "cleaner.PENDING": ["Na fila", "Queued", "En cola"],
+  "cleaner.SENDING": ["Enviando", "Sending", "Enviando"],
 };
+
+/** Plain-language label for a cleaner push code; unknown codes stay visible as-is. */
+export function cleanerPushCopy(language, code) {
+  const entry = messages[`cleaner.${code}`];
+  return entry ? entry[{ pt: 0, en: 1, es: 2 }[language] ?? 1] : code;
+}
 
 export function diagnosticCopy(language, key) {
   return messages[key]?.[{ pt: 0, en: 1, es: 2 }[language] ?? 1] || messages.unknown[1];

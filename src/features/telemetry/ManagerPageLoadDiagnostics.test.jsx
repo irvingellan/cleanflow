@@ -48,12 +48,13 @@ describe("ManagerPageLoadDiagnostics", () => {
     renderDiagnostics();
 
     expect(screen.getByRole("heading", { name: "Manager page-load timings" })).toBeVisible();
-    expect(screen.getAllByText("manager-user-uid")).toHaveLength(1);
-    expect(screen.getByTitle("manager-user-uid")).toHaveTextContent("manager-");
-    expect(screen.getByText("chrome/macos · desktop")).toBeVisible();
+    // People and devices are named; raw IDs are not shown.
+    expect(screen.getAllByText("Other manager account · manage").length).toBeGreaterThan(0);
+    expect(screen.queryByText("manager-user-uid")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Mac · Chrome").length).toBeGreaterThan(0);
     expect(screen.getByText("4g")).toBeVisible();
-    expect(screen.getByText("S1234567 / D7654321")).toBeVisible();
-    expect(screen.getByTitle("S1234567abcdef / D7654321abcdef")).toHaveTextContent("S1234567 / D7654321");
+    expect(screen.queryByText("S1234567 / D7654321")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("S1234567abcdef / D7654321abcdef")).not.toBeInTheDocument();
     expect(screen.getAllByText("3.20 s").length).toBeGreaterThan(1);
     expect(screen.getAllByText("slow").length).toBeGreaterThan(1);
     expect(screen.queryByText(/email|address|access code/i)).not.toBeInTheDocument();
@@ -64,8 +65,8 @@ describe("ManagerPageLoadDiagnostics", () => {
 
     fireEvent.change(screen.getByLabelText("Time window"), { target: { value: "30" } });
     fireEvent.change(screen.getByLabelText("Page"), { target: { value: "jobs" } });
-    fireEvent.change(screen.getByLabelText("User / UID"), { target: { value: "manager-user-uid" } });
-    fireEvent.change(screen.getByLabelText("Device / browser"), { target: { value: "chrome/macos" } });
+    fireEvent.change(screen.getByLabelText("Person"), { target: { value: "manager-user-uid" } });
+    fireEvent.change(screen.getByLabelText("Device"), { target: { value: "chrome/macos" } });
 
     expect(setWindowDays).toHaveBeenCalledWith(30);
     expect(setPageFilter).toHaveBeenCalledWith("jobs");
@@ -104,8 +105,8 @@ describe("ManagerPageLoadDiagnostics", () => {
     expect(within(waterfall).getAllByRole("listitem")).toHaveLength(2);
     expect(waterfall).toHaveTextContent("+50 ms · 200 ms · Error");
     expect(waterfall.querySelectorAll(".load-diagnostics__waterfall-bar")[1]).toHaveStyle({ left: "12.5%", width: "50%" });
-    expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("User: manager-");
-    expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("Device: safari/ios · mobile");
+    expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("User: Other manager account · manage");
+    expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("Device: iPhone/iPad · Safari");
     expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("Observed span: 400 ms");
     expect(visits.parentElement).toBe(operations.parentElement);
     expect(operations).toHaveClass("load-diagnostics__section--alongside");
@@ -114,7 +115,7 @@ describe("ManagerPageLoadDiagnostics", () => {
 
     fireEvent.change(screen.getByLabelText("Visit"), { target: { value: "visit-2" } });
     expect(within(visits).getByRole("list", { name: "Operation timing waterfall" })).toHaveTextContent("Refresh");
-    expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("Device: chrome/android · mobile");
+    expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("Device: Android · Chrome");
     expect(within(visits).getByText(/Latest event:/)).toHaveTextContent("Observed span: 100 ms");
   });
 

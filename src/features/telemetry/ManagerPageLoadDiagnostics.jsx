@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { BackButton, StateCard } from "../../components/UiPrimitives.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
+import { getAuth } from "firebase/auth";
+import { firebaseApp } from "../../services/firebase/client.js";
 import { useTranslation } from "../../i18n/translations.js";
+import { deviceKeyLabel, deviceLabel, personLabel } from "./diagnosticLabels.js";
 import {
   durationSeverity,
   managerOperationPage,
@@ -21,6 +24,14 @@ function eventTime(value, language) {
     { en: "en-US", pt: "pt-BR", es: "es-ES" }[language] || "en-US",
     { dateStyle: "short", timeStyle: "short" },
   ).format(date);
+}
+
+function signedInUser() {
+  try {
+    return getAuth(firebaseApp).currentUser;
+  } catch {
+    return null;
+  }
 }
 
 function shortIdentifier(value) {
@@ -79,6 +90,10 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
   const selectedVisit = diagnostics.jobDetailVisits.find((visit) => visit.id === selectedVisitId)
     || diagnostics.jobDetailVisits[0];
   const hasPageResults = !diagnostics.isLoading && !diagnostics.hasError;
+  const currentUser = signedInUser();
+  const personCopy = { you: translate("loadDiagnostics.you"), otherAccount: translate("loadDiagnostics.otherAccount") };
+  const person = (uid) => personLabel(uid, currentUser, personCopy);
+  const installed = translate("loadDiagnostics.installedApp");
   const hasOperationResults = !diagnostics.operationIsLoading && !diagnostics.operationHasError;
 
   return (
@@ -116,14 +131,14 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
           {translate("loadDiagnostics.user")}
           <select value={diagnostics.userFilter} onChange={(event) => diagnostics.setUserFilter(event.target.value)}>
             <option value="all">{translate("loadDiagnostics.allUsers")}</option>
-            {diagnostics.users.map((uid) => <option key={uid} value={uid}>{uid}</option>)}
+            {diagnostics.users.map((uid) => <option key={uid} value={uid}>{person(uid)}</option>)}
           </select>
         </label>
         <label>
           {translate("loadDiagnostics.deviceBrowser")}
           <select value={diagnostics.deviceFilter} onChange={(event) => diagnostics.setDeviceFilter(event.target.value)}>
             <option value="all">{translate("loadDiagnostics.allDevices")}</option>
-            {diagnostics.devices.map((device) => <option key={device} value={device}>{device}</option>)}
+            {diagnostics.devices.map((device) => <option key={device} value={device}>{deviceKeyLabel(device, installed)}</option>)}
           </select>
         </label>
       </div>
@@ -139,6 +154,9 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
       {hasPageResults && (
         <>
           <p className="load-diagnostics__sample-note">{translate("loadDiagnostics.sampleLimit")}</p>
+          {summary.backgroundCount > 0 && (
+            <p className="load-diagnostics__sample-note">{translate("loadDiagnostics.backgroundExcluded", { count: summary.backgroundCount })}</p>
+          )}
           <div className="load-diagnostics__summary" aria-label={translate("loadDiagnostics.summary")}>
             {[
               ["events", summary.eventCount],
@@ -244,8 +262,8 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
                   <p className="load-diagnostics__visit-details">
                     {translate("loadDiagnostics.visitDetails", {
                       time: eventTime(selectedVisit.latestAtMs, language),
-                      user: shortIdentifier(selectedVisit.events[0]?.uid),
-                      device: `${selectedVisit.events[0]?.browser || translate("loadDiagnostics.noValue")}/${selectedVisit.events[0]?.platform || translate("loadDiagnostics.noValue")} · ${translate(`loadDiagnostics.deviceClasses.${selectedVisit.events[0]?.deviceClass}`)}`,
+                      user: person(selectedVisit.events[0]?.uid),
+                      device: deviceLabel(selectedVisit.events[0] || {}, installed),
                       span: durationLabel(selectedVisit.spanMs, translate),
                     })}
                   </p>
@@ -273,12 +291,11 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
                   <th>{translate("loadDiagnostics.result")}</th>
                   <th>{translate("loadDiagnostics.deviceBrowser")}</th>
                   <th>{translate("loadDiagnostics.network")}</th>
-                  <th>{translate("loadDiagnostics.sessionDevice")}</th>
                 </tr></thead>
                 <tbody>{diagnostics.events.map((event) => (
                   <tr key={event.id}>
                     <td>{eventTime(event.createdAt, language)}</td>
-                    <td className="load-diagnostics__uid"><span className="load-diagnostics__identifier" title={event.uid}>{shortIdentifier(event.uid)}</span></td>
+                    <td className="load-diagnostics__uid">{person(event.uid)}</td>
                     <td>{translate(`loadDiagnostics.pages.${event.page}`)}</td>
                     <td>
                       <Duration value={event.durationMs} translate={translate} />
@@ -287,14 +304,8 @@ export function ManagerPageLoadDiagnostics({ onBack }) {
                     <td><span className={`load-diagnostics__result load-diagnostics__result--${event.result}`}>
                       {translate(`loadDiagnostics.results.${event.result}`)}
                     </span></td>
-                    <td>{event.browser}/{event.platform} · {translate(`loadDiagnostics.deviceClasses.${event.deviceClass}`)}</td>
+                    <td>{deviceLabel(event, installed)}</td>
                     <td>{event.connection?.effectiveType || translate("loadDiagnostics.noValue")}</td>
-                    <td><span className="load-diagnostics__identifier" title={`${event.sessionId || "—"} / ${event.deviceId || "—"}`}>
-                      {translate("loadDiagnostics.ids", {
-                        session: shortIdentifier(event.sessionId),
-                        device: shortIdentifier(event.deviceId),
-                      })}
-                    </span></td>
                   </tr>
                 ))}</tbody>
               </table>
