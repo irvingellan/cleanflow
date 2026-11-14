@@ -96,20 +96,27 @@ function percentile(sortedValues, percentileValue) {
   return sortedValues[Math.max(0, Math.ceil(percentileValue * sortedValues.length) - 1)];
 }
 
+// Writers cap durations at 600 s; those visits sat in a background tab, so they
+// say nothing about load speed and would swamp the average.
+export const backgroundDurationCapMs = 600_000;
+const isForegroundDuration = (value) => Number.isFinite(value) && value < backgroundDurationCapMs;
+
 function summarize(events) {
-  const durations = events.map((event) => event.durationMs).filter(Number.isFinite).sort((a, b) => a - b);
+  const backgroundCount = events.filter((event) => Number.isFinite(event.durationMs) && !isForegroundDuration(event.durationMs)).length;
+  const durations = events.map((event) => event.durationMs).filter(isForegroundDuration).sort((a, b) => a - b);
   if (durations.length === 0) {
-    return { eventCount: events.length, averageMs: null, medianMs: null, p95Ms: null, slowest: null };
+    return { eventCount: events.length, backgroundCount, averageMs: null, medianMs: null, p95Ms: null, slowest: null };
   }
   const middle = Math.floor(durations.length / 2);
   return {
     eventCount: events.length,
+    backgroundCount,
     averageMs: Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length),
     medianMs: durations.length % 2 === 0
       ? Math.round((durations[middle - 1] + durations[middle]) / 2)
       : durations[middle],
     p95Ms: percentile(durations, 0.95),
-    slowest: [...events].filter((event) => Number.isFinite(event.durationMs))
+    slowest: [...events].filter((event) => isForegroundDuration(event.durationMs))
       .sort((first, second) => second.durationMs - first.durationMs)[0] || null,
   };
 }

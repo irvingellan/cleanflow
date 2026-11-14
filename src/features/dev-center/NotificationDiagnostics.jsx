@@ -3,7 +3,8 @@ import { useTranslation } from "../../i18n/translations.js";
 import { readLocalNotificationHealth } from "../notifications/notificationHealthService.js";
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
 import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
-import { diagnosticCopy } from "./devCenterNotificationCopy.js";
+import { cleanerPushCopy, diagnosticCopy } from "./devCenterNotificationCopy.js";
+import { deviceLabel } from "../telemetry/diagnosticLabels.js";
 import { sendDeveloperTestNotification } from "./devCenterService.js";
 
 const localeByLanguage = { en: "en-US", pt: "pt-BR", es: "es-ES" };
@@ -41,6 +42,16 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
   const selectedDevice = activeDevices.find((device) => device.registrationId === targetRegistrationId);
   const healthOnlyReports = (diagnostics?.healthReports || []).filter((report) =>
     !(diagnostics?.devices || []).some((device) => device.registrationId === report.registrationId));
+  const healthFor = (device) => (diagnostics?.healthReports || []).find((report) => report.registrationId === device.registrationId);
+  // "irving@… (você) · Mac · Safari — este navegador" instead of a bare device ID.
+  const deviceName = (device) => {
+    const health = healthFor(device);
+    const who = `${device.userEmail || translate("devCenter.unknownAccount")}${device.isCurrentAccount ? ` (${copy("you")})` : ""}`;
+    const what = health ? deviceLabel({ platform: health.platform, browser: health.browserClass, standalone: health.standalone }, copy("installedApp")) : device.platform;
+    const here = device.registrationId && device.registrationId === localHealth?.registrationId ? ` — ${copy("thisBrowser")}` : "";
+    return `${who} · ${what}${here}`;
+  };
+  const isCurrentDevice = (device) => device.active && !["invalidated", "signed-out", "superseded"].includes(device.tokenState);
 
   async function refreshLocalHealth() {
     try {
@@ -75,6 +86,24 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
       setIsSendingTest(false);
       setIsConfirmingTest(false);
     }
+  }
+
+  // One readable card per device: who, which device, and whether a notice can reach it.
+  function renderDevice(device) {
+    const health = healthFor(device);
+    return (
+      <li key={device.registrationId || device.deviceId}>
+        <strong title={device.deviceId}>{deviceName(device)}</strong>
+        {"eligible" in device && <span>{copy(device.eligible === true ? "eligible" : device.eligible === false ? "ineligible" : "eligibilityUnknown")}</span>}
+        {device.tokenState && <span>{copy("registrationState")}: {copy(device.tokenState)}</span>}
+        {health && <span>{translate("devCenter.browserPermission")}: {translate(`devCenter.healthPermission${health.notificationPermission}`)} · {translate("devCenter.fcmRegistration")}: {translate(`devCenter.healthFcm${health.fcmRegistration}`)}</span>}
+        {health?.fcmErrorStage && <span>{translate("devCenter.failure")}: {health.fcmErrorStage} · {health.fcmErrorCode}</span>}
+        {"latestTest" in device && device.latestTest && (
+          <span>{copy("lastTest")}: {formatTimestamp(device.latestTest.attemptedAt, language, translate)} · {translate(`devCenter.testStatus${device.latestTest.status}`)}</span>
+        )}
+        <span>{translate("devCenter.lastSeen")}: {formatTimestamp(device.lastSeenAt, language, translate)}</span>
+      </li>
+    );
   }
 
   return (
@@ -146,37 +175,16 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
               <p>{translate("devCenter.noRegisteredDevices")}</p>
             ) : (
               <ul className="dev-center__diagnostics-list">
-                {diagnostics.devices.map((device) => {
-                  const health = (diagnostics.healthReports || []).find((report) => report.registrationId === device.registrationId);
-                  return <li key={device.registrationId || device.deviceId}>
-                    <strong>{device.userEmail || translate("devCenter.unknownAccount")}</strong>
-                    <span>{translate("devCenter.deviceId")}: {device.deviceId}</span>
-                    <span>{translate("devCenter.platform")}: {device.platform}</span>
-                    <span>{translate("devCenter.language")}: {device.language || translate("common.notProvided")}</span>
-                    <span>{device.active ? translate("devCenter.deviceActive") : translate("devCenter.deviceInactive")}</span>
-                    {device.registrationId && device.registrationId === localHealth?.registrationId && <span>{copy("current")}</span>}
-                    {"eligible" in device && <span>{copy(device.eligible === true ? "eligible" : device.eligible === false ? "ineligible" : "eligibilityUnknown")}</span>}
-                    {device.tokenState && <span>{copy("registrationState")}: {copy(device.tokenState)}</span>}
-                    {"latestTest" in device && (device.latestTest ? (
-                      <span>{copy("lastTest")}: {formatTimestamp(device.latestTest.attemptedAt, language, translate)} · {translate(`devCenter.testStatus${device.latestTest.status}`)}</span>
-                    ) : <span>{copy("noTest")}</span>)}
-                    <span>{translate("devCenter.created")}: {formatTimestamp(device.createdAt, language, translate)}</span>
-                    <span>{translate("devCenter.lastSeen")}: {formatTimestamp(device.lastSeenAt, language, translate)}</span>
-                    <span>{translate("devCenter.updated")}: {formatTimestamp(device.updatedAt, language, translate)}</span>
-                    {health ? (
-                      <>
-                        <span>{translate("devCenter.browserPermission")}: {translate(`devCenter.healthPermission${health.notificationPermission}`)}</span>
-                        <span>{translate("devCenter.healthServiceWorker")}: {translate(`devCenter.healthWorker${health.serviceWorker}`)}</span>
-                        <span>{translate("devCenter.fcmRegistration")}: {translate(`devCenter.healthFcm${health.fcmRegistration}`)}</span>
-                        <span>{copy("displayMode")}: {displayMode(health.standalone)}</span>
-                        <span>{copy("browser")}: {health.platform || copy("unknown")} · {health.browserClass || copy("unknown")}</span>
-                        {health.fcmErrorStage && <span>{translate("devCenter.failure")}: {health.fcmErrorStage} · {health.fcmErrorCode}</span>}
-                        <span>{translate("devCenter.healthLastReported")}: {formatTimestamp(health.checkedAt, language, translate)}</span>
-                      </>
-                    ) : <span>{translate("devCenter.noDeviceHealth")}</span>}
-                  </li>;
-                })}
+                {diagnostics.devices.filter(isCurrentDevice).map((device) => renderDevice(device))}
               </ul>
+            )}
+            {diagnostics.devices.some((device) => !isCurrentDevice(device)) && (
+              <details className="dev-center__old-devices">
+                <summary>{copy("oldDevices").replace("{count}", diagnostics.devices.filter((device) => !isCurrentDevice(device)).length)}</summary>
+                <ul className="dev-center__diagnostics-list">
+                  {diagnostics.devices.filter((device) => !isCurrentDevice(device)).map((device) => renderDevice(device))}
+                </ul>
+              </details>
             )}
             {healthOnlyReports.length > 0 && (
               <>
@@ -257,9 +265,9 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
                 <ul className="dev-center__diagnostics-list">
                   {diagnostics.cleanerDeliveries.map((delivery, index) => (
                     <li key={`${delivery.recordedAt}-${index}`}>
-                      <strong>{delivery.type} · {delivery.deliveryStatus}</strong>
+                      <strong>{cleanerPushCopy(language, delivery.type)}</strong>
+                      <span>{cleanerPushCopy(language, delivery.deliveryStatus)}</span>
                       <span>{formatTimestamp(delivery.recordedAt, language, translate)}</span>
-                      <span>{delivery.stages.join(" · ")}</span>
                       <span>{translate("devCenter.attempted")}: {countOrUnknown(delivery.targetDeviceCount, translate)} · {translate("devCenter.fcmAccepted")}: {countOrUnknown(delivery.acceptedByFcmDevices, translate)}</span>
                       {delivery.devices.map((device) => (
                         <span key={device.installation}>{device.installation} · {device.outcome}</span>
@@ -271,21 +279,6 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
             </section>
           )}
 
-          <section>
-            <h4>{translate("devCenter.developerTestHistory")}</h4>
-            {(diagnostics.developerTests || []).length === 0 ? <p>{translate("devCenter.noDeveloperTests")}</p> : (
-              <ul className="dev-center__diagnostics-list">
-                {diagnostics.developerTests.map((attempt, index) => (
-                  <li key={`${attempt.attemptedAt || "test"}-${index}`}>
-                    <strong>{translate(`devCenter.testStatus${attempt.status}`)}</strong>
-                    <span>{translate("devCenter.deviceId")}: {attempt.targetDeviceId || translate("common.notProvided")}</span>
-                    <span>{translate("devCenter.attemptedAt")}: {formatTimestamp(attempt.attemptedAt, language, translate)}</span>
-                    {attempt.failureCode && <span>{translate("devCenter.failure")}: {attempt.failureCode}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
         </div>
       )}
 
@@ -308,7 +301,7 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
               <option value="">{translate("devCenter.selectTestDevice")}</option>
               {activeDevices.map((device) => (
                 <option value={device.registrationId} key={device.registrationId}>
-                  {device.userEmail || translate("devCenter.unknownAccount")} · {device.deviceId}
+                  {deviceName(device)}
                 </option>
               ))}
             </select>
@@ -320,7 +313,7 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
             </button>
           ) : (
             <div className="dev-center__confirm" role="group" aria-label={translate("devCenter.testConfirmationTitle")}>
-              <p>{translate("devCenter.testConfirmationDescription", { device: selectedDevice?.deviceId || "" })}</p>
+              <p>{translate("devCenter.testConfirmationDescription", { device: selectedDevice ? deviceName(selectedDevice) : "" })}</p>
               <div className="button-row">
                 <button className="button" type="button" disabled={isSendingTest} onClick={() => setIsConfirmingTest(false)}>{translate("common.cancel")}</button>
                 <button className="button button--primary" type="button" disabled={!selectedDevice || isSendingTest} onClick={sendTest}>

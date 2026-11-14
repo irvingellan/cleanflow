@@ -107,7 +107,7 @@ async function openDiagnostics(page, language) {
   await page.getByRole("button", { name: labels[language].signIn, exact: true }).click();
   await expect(page.getByRole("heading", { name: labels[language].title, exact: true })).toBeVisible();
   const diagnostics = page.locator(".manager-load-diagnostics");
-  await expect(diagnostics.locator(".load-diagnostics__filters select").nth(2)).toContainText(syntheticUid);
+  await expect(diagnostics.locator(".load-diagnostics__filters select").nth(2)).toContainText(syntheticUid.slice(0, 6));
   await diagnostics.locator(".load-diagnostics__filters select").nth(2).selectOption(syntheticUid);
   await expect(diagnostics.locator(".load-diagnostics__events-table tbody tr")).toHaveCount(48);
   await expect(diagnostics.locator(".load-diagnostics__waterfall-row")).toHaveCount(6);

@@ -179,3 +179,7 @@
 .system-status__latency--cold { color: var(--color-warning-text, var(--cf-text)); }
 .system-status__latency--failed { color: var(--color-danger-text, var(--cf-text)); }
 .system-status__links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; font-size: var(--cf-text-sm); }
+
+.dev-center__old-devices { margin-top: 10px; }
+.dev-center__old-devices summary { cursor: pointer; color: var(--cf-text-secondary); font-size: var(--cf-text-sm); font-weight: 600; padding: 6px 0; }
+.dev-center__lab-target select { min-height: 40px; width: 100%; max-width: 520px; }

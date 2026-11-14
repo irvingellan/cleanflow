@@ -820,6 +820,9 @@ h1 {
 .load-diagnostics__filters select {
   min-width: 0;
   width: 100%;
+  min-height: 40px;
+  font-size: 0.9375rem;
+  font-weight: 500;
   border: 1px solid var(--color-input-border);
   border-radius: 9px;
   padding: 8px;

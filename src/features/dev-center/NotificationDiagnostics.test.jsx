@@ -74,10 +74,10 @@ describe("NotificationDiagnostics", () => {
     expect(screen.getByText("Server eligible")).toBeVisible();
     expect(screen.getByText("Server ineligible")).toBeVisible();
     expect(screen.getByText(/Latest recorded test for this installation:.*Unknown/)).toBeVisible();
-    expect(screen.getByText("Launch mode: Installed app")).toBeVisible();
+    expect(screen.getByText(/iPhone\/iPad · installed app/)).toBeVisible();
     expect(screen.getByText(/Bounded sample/)).toBeVisible();
     expect(screen.getByText(/Reminder for today's jobs/)).toBeVisible();
-    return screen.findByText("This installation");
+    return screen.findAllByText(/— this browser/).then((matches) => expect(matches.length).toBeGreaterThan(0));
   });
 
   it("renders active and inactive device metadata and aggregate reminder outcomes", () => {
@@ -94,10 +94,10 @@ describe("NotificationDiagnostics", () => {
       },
     });
 
-    expect(screen.getByText("manager@example.test")).toBeVisible();
-    expect(screen.getByText("Device ID: 12345678")).toBeVisible();
-    expect(screen.getByText("Active")).toBeVisible();
-    expect(screen.getByText("Inactive")).toBeVisible();
+    // Devices are named by account and device; inactive ones move under a collapsed list.
+    expect(screen.getByText("manager@example.test · web")).toBeVisible();
+    expect(screen.getByTitle("12345678")).toBeVisible();
+    expect(screen.getByText("Old or inactive devices (1)")).toBeVisible();
     expect(screen.getByText("Partially accepted")).toBeVisible();
     expect(screen.getByText("No active devices")).toBeVisible();
     expect(screen.getByText(/FCM accepted: 1/)).toBeVisible();
@@ -181,8 +181,7 @@ describe("NotificationDiagnostics", () => {
       deliveries: [],
     } });
 
-    expect(screen.getByText("Browser permission: Allowed")).toBeVisible();
-    expect(screen.getByText("FCM registration: Registered in this session")).toBeVisible();
+    expect(screen.getByText(/Browser permission: Allowed · FCM registration: Registered in this session/)).toBeVisible();
     expect(screen.queryByText(/safe-registration-id/)).not.toBeInTheDocument();
   });
 
