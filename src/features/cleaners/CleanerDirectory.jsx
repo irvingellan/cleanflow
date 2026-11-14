@@ -6,6 +6,7 @@ import { Icon } from "../../components/Icon.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { preferredLanguageLabel } from "./cleanerPresentation.js";
 import { filterCleanersByName } from "./cleanerSearch.js";
+import { agendaText } from "../cleaner-agenda/cleanerAgendaMessages.js";
 
 function InformationIcon({ name }) {
   if (name === "phone") {
@@ -24,8 +25,8 @@ function InformationIcon({ name }) {
   );
 }
 
-export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded }) {
-  const { translate } = useTranslation();
+export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded, onAgenda }) {
+  const { language, translate } = useTranslation();
   const [search, setSearch] = useState("");
 
   if (isLoading) {
@@ -50,6 +51,10 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
           </h2>
         </div>
         <div className="cf-page-header__actions">
+          {onAgenda && <button className="button button--secondary" type="button" onClick={onAgenda}>
+            <Icon name="calendar" size={18} />
+            {agendaText(language, "open")}
+          </button>}
           {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
           <button className="button button--primary" type="button" onClick={onCreate}>
             <Icon name="plus" size={18} />

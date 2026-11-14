@@ -78,6 +78,7 @@ import { ThemeProvider, useTheme } from "./theme/theme.js";
 import { useManagerPageLoadTelemetry } from "./features/telemetry/useManagerPageLoadTelemetry.js";
 import { ManagerPageLoadDiagnostics } from "./features/telemetry/ManagerPageLoadDiagnostics.jsx";
 import { WeeklyClosePreview } from "./features/weekly-close/WeeklyClosePreview.jsx";
+import { CleanerAgendaView } from "./features/cleaner-agenda/CleanerAgendaView.jsx";
 import { DeveloperEnvironmentControls } from "./components/EnvironmentBanner.jsx";
 import {
   formatCreatedAt,
@@ -902,6 +903,26 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("cleaner-detail");
   }
 
+  function showCleanerAgenda() {
+    setActiveSection("cleaners");
+    clearProperty();
+    closeJobDetail();
+    setView("cleaner-agenda");
+  }
+
+  function openCleanerAgendaJob(job) {
+    setJobDetailInitialFocus(null);
+    setActiveSection("cleaners");
+    setJobDetailOrigin("cleaner-agenda");
+    openJobDetail(job);
+    setView("job-detail");
+  }
+
+  function returnToCleanerAgenda() {
+    closeJobDetail();
+    setView("cleaner-agenda");
+  }
+
   function returnToClientDetail() {
     clearProperty();
     setView("client-detail");
@@ -1017,7 +1038,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const shellWidth = view === "dashboard" ? "dashboard"
     : view === "job-detail" && jobDetailOrigin === "jobs" ? "workspace"
       : ["job-list", "property-list", "cleaner-list", "client-list", "payout-list", "notification-inbox", "dev-center",
-        "load-time-diagnostics", "weekly-close-preview", "payout-review", "job-detail", "checklist-run"].includes(view) ? "wide"
+        "load-time-diagnostics", "weekly-close-preview", "cleaner-agenda", "payout-review", "job-detail", "checklist-run"].includes(view) ? "wide"
         : "standard";
   const isInboxView = view === "notification-inbox";
   // Wide screens keep the Services list beside the open Job, so search, filters
@@ -1290,8 +1311,11 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             canManageExcluded={canManageExcludedRecords}
             showExcluded={showExcludedRecords}
             onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
+            onAgenda={showCleanerAgenda}
           />
         )}
+
+        {view === "cleaner-agenda" && <CleanerAgendaView onBack={showCleaners} onOpenJob={openCleanerAgendaJob} />}
 
         {view === "payout-list" && (
           <PayoutDirectory
@@ -1492,6 +1516,8 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
                     ? returnToClientDetail
                     : jobDetailOrigin === "cleaner"
                       ? returnToCleanerDetail
+                    : jobDetailOrigin === "cleaner-agenda"
+                      ? returnToCleanerAgenda
                     : returnToJobs
             }
             onOfferToCleaners={showOfferCleaners}
