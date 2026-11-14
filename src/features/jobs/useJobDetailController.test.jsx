@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   getChecklistCapability: vi.fn(),
   issueChecklistCapability: vi.fn(),
   getJobById: vi.fn(),
+  subscribeToJob: vi.fn(),
+  subscribeToJobOffer: vi.fn(),
+  rescheduleJob: vi.fn(),
   getCleaners: vi.fn(),
   getJobIssues: vi.fn(),
   getJobOffers: vi.fn(),
@@ -49,6 +52,12 @@ vi.mock("../issues/issueService.js", () => ({
 vi.mock("./jobOfferService.js", () => ({
   getJobOffers: mocks.getJobOffers,
   createPublicOfferLink: vi.fn(),
+  subscribeToJobOffer: mocks.subscribeToJobOffer,
+}));
+
+vi.mock("./jobScheduleService.js", () => ({
+  rescheduleJob: mocks.rescheduleJob,
+  createManualReplacementOffer: vi.fn(),
 }));
 
 vi.mock("./assignmentService.js", async (importOriginal) => ({
@@ -59,6 +68,7 @@ vi.mock("./assignmentService.js", async (importOriginal) => ({
 vi.mock("./jobService.js", async (importOriginal) => ({
   ...(await importOriginal()),
   getJobById: mocks.getJobById,
+  subscribeToJob: mocks.subscribeToJob,
 }));
 
 import { useJobDetailController } from "./useJobDetailController.js";
@@ -71,6 +81,8 @@ beforeEach(() => {
   mocks.getJobIssues.mockResolvedValue([]);
   mocks.getJobOffers.mockResolvedValue([]);
   mocks.getJobAssignments.mockResolvedValue([]);
+  mocks.subscribeToJob.mockReturnValue(() => {});
+  mocks.subscribeToJobOffer.mockReturnValue(() => {});
   mocks.trackers.length = 0;
   mocks.createManagerPageVisitId.mockImplementation(
     () => `visit-${mocks.createManagerPageVisitId.mock.calls.length}`,
@@ -88,6 +100,48 @@ function deferred() {
   const promise = new Promise((resolvePromise, rejectPromise) => { resolve = resolvePromise; reject = rejectPromise; });
   return { promise, resolve, reject };
 }
+
+describe("useJobDetailController reschedule readback", () => {
+  it("sends the editor revision and publishes server confirmation metadata", async () => {
+    const job = { id: "job-a", operationalStatus: "ASSIGNED", scheduleRevision: 2 };
+    const fresh = { ...job, scheduleRevision: 3, scheduleConfirmation: { revision: 3, byCleaner: {
+      ana: { state: "PENDING", assignmentId: "assignment-a" },
+    } } };
+    mocks.rescheduleJob.mockResolvedValue({ changed: true, scheduleRevision: 3 });
+    mocks.getJobById.mockResolvedValue(fresh);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob(job));
+    let resultOfSave;
+    await act(async () => {
+      resultOfSave = await result.current.actions.saveJobSchedule({
+        scheduledDate: "2026-10-25", scheduledStart: "10:30", expectedScheduleRevision: 1,
+      });
+    });
+    expect(mocks.rescheduleJob).toHaveBeenCalledWith({
+      jobId: job.id, scheduledDate: "2026-10-25", scheduledStart: "10:30", expectedScheduleRevision: 1,
+    });
+    expect(mocks.getJobById).toHaveBeenCalledWith(job.id, { serverOnly: true });
+    expect(resultOfSave.job).toEqual(fresh);
+    expect(result.current.job).toEqual(fresh);
+  });
+
+  it("merges a current replacement observation and unsubscribes on a new revision", async () => {
+    const unsubscribe = vi.fn();
+    mocks.subscribeToJobOffer.mockReturnValue(unsubscribe);
+    const job = { id: "job-a", operationalStatus: "ASSIGNED", scheduleRevision: 2,
+      manualReplacementOffer: { offerId: "replacement-example", scheduleRevision: 2 } };
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob(job));
+    const observeOffer = mocks.subscribeToJobOffer.mock.lastCall[2];
+    const observeJob = mocks.subscribeToJob.mock.lastCall[1];
+    await act(async () => observeOffer({ id: "replacement-example", status: "INTERESTED" }));
+    expect(result.current.detail.offers).toEqual([{ id: "replacement-example", status: "INTERESTED" }]);
+    await act(async () => observeJob({ ...job, scheduleRevision: 3, manualReplacementOffer: undefined }));
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    await act(async () => observeOffer({ id: "replacement-example", status: "DECLINED" }));
+    expect(result.current.detail.offers).toEqual([]);
+  });
+});
 
 describe("useJobDetailController offer refresh isolation", () => {
   it.each(["success", "failure"])("ignores an old Job's late %s after the new Job's offers arrive", async (outcome) => {

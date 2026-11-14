@@ -545,8 +545,15 @@ to that context. Editing is also blocked for archived, `IN_PROGRESS`, and
 `COMPLETED` Jobs. After a successful change the manager is reminded that
 manually sent external communication may need to be resent.
 
-**OPEN QUESTION:** whether an active Offer or Assignment must reconfirm after a
-schedule revision, and which reminder behavior follows, remains open.
+**Issue #58 extension.** An active Assignment on an eligible rescheduled Job
+receives a private confirmation for that revision. A cleaner can respond once
+through her active Hub session. A decline deactivates her exact Assignment and
+commits its audit and a manager notice. A response to an older revision cannot
+change the current schedule or roster. Pending authorized Offers use the current
+schedule and a closed automatic batch keeps its history and close marker. A
+manager can issue a separate manual replacement request after a vacancy. The
+existing push channel links to the signed-in Inbox and the optional WhatsApp
+handoff opens a draft on manager action.
 
 ---
 

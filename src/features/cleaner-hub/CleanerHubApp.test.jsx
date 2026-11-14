@@ -337,6 +337,35 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.queryByRole("button", { name: "Aceitar serviço" })).toBeNull();
   });
 
+  it("passes the displayed schedule revision and leaves updated automatic offers actionable after a stale response", async () => {
+    const { service, handlers } = fakeService();
+    const offer = { ...entries[1], offerStatus: "PENDING", offerDistributionMode: "FIRST_ACCEPT_WINS", scheduleRevision: 2 };
+    service.respondToMyOffer.mockResolvedValue({ state: "stale-schedule" });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [offer], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Aceitar serviço" }));
+    expect(service.respondToMyOffer).toHaveBeenCalledExactlyOnceWith("j2", "ACCEPTED", { scheduleRevision: 2 });
+    expect(await screen.findByText("O horário mudou de novo. Confira o aviso mais recente.")).toBeInTheDocument();
+    act(() => handlers.agenda({ entries: [{ ...offer, scheduleRevision: 3 }], fromCache: false }));
+    expect(screen.getByRole("button", { name: "Aceitar serviço" })).toBeEnabled();
+  });
+
+  it("responds to the authenticated manual replacement without automatic assignment", async () => {
+    const { service, handlers } = fakeService();
+    const offer = { ...entries[1], offerStatus: "PENDING", scheduleRevision: 2, replacementOfferId: "replacement-local" };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [offer], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Tenho interesse" }));
+    expect(service.respondToMyOffer).toHaveBeenCalledExactlyOnceWith("j2", "INTERESTED", {
+      scheduleRevision: 2, offerId: "replacement-local",
+    });
+    expect(screen.queryByRole("button", { name: "Aceitar serviço" })).not.toBeInTheDocument();
+  });
+
   it("submits interest without confirming a manual offer", async () => {
     const { service, handlers } = fakeService();
     render(<CleanerHubApp hubOptions={{ service }} />);

@@ -304,9 +304,15 @@ If the initial Checklist Run exists, schedule editing is blocked: its frozen Job
 snapshot and any issued capability must not be rewritten or left describing an
 old date/time. This conservative lock applies even to an untouched `DRAFT` Run.
 
-Whether a reschedule requires a cleaner to reconfirm, withdraws a pending Offer,
-or triggers a reminder is an **OPEN QUESTION**. The audit model must support
-those later choices.
+Issue #58 adds a server-owned Job `scheduleConfirmation` with the current
+revision and one decision per active cleaner. Each decision is bound to the
+Assignment observed at reschedule time, or to the correctly scoped singular
+legacy roster. The child receipt under the matching schedule revision
+records the terminal decision. Confirmation changes only the decision.
+Decline records the removal audit, advances checklist context and frees the
+vacancy without rewriting the original dates or reopening a closed batch.
+Stale and repeated responses do not create a second Assignment change.
+A manager-issued manual replacement is recorded separately from the old batch.
 
 ## Cleaner account and agenda projection
 

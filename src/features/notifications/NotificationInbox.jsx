@@ -91,25 +91,39 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
     };
   }, [enabled, refresh, role, sessionKey]);
 
-  async function action(method, id) {
+  async function action(method, id, fields) {
     const request = current.current;
     if (!request || request.sessionKey !== sessionKey) return { state: "superseded" };
     let result;
     try {
-      result = await service[method](role, id);
+      result = await (fields ? service[method](role, id, fields) : service[method](role, id));
     } catch (error) {
-      if (request === current.current && ["functions/permission-denied", "functions/unauthenticated"].includes(error?.code)) {
+      if (request !== current.current) return { state: "superseded" };
+      if (["functions/permission-denied", "functions/unauthenticated"].includes(error?.code)) {
         request.version += 1;
         setSnapshot({ sessionKey, state: "error", ...empty });
       }
       throw error;
     }
     if (request !== current.current) return { state: "superseded" };
+    if (method === "respondToReschedule" && ["CONFIRMED", "DECLINED"].includes(result?.state)) {
+      request.version += 1;
+      setSnapshot(previous => ({
+        ...previous,
+        items: previous.items.map(item => item.id === id && item.reschedule?.scheduleRevision === result.scheduleRevision
+          ? {
+            ...item,
+            ...(result.state === "DECLINED" ? { openable: false, serviceLabel: null } : {}),
+            reschedule: result.state === "DECLINED"
+              ? { state: result.state } : { ...item.reschedule, state: result.state },
+          } : item),
+      }));
+    }
     if (["read", "opened", "unavailable"].includes(result?.state)) {
       request.version += 1;
       setSnapshot((previous) => {
         const items = previous.items.map((item) => item.id !== id ? item : result.state === "unavailable"
-          ? { ...item, serviceLabel: null, automaticOffer: null, openable: false } : { ...item, read: true });
+          ? { ...item, serviceLabel: null, automaticOffer: null, reschedule: null, openable: false } : { ...item, read: true });
         return { ...previous, items, loadedUnreadCount: unreadCount(items) };
       });
     }
@@ -121,6 +135,7 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
     ...data, refresh,
     loadOlder: () => data.nextCursor && load(data.nextCursor),
     mark: (id) => action("mark", id), open: (id) => action("open", id),
+    respondToReschedule: role === "CLEANER" ? (id, fields) => action("respondToReschedule", id, fields) : null,
   };
 }
 
@@ -181,6 +196,27 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
     }
   }
 
+  async function respond(item, decision) {
+    setError(null);
+    setBusyId(item.id);
+    try {
+      const result = await inbox.respondToReschedule(item.id, { decision, scheduleRevision: item.reschedule.scheduleRevision });
+      if (mounted.current && result?.state !== "superseded" && !["CONFIRMED", "DECLINED"].includes(result?.state)) {
+        setError("inbox.actionError");
+      }
+    } catch (error) {
+      if (!mounted.current) return;
+      if (error?.details?.reason === "stale-schedule") {
+        setError("inbox.reschedule.stale");
+        await inbox.refresh();
+      } else {
+        setError("inbox.actionError");
+      }
+    } finally {
+      if (mounted.current) setBusyId(null);
+    }
+  }
+
   const counts = {
     all: inbox.items.length,
     unread: inbox.items.filter(({ read }) => !read).length,
@@ -224,6 +260,10 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
             const schedule = automatic?.scheduledDate
               ? [formatDate(automatic.scheduledDate, null, language), automatic.scheduledStart].filter(Boolean).join(" · ")
               : null;
+            const decision = item.reschedule?.state;
+            const proposedSchedule = decision === "PENDING" && item.reschedule.scheduledDate
+              ? [formatDate(item.reschedule.scheduledDate, null, language), item.reschedule.scheduledStart].filter(Boolean).join(" · ")
+              : null;
             return (
               <li key={item.id} className={`cf-notice cf-tone--${look.tone}${item.read ? "" : " is-unread"}`}>
                 <span className="cf-notice__icon" aria-hidden="true"><Icon name={look.icon} size={20} /></span>
@@ -237,12 +277,21 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
                   {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
                   {automatic?.cleanerLabel && <p>{t("inbox.automatic.assignee", { cleaner: automatic.cleanerLabel })}</p>}
                   {schedule && <p className="cf-notice__service">{schedule}</p>}
-                  {!item.openable && <p className="cf-notice__unavailable">{t(item.type === "PUSH_TEST" ? "inbox.testNotice" : "inbox.targetUnavailable")}</p>}
+                  {proposedSchedule && <p>{t("inbox.reschedule.prompt", { schedule: proposedSchedule })}</p>}
+                  {["CONFIRMED", "DECLINED"].includes(decision)
+                    && <p role="status">{t(decision === "CONFIRMED" ? "inbox.reschedule.confirmed" : "inbox.reschedule.declined")}</p>}
+                  {!item.openable && decision !== "DECLINED" && <p className="cf-notice__unavailable">{t(item.type === "PUSH_TEST" ? "inbox.testNotice" : "inbox.targetUnavailable")}</p>}
                 </div>
                 <div className="cf-notice__actions">
                   {item.openable && <button type="button" className={`button${item.read ? "" : " button--primary"}`} disabled={busyId !== null} onClick={() => act("open", item.id)}>
                     {t(look.action)}
                   </button>}
+                  {proposedSchedule && inbox.respondToReschedule && <>
+                    <button type="button" className="button button--primary" disabled={busyId !== null}
+                      onClick={() => respond(item, "CONFIRMED")}>{t("inbox.reschedule.confirm")}</button>
+                    <button type="button" className="button" disabled={busyId !== null}
+                      onClick={() => respond(item, "DECLINED")}>{t("inbox.reschedule.decline")}</button>
+                  </>}
                   {!item.read && <button type="button" className="button button--text" disabled={busyId !== null} onClick={() => act("mark", item.id)}>{t("inbox.markRead")}</button>}
                 </div>
               </li>
@@ -268,6 +317,7 @@ const noticeLooks = {
   AUTO_ASSIGNED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
   ASSIGNED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
   RESCHEDULED: { icon: "clock", tone: "warning", action: "inbox.action.openJob" },
+  RESCHEDULE_DECLINED: { icon: "userX", tone: "attention", action: "inbox.action.openJob" },
   CANCELLED: { icon: "x", tone: "risk", action: "inbox.open" },
   UNASSIGNED: { icon: "userX", tone: "risk", action: "inbox.open" },
   PUSH_TEST: { icon: "bell", tone: "info", action: "inbox.open" },

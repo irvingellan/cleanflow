@@ -85,7 +85,9 @@ import {
 import { removePublicChecklistEvidence } from "./checklistMultiPhotoService.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { rescheduleJobForManager } from "./jobScheduleService.js";
+import { respondToRescheduleForCleaner } from "./jobScheduleResponseService.js";
 import { createAutomaticJobOffersForManager } from "./managerAutomaticOffers.js";
+import { createManualReplacementOfferForManager } from "./managerManualReplacementOfferService.js";
 import { assignCleanerDirectlyForManager, removeAutomaticCleanerAssignmentForManager } from "./managerDirectAssignmentService.js";
 import {
   abandonChecklistRunAndCompleteJobForManager,
@@ -874,6 +876,18 @@ export const assignCleanerDirectly = onCall(
       jobId,
       cleanerId,
       actorUid: request.auth.uid,
+      replacementOfferId: request.data?.replacementOfferId,
+    });
+  },
+);
+
+export const createManualReplacementOffer = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+    return createManualReplacementOfferForManager(db, {
+      organizationId, actorUid: request.auth.uid, jobId: request.data?.jobId,
+      cleanerId: request.data?.cleanerId, scheduleRevision: request.data?.scheduleRevision,
     });
   },
 );
@@ -933,6 +947,7 @@ export const rescheduleJob = onCall(
       jobId: request.data?.jobId,
       scheduledDate: request.data?.scheduledDate,
       scheduledStart: request.data?.scheduledStart,
+      expectedScheduleRevision: request.data?.expectedScheduleRevision,
       actorUid: request.auth.uid,
     });
   },
@@ -1806,8 +1821,20 @@ export const respondToMyOffer = onCall(
     const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
     const result = await respondToOfferForCleaner(db, {
       organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, status: request.data?.status,
+      scheduleRevision: request.data?.scheduleRevision, offerId: request.data?.offerId,
     });
     return { state: result.state, status: result.status || null };
+  },
+);
+
+export const respondToMyReschedule = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
+    return respondToRescheduleForCleaner(db, {
+      organizationId, cleanerId, uid, sessionId, eventId: request.data?.eventId,
+      scheduleRevision: request.data?.scheduleRevision, decision: request.data?.decision,
+    });
   },
 );
 

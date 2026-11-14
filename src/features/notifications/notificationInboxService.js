@@ -12,4 +12,5 @@ export const notificationInboxService = {
   list: (role, fields) => callInbox("listNotificationInbox", role, fields),
   mark: (role, id) => callInbox("markNotificationRead", role, { id }),
   open: (role, id) => callInbox("openNotificationInboxItem", role, { id }),
+  respondToReschedule: (role, eventId, fields) => callInbox("respondToMyReschedule", role, { eventId, ...fields }),
 };

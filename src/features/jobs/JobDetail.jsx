@@ -10,6 +10,10 @@ import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js"
 import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
 import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
 import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
+import { JobScheduleConfirmation } from "./JobScheduleConfirmation.jsx";
+import {
+  currentScheduleConfirmations, currentScheduleRevision, scheduleConfirmationMessage,
+} from "./scheduleConfirmation.js";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
 import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
@@ -115,6 +119,7 @@ export function JobDetail({
   onUpdatePrices,
   onUpdateDetails,
   onUpdateSchedule,
+  onOfferManualReplacement,
   onSimulateAssignedCleaner,
   onResolveIssue,
   onSaveDataProvenance,
@@ -192,11 +197,14 @@ export function JobDetail({
   const [jobScheduleValues, setJobScheduleValues] = useState(() => ({
     scheduledDate: job.scheduledDate || "",
     scheduledStart: job.scheduledStart || "",
+    expectedScheduleRevision: currentScheduleRevision(job),
   }));
   const [isSavingJobSchedule, setIsSavingJobSchedule] = useState(false);
   const [jobScheduleSaveError, setJobScheduleSaveError] = useState("");
   const [hasSavedJobSchedule, setHasSavedJobSchedule] = useState(false);
   const [scheduleCommunicationMayBeStale, setScheduleCommunicationMayBeStale] = useState(false);
+  const [needsScheduleReload, setNeedsScheduleReload] = useState(false);
+  const [scheduleRevisionConflict, setScheduleRevisionConflict] = useState(false);
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const [reminderPreview, setReminderPreview] = useState(null);
@@ -267,6 +275,22 @@ export function JobDetail({
   const cleanerNamesById = { ...resolvedCleanerNames, ...knownCleanerNames };
   const cleanerPhonesById = { ...resolvedCleanerPhones, ...knownCleanerPhones };
   const cleanerLanguagesById = { ...resolvedCleanerLanguages, ...knownCleanerLanguages };
+  const scheduleRevision = currentScheduleRevision(job);
+  const scheduleResponses = currentScheduleConfirmations(job);
+  const scheduleMessage = (key, values) => scheduleConfirmationMessage(language, key, values);
+  const replacementPointer = job.manualReplacementOffer?.scheduleRevision === scheduleRevision
+    ? job.manualReplacementOffer : null;
+  const knownReplacementOffer = replacementPointer && offers.find((offer) =>
+    offer.id === replacementPointer.offerId && offer.offerKind === "MANUAL_REPLACEMENT"
+    && offer.cleanerId === replacementPointer.cleanerId
+    && ["PENDING", "INTERESTED", "DECLINED"].includes(offer.status));
+  const replacementOffer = knownReplacementOffer
+    && (knownReplacementOffer.status === "DECLINED" || knownReplacementOffer.publicOfferExpiresAt?.toMillis?.() > Date.now())
+    ? knownReplacementOffer : null;
+  const canOfferReplacement = Boolean(onOfferManualReplacement && canDirectAssign && !isLoadingOffers && !hasOffersError
+    && automaticOfferJob && job.automaticOfferBatch?.version === 2 && job.startedAt == null
+    && scheduleResponses.some(({ state }) => state === "DECLINED")
+    && (!replacementPointer || (knownReplacementOffer && (!replacementOffer || replacementOffer.status === "DECLINED"))));
   const cleanerLanguageFor = (cleanerId) =>
     normalizeCleanerPreferredLanguage(cleanerLanguagesById[cleanerId]);
   const cleanerLanguageLabelFor = (cleanerId) =>
@@ -281,6 +305,7 @@ export function JobDetail({
     job.assignedCleanerId,
     ...activeAssignments.map((assignment) => assignment.cleanerId),
     ...offers.map((offer) => offer.cleanerId),
+    ...scheduleResponses.map((response) => response.cleanerId),
   ]
     .filter(Boolean)
     .filter(
@@ -603,12 +628,15 @@ export function JobDetail({
     setJobScheduleValues({
       scheduledDate: job.scheduledDate || "",
       scheduledStart: job.scheduledStart || "",
+      expectedScheduleRevision: currentScheduleRevision(job),
     });
     setIsEditingJobSchedule(false);
     setIsSavingJobSchedule(false);
     setJobScheduleSaveError("");
     setHasSavedJobSchedule(false);
     setScheduleCommunicationMayBeStale(false);
+    setNeedsScheduleReload(false);
+    setScheduleRevisionConflict(false);
     setIntentNotice(null);
   }, [job.id]);
 
@@ -700,15 +728,19 @@ export function JobDetail({
     setJobScheduleValues({
       scheduledDate: job.scheduledDate || "",
       scheduledStart: job.scheduledStart || "",
+      expectedScheduleRevision: currentScheduleRevision(job),
     });
     setJobScheduleSaveError("");
     setHasSavedJobSchedule(false);
     setScheduleCommunicationMayBeStale(false);
+    setNeedsScheduleReload(false);
+    setScheduleRevisionConflict(false);
     setIsEditingJobSchedule(true);
   }
 
   async function saveJobSchedule(event) {
     event.preventDefault();
+    if (scheduleRevisionConflict || isSavingJobSchedule) return;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(jobScheduleValues.scheduledDate)) {
       setJobScheduleSaveError(translate("jobs.scheduleInvalidDate"));
       return;
@@ -729,21 +761,26 @@ export function JobDetail({
     setIsSavingJobSchedule(true);
     setJobScheduleSaveError("");
     setHasSavedJobSchedule(false);
+    const jobId = job.id;
     try {
-      const result = await onUpdateSchedule({
-        scheduledDate: jobScheduleValues.scheduledDate,
-        scheduledStart: jobScheduleValues.scheduledStart,
-      });
+      const result = await onUpdateSchedule(jobScheduleValues);
+      if (currentJobIdRef.current !== jobId) return;
       setJobScheduleValues({
         scheduledDate: result?.job?.scheduledDate || jobScheduleValues.scheduledDate,
         scheduledStart: result?.job?.scheduledStart || "",
+        expectedScheduleRevision: currentScheduleRevision(result?.job || job),
       });
+      setNeedsScheduleReload(result?.needsScheduleReload === true);
       setScheduleCommunicationMayBeStale(result?.changed === true);
       setIsEditingJobSchedule(false);
       setHasSavedJobSchedule(true);
     } catch (error) {
+      if (currentJobIdRef.current !== jobId) return;
       const reason = error?.details?.reason;
-      setJobScheduleSaveError(reason === "checklist-run-exists"
+      setScheduleRevisionConflict(reason === "stale-schedule");
+      setJobScheduleSaveError(reason === "stale-schedule"
+        ? scheduleMessage("stale")
+        : reason === "checklist-run-exists"
         ? translate("jobs.scheduleLockedByChecklist")
         : reason === "status" || reason === "archived"
           ? translate("jobs.scheduleReadOnlyState")
@@ -753,7 +790,7 @@ export function JobDetail({
               ? translate("jobs.scheduleInvalidTime")
               : translate("jobs.scheduleUpdateError"));
     } finally {
-      setIsSavingJobSchedule(false);
+      if (currentJobIdRef.current === jobId) setIsSavingJobSchedule(false);
     }
   }
 
@@ -1170,6 +1207,24 @@ export function JobDetail({
       />}
       </aside>
       <div className="cf-job__sections">
+      {scheduleResponses.length > 0 && (
+        <JobScheduleConfirmation key={`${job.id}:${scheduleRevision}`}
+          job={job} responses={scheduleResponses} language={language} translate={translate}
+          cleanerName={(id, assignmentId) => currentCleanerName(
+            id,
+            assignments.find((assignment) => assignment.id === assignmentId && assignment.cleanerId === id)?.cleanerNameSnapshot
+              || (id === job.assignedCleanerId ? job.assignedCleanerName : null),
+            cleanerNamesById, translate("common.notProvided"),
+          )}
+          cleanerLanguage={cleanerLanguageFor} cleanerPhone={(id) => cleanerPhonesById[id]}
+          replacementOffer={canDirectAssign ? replacementOffer : null}
+          replacementCandidates={availableCleaners.filter((cleaner) => canAssignCleanerDirectly(job, cleaner)).filter(({ id }) =>
+            !scheduleResponses.some(({ cleanerId, state }) => cleanerId === id && state === "DECLINED"))}
+          canOfferReplacement={canOfferReplacement}
+          onOfferReplacement={onOfferManualReplacement}
+          onAssignReplacement={onAssignCleanerDirectly}
+        />
+      )}
       <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
       <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
         {hasSavedJobSchedule && !isEditingJobSchedule && (
@@ -1177,6 +1232,9 @@ export function JobDetail({
         )}
         {hasSavedJobSchedule && scheduleCommunicationMayBeStale && !isEditingJobSchedule && (
           <p className="form-hint">{translate("jobs.scheduleExternalMessageWarning")}</p>
+        )}
+        {needsScheduleReload && currentScheduleConfirmations(job).length === 0 && !isEditingJobSchedule && (
+          <p className="form-hint" role="status">{scheduleMessage("readbackError")}</p>
         )}
         {isEditingJobSchedule && (
           <form className="cleaning-form" noValidate onSubmit={saveJobSchedule}>
@@ -1218,14 +1276,17 @@ export function JobDetail({
                   setJobScheduleValues({
                     scheduledDate: job.scheduledDate || "",
                     scheduledStart: job.scheduledStart || "",
+                    expectedScheduleRevision: currentScheduleRevision(job),
                   });
                 }}
               >
                 {translate("common.cancel")}
               </button>
-              <button className="button button--primary" type="submit" disabled={isSavingJobSchedule}>
-                {isSavingJobSchedule ? translate("jobs.savingSchedule") : translate("jobs.saveSchedule")}
-              </button>
+              {scheduleRevisionConflict
+                ? <button className="button" type="button" onClick={startJobScheduleEdit}>{scheduleMessage("reviewCurrent")}</button>
+                : <button className="button button--primary" type="submit" disabled={isSavingJobSchedule}>
+                  {isSavingJobSchedule ? translate("jobs.savingSchedule") : translate("jobs.saveSchedule")}
+                </button>}
             </div>
           </form>
         )}

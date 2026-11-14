@@ -84,6 +84,7 @@ service cloud.firestore {
         && (!('scheduleRevision' in request.resource.data)
           || (request.resource.data.scheduleRevision is int
             && request.resource.data.scheduleRevision == 0))
+        && !request.resource.data.keys().hasAny(['scheduleConfirmation', 'manualReplacementOffer'])
         && (!('checklistContextRevision' in request.resource.data)
           || checklistContextRevision(request.resource.data) == 0);
     }
@@ -113,7 +114,7 @@ service cloud.firestore {
 
     function jobScheduleUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['scheduledDate', 'scheduledStart', 'scheduleRevision']);
+        .hasAny(['scheduledDate', 'scheduledStart', 'scheduleRevision', 'scheduleConfirmation', 'manualReplacementOffer']);
     }
 
     function isAutomaticOfferJob(data) {
@@ -355,13 +356,15 @@ service cloud.firestore {
         allow create: if activeManager(orgId) && !automaticOfferJob(orgId, jobId)
           && request.resource.data.get('status', null) != 'ACCEPTED'
           && !request.resource.data.keys().hasAny([
-            'offerDistributionMode', 'offeredChecklistContextRevision', 'automaticOfferBatchVersion', 'acceptedAssignmentId'
+            'offerDistributionMode', 'offeredChecklistContextRevision', 'automaticOfferBatchVersion',
+            'acceptedAssignmentId', 'offerKind', 'replacementOfferId', 'replacementAssignmentId'
           ]);
         allow update: if activeManager(orgId) && (automaticOfferJob(orgId, jobId)
           ? managerCanUpdateAutomaticOffer(orgId, jobId, offerId)
           : (request.resource.data.get('status', null) != 'ACCEPTED'
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-              'offerDistributionMode', 'offeredChecklistContextRevision', 'automaticOfferBatchVersion', 'acceptedAssignmentId'
+              'offerDistributionMode', 'offeredChecklistContextRevision', 'automaticOfferBatchVersion',
+              'acceptedAssignmentId', 'offerKind', 'replacementOfferId', 'replacementAssignmentId'
             ])));
         allow delete: if activeManager(orgId) && !automaticOfferJob(orgId, jobId);
       }
@@ -370,13 +373,15 @@ service cloud.firestore {
         // Attendance acknowledgment is server-owned, independent of roster edits.
         allow create: if activeManager(orgId) && !automaticOfferJob(orgId, jobId)
           && !request.resource.data.keys()
-            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod'])
+            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod',
+              'removalReason', 'removalScheduleRevision', 'replacementOfferId'])
           && assignmentParentRevisionAdvanced(orgId, jobId);
         allow delete: if activeManager(orgId) && !automaticOfferJob(orgId, jobId)
           && assignmentParentRevisionAdvanced(orgId, jobId);
         allow update: if activeManager(orgId)
           && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod'])
+            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod',
+              'removalReason', 'removalScheduleRevision', 'replacementOfferId'])
           && (!automaticOfferJob(orgId, jobId)
             || (!('automaticOfferBatch' in
                   get(/databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId)).data)

@@ -333,8 +333,13 @@ snapshot and capability context cannot become inconsistent. Browser clients
 cannot update schedule fields directly; a manager-authorized callable writes
 the Job and its `scheduleHistory` record in one transaction.
 
-**OPEN QUESTION:** whether changed schedules automatically require cleaner
-reconfirmation, withdraw pending Offers, or send a reminder is not yet decided.
+**Issue #58 candidate:** a confirmed date change requests one response from each
+current Assignment. The Inbox shows the new date privately. Current device
+registrations can display the day and time only and open the authenticated Inbox. The cleaner can confirm or decline. A
+decline removes only her Assignment, keeps its audit and alerts the manager
+to the vacancy. Pending invitations use the current schedule. A closed
+automatic batch remains closed when a separate manual replacement is offered.
+The manager can prepare a WhatsApp draft linking to Minha agenda.
 
 ## Property defaults and Job snapshots
 

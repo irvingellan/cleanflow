@@ -4,6 +4,8 @@ import {
   isAutomaticOfferRecord, matchesAutomaticOfferBatch, rosterMatchesActiveAssignments, validRosterId,
 } from "./firstAcceptWins.js";
 import { buildManagerDirectAssignmentData } from "./managerDirectAssignmentService.js";
+import { currentManualReplacementOffer, manualReplacementOfferKind } from "./managerManualReplacementOfferService.js";
+import { jobScheduleRevision } from "./rescheduleConfirmations.js";
 import { manualOfferAvailability } from "./offerSlots.js";
 import {
   createAutomaticOfferConfirmationNotices, createManagerOperationalNotification, managerOfferNotificationGeneration,
@@ -39,7 +41,7 @@ export function respondToAuthenticatedOffer(database, options, identity, authori
 }
 
 async function respondToOffer(database, {
-  organizationId, jobReference, offerReference, tokenHash, status, now = () => new Date(),
+  organizationId, jobReference, offerReference, tokenHash, status, scheduleRevision, now = () => new Date(),
 }, identity) {
   const jobPath = `organizations/${organizationId}/jobs/${jobReference?.id || ""}`;
   if (jobReference?.path !== jobPath
@@ -56,16 +58,23 @@ async function respondToOffer(database, {
     if (!jobSnapshot.exists || !offerSnapshot.exists) return { state: "not-found" };
     const job = jobSnapshot.data();
     const offer = offerSnapshot.data();
+    const replacement = offer.offerKind === manualReplacementOfferKind;
     if (identity) {
-      if (offer.cleanerId !== identity.cleanerId || offerReference.id !== identity.cleanerId) {
+      if (offer.cleanerId !== identity.cleanerId || (!replacement && offerReference.id !== identity.cleanerId)) {
         return { state: "unavailable" };
       }
       await identity.authorizeResponse(transaction);
-    } else if (typeof tokenHash !== "string" || offer.publicOfferTokenHash !== tokenHash) {
+    } else if (replacement || typeof tokenHash !== "string" || offer.publicOfferTokenHash !== tokenHash) {
       return { state: "not-found" };
     }
 
-    if (isAutomaticOfferRecord(offer, job)) {
+    if (replacement) {
+      if (!identity || status === "ACCEPTED" || offer.jobId !== jobReference.id
+        || !currentManualReplacementOffer(job, offer, offerReference.id, typeof now === "function" ? now() : now)) {
+        return { state: "unavailable" };
+      }
+      if (scheduleRevision !== jobScheduleRevision(job)) return { state: "stale-schedule" };
+    } else if (isAutomaticOfferRecord(offer, job)) {
       if (!isAutomaticOfferJob(job) || !isAutomaticOfferJob(offer) || offer.jobId !== jobReference.id
         || job.organizationId !== organizationId
         || (offer.organizationId != null && offer.organizationId !== organizationId)) {
@@ -75,14 +84,17 @@ async function respondToOffer(database, {
       if (!identity) return { state: state === "available" ? "hub-required" : state };
       return respondToAutomaticOffer(transaction, {
         organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity,
-        now,
+        now, scheduleRevision,
       });
     }
-    if (status === "ACCEPTED" || (identity && typeof offer.publicOfferTokenHash !== "string")) {
+    if (status === "ACCEPTED" || (identity && !replacement && typeof offer.publicOfferTokenHash !== "string")) {
       return { state: "unavailable" };
     }
-    const state = publicOfferState(offer, job, typeof now === "function" ? now() : now);
+    const state = replacement ? "available" : publicOfferState(offer, job, typeof now === "function" ? now() : now);
     if (state !== "available") return { state };
+    if (identity && !replacement && scheduleRevision !== undefined && scheduleRevision !== jobScheduleRevision(job)) {
+      return { state: "stale-schedule" };
+    }
     if (offer.status !== "PENDING") return { state: "answered", status: offer.status };
     const notificationContext = {
       organizationId, offerId: offerReference.id, cleanerId: offer.cleanerId,
@@ -105,7 +117,7 @@ async function respondToOffer(database, {
 }
 
 async function respondToAutomaticOffer(transaction, {
-  organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity, now,
+  organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity, now, scheduleRevision,
 }) {
   const assignments = jobReference.collection("assignments");
   const claim = job.firstAcceptClaim;
@@ -127,6 +139,9 @@ async function respondToAutomaticOffer(transaction, {
   }
 
   if (state !== "available") return { state };
+  const currentScheduleRevision = jobScheduleRevision(job);
+  if (isVersioned && (currentScheduleRevision === null
+    || (scheduleRevision ?? 0) !== currentScheduleRevision)) return { state: "stale-schedule" };
   if (status === "INTERESTED") return { state: "unavailable" };
   if (offer.status !== "PENDING") return { state: "answered", status: offer.status };
 

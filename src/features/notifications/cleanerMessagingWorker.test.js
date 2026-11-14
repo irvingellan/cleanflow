@@ -101,6 +101,24 @@ describe("Isolated Cleaner Hub push worker", () => {
     expect(fixture.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "cleanflow-cleaner-push-received" });
   });
 
+  it("displays the valid rescheduled date from structured fields and ignores provider message and links", async () => {
+    const fixture = workerFixture();
+    await fixture.receive({ data: {
+      cleanerBindingId: bindingId, eventId: "schedule", rescheduleDate: "2026-11-19", rescheduleStart: "14:15",
+      body: "private input", link: "//example.test",
+    } });
+    expect(fixture.showNotification).toHaveBeenCalledExactlyOnceWith("CleanFlow", expect.objectContaining({
+      body: expect.stringMatching(/^A data mudou para .+ · 14:15\. Você pode\?$/),
+      data: { cleanerBindingId: bindingId },
+    }));
+    await fixture.receive({ data: {
+      cleanerBindingId: bindingId, eventId: "invalid", rescheduleDate: "2026-02-31", rescheduleStart: "14:15",
+    } });
+    expect(fixture.showNotification).toHaveBeenLastCalledWith("CleanFlow", expect.objectContaining({
+      body: "Abra o CleanFlow para ver seus avisos.",
+    }));
+  });
+
   it("suppresses SDK notification payloads and drops data from an old account", async () => {
     const fixture = workerFixture();
     await fixture.receive({ notification: { title: "Private" }, data: { cleanerBindingId: bindingId } });

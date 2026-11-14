@@ -3,6 +3,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { initialChecklistRunId } from "./checklistRunService.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
+import { currentManualReplacementOffer, isManualReplacementOfferId } from "./managerManualReplacementOfferService.js";
 import {
   automaticOfferBatch, checklistContextRevision, emptySingleOfferRoster, isAutomaticOfferJob,
   rosterMatchesActiveAssignments, validRosterId,
@@ -54,14 +55,17 @@ export function buildManagerDirectAssignmentData(job, {
   return assignment;
 }
 
-/** A manager's explicit selection creates one Assignment without changing Offers. */
+/** A manager creates one Assignment, optionally confirming a signed-in replacement Offer. */
 export async function assignCleanerDirectlyForManager(database, {
   organizationId,
   jobId,
   cleanerId,
   actorUid,
+  replacementOfferId,
+  now = () => new Date(),
 }) {
-  if (![organizationId, jobId, cleanerId].every(validRosterId)) {
+  if (![organizationId, jobId, cleanerId].every(validRosterId)
+    || (replacementOfferId !== undefined && !isManualReplacementOfferId(replacementOfferId))) {
     throw new HttpsError("invalid-argument", "Job or Cleaner is invalid.");
   }
   if (!validRosterId(actorUid)) {
@@ -91,7 +95,8 @@ export async function assignCleanerDirectlyForManager(database, {
     }
     if (!cleanerSnapshot.exists) throw new HttpsError("not-found", "Cleaner not found.");
     const cleaner = cleanerSnapshot.data();
-    if (cleaner.active !== true || cleaner.archivedAt) {
+    if (cleaner.active !== true || cleaner.archivedAt
+      || (cleaner.organizationId != null && cleaner.organizationId !== organizationId)) {
       throw precondition("Only active Cleaners can be assigned.", "cleaner-inactive");
     }
     const cleanerName = typeof cleaner.name === "string" ? cleaner.name.trim() : "";
@@ -109,6 +114,25 @@ export async function assignCleanerDirectlyForManager(database, {
       ? activeAssignmentsQuery.limit(batch.capacity + 1) : activeAssignmentsQuery);
     const activeAssignments = assignmentsSnapshot.docs.map((snapshot) => snapshot.data());
     const activeIds = assertRosterConsistent(job, activeAssignments, organizationId, jobId);
+    const replacementRef = replacementOfferId === undefined ? null : jobReference.collection("offers").doc(replacementOfferId);
+    if (replacementRef) {
+      const replacement = (await transaction.get(replacementRef)).data();
+      const confirmed = assignmentsSnapshot.docs.find(snapshot => snapshot.id === replacement?.replacementAssignmentId);
+      if (replacement?.status === "SELECTED" && replacement.organizationId === organizationId
+        && replacement.jobId === jobId && replacement.cleanerId === cleanerId
+        && confirmed?.data().replacementOfferId === replacementOfferId && confirmed.data().cleanerId === cleanerId) {
+        return {
+          jobId, assignmentId: confirmed.id, cleanerId, assignedCleanerIds: job.assignedCleanerIds,
+          operationalStatus: job.operationalStatus, checklistContextRevision: checklistContextRevision(job),
+        };
+      }
+      if (replacement?.status !== "INTERESTED" || replacement.cleanerId !== cleanerId || replacement.jobId !== jobId
+        || job.organizationId !== organizationId
+        || !currentManualReplacementOffer(job, replacement, replacementOfferId, now())) {
+        throw precondition("This replacement offer is unavailable.", "replacement-unavailable");
+      }
+    }
+
     if (activeIds.has(cleanerId)) {
       throw precondition("This Cleaner is already assigned.", "cleaner-already-assigned");
     }
@@ -122,14 +146,25 @@ export async function assignCleanerDirectlyForManager(database, {
     }
 
     const assignedCleanerIds = [...job.assignedCleanerIds, cleanerId];
-    transaction.create(newAssignmentReference, buildManagerDirectAssignmentData(job, {
-      organizationId, jobId, cleanerId, cleanerName, actorUid,
-    }));
+    const nextAssignment = buildManagerDirectAssignmentData(job, { organizationId, jobId, cleanerId, cleanerName, actorUid });
+    if (replacementRef) {
+      nextAssignment.source = "OFFER";
+      nextAssignment.sourceOfferId = replacementOfferId;
+      nextAssignment.replacementOfferId = replacementOfferId;
+      transaction.update(replacementRef, {
+        status: "SELECTED", replacementAssignmentId: newAssignmentReference.id, selectedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    transaction.create(newAssignmentReference, nextAssignment);
+    const replacementRecipient = job.manualReplacementOffer?.cleanerId;
+    const retireReplacement = Boolean(job.manualReplacementOffer && (replacementRef
+      || replacementRecipient === cleanerId || (batch && assignedCleanerIds.length >= batch.capacity)));
     transaction.update(jobReference, {
       assignedCleanerIds,
       operationalStatus: "ASSIGNED",
       checklistContextRevision: revision + 1,
       ...(automatic && !job.offerDistributionClosedAt ? { offerDistributionClosedAt: FieldValue.serverTimestamp() } : {}),
+      ...(retireReplacement ? { manualReplacementOffer: FieldValue.delete() } : {}),
     });
 
     return {

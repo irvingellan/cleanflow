@@ -296,6 +296,13 @@ test("reschedule push rejects the superseded revision and cancellation never reo
   assert.equal(await pushTarget(records.find((event) => event.scheduleRevision === 1)), null);
   assert.deepEqual(await pushTarget(records.find((event) => event.scheduleRevision === 2)), { kind: "JOB", jobId: "changes" });
 
+  // Persisted pre-feature schedule records remain readable without inventing
+  // an actionable confirmation for either historical event.
+  const beforeArchive = await listNotificationInbox.run(cleaner("ana"));
+  const moves = beforeArchive.items.filter(({ type }) => type === "RESCHEDULED");
+  assert.equal(moves.length, 2);
+  assert.ok(moves.every(({ reschedule }) => reschedule == null));
+
   await job("changes").update({ archivedAt: Timestamp.now(), checklistContextRevision: 4 });
   const archived = await job("changes").get();
   assert.equal(await jobTransition("changes", "archive", rescheduledAgain, archived), 1);
