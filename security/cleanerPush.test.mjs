@@ -312,7 +312,11 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
     assert.equal(await recordCleanerJobInboxEvents(functionDatabase, args), 1);
     assert.equal(await recordCleanerJobInboxEvents(functionDatabase, args), 0);
     assert.equal((await job.collection("assignments").get()).size, 1);
-    assert.equal((await job.collection("managerNotificationDeliveries").get()).size, 1);
+    const deliveries = (await job.collection("managerNotificationDeliveries").get()).docs;
+    assert.deepEqual(deliveries.map((entry) => [entry.get("eventType"), entry.get("deliveryStatus")])
+      .sort(([left], [right]) => left.localeCompare(right)), [
+      ["AUTO_ASSIGNMENT_CONFIRMED", "PENDING"], ["AUTO_OFFER_BATCH_FILLED", "PENDING"],
+    ]);
   }
 
   const assigned = (await inboxReference(cleanerA).where("type", "==", "AUTO_ASSIGNED").get()).docs

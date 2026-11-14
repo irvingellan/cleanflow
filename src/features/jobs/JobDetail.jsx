@@ -28,7 +28,7 @@ import {
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { FIRST_ACCEPT_WINS, automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
-import { canAssignCleanerDirectly } from "./assignmentService.js";
+import { canAssignCleanerDirectly, canDirectlyFillJob } from "./assignmentService.js";
 import { formatIssueCategory } from "../issues/issuePresentation.js";
 import {
   formatCreatedAt,
@@ -244,9 +244,7 @@ export function JobDetail({
   const canEditRoster =
     isAssignmentAware &&
     ["OFFERED", "ASSIGNED"].includes(job.operationalStatus);
-  const canDirectAssign = isAssignmentAware && !job.archivedAt
-    && (!automaticOfferJob || assignedCleanerIds.length === 0)
-    && ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus);
+  const canDirectAssign = canDirectlyFillJob(job);
   const cleanerSelection = useCleanerSelectionContext(job, (canDirectAssign && isDirectAssignmentOpen) || (canEditRoster && Boolean(replacementTargetId)));
   const directCleanerOptions = sortByCleanerExperience(
     filterCleanersByName(availableCleaners.filter((cleaner) => canAssignCleanerDirectly(job, cleaner)), directCleanerSearch),

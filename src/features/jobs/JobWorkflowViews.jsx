@@ -9,7 +9,7 @@ import {
 import { useTranslation } from "../../i18n/translations.js";
 import { createIssue } from "../issues/issueService.js";
 import { createJobOffers, respondToJobOffer } from "./jobOfferService.js";
-import { canOptIntoAutomaticOffers } from "./automaticOffers.js";
+import { automaticOfferOptInLabel, canOptIntoAutomaticOffers } from "./automaticOffers.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 import { CleanerSelectionOption, CleanerSelectionStatus, sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 
@@ -26,14 +26,20 @@ export function OfferCleaners({
   const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
   const [cleanerSearch, setCleanerSearch] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [automatic, setAutomatic] = useState(false);
+  const [distribution, setDistribution] = useState(null);
   const canOptIn = import.meta.env.VITE_AUTOMATIC_OFFERS_MODE === "enabled"
     && canOfferAutomatically && canOptIntoAutomaticOffers(job);
+  const currentDistribution = distribution?.jobId === job.id ? distribution.mode : null;
+  const automatic = currentDistribution !== "manual" && canOptIn;
+  const unavailableAutomatic = currentDistribution === "automatic" && !canOptIn;
   const [hasSendError, setHasSendError] = useState(false);
   const context = useCleanerSelectionContext(job, !isLoading && !hasError && cleaners.length > 0);
   const visibleCleaners = sortByCleanerExperience(filterCleanersByName(cleaners, cleanerSearch), context.result);
 
   function toggleCleaner(cleanerId) {
+    if (currentDistribution === null) {
+      setDistribution({ jobId: job.id, mode: canOptIn ? "automatic" : "manual" });
+    }
     setSelectedCleanerIds((currentIds) =>
       currentIds.includes(cleanerId)
         ? currentIds.filter((id) => id !== cleanerId)
@@ -47,7 +53,7 @@ export function OfferCleaners({
       selectedCleanerIds.includes(cleaner.id),
     );
 
-    if (selectedCleaners.length === 0) {
+    if (selectedCleaners.length === 0 || unavailableAutomatic) {
       return;
     }
 
@@ -125,19 +131,19 @@ export function OfferCleaners({
             </div>
           )}
 
-          {canOptIn && (
+          {(canOptIn || unavailableAutomatic) && (
             <label className="cleaner-option">
               <input
                 type="checkbox"
-                checked={automatic}
+                checked={automatic || unavailableAutomatic}
                 disabled={isSending}
-                onChange={(event) => setAutomatic(event.target.checked)}
+                onChange={(event) => setDistribution({ jobId: job.id, mode: event.target.checked ? "automatic" : "manual" })}
               />
-              <span>{translate("offers.firstAcceptOptIn")}</span>
+              <span>{automaticOfferOptInLabel(job, language, translate)}</span>
             </label>
           )}
 
-          {hasSendError && (
+          {(hasSendError || unavailableAutomatic) && (
             <p className="form-error" role="alert">
               {translate("offers.sendError")}
             </p>
@@ -147,7 +153,7 @@ export function OfferCleaners({
             <button
               className="button button--primary"
               type="submit"
-              disabled={selectedCleanerIds.length === 0 || isSending}
+              disabled={selectedCleanerIds.length === 0 || isSending || unavailableAutomatic}
             >
               {isSending ? translate("offers.sending") : translate("offers.send")}
             </button>

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
-import { createManagerInboxItem, managerInboxTypes } from "./notificationInboxEvents.js";
+import { automaticOfferNotice, createManagerInboxItem, inboxEventId, managerInboxTypes, validInboxSegment } from "./notificationInboxEvents.js";
 import {
   boundedManagerFcmSend, deactivateInvalidManagerDevices, loadEligibleManagerPushDevices,
   managerFcmFailureCode, normalizeManagerFcmResult,
@@ -9,21 +9,28 @@ import {
 export const managerOperationalNotificationCollection = "managerNotificationDeliveries";
 export const managerOperationalNotificationTypes = Object.freeze({
   interest: "CLEANER_INTERESTED", acknowledgment: "ASSIGNMENT_CONFIRMED",
+  automatic: managerInboxTypes.automatic, automaticBatchFilled: managerInboxTypes.automaticBatchFilled,
 });
 const copies = {
   en: {
     CLEANER_INTERESTED: ["👤 Cleaner interested", (cleaner, property) => `${cleaner} is interested in ${property}.`],
     ASSIGNMENT_CONFIRMED: ["✅ Cleaner confirmed", (cleaner, property) => `${cleaner} confirmed ${property}.`],
+    AUTO_ASSIGNMENT_CONFIRMED: ["Cleaner assigned automatically", (cleaner, property, when) => `${cleaner} accepted ${property}${when ? ` for ${when}` : ""}.`],
+    AUTO_OFFER_BATCH_FILLED: ["All spots filled", (_cleaner, property, when) => `All spots for ${property}${when ? ` on ${when}` : ""} are filled.`],
     cleaner: "A cleaner", property: "a property",
   },
   pt: {
     CLEANER_INTERESTED: ["👤 Cleaner interessado", (cleaner, property) => `${cleaner} tem interesse em ${property}.`],
     ASSIGNMENT_CONFIRMED: ["✅ Cleaner confirmou", (cleaner, property) => `${cleaner} confirmou ${property}.`],
+    AUTO_ASSIGNMENT_CONFIRMED: ["Cleaner atribuída automaticamente", (cleaner, property, when) => `${cleaner} aceitou ${property}${when ? ` para ${when}` : ""}.`],
+    AUTO_OFFER_BATCH_FILLED: ["Todas as vagas preenchidas", (_cleaner, property, when) => `Todas as vagas de ${property}${when ? ` em ${when}` : ""} foram preenchidas.`],
     cleaner: "Um cleaner", property: "uma propriedade",
   },
   es: {
     CLEANER_INTERESTED: ["👤 Cleaner interesado", (cleaner, property) => `${cleaner} está interesado en ${property}.`],
     ASSIGNMENT_CONFIRMED: ["✅ Cleaner confirmó", (cleaner, property) => `${cleaner} confirmó ${property}.`],
+    AUTO_ASSIGNMENT_CONFIRMED: ["Cleaner asignada automáticamente", (cleaner, property, when) => `${cleaner} aceptó ${property}${when ? ` para ${when}` : ""}.`],
+    AUTO_OFFER_BATCH_FILLED: ["Todas las plazas cubiertas", (_cleaner, property, when) => `Todas las plazas de ${property}${when ? ` del ${when}` : ""} están cubiertas.`],
     cleaner: "Un cleaner", property: "una propiedad",
   },
 };
@@ -40,8 +47,18 @@ export function managerOfferNotificationGeneration(offer) {
 }
 
 export function managerOperationalNotificationEventId({
-  organizationId, jobId, eventType, offerId, assignmentId, offerGeneration = "legacy",
+  organizationId, jobId, eventType, offerId, assignmentId, offerGeneration = "legacy", batchId,
 }) {
+  const automatic = eventType === managerOperationalNotificationTypes.automatic;
+  const filled = eventType === managerOperationalNotificationTypes.automaticBatchFilled;
+  if (automatic || filled) {
+    if (![organizationId, jobId].every(validInboxSegment) || typeof batchId !== "string"
+      || !/^(0|[1-9]\d{0,15})$/.test(batchId) || !Number.isSafeInteger(Number(batchId))
+      || (automatic ? !validInboxSegment(offerId) || !validInboxSegment(assignmentId) : offerId != null || assignmentId != null)) {
+      throw new Error("Manager notification event context is invalid.");
+    }
+    return inboxEventId(organizationId, jobId, eventType, batchId, ...(automatic ? [offerId, assignmentId] : []));
+  }
   if (![organizationId, jobId, offerId].every(validSegment)
     || !Object.values(managerOperationalNotificationTypes).includes(eventType)
     || (eventType === managerOperationalNotificationTypes.acknowledgment && !validSegment(assignmentId))
@@ -78,6 +95,28 @@ export function createManagerOperationalNotification(transaction, organizationRe
   });
 }
 
+/** A successful V2 acceptance writes both streams atomically with the Assignment. */
+export function createAutomaticOfferConfirmationNotices(transaction, organization, job, {
+  organizationId, cleanerId, cleanerName, offerId, assignmentId, batchId, filled, propertyName, scheduledDate, scheduledStart,
+}) {
+  if (organization.path !== `organizations/${organizationId}`
+    || job.path !== `${organization.path}/jobs/${job.id}` || !validInboxSegment(cleanerId) || typeof filled !== "boolean") {
+    throw new Error("Manager notification event scope is invalid.");
+  }
+  const publish = (eventType, identity, recipient) => {
+    const eventId = managerOperationalNotificationEventId({ organizationId, jobId: job.id, eventType, batchId, ...identity });
+    const notice = automaticOfferNotice(eventType, { cleanerLabel: cleanerName, scheduledDate, scheduledStart });
+    transaction.create(job.collection(managerOperationalNotificationCollection).doc(eventId), {
+      eventId, eventType, batchId, ...identity, cleanerId: recipient, propertyName: safeName(propertyName, null),
+      ...(notice ? { automaticOffer: notice } : {}),
+      deliveryProvider: "fcm", deliveryStatus: "PENDING", createdAt: FieldValue.serverTimestamp(),
+    });
+    createManagerInboxItem(transaction, organization, { eventId, jobId: job.id, type: eventType, automaticOffer: notice });
+  };
+  publish(managerOperationalNotificationTypes.automatic, { offerId, assignmentId }, cleanerId);
+  if (filled) publish(managerOperationalNotificationTypes.automaticBatchFilled, {}, null);
+}
+
 function safeName(value, fallback) {
   return typeof value === "string" && value.trim()
     ? value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120) : fallback;
@@ -89,10 +128,15 @@ export function managerOperationalFcmMessages(devices, eventId, eventType, conte
     const language = typeof device.language === "string" ? device.language.toLowerCase().split("-")[0] : "en";
     const copy = copies[language] || copies.en;
     const [title, body] = copy[eventType];
+    const notice = automaticOfferNotice(eventType, context.automaticOffer);
+    const when = notice?.scheduledDate
+      ? [new Intl.DateTimeFormat(language === "pt" ? "pt-BR" : language === "es" ? "es-US" : "en-US",
+        { dateStyle: "medium", timeZone: "UTC" }).format(new Date(notice.scheduledDate)), notice.scheduledStart].filter(Boolean).join(" · ")
+      : "";
     return {
       token: device.token,
       data: {
-        title, body: body(safeName(context.cleanerName, copy.cleaner), safeName(context.propertyName, copy.property)),
+        title, body: body(safeName(notice?.cleanerLabel || context.cleanerName, copy.cleaner), safeName(context.propertyName, copy.property), when),
         eventId, eventType, link: "/",
       },
       webpush: { headers: { Urgency: "high" } },
@@ -109,7 +153,7 @@ async function recordOutcome(reference, outcome, logger) {
   return outcome;
 }
 
-/** Only the two committed Offer transitions enter this claimed, non-retrying FCM path. */
+/** Only committed operational events enter this claimed, non-retrying FCM path. */
 export async function processManagerOperationalNotification({
   database, deliveryReference, organizationId, jobId, eventId, sendFcm, logger,
   loadManagerDevices = (org) => loadEligibleManagerPushDevices(database, org),
@@ -124,10 +168,12 @@ export async function processManagerOperationalNotification({
     const data = snapshot.data();
     let expected;
     try { expected = managerOperationalNotificationEventId({ ...data, organizationId, jobId }); } catch { return null; }
+    const validCleanerId = data.eventType === managerOperationalNotificationTypes.automatic ? validInboxSegment : validSegment;
     if (eventId !== expected || data.eventId !== eventId || data.deliveryProvider !== "fcm"
-      || (data.eventType === managerOperationalNotificationTypes.acknowledgment
-        && !validSegment(data.cleanerId))
-      || (data.cleanerId !== null && !validSegment(data.cleanerId))) return null;
+      || ([managerOperationalNotificationTypes.acknowledgment, managerOperationalNotificationTypes.automatic].includes(data.eventType)
+        && !validCleanerId(data.cleanerId))
+      || (data.eventType === managerOperationalNotificationTypes.automaticBatchFilled && data.cleanerId !== null)
+      || (data.cleanerId !== null && !validCleanerId(data.cleanerId))) return null;
     transaction.update(deliveryReference, { deliveryStatus: "SENDING", attemptedAt: FieldValue.serverTimestamp() });
     return data;
   });
@@ -141,11 +187,12 @@ export async function processManagerOperationalNotification({
       deliveryStatus: "NO_ACTIVE_DEVICES", targetDeviceCount: 0,
       acceptedByFcmDevices: 0, failedDevices: 0, unknownDevices: 0,
     }, logger);
-    const [cleaner] = event.cleanerId ? await database.getAll(database.doc(
+    const notice = automaticOfferNotice(event.eventType, event.automaticOffer);
+    const [cleaner] = event.cleanerId && !notice?.cleanerLabel ? await database.getAll(database.doc(
       `organizations/${organizationId}/cleaners/${event.cleanerId}`,
     )) : [];
     const messages = managerOperationalFcmMessages(devices, eventId, event.eventType, {
-      propertyName: event.propertyName, cleanerName: cleaner?.data()?.name,
+      propertyName: event.propertyName, cleanerName: cleaner?.data()?.name, automaticOffer: notice,
     });
     const response = await boundedManagerFcmSend(sendFcm, messages);
     const outcome = normalizeManagerFcmResult(response, devices.length);

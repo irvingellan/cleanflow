@@ -1,4 +1,5 @@
 import { cleanerInboxTypes, managerInboxTypes } from "./notificationInboxEvents.js";
+import { managerOperationalNotificationTypes } from "./managerOperationalNotifications.js";
 import { notificationHealthErrorStages, notificationHealthErrorCodes } from "./notificationLab.js";
 
 const deliveryStatuses = new Set([
@@ -161,7 +162,7 @@ export function buildNotificationDiagnostics({
       checkedAt: timestampToIso(data.checkedAt),
     })),
     reviewDeliveries: reviewDeliveries.map(({ data }) => ({
-      eventType: ["CHECKLIST_READY_FOR_REVIEW", "CLEANER_INTERESTED", "ASSIGNMENT_CONFIRMED"].includes(data.eventType)
+      eventType: [managerInboxTypes.checklist, ...Object.values(managerOperationalNotificationTypes)].includes(data.eventType)
         ? data.eventType : "UNKNOWN",
       deliveryStatus: ["PENDING", "SENDING", "NO_ACTIVE_DEVICES", "FCM_ACCEPTED", "PARTIAL", "FAILED", "UNKNOWN"]
         .includes(data.deliveryStatus) ? data.deliveryStatus : "UNKNOWN",

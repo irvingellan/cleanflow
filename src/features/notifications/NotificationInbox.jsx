@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanerMessagingWorkerPath, cleanerPushReceiptEvent } from "./cleanerPushBinding.js";
 import { Icon } from "../../components/Icon.jsx";
+import { formatDate } from "../../lib/presentation.js";
 import { inboxMessage } from "./notificationInboxMessages.js";
 import { notificationInboxEnabled } from "./notificationInboxMode.js";
 import { notificationInboxService } from "./notificationInboxService.js";
@@ -108,7 +109,7 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
       request.version += 1;
       setSnapshot((previous) => {
         const items = previous.items.map((item) => item.id !== id ? item : result.state === "unavailable"
-          ? { ...item, serviceLabel: null, openable: false } : { ...item, read: true });
+          ? { ...item, serviceLabel: null, automaticOffer: null, openable: false } : { ...item, read: true });
         return { ...previous, items, loadedUnreadCount: unreadCount(items) };
       });
     }
@@ -219,6 +220,10 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
         <ul className="cf-inbox__list">
           {items.map((item) => {
             const look = noticeLook(item.type);
+            const automatic = item.openable ? item.automaticOffer : null;
+            const schedule = automatic?.scheduledDate
+              ? [formatDate(automatic.scheduledDate, null, language), automatic.scheduledStart].filter(Boolean).join(" · ")
+              : null;
             return (
               <li key={item.id} className={`cf-notice cf-tone--${look.tone}${item.read ? "" : " is-unread"}`}>
                 <span className="cf-notice__icon" aria-hidden="true"><Icon name={look.icon} size={20} /></span>
@@ -230,6 +235,8 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
                   </div>
                   <h3>{t(`inbox.event.${item.type}`)}</h3>
                   {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
+                  {automatic?.cleanerLabel && <p>{t("inbox.automatic.assignee", { cleaner: automatic.cleanerLabel })}</p>}
+                  {schedule && <p className="cf-notice__service">{schedule}</p>}
                   {!item.openable && <p className="cf-notice__unavailable">{t(item.type === "PUSH_TEST" ? "inbox.testNotice" : "inbox.targetUnavailable")}</p>}
                 </div>
                 <div className="cf-notice__actions">
@@ -254,6 +261,7 @@ const noticeLooks = {
   CHECKLIST_READY_FOR_REVIEW: { icon: "clipCheck", tone: "attention", action: "inbox.action.reviewChecklist" },
   ASSIGNMENT_CONFIRMED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
   AUTO_ASSIGNMENT_CONFIRMED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
+  AUTO_OFFER_BATCH_FILLED: { icon: "checkCircle", tone: "success", action: "inbox.action.openJob" },
   TOMORROW_19: { icon: "calendar", tone: "info", action: "inbox.action.openDashboard" },
   TODAY_07: { icon: "calendar", tone: "info", action: "inbox.action.openDashboard" },
   NEW_OFFER: { icon: "send", tone: "attention", action: "inbox.action.openOffer" },

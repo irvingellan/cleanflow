@@ -106,15 +106,14 @@ describe("automatic offer opt-in", () => {
     });
   });
 
-  it("opts a new single-slot Job in only after the manager checks the option", async () => {
+  it("defaults a new multi-slot Job to automatic offers when the mode is enabled", async () => {
     vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
     const user = userEvent.setup();
     renderOfferCleaners(vi.fn(), "en", {
-      schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [],
+      schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], requiredCleanerCount: 3,
     });
-    const optIn = screen.getByRole("checkbox", { name: "Assign automatically to the first cleaner who accepts" });
-    expect(optIn).not.toBeChecked();
-    await user.click(optIn);
+    const optIn = screen.getByRole("checkbox", { name: "Assign the available spots to the first cleaners who accept" });
+    expect(optIn).toBeChecked();
     await user.click(screen.getByLabelText("Ana"));
     await user.click(screen.getByRole("button", { name: "Create offers" }));
     expect(createJobOffers).toHaveBeenCalledWith({
@@ -124,9 +123,39 @@ describe("automatic offer opt-in", () => {
     });
   });
 
+  it("keeps a manual draft when newly fetched history enables automatic offers", async () => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
+    const job = { id: "job-1", schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [] };
+    const cleaners = [{ id: "ana", name: "Ana" }];
+    const onSent = vi.fn();
+    const form = (eligible) => <TranslationProvider>
+      <OfferCleaners job={job} cleaners={cleaners} canOfferAutomatically={eligible} onSent={onSent} />
+    </TranslationProvider>;
+    const { rerender } = render(form(false));
+    await userEvent.click(screen.getByLabelText("Ana"));
+    rerender(form(true));
+    expect(screen.getByRole("checkbox", { name: /assign automatically/i })).not.toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledExactlyOnceWith({ jobId: job.id, cleaners });
+  });
+
+  it("allows the manager to use manual offers on an eligible Job", async () => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
+    const user = userEvent.setup();
+    renderOfferCleaners(vi.fn(), "en", {
+      schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], requiredCleanerCount: 10,
+    });
+    const optIn = screen.getByRole("checkbox", { name: "Assign the available spots to the first cleaners who accept" });
+    await user.click(optIn);
+    await user.click(screen.getByLabelText("Ana"));
+    await user.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [{ id: "ana", name: "Ana" }] });
+  });
+
   it.each([
     { operationalStatus: "OFFERED" },
-    { requiredCleanerCount: 2 },
+    { requiredCleanerCount: 11 },
+    { requiredCleanerCount: 0 },
     { assignedCleanerIds: ["ana"] },
     { archivedAt: new Date() },
   ])("keeps the automatic option out of incompatible Jobs (%o)", (data) => {

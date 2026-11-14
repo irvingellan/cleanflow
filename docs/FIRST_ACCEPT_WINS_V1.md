@@ -1,15 +1,31 @@
-# First Accept Wins V1
+# First Accept Wins
 
-**Issue #86 · Local release candidate · Production pilot still runs Cleaner Hub V1.**
+Issue #86 defines batch version 2 for 1–10 spots (DEC-047). The Production
+baseline for this change is `bb9380e`, with 57 active Functions and automatic
+offer creation disabled. Publishing the writer and enabling the feature need
+separate approval.
 
-The source baseline is release `a593daf636024d6830bf89c75bd7f6353b4b759f` with its
-documentation checkpoint `5469a32a3d7890b7a4e00ad0031ca1be8f09595b`. The 14
-public Hosting files match the previous release manifest. See the
-[release registry](engineering/WORKTREE_RELEASE_CANDIDATE_REGISTRY.md) for the
-recorded Hosting version and the [Cleaner Hub runbook](CLEANER_HUB_V1.md) for
-existing session and device handling.
+## New batches
 
-## Contract and compatibility
+- The option starts checked only when the feature and the new Job are eligible.
+  The manager can choose manual distribution before sending. The server repeats
+  the eligibility check for empty rosters with no prior Offers or Assignments.
+- The batch freezes capacity and an opening checklist context revision. An
+  accepted Offer stores its exact Assignment ID. Ordinary context advances from
+  these acceptances keep the remaining invitations valid. Pending recipients
+  can still be withdrawn by the manager while the batch is open.
+- When the batch fills, the server closes it in the same transaction. A direct
+  manager assignment or removal also closes it. Later roster corrections stay
+  inside the frozen capacity and cannot reopen the batch.
+- An accepted Assignment produces one manager notification with cleaner and
+  schedule labels. Closing by filling all spots produces one distinct
+  notification. Repeated responses and duplicate deliveries reuse their
+  receipts. Notifications use the existing Inbox and push paths.
+- Job and Offer batch metadata are server-owned. Each cleaner sees her own
+  result and can respond only with a current authorized session. Public links
+  lead to signed-in Minha agenda.
+
+## Unversioned single-slot compatibility
 
 - Default distribution uses the legacy interest/decline flow. A manager
   explicitly selects automatic distribution on a new, unassigned, non-archived
@@ -60,7 +76,7 @@ existing session and device handling.
 
 | Area | Review points |
 |---|---|
-| Functions | New `createAutomaticJobOffers`. Updated `respondToMyOffer`, `assignCleanerDirectly`, `publicOffer`, `syncCleanerAgendaOnJobWrite`, `syncCleanerAgendaOnAssignmentWrite`, and `syncCleanerAgendaOnOfferWrite`. |
+| Functions | New `createAutomaticJobOffers`. New `removeAutomaticCleanerAssignment` for versioned rosters. Updated `respondToMyOffer`, `assignCleanerDirectly`, `publicOffer`, `syncCleanerAgendaOnJobWrite`, `syncCleanerAgendaOnAssignmentWrite`, and `syncCleanerAgendaOnOfferWrite`. |
 | Rules | Job provenance and Assignment method are server-owned. Automatic browser Offer updates can only mint a token or revoke a still-pending invitation. Cleaner reads remain scoped to her agenda projection. |
 | Manager UI | `JobWorkflowViews.jsx`, `JobDetail.jsx`, and the Job services/controller. Existing direct assignment, roster removal, manual Offer and checklist paths. |
 | Cleaner UI | `CleanerHubApp.jsx`, `cleanerAgendaModel.js`, public Offer section of `App.jsx`, and localized copy. |
@@ -99,7 +115,7 @@ for review. Deployment is a separate operation.
    only after the callable is healthy. Use metadata and read-only probes for
    Production verification until the owner separately authorizes an operational
    pilot Job and recipients.
-3. Enable only through the unchecked per-Job opt-in. First run one manager and
+3. Enable only after an owner decision. First run one manager and
    two already linked cleaners under the device protocol below. Observe one
    Assignment, both agenda outcomes, manager audit, and the winner's checklist.
    Record device outcomes separately from provider notification or emulator
@@ -139,7 +155,7 @@ link with the two approved accounts. Record browser/OS, install mode, time and
 outcome, using redacted evidence.
 
 **Claude visual review:** use the existing components and styles. Review the
-unchecked opt-in, manager assignment source and timestamp, awaiting/expired/
+default-checked option and manual override, manager assignment source and timestamp, awaiting/expired/
 unavailable/revoke controls, public Hub CTA, and Hub pending/sending/confirmed/
 taken/offline states. Check focus, screen reader status, contrast and long
 Portuguese, English and Spanish strings on installed 360–390 px screens.

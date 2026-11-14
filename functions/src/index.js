@@ -86,7 +86,7 @@ import { removePublicChecklistEvidence } from "./checklistMultiPhotoService.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { rescheduleJobForManager } from "./jobScheduleService.js";
 import { createAutomaticJobOffersForManager } from "./managerAutomaticOffers.js";
-import { assignCleanerDirectlyForManager } from "./managerDirectAssignmentService.js";
+import { assignCleanerDirectlyForManager, removeAutomaticCleanerAssignmentForManager } from "./managerDirectAssignmentService.js";
 import {
   abandonChecklistRunAndCompleteJobForManager,
   completeJobWithoutChecklistForManager,
@@ -873,6 +873,20 @@ export const assignCleanerDirectly = onCall(
       organizationId,
       jobId,
       cleanerId,
+      actorUid: request.auth.uid,
+    });
+  },
+);
+
+export const removeAutomaticCleanerAssignment = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    await requireOrganizationManager(db, request, organizationId);
+
+    return removeAutomaticCleanerAssignmentForManager(db, {
+      organizationId,
+      jobId: request.data?.jobId,
+      assignmentId: request.data?.assignmentId,
       actorUid: request.auth.uid,
     });
   },

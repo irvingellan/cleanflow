@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { publicOfferState } from "./publicOfferResponseService.js";
-import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
+import { automaticOfferBatchVersion, FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 
 /**
  * Cleaner agenda projection (Cleaner Hub V1).
@@ -139,7 +139,8 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
       propertyName: offer.offeredPropertyName,
       scheduledDate: offer.offeredScheduledDate,
       scheduledStart: offer.offeredScheduledStart,
-    } : closed ? { ...job, operationalStatus: "OFFERED" } : job;
+    } : closed || offer.automaticOfferBatchVersion === automaticOfferBatchVersion
+      ? { ...job, operationalStatus: "OFFERED" } : job;
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, details),
       kind: agendaKinds.offer,

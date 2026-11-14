@@ -1,11 +1,12 @@
 import { FieldValue } from "firebase-admin/firestore";
 import {
-  automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob, isAutomaticOfferRecord,
+  automaticOfferBatch, automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob,
+  isAutomaticOfferRecord, matchesAutomaticOfferBatch, rosterMatchesActiveAssignments, validRosterId,
 } from "./firstAcceptWins.js";
 import { buildManagerDirectAssignmentData } from "./managerDirectAssignmentService.js";
 import { manualOfferAvailability } from "./offerSlots.js";
 import {
-  createManagerOperationalNotification, managerOfferNotificationGeneration,
+  createAutomaticOfferConfirmationNotices, createManagerOperationalNotification, managerOfferNotificationGeneration,
   managerOperationalNotificationCollection, managerOperationalNotificationEventId,
   managerOperationalNotificationTypes,
 } from "./managerOperationalNotifications.js";
@@ -108,11 +109,16 @@ async function respondToAutomaticOffer(transaction, {
 }) {
   const assignments = jobReference.collection("assignments");
   const claim = job.firstAcceptClaim;
+  const batch = automaticOfferBatch(job);
+  const isVersioned = Object.hasOwn(job, "automaticOfferBatch") || Object.hasOwn(offer, "automaticOfferBatchVersion");
+  if (isVersioned && !matchesAutomaticOfferBatch(offer, batch)) return { state: "unavailable" };
+  const claimedAssignmentId = isVersioned ? offer.acceptedAssignmentId
+    : claim?.offerId === offerReference.id && claim.cleanerId === identity.cleanerId ? claim.assignmentId : null;
   if (!job.archivedAt && status === "ACCEPTED" && offer.status === "ACCEPTED"
-    && claim?.offerId === offerReference.id && claim.cleanerId === identity.cleanerId
     && Array.isArray(job.assignedCleanerIds) && job.assignedCleanerIds.includes(identity.cleanerId)
-    && typeof claim.assignmentId === "string" && claim.assignmentId.length > 0 && !claim.assignmentId.includes("/")) {
-    const assignment = (await transaction.get(assignments.doc(claim.assignmentId))).data();
+    && (isVersioned ? validRosterId(claimedAssignmentId)
+      : typeof claimedAssignmentId === "string" && claimedAssignmentId.length > 0 && !claimedAssignmentId.includes("/"))) {
+    const assignment = (await transaction.get(assignments.doc(claimedAssignmentId))).data();
     if (assignment?.isActive === true && assignment.cleanerId === identity.cleanerId
       && assignment.organizationId === organizationId && assignment.jobId === jobReference.id
       && assignment.assignmentMethod === FIRST_ACCEPT_WINS && assignment.sourceOfferId === offerReference.id) {
@@ -130,8 +136,17 @@ async function respondToAutomaticOffer(transaction, {
     return { state: "answered", status };
   }
 
-  const activeAssignments = await transaction.get(assignments.where("isActive", "==", true));
-  if (!activeAssignments.empty) return { state: "already-taken" };
+  const activeQuery = assignments.where("isActive", "==", true);
+  const activeAssignments = await transaction.get(isVersioned ? activeQuery.limit(batch.capacity + 1) : activeQuery);
+  if (isVersioned) {
+    const activeRoster = activeAssignments.docs.map(snapshot => snapshot.data());
+    if (!rosterMatchesActiveAssignments(job, activeRoster, organizationId, jobReference.id)
+      || activeRoster.some(assignment => assignment.assignmentMethod !== FIRST_ACCEPT_WINS)) {
+      return { state: "unavailable" };
+    }
+  } else if (!activeAssignments.empty) {
+    return { state: "already-taken" };
+  }
   // A transaction can wait for another writer. Recheck the server clock after
   // its last read so an expired Offer cannot win because of a stale timestamp.
   const currentState = automaticOfferState(offer, job, typeof now === "function" ? now() : now);
@@ -149,20 +164,38 @@ async function respondToAutomaticOffer(transaction, {
     cleanerAcknowledgedAt: acceptedAt,
     cleanerAcknowledgedOfferId: offerReference.id,
   });
+  const assignedCleanerIds = [...job.assignedCleanerIds, identity.cleanerId];
+  const checklistRevision = checklistContextRevision(job) + 1;
+  const filled = !isVersioned || assignedCleanerIds.length === batch.capacity;
+  const firstAcceptClaim = {
+    cleanerId: identity.cleanerId, offerId: offerReference.id, assignmentId: assignment.id, acceptedAt,
+  };
   transaction.update(jobReference, {
-    assignedCleanerIds: [identity.cleanerId],
+    assignedCleanerIds,
     operationalStatus: "ASSIGNED",
-    checklistContextRevision: checklistContextRevision(job) + 1,
-    offerDistributionClosedAt: acceptedAt,
-    firstAcceptClaim: {
-      cleanerId: identity.cleanerId, offerId: offerReference.id, assignmentId: assignment.id, acceptedAt,
-    },
+    checklistContextRevision: checklistRevision,
+    ...(filled ? { offerDistributionClosedAt: acceptedAt } : {}),
+    ...((!isVersioned || batch.capacity === 1) ? { firstAcceptClaim } : {}),
+    ...(isVersioned ? {
+      automaticOfferBatch: { ...batch, currentContextRevision: checklistRevision },
+      lastAutomaticOfferAcceptance: { cleanerId: identity.cleanerId, assignmentId: assignment.id },
+    } : {}),
   });
-  transaction.update(offerReference, { status, respondedAt: acceptedAt });
-  createManagerOperationalNotification(transaction, organizationReference, jobReference, {
+  transaction.update(offerReference, {
+    status, respondedAt: acceptedAt, ...(isVersioned ? { acceptedAssignmentId: assignment.id } : {}),
+  });
+  const notice = {
     organizationId, automatic: true, offerId: offerReference.id, assignmentId: assignment.id,
     cleanerId: identity.cleanerId, eventType: managerOperationalNotificationTypes.acknowledgment,
     propertyName: job.propertyName,
-  });
+  };
+  if (isVersioned) {
+    createAutomaticOfferConfirmationNotices(transaction, organizationReference, jobReference, {
+      ...notice, batchId: String(batch.openingContextRevision), filled,
+      cleanerName: offer.cleanerName, scheduledDate: job.scheduledDate, scheduledStart: job.scheduledStart,
+    });
+  } else {
+    createManagerOperationalNotification(transaction, organizationReference, jobReference, notice);
+  }
   return { state: "assigned", status: "ACCEPTED" };
 }

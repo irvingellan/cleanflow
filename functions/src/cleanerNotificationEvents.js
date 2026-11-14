@@ -1,5 +1,5 @@
 import { rosterCleanerIds } from "./cleanerAgenda.js";
-import { isAutomaticOfferJob } from "./firstAcceptWins.js";
+import { automaticOfferBatch, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import {
   cleanerInbox, cleanerInboxTypes as types, inboxEventId, inboxEventRecord,
   offerInboxGeneration, validInboxSegment,
@@ -33,10 +33,15 @@ export function planCleanerJobInboxEvents(before, after) {
   }
   for (const cleanerId of next) {
     if (previous.has(cleanerId) || after.operationalStatus !== "ASSIGNED") continue;
-    const claim = after.firstAcceptClaim;
+    const batch = automaticOfferBatch(after);
+    const claim = batch ? after.lastAutomaticOfferAcceptance : after.firstAcceptClaim;
+    const previousClaim = batch ? before?.lastAutomaticOfferAcceptance : before?.firstAcceptClaim;
     const automatic = isAutomaticOfferJob(after) && claim?.cleanerId === cleanerId
-      && claim.assignmentId !== before?.firstAcceptClaim?.assignmentId;
-    changes.push({ cleanerId, type: automatic ? types.automatic : types.assigned });
+      && validInboxSegment(claim.assignmentId) && claim.assignmentId !== previousClaim?.assignmentId;
+    changes.push({
+      cleanerId, type: automatic ? types.automatic : types.assigned,
+      ...(automatic && batch ? { automaticAssignmentId: claim.assignmentId } : {}),
+    });
   }
   return changes;
 }
@@ -69,7 +74,7 @@ export function recordCleanerJobInboxEvents(database, { organizationId, jobId, b
   const previous = before?.data();
   const current = after?.data();
   const organization = database.collection("organizations").doc(organizationId);
-  const records = planCleanerJobInboxEvents(previous, current).map(({ cleanerId, type }) => ({
+  const records = planCleanerJobInboxEvents(previous, current).map(({ cleanerId, type, automaticAssignmentId }) => ({
     organizationId,
     jobId,
     cleanerId,
@@ -78,6 +83,7 @@ export function recordCleanerJobInboxEvents(database, { organizationId, jobId, b
     transitionKey: inboxEventId(eventId),
     contextRevision: notificationRevision(current?.checklistContextRevision),
     scheduleRevision: notificationRevision(current?.scheduleRevision),
+    ...(automaticAssignmentId ? { automaticAssignmentId } : {}),
     createdAt: after?.updateTime || before?.readTime,
   }));
   return storeCleanerEvents(database, organization, records);
