@@ -130,6 +130,12 @@ import {
 // Approved Node22 Policy B; preserve unspecified live configuration.
 setGlobalOptions({ preserveExternalChanges: true, maxInstances: 20 });
 
+// A client wakes a cold Function ahead of need (see src/services/firebase/functionWarmup.js).
+// Checked after authorization, so it only confirms the caller and returns nothing.
+function isWarmupCall(request) {
+  return request.data?.warmup === true;
+}
+
 if (getApps().length === 0) {
   initializeApp();
 }
@@ -804,6 +810,7 @@ export const getChecklistRun = onCall(
   { region: "us-central1" },
   async (request) => {
     await requireOrganizationManager(db, request, organizationId);
+    if (isWarmupCall(request)) return { warm: true };
 
     const jobId = request.data?.jobId;
     if (!validChecklistRunJobId(jobId)) {
@@ -957,6 +964,7 @@ export const getChecklistCapability = onCall(
   { region: "us-central1" },
   async (request) => {
     await requireOrganizationManager(db, request, organizationId);
+    if (isWarmupCall(request)) return { warm: true };
     const jobId = request.data?.jobId;
     if (!validChecklistRunJobId(jobId)) {
       throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
@@ -1017,6 +1025,7 @@ export const getJobPhotoCounts = onCall(
   { region: "us-central1" },
   async (request) => {
     await requireOrganizationManager(db, request, organizationId);
+    if (isWarmupCall(request)) return { warm: true };
     const jobIds = request.data?.jobIds;
     if (!validPhotoCountRequest(jobIds)) throw new HttpsError("invalid-argument", "Photo count request is invalid.");
     return loadJobPhotoCounts(db, { organizationId, jobIds });
@@ -1027,6 +1036,7 @@ export const getChecklistEvidence = onCall(
   { region: "us-central1" },
   async (request) => {
     await requireOrganizationManager(db, request, organizationId);
+    if (isWarmupCall(request)) return { warm: true };
     const jobId = request.data?.jobId;
     const requirementId = request.data?.requirementId;
     const evidenceId = request.data?.evidenceId;
@@ -1453,6 +1463,12 @@ export const publicOffer = onRequest(
 export const publicChecklist = onRequest(
   { region: "us-central1", invoker: "public", timeoutSeconds: 60 },
   async (request, response) => {
+    if (request.method === "GET" && request.query?.warmup === "1") {
+      // Wakes the instance before a cleaner opens a checklist; reads nothing.
+      response.set("Cache-Control", "no-store");
+      response.status(204).end();
+      return;
+    }
     if (!["GET", "POST", "PUT"].includes(request.method)) {
       sendPublicError(response, 405, "method_not_allowed");
       return;
@@ -1799,6 +1815,7 @@ export const openMyChecklist = onCall(
   { region: "us-central1" },
   async (request) => {
     const { uid, cleanerId, sessionId } = await requireActiveCleaner(db, request, organizationId);
+    if (isWarmupCall(request)) return { warm: true };
     return openChecklistForCleaner(db, {
       organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, runId: initialChecklistRunId,
       newToken: newChecklistCapabilityToken, hashToken,
@@ -1811,6 +1828,7 @@ export const getMyJobAccess = onCall(
   { region: "us-central1" },
   async (request) => {
     const { cleanerId } = await requireActiveCleaner(db, request, organizationId);
+    if (isWarmupCall(request)) return { warm: true };
     return loadCleanerJobAccess(db, { organizationId, cleanerId, jobId: request.data?.jobId });
   },
 );

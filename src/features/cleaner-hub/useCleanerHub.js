@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recordManagerAccessDiagnostic } from "../auth/managerAccessDiagnostics.js";
 import * as defaultService from "./cleanerHubService.js";
+import { startFunctionWarmup } from "../../services/firebase/functionWarmup.js";
 import { buildCleanerAgenda, freshnessFor } from "./cleanerAgendaModel.js";
 
 const systemClock = () => new Date();
@@ -146,6 +147,12 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     setAttempt((value) => value + 1);
     service.reconnectAgenda?.().catch(() => undefined);
   }, [service, session.status, signedIn]);
+
+  // Wake the checklist Functions while the cleaner reads the agenda.
+  useEffect(() => {
+    if (!signedIn || typeof service.cleanerWarmupTasks !== "function") return undefined;
+    return startFunctionWarmup(service.cleanerWarmupTasks());
+  }, [service, signedIn]);
 
   const startupNeedsRetry = session.status === "unverified" || membership.state === "error"
     || (signedIn && !agenda.hasSnapshot && Boolean(agenda.error));
