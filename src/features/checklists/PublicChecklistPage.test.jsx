@@ -237,6 +237,11 @@ beforeEach(() => {
       revision,
       checklistAnswers: { ...acknowledgedDraft.checklistAnswers, ...(changes.checklistAnswers || {}) },
       inventoryAnswers: { ...acknowledgedDraft.inventoryAnswers, ...(changes.inventoryAnswers || {}) },
+      ...(changes.inventoryQuantities ? {
+        inventoryQuantities: Object.fromEntries(Object.entries({
+          ...acknowledgedDraft.inventoryQuantities, ...changes.inventoryQuantities,
+        }).filter(([, quantity]) => quantity !== null)),
+      } : {}),
       issueNotes: Object.hasOwn(changes, "issueNotes") ? changes.issueNotes : acknowledgedDraft.issueNotes,
       generalNotes: Object.hasOwn(changes, "generalNotes") ? changes.generalNotes : acknowledgedDraft.generalNotes,
     });
@@ -615,6 +620,98 @@ describe("PublicChecklistPage", () => {
       baseRevision: 1,
       changes: { inventoryAnswers: { soap: "NEEDS_RESTOCK" } },
     })));
+  });
+
+  it("keeps historical inventory levels without an optional quantity field", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    expect(stock("Restock")).toBeVisible();
+    expect(screen.queryByRole("radio", { name: "Empty" })).not.toBeInTheDocument();
+    fireEvent.click(stock("Low"));
+    expect(screen.queryByLabelText("Quantity (optional)")).not.toBeInTheDocument();
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenCalledTimes(1));
+    expect(savePublicChecklistDraft.mock.calls[0][0].changes).toEqual({ inventoryAnswers: { soap: "LOW" } });
+  });
+
+  it("preserves a queued new quantity through an earlier acknowledgement and clears it on a high answer", async () => {
+    const checklist = { ...frozenChecklist, definitionVersion: 2 };
+    getPublicChecklist.mockResolvedValue({ checklist, draft: createDraft() });
+    const levelSave = deferred();
+    savePublicChecklistDraft.mockReturnValueOnce(levelSave.promise);
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    expect(screen.queryByRole("radio", { name: "Restock" })).not.toBeInTheDocument();
+    fireEvent.click(stock("Empty"));
+    expect(savePublicChecklistDraft.mock.calls[0][0].changes).toEqual({ inventoryAnswers: { soap: "EMPTY" } });
+    const quantity = screen.getByLabelText("Quantity (optional)");
+    fireEvent.change(quantity, { target: { value: "0" } });
+    expect(quantity).toHaveValue("0");
+    fireEvent.change(quantity, { target: { value: "1.5" } });
+    expect(quantity).toHaveValue("0");
+    fireEvent.change(quantity, { target: { value: "100" } });
+    expect(quantity).toHaveValue("0");
+    await act(async () => {
+      acknowledgedDraft = createDraft({ revision: 1, inventoryAnswers: { soap: "EMPTY" }, inventoryQuantities: {} });
+      levelSave.resolve({ revision: 1, draft: acknowledgedDraft });
+    });
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenLastCalledWith(expect.objectContaining({
+      baseRevision: 1, changes: { inventoryQuantities: { soap: 0 } },
+    })));
+    expect(quantity).toHaveValue("0");
+    fireEvent.click(stock("High"));
+    expect(screen.queryByLabelText("Quantity (optional)")).not.toBeInTheDocument();
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenLastCalledWith(expect.objectContaining({
+      baseRevision: 2, changes: { inventoryAnswers: { soap: "HIGH" }, inventoryQuantities: { soap: null } },
+    })));
+    fireEvent.click(stock("Low"));
+    expect(screen.getByLabelText("Quantity (optional)")).toHaveValue("");
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenCalledTimes(4));
+    fireEvent.change(screen.getByLabelText("Quantity (optional)"), { target: { value: "99" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Save now" }));
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenLastCalledWith(expect.objectContaining({
+      baseRevision: 4, changes: { inventoryQuantities: { soap: 99 } },
+    })));
+    fireEvent.change(screen.getByLabelText("Quantity (optional)"), { target: { value: "" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Save now" }));
+    await waitFor(() => expect(savePublicChecklistDraft).toHaveBeenLastCalledWith(expect.objectContaining({
+      baseRevision: 5, changes: { inventoryQuantities: { soap: null } },
+    })));
+    expect(screen.getByLabelText("Quantity (optional)")).toHaveValue("");
+  });
+
+  it("shows frozen photo guidance for a new Run and allows review without a quantity or individually tagged photos", async () => {
+    const evidence = [{ evidenceId: "photo-a", requirementId: "living-belongings" }];
+    const checklist = primeMulti(evidence, { definitionVersion: 2, photoRequirements: frozenChecklist.requiredPhotoTypes });
+    acknowledgedDraft = createDraft({ ...acknowledgedDraft, inventoryAnswers: { soap: "LOW" } });
+    getPublicChecklist.mockResolvedValue({ checklist, draft: acknowledgedDraft });
+    renderPage();
+    const orientation = await screen.findByRole("region", { name: "Photos your manager needs" });
+    expect(within(orientation).getByRole("listitem")).toHaveTextContent("Final room");
+    expect(within(orientation).queryByText(/missing|complete/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Quantity (optional)")).toHaveValue("");
+    expect(screen.getByText("Your checklist is ready. Send it to your manager.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send checklist for review" }));
+    await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledOnce());
+  });
+
+  it("omits photo guidance when the new Run has no property photo list", async () => {
+    primeMulti([], { definitionVersion: 2, requiredPhotoTypes: [] });
+    renderPage();
+    await screen.findByLabelText("Choose photos");
+    expect(screen.queryByRole("region", { name: "Photos your manager needs" })).not.toBeInTheDocument();
+  });
+
+  it("keeps an existing V2 photo policy on its historical inventory and guidance", async () => {
+    primeMulti([], { definitionVersion: 1, photoRequirements: frozenChecklist.requiredPhotoTypes });
+    renderPage();
+    await screen.findByRole("heading", { name: "Cleaning checklist" });
+    expect(screen.getByTestId("photo-requirements")).toHaveTextContent("Final room");
+    expect(screen.queryByRole("region", { name: "Photos your manager needs" })).not.toBeInTheDocument();
+    expect(stock("Restock")).toBeVisible();
+    expect(screen.queryByLabelText("Quantity (optional)")).not.toBeInTheDocument();
   });
 
   it("debounces and persists a cleared note", async () => {

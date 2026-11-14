@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "../../i18n/translations.js";
+import { withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
 import { globalChecklistDefinition } from "../checklists/checklistDefinition.js";
 import { normalizePropertyChecklistSettings, resolveChecklistDefinition } from "../checklists/checklistRunDefinition.js";
 
@@ -96,7 +97,8 @@ function settingsFrom(draft) {
 }
 
 export function PropertyChecklistEditor({ property, onSave }) {
-  const { translate } = useTranslation();
+  const { language, translate: baseTranslate } = useTranslation();
+  const translate = withChecklistInventoryMessages(baseTranslate, language);
   const [draft, setDraft] = useState(null);
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);

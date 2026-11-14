@@ -1,5 +1,6 @@
 import { globalChecklistDefinition } from "./checklistDefinition.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
+import { checklistRunDefinitionVersion } from "./checklistInventory.js";
 
 const allowedItemKeys = ["id", "label", "requiresPhoto", "canBeNotApplicable", "order"];
 const allowedInventoryKeys = ["id", "label", "hidden"];
@@ -197,7 +198,7 @@ export function projectChecklistRunForCleaner(checklistRun, {
   return {
     status: checklistRun?.status === "READY_FOR_REVIEW" ? "READY_FOR_REVIEW" : "DRAFT",
     readyForReviewAt,
-    definitionVersion: checklistRun?.definitionVersion || null,
+    definitionVersion: checklistRunDefinitionVersion(checklistRun),
     ...(checklistRun?.evidencePolicy?.version === 2 ? { evidencePolicy: {
       version: 2, maxPhotos: checklistRun.evidencePolicy.maxPhotos, maxTotalBytes: checklistRun.evidencePolicy.maxTotalBytes,
     } } : {}),

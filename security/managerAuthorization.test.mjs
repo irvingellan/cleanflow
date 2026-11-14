@@ -1190,7 +1190,7 @@ async function saveRequiredChecklistPhoto(token) {
   return result;
 }
 
-async function prepareReadyClientReportRun() {
+async function prepareReadyClientReportRun({ legacyInventory = true } = {}) {
   await seedEligibleChecklistJob({
     checklistSettings: {
       additionalChecklistItems: [{ id: "client-window-check", sectionId: "living-general", label: "Check windows" }],
@@ -1198,6 +1198,10 @@ async function prepareReadyClientReportRun() {
       cleanerInstructions: "Cleaner-facing instruction.",
     },
   });
+  const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
+  if (legacyInventory) {
+    await runRef.update({ definitionVersion: 1, "resolvedDefinition.definitionVersion": 1 });
+  }
   const cleanerCapability = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
   await saveRequiredChecklistPhoto(cleanerCapability.token);
   const completeAnswers = await completeChecklistAnswers();
@@ -1208,7 +1212,8 @@ async function prepareReadyClientReportRun() {
     changes: {
       ...completeAnswers,
       checklistAnswers: { ...completeAnswers.checklistAnswers, "bed-remake": "DONE", "client-window-check": "DONE" },
-      inventoryAnswers: { ...completeAnswers.inventoryAnswers, "hand-soap": "NEEDS_RESTOCK", "client-tea": "LOW" },
+      inventoryAnswers: { ...completeAnswers.inventoryAnswers, "hand-soap": legacyInventory ? "NEEDS_RESTOCK" : "EMPTY", "client-tea": "LOW" },
+      ...(legacyInventory ? {} : { inventoryQuantities: { "hand-soap": 0 } }),
       issueNotes: "A lamp bulb needs replacement.",
       generalNotes: "Cleaning notes for the client.",
     },
@@ -1221,7 +1226,6 @@ async function prepareReadyClientReportRun() {
     baseRevision: 1,
   });
   assert.equal(ready.code, 200);
-  const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
   await runRef.update({
     "propertySnapshot.accessInstructions": "private access instructions",
     "propertySnapshot.propertyId": "private-property-id",
@@ -1273,7 +1277,8 @@ test("active manager creates one default DRAFT Checklist Run and a retry returns
   const run = runs.docs[0].data();
   assert.equal(run.status, "DRAFT");
   assert.deepEqual(run.evidencePolicy, { version: 2, maxPhotos: 60, maxTotalBytes: 120 * 1024 * 1024 });
-  assert.equal(run.definitionVersion, 1);
+  assert.equal(run.definitionVersion, 2);
+  assert.equal(run.resolvedDefinition.inventoryItems.length, 15);
   assert.equal(run.resolvedDefinition.sections.flatMap((section) => section.items).length, 28);
   assert.equal(run.createdByUid, "manager");
 });
@@ -1736,7 +1741,8 @@ test("capability-authorized cleaner can hand off one saved DRAFT for manager rev
     token: issued.token, mutationId: "draft-mutation-ready-1", baseRevision: 0,
     changes: {
       ...completeAnswers,
-      inventoryAnswers: { ...completeAnswers.inventoryAnswers, "hand-soap": "NEEDS_RESTOCK" },
+      inventoryAnswers: { ...completeAnswers.inventoryAnswers, "hand-soap": "EMPTY" },
+      inventoryQuantities: { "hand-soap": 0 },
       generalNotes: "All saved",
     },
   });
@@ -1754,6 +1760,7 @@ test("capability-authorized cleaner can hand off one saved DRAFT for manager rev
   assert.equal(first.body.duplicate, false);
   assert.equal(first.body.checklist.status, "READY_FOR_REVIEW");
   assert.equal(first.body.draft.generalNotes, "All saved");
+  assert.equal(first.body.draft.inventoryQuantities["hand-soap"], 0);
   const runPath = `${root}/jobs/job/checklistRuns/initial`;
   const persisted = (await admin.doc(runPath).get()).data();
   assert.equal(persisted.status, "READY_FOR_REVIEW");
@@ -1808,7 +1815,7 @@ test("review handoff rejects unanswered frozen items and missing evidence withou
   assert.equal(handoff.body.error, "checklist_requirements_missing");
   assert.deepEqual(handoff.body.requirements, {
     missingChecklistCount: 26,
-    missingInventoryCount: 12,
+    missingInventoryCount: 14,
     missingPhotoCount: 1,
   });
   const run = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
@@ -1859,7 +1866,7 @@ test("a saved complete checklist without its frozen photo stays editable; adding
   assert.equal(reloaded.code, 200);
   assert.equal(reloaded.body.checklist.status, "READY_FOR_REVIEW");
   assert.equal(reloaded.body.draft.progress.checklist.unanswered, 0);
-  assert.equal(reloaded.body.draft.progress.inventory.answered, 13);
+  assert.equal(reloaded.body.draft.progress.inventory.answered, 15);
   const manager = await getChecklistRun.run(request("manager", { jobId: "job" }));
   assert.equal(manager.run.status, "READY_FOR_REVIEW");
   assert.equal(manager.run.draft.progress.checklist.unanswered, 0);
@@ -2103,6 +2110,31 @@ async function publicClientPortalGet(token, extraQuery = {}, method = "GET") {
   await publicClientPortal({ method, query: { token, ...extraQuery } }, response);
   return response;
 }
+
+test("a new Run exposes corrected inventory quantity without exposing the original to clients", async () => {
+  const { runRef } = await prepareReadyClientReportRun({ legacyInventory: false });
+  const change = { jobId: "job", kind: "inventory", itemId: "hand-soap", answer: { level: "LOW", quantity: 2 } };
+  const draftRef = runRef.collection("drafts").doc("current");
+  const before = (await draftRef.get()).data();
+  await correctChecklistAnswer.run(request("manager", change));
+
+  const getSoap = async () => (await getChecklistRun.run(request("manager", { jobId: "job" })))
+    .run.inventoryItems.find((item) => item.id === "hand-soap");
+  const corrected = await getSoap();
+  assert.deepEqual([corrected.answer, corrected.quantity, corrected.cleanerAnswer, corrected.originalQuantity], ["LOW", 2, "EMPTY", 0]);
+  assert.deepEqual((await draftRef.get()).data(), before);
+
+  const link = await createClientReport.run(request("manager", { jobId: "job" }));
+  const report = await publicClientReportGet(link.token);
+  assert.equal(report.code, 200);
+  assert.deepEqual(report.body.report.inventoryItems.find((item) => item.labelKey === "checklistPreview.handSoap"), {
+    labelKey: "checklistPreview.handSoap", answer: "LOW", quantity: 2,
+  });
+
+  await correctChecklistAnswer.run(request("manager", { ...change, answer: null }));
+  const restored = await getSoap();
+  assert.deepEqual([restored.answer, restored.quantity, restored.originalQuantity], ["EMPTY", 0, undefined]);
+});
 
 test("a manager corrects a cleaner's answer without rewriting it, and the client report follows", async () => {
   const { runRef } = await prepareReadyClientReportRun();

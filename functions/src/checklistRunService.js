@@ -3,6 +3,7 @@ import { applyManagerCorrections, managerCorrection } from "./checklistManagerCo
 import { HttpsError } from "firebase-functions/v2/https";
 import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
 import { checklistDraftReviewRequirements, projectChecklistDraftForRead } from "./checklistDraftService.js";
+import { checklistRunDefinitionVersion, validChecklistInventoryQuantity } from "./checklistInventory.js";
 import { createChecklistEvidencePolicy, isPilotChecklistPhotoRequirement, pilotChecklistPhotoRequirementId, projectChecklistEvidence, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
 
 export const initialChecklistRunId = "initial";
@@ -52,7 +53,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
     id: runId,
     status: run?.status || "DRAFT",
     jobId: typeof run?.jobId === "string" ? run.jobId : null,
-    definitionVersion: Number.isInteger(run?.definitionVersion) ? run.definitionVersion : null,
+    definitionVersion: checklistRunDefinitionVersion(run),
     ...(run?.evidencePolicy?.version === 2 ? { evidencePolicy: createChecklistEvidencePolicy(run.evidencePolicy) } : {}),
     property: {
       id: typeof run?.propertySnapshot?.propertyId === "string"
@@ -76,13 +77,20 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
         ...withCorrection("checklist", item?.id, draftProjection.checklistAnswers?.[item?.id]),
       })),
     })),
-    inventoryItems: (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => ({
-      id: typeof item?.id === "string" ? item.id : "",
-      labelKey: typeof item?.labelKey === "string" ? item.labelKey : null,
-      label: typeof item?.label === "string" ? item.label : null,
-      answer: corrected.inventoryAnswers?.[item?.id] || "UNANSWERED",
-      ...withCorrection("inventory", item?.id, draftProjection.inventoryAnswers?.[item?.id]),
-    })),
+    inventoryItems: (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => {
+      const quantity = corrected.inventoryQuantities?.[item?.id];
+      const originalQuantity = draftProjection.inventoryQuantities?.[item?.id];
+      const correction = withCorrection("inventory", item?.id, draftProjection.inventoryAnswers?.[item?.id]);
+      return {
+        id: typeof item?.id === "string" ? item.id : "",
+        labelKey: typeof item?.labelKey === "string" ? item.labelKey : null,
+        label: typeof item?.label === "string" ? item.label : null,
+        answer: corrected.inventoryAnswers?.[item?.id] || "UNANSWERED",
+        ...(validChecklistInventoryQuantity(quantity) ? { quantity } : {}),
+        ...correction,
+        ...(correction.correctedByManager && validChecklistInventoryQuantity(originalQuantity) ? { originalQuantity } : {}),
+      };
+    }),
     checklistItemCount: sections.reduce(
       (count, section) => count + (Array.isArray(section?.items) ? section.items.length : 0),
       0,

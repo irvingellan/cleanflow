@@ -6,13 +6,13 @@ import { assertChecklistDraftReadyForReview } from "./checklistDraftService.js";
 import { downloadSavedChecklistEvidence } from "./checklistEvidenceService.js";
 import { pilotChecklistPhotoRequirementId, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
 import { selectMultiPhotoEvidence } from "./checklistMultiPhotoService.js";
+import { checklistInventoryNeedsRestock, validChecklistInventoryQuantity } from "./checklistInventory.js";
 
 export const clientReportCapabilityId = "active";
 export const clientReportLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
 const initialRunId = "initial";
 const tokenHashPattern = /^[a-f0-9]{64}$/;
 const checklistAnswers = new Set(["UNANSWERED", "DONE", "NOT_APPLICABLE"]);
-const inventoryAnswers = new Set(["UNANSWERED", "LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"]);
 export const clientReportNoteMaximum = 1000;
 export const clientReportSentChannels = Object.freeze(["WHATSAPP", "EMAIL", "OTHER"]);
 
@@ -94,7 +94,7 @@ export function clientReportSummary(sections, inventoryItems, photoCount) {
     tasksNotApplicable: items.filter((item) => item.answer === "NOT_APPLICABLE").length,
     tasksTotal: items.length,
     photoCount,
-    restockCount: inventoryItems.filter((item) => item.answer === "NEEDS_RESTOCK" || item.answer === "LOW").length,
+    restockCount: inventoryItems.filter((item) => checklistInventoryNeedsRestock(item.answer)).length,
   };
 }
 
@@ -118,10 +118,14 @@ export function projectClientReport(run, draft, evidence, presentationInput = {}
       answer: validAnswer(answers.checklistAnswers?.[item.id], checklistAnswers),
     })),
   }));
-  const inventoryItems = (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => ({
-    ...visibleLabel(item),
-    answer: validAnswer(answers.inventoryAnswers?.[item.id], inventoryAnswers),
-  }));
+  const inventoryItems = (Array.isArray(definition.inventoryItems) ? definition.inventoryItems : []).map((item) => {
+    const quantity = answers.inventoryQuantities?.[item.id];
+    return {
+      ...visibleLabel(item),
+      answer: Object.hasOwn(answers.inventoryAnswers, item.id) ? answers.inventoryAnswers[item.id] : "UNANSWERED",
+      ...(validChecklistInventoryQuantity(quantity) ? { quantity } : {}),
+    };
+  });
   const galleryPhotos = run.evidencePolicy?.version === 2 ? visiblePhotos(run, evidence) : null;
   const hasPhoto = galleryPhotos ? galleryPhotos.length > 0
     : evidence?.status === "SAVED" && evidence.requirementId === pilotChecklistPhotoRequirementId;

@@ -232,6 +232,21 @@ describe("ChecklistRunDetail", () => {
     rerender(view({ answer: "NEEDS_RESTOCK" }, { status: "DRAFT" }));
     expect(screen.queryByRole("button", { name: "Correct" })).not.toBeInTheDocument();
   });
+  it("shows an original inventory quantity of zero and saves a typed correction for a new Run", async () => {
+    const correctAnswer = vi.fn().mockResolvedValue({ corrected: true });
+    render(<TranslationProvider>
+      <ChecklistRunDetail job={{ id: "job-1" }} checklistRun={{
+        id: "initial", status: "READY_FOR_REVIEW", definitionVersion: 2,
+        inventoryItems: [{ id: "hand-soap", label: "Hand soap", answer: "EMPTY", quantity: 0 }],
+      }} onRefresh={vi.fn()} correctAnswer={correctAnswer} />
+    </TranslationProvider>);
+    expect(screen.getByText("Empty · Quantity 0")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Correct" }));
+    fireEvent.change(screen.getByLabelText("Stock level"), { target: { value: "LOW" } });
+    fireEvent.change(screen.getByLabelText("Quantity (optional)"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    await waitFor(() => expect(correctAnswer).toHaveBeenCalledWith("job-1", "inventory", "hand-soap", { level: "LOW", quantity: 2 }));
+  });
   it("shows a cleaner-ready Run and its acknowledged draft without manager editing controls", () => {
     renderChecklistRun({
       status: "READY_FOR_REVIEW",

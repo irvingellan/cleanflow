@@ -76,6 +76,16 @@ describe("PublicClientReportPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("shows an empty inventory item and a count of zero in the public report", async () => {
+    getPublicClientReport.mockResolvedValue({
+      inventoryItems: [{ labelKey: "checklistPreview.shampoo", answer: "EMPTY", quantity: 0 }],
+      sections: [], summary: { restockCount: 1 },
+    });
+    renderPage();
+    expect((await screen.findAllByText("Empty · Quantity 0")).some((node) => !node.closest("[hidden]"))).toBe(true);
+    expect(screen.getAllByText("Shampoo")[0]).toBeVisible();
+  });
+
   it("shows a safe unavailable state for an invalid or revoked link", async () => {
     getPublicClientReport.mockRejectedValue({ retryable: false });
     renderPage("invalid");

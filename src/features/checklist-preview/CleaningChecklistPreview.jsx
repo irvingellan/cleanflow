@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
+import { withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
 import {
   checklistSections,
   createInitialChecklistState,
@@ -15,7 +16,8 @@ import {
 const inventoryLevels = ["LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"];
 
 export function CleaningChecklistPreview() {
-  const { language, setLanguage, translate } = useTranslation();
+  const { language, setLanguage, translate: baseTranslate } = useTranslation();
+  const translate = withChecklistInventoryMessages(baseTranslate, language);
   const [details, setDetails] = useState(demoCleaningDetails);
   const [checklistState, setChecklistState] = useState(createInitialChecklistState);
   const [inventoryState, setInventoryState] = useState(createInitialInventoryState);

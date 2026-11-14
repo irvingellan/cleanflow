@@ -1,7 +1,13 @@
 import { Icon } from "../../components/Icon.jsx";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  checklistInventoryLevels,
+  supportsChecklistInventoryQuantity,
+  validChecklistInventoryQuantity,
+} from "../../../functions/src/checklistInventory.js";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
+import { withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
 import { languageOptions, usePublicTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
 import { checklistSaveStates, usePublicChecklistDraft } from "./usePublicChecklistDraft.js";
@@ -34,7 +40,6 @@ const saveStateKeys = {
   [checklistSaveStates.READY_FOR_REVIEW]: "checklists.readyForReview",
 };
 
-const inventoryAnswers = ["UNANSWERED", "LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"];
 // Phase 5D.1 intentionally supports one frozen pilot evidence requirement only.
 const pilotPhotoRequirementId = "living-belongings";
 
@@ -146,7 +151,6 @@ function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSa
 function ChecklistAnswer({
   item, value, onChange, translate, token, evidence, disabled = false,
   missing = false, photoMissing = false, answerTargetRef, photoTargetRef, onEvidenceSaved, gallery,
-  photoRequirements = null, photoRequirementsAreExample = false,
 }) {
   const label = itemLabel(item, translate);
   const answerValues = ["UNANSWERED", "DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
@@ -210,8 +214,9 @@ function reviewErrorMessage(reviewError, translate) {
   return translate("checklists.readyForReviewError");
 }
 
-function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onCheckReadiness, onSubmit, language, translate, pendingPhotos, refreshingPhotos, remotePendingPhotos }) {
+function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, onCheckReadiness, onSubmit, language, translate, pendingPhotos, refreshingPhotos, remotePendingPhotos, highlightSend }) {
   const [isConfirming, setIsConfirming] = useState(false);
+  const confirmationRef = useRef(null);
   const isReady = saveState === checklistSaveStates.READY_FOR_REVIEW;
   const canSubmit = saveState === checklistSaveStates.SAVED && !isSubmittingReview && !refreshingPhotos;
   const showReviewError = Boolean(reviewError && reviewError !== "checklist_requirements_missing");
@@ -247,17 +252,26 @@ function ReviewHandoff({ checklist, saveState, isSubmittingReview, reviewError, 
       {remotePendingPhotos > 0 && <p role="status">{translate("checklists.remotePendingPhotos")}</p>}
       {!isConfirming ? (
         <>
-          <p>{translate("checklists.readyForReviewPrompt")}</p>
+          <p>{translate(highlightSend ? "checklists.sendForReviewReminder" : "checklists.readyForReviewPrompt")}</p>
           {!canSubmit && <p className="public-checklist__review-help">{translate("checklists.readyForReviewSaveFirst")}</p>}
           {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
-          <button className="button" type="button" disabled={!canSubmit} onClick={() => {
-            check(() => setIsConfirming(true));
-          }}>
-            {translate("checklists.sendForReview")}
-          </button>
+          <div className={highlightSend ? "public-checklist__send-emphasis" : "public-checklist__send-slot"}>
+            <button className="button" type="button" disabled={!canSubmit} onClick={() => {
+              check(() => {
+                setIsConfirming(true);
+                if (highlightSend) requestAnimationFrame(() => {
+                  confirmationRef.current?.scrollIntoView?.({ block: "center" });
+                  confirmationRef.current?.focus({ preventScroll: true });
+                });
+              });
+            }}>
+              {translate("checklists.sendForReview")}
+            </button>
+          </div>
         </>
       ) : (
-        <div className="public-checklist__review-confirmation" role="dialog" aria-labelledby="checklist-review-confirm-title">
+        <div className="public-checklist__review-confirmation" role="dialog" aria-labelledby="checklist-review-confirm-title"
+          ref={confirmationRef} tabIndex={highlightSend ? -1 : undefined}>
           <h3 id="checklist-review-confirm-title">{translate("checklists.sendForReviewConfirmTitle")}</h3>
           <p>{translate("checklists.readyForReviewConfirmBody")}</p>
           {showReviewError && <p className="form-error" role="alert">{reviewErrorMessage(reviewError, translate)}</p>}
@@ -336,7 +350,8 @@ export function PublicChecklistPage({ token }) {
     retryLoad,
     updateEvidence,
   } = usePublicChecklistDraft(token);
-  const { language, setLanguage, translate } = usePublicTranslation(checklist?.preferredLanguage);
+  const { language, setLanguage, translate: baseTranslate } = usePublicTranslation(checklist?.preferredLanguage);
+  const translate = useMemo(() => withChecklistInventoryMessages(baseTranslate, language), [baseTranslate, language]);
   const fieldTargetsRef = useRef(new Map());
   const [hasAttemptedValidation, setHasAttemptedValidation] = useState(false);
   const [confirmedEvidenceIds, setConfirmedEvidenceIds] = useState(() => new Set());
@@ -427,6 +442,12 @@ export function PublicChecklistPage({ token }) {
   const missingChecklistCount = missingItems.filter((item) => item.kind === "checklist").length;
   const missingInventoryCount = missingItems.filter((item) => item.kind === "inventory").length;
   const missingPhotoCount = missingItems.filter((item) => item.kind === "photo").length;
+  const definitionVersion = checklist.definitionVersion;
+  const usesCurrentDefinition = definitionVersion === 2;
+  const inventoryLevels = ["UNANSWERED", ...checklistInventoryLevels(definitionVersion)];
+  const photoOrientation = usesCurrentDefinition
+    ? (checklist.requiredPhotoTypes ?? checklist.photoRequirements ?? [])
+    : [];
   const photoItem = checklist.sections.flatMap((section) => section.items).find((item) => item.requiresPhoto && item.id === pilotPhotoRequirementId);
   const failedPhotos = isV2 ? gallery.local.filter((item) => item.state === "FAILED").length : 0;
   const sendingPhotos = isV2 ? gallery.local.length - failedPhotos : 0;
@@ -440,8 +461,12 @@ export function PublicChecklistPage({ token }) {
     target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     target?.focus?.({ preventScroll: true });
   };
+  const canShowSendStep = !isV2 || gallery.pendingCount === 0;
+  const highlightSend = usesCurrentDefinition && missingItems.length === 0 && canReviewRef.current
+    && canShowSendStep && !gallery.refreshing && !reviewRequirements?.pendingPhotoCount;
   const reviewHandoff = <ReviewHandoff
     checklist={checklist}
+    highlightSend={highlightSend}
     saveState={saveState}
     isSubmittingReview={isSubmittingReview}
     reviewError={reviewError}
@@ -529,7 +554,12 @@ export function PublicChecklistPage({ token }) {
                 {!hasAttemptedValidation && <button className="button button--secondary" type="button" onClick={moveToFirstMissing}>{translate("checklists.goToFirstMissingItem")}</button>}
               </>
             ) : failedPhotos > 0 ? <><p>{translate("checklists.completionPhotosFailedHelp")}</p><button className="button button--secondary" type="button" onClick={moveToPhotos}>{translate("checklists.goToPhotos")}</button></>
-            : saveState === checklistSaveStates.SAVED && (!isV2 || gallery.pendingCount === 0) && <><p>{translate("checklists.completionReadyHelp")}</p><a className="button button--secondary" href="#checklist-review-handoff-title">{translate("checklists.goToSendStep")}</a></>}
+            : canShowSendStep && (usesCurrentDefinition || saveState === checklistSaveStates.SAVED) && (
+              <div className={saveState === checklistSaveStates.SAVED ? "public-checklist__completion-send" : "public-checklist__completion-send is-pending"}>
+                <p>{translate("checklists.completionReadyHelp")}</p>
+                <a className="button button--secondary" href="#checklist-review-handoff-title">{translate("checklists.goToSendStep")}</a>
+              </div>
+            )}
           </section>
         )}
 
@@ -597,9 +627,6 @@ export function PublicChecklistPage({ token }) {
                   else fieldTargetsRef.current.delete(`photo:${item.id}`);
                 }}
                 onEvidenceSaved={(requirementId) => setConfirmedEvidenceIds((current) => new Set([...current, requirementId]))}
-                // FB06: optional frozen list from the Run (proposed contract). Absent on current Runs.
-                photoRequirements={Array.isArray(checklist.photoRequirements) ? checklist.photoRequirements : null}
-                photoRequirementsAreExample={checklist.photoRequirementsSample === true}
               />
             ))}
           </section>
@@ -612,31 +639,54 @@ export function PublicChecklistPage({ token }) {
               <SectionCount done={checklist.inventoryItems.filter((item) => (draft.inventoryAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length} total={checklist.inventoryItems.length} translate={translate} />
             </h2>
             <div className="public-checklist__inventory">
-              {checklist.inventoryItems.map((item) => (
-                <fieldset key={item.id} aria-describedby={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? `inventory-missing-${item.id}` : undefined}
-                  className={`public-checklist__inventory-item${hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) ? " public-checklist__control--missing" : ""}`}>
-                  <legend>{itemLabel(item, translate)}</legend>
-                  <div className="public-checklist__levels">
-                    {inventoryAnswers.map((answer) => {
-                      const current = draft.inventoryAnswers?.[item.id] || "UNANSWERED";
-                      return <label key={answer} data-level={answer} className={answer === "UNANSWERED" ? "visually-hidden" : undefined}
-                        // One tap sets the level; tapping the chosen level again clears it.
-                        onClick={(event) => { if (answer !== "UNANSWERED" && current === answer && !isReadOnly) { event.preventDefault(); queueChanges({ inventoryAnswers: { [item.id]: "UNANSWERED" } }); } }}>
-                        <input type="radio" name={`inventory-answer-${item.id}`} value={answer} checked={current === answer} disabled={isReadOnly}
-                          ref={answer === "LOW" ? (node) => {
-                            if (node) fieldTargetsRef.current.set(`inventory:${item.id}`, node);
-                            else fieldTargetsRef.current.delete(`inventory:${item.id}`);
-                          } : undefined}
-                          onChange={() => queueChanges({ inventoryAnswers: { [item.id]: answer } })} />
-                        {translate(answer === "NEEDS_RESTOCK" ? "checklists.inventoryRestockShort" : `checklists.inventory${answer}`)}
-                      </label>;
-                    })}
-                  </div>
-                  {hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`) && (
-                    <small className="public-checklist__missing-marker" id={`inventory-missing-${item.id}`}>{translate("checklists.inventoryRequiredBeforeReview")}</small>
-                  )}
-                </fieldset>
-              ))}
+              {checklist.inventoryItems.map((item) => {
+                const current = draft.inventoryAnswers?.[item.id] || "UNANSWERED";
+                const showQuantity = supportsChecklistInventoryQuantity(definitionVersion, current);
+                const quantity = draft.inventoryQuantities?.[item.id];
+                const changeLevel = (answer) => queueChanges({
+                  inventoryAnswers: { [item.id]: answer },
+                  ...(showQuantity && !supportsChecklistInventoryQuantity(definitionVersion, answer)
+                    ? { inventoryQuantities: { [item.id]: null } } : {}),
+                });
+                const missing = hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `inventory:${item.id}`);
+                return (
+                  <fieldset key={item.id} aria-describedby={missing ? `inventory-missing-${item.id}` : undefined}
+                    className={`public-checklist__inventory-item${missing ? " public-checklist__control--missing" : ""}`}>
+                    <legend>{itemLabel(item, translate)}</legend>
+                    <div className="public-checklist__levels">
+                      {inventoryLevels.map((answer) => (
+                        <label key={answer} data-level={answer} className={answer === "UNANSWERED" ? "visually-hidden" : undefined}
+                          // One tap sets the level; tapping the chosen level again clears it.
+                          onClick={(event) => { if (answer !== "UNANSWERED" && current === answer && !isReadOnly) { event.preventDefault(); changeLevel("UNANSWERED"); } }}>
+                          <input type="radio" name={`inventory-answer-${item.id}`} value={answer} checked={current === answer} disabled={isReadOnly}
+                            ref={answer === "LOW" ? (node) => {
+                              if (node) fieldTargetsRef.current.set(`inventory:${item.id}`, node);
+                              else fieldTargetsRef.current.delete(`inventory:${item.id}`);
+                            } : undefined}
+                            onChange={() => changeLevel(answer)} />
+                          {translate(answer === "NEEDS_RESTOCK" ? "checklists.inventoryRestockShort" : `checklists.inventory${answer}`)}
+                        </label>
+                      ))}
+                    </div>
+                    {showQuantity && (
+                      <label className="public-checklist__inventory-quantity">
+                        <span>{translate("checklists.inventoryQuantityOptional")}</span>
+                        <input type="text" inputMode="numeric" enterKeyHint="done" value={quantity ?? ""} disabled={isReadOnly || isSubmittingReview}
+                          onChange={({ target: { value } }) => {
+                            if (!/^\d{0,2}$/.test(value)) return;
+                            const next = value === "" ? null : Number(value);
+                            if (next === null || validChecklistInventoryQuantity(next)) {
+                              queueChanges({ inventoryQuantities: { [item.id]: next } }, { debounce: true });
+                            }
+                          }} />
+                      </label>
+                    )}
+                    {missing && (
+                      <small className="public-checklist__missing-marker" id={`inventory-missing-${item.id}`}>{translate("checklists.inventoryRequiredBeforeReview")}</small>
+                    )}
+                  </fieldset>
+                );
+              })}
             </div>
           </section>
         )}
@@ -665,28 +715,33 @@ export function PublicChecklistPage({ token }) {
           </label>
         </section>
 
-        {!isV2 && checklist.requiredPhotoTypes?.length > 0 && (
+        {!isV2 && !usesCurrentDefinition && checklist.requiredPhotoTypes?.length > 0 && (
           <section className="public-checklist__future-note" aria-labelledby="public-checklist-photos-title">
             <h2 id="public-checklist-photos-title">{translate("checklists.requiredPhotos")}</h2>
             <p>{translate("checklists.photosLater")}</p>
           </section>
         )}
 
-        {isV2 && photoItem && (
+        {((isV2 && photoItem) || photoOrientation.length > 0) && (
           <section className="public-checklist__section" id="public-checklist-photos-section" aria-labelledby="public-checklist-photos-section-title">
             <h2 id="public-checklist-photos-section-title" className="public-checklist__section-title">
               <span>{translate("checklists.photosSectionTitle")}</span>
             </h2>
-            <ChecklistPhotoGallery gallery={gallery} token={token} disabled={isReadOnly || isSubmittingReview}
+            {photoOrientation.length > 0 && (
+              <section className="public-checklist__photo-orientation" aria-labelledby="public-checklist-photo-orientation-title">
+                <h3 id="public-checklist-photo-orientation-title">{translate("checklists.photoOrientationTitle")}</h3>
+                <ul>{photoOrientation.map(({ id, label }) => <li key={id}>{label}</li>)}</ul>
+              </section>
+            )}
+            {isV2 && photoItem && <ChecklistPhotoGallery gallery={gallery} token={token} disabled={isReadOnly || isSubmittingReview}
               missing={hasAttemptedValidation && missingItems.some((missingItem) => missingItem.key === `photo:${photoItem.id}`)}
               targetRef={(node) => {
                 if (node) fieldTargetsRef.current.set(`photo:${photoItem.id}`, node);
                 else fieldTargetsRef.current.delete(`photo:${photoItem.id}`);
               }}
               translate={translate}
-              // FB06: optional frozen list from the Run (proposed contract). Absent on current Runs.
-              photoRequirements={Array.isArray(checklist.photoRequirements) ? checklist.photoRequirements : null}
-              requirementsAreExample={checklist.photoRequirementsSample === true} />
+              photoRequirements={!usesCurrentDefinition && Array.isArray(checklist.photoRequirements) ? checklist.photoRequirements : null}
+              requirementsAreExample={checklist.photoRequirementsSample === true} />}
           </section>
         )}
 

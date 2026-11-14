@@ -83,3 +83,28 @@ test("twenty saved photos load no images until explicit view; READY is read-only
   await expect(page.getByRole("button", { name: "View photo", exact: true })).toHaveCount(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test("a ready new Run fixes the existing mobile send button without moving the task", async ({ page }) => {
+  await page.evaluate(() => {
+    globalThis.syntheticSaveDelay = 500;
+    window.resetGallery({ count: 1, newDefinition: true, taskAnswer: "UNANSWERED" });
+  });
+  const target = page.locator('.public-checklist__item--task label[data-answer="DONE"]').first();
+  const top = async () => Math.round((await target.boundingBox()).y + await page.evaluate(() => scrollY));
+  await expect(target).toBeVisible();
+  const send = page.getByRole("button", { name: "Send checklist for review", exact: true });
+  await expect(send).not.toHaveCSS("position", "fixed");
+  const guidance = page.getByRole("region", { name: "Photos your manager needs" });
+  await expect(guidance.getByRole("listitem")).toHaveText("Final room");
+  await target.click();
+  const pending = await top();
+  await expect(send).toHaveCSS("position", "fixed");
+  await expect(send).toBeInViewport();
+  expect(await top()).toBe(pending);
+  await send.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Send checklist for review" })).toHaveCSS("position", "static");
+  await dialog.getByRole("button", { name: "Send checklist for review" }).click();
+  await expect(page.locator(".public-checklist__receipt")).toBeVisible();
+});

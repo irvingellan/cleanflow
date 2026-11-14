@@ -1055,6 +1055,17 @@ under review or completed is never rewritten. The required-photo item keeps its
 evidence contract and can only be renamed. Typed labels are shown as written in
 every language.
 
+**Stock and photo guidance update (2026-11-13).** Newly created Runs freeze
+definition version 2 and the updated default stock list. Property overrides
+continue to apply. Version 1 and unversioned Runs keep their frozen labels and
+`NEEDS_RESTOCK` level. New Runs use `HIGH`, `MEDIUM`, `LOW` and `EMPTY`.
+The optional stock quantity is an integer from 0 to 99 on `LOW` or `EMPTY`.
+Changing to another level clears that quantity. The manager correction layer
+can override the quantity and restore the original on undo. The report and
+portal show the effective level and quantity. Configured photo guidance for a
+new Run is informational. The existing evidence and review gates still apply.
+Definition version and the frozen photo upload policy are independent.
+
 **Shared access (FB01).** Only `Property.cleanerAccess` fields the manager fills
 in on purpose (door, gate, lockbox, parking, Wi-Fi, alarm, note), plus the address
 and cleaner instructions, are shared, and only when `cleanerAccess.shared` is on.
