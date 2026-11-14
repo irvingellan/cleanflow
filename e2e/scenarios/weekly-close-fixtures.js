@@ -1,22 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
-import { getE2eFirestore } from "../globalSetup.js";
+import { getE2eFirestore, requireLocalE2EEmulators } from "../globalSetup.js";
 
 const organizationId = "cleanflow-demo";
 
-function requireLocalDemoEmulators() {
-  if (
-    process.env.GCLOUD_PROJECT !== "demo-cleanflow" ||
-    !["127.0.0.1:8080", "localhost:8080"].includes(process.env.FIRESTORE_EMULATOR_HOST) ||
-    !["127.0.0.1:9099", "localhost:9099"].includes(process.env.FIREBASE_AUTH_EMULATOR_HOST)
-  ) {
-    throw new Error("Weekly Close fixtures require isolated local demo-cleanflow emulators.");
-  }
-}
-
 /** Synthetic REAL classification tests import eligibility, not real customer data. */
 export async function seedWeeklyCloseFixture(testInfo) {
-  requireLocalDemoEmulators();
+  requireLocalE2EEmulators();
   const db = getE2eFirestore();
   const orgRef = db.collection("organizations").doc(organizationId);
   const prefix = `weekly-close-${testInfo.repeatEachIndex}-${randomUUID().slice(0, 8)}`;
@@ -87,6 +77,17 @@ export async function seedWeeklyCloseFixture(testInfo) {
     if (key === "demo") job.dataProvenance = "DEMO";
     batch.set(jobRef, job);
   }
+  for (let index = 0; index < 201; index += 1) {
+    const jobRef = orgRef.collection("jobs").doc(`${prefix}-job-dense-${index}`);
+    jobRefs.push(jobRef);
+    batch.set(jobRef, {
+      ...metadata, propertyId: propertyRefs[0].id, propertyName: rows[0][1],
+      clientId: clients[0].id, clientName: clients[0].name, operationalStatus: "COMPLETED",
+      scheduledDate: index < 100 ? "2026-10-10" : "2026-10-11",
+      scheduledStart: "11:00", completedAt: now, assignedCleanerId: cleanerId,
+      assignedCleanerName: "Weekly Scenario Cleaner", clientPrice: 1, cleanerPayout: 0,
+    });
+  }
   const payouts = [
     { id: `${prefix}-payout-paid`, jobIds: [`${prefix}-job-paid`], amount: 100 },
     { id: `${prefix}-payout-grouped`, jobIds: [`${prefix}-job-grouped`, `${prefix}-job-before`], amount: 110 },
@@ -101,14 +102,14 @@ export async function seedWeeklyCloseFixture(testInfo) {
 }
 
 export async function weeklyCloseDomainSnapshot(fixture) {
-  requireLocalDemoEmulators();
+  requireLocalE2EEmulators();
   const snapshots = await fixture.db.getAll(...fixture.jobRefs, ...fixture.payoutRefs);
   return snapshots.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
 }
 
 export async function cleanupWeeklyCloseFixture(fixture) {
   if (!fixture) return;
-  requireLocalDemoEmulators();
+  requireLocalE2EEmulators();
   const refs = [
     ...fixture.jobRefs, ...fixture.propertyRefs, ...fixture.payoutRefs,
     ...fixture.clients.map(({ id }) => fixture.orgRef.collection("clients").doc(id)),

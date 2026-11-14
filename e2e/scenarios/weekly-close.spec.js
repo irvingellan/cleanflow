@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test, expect, step, loginManager } from "./support.js";
+import { periodMessage } from "../../src/features/weekly-close/weeklyClosePeriodMessages.js";
 import { formatPrice } from "../../src/lib/presentation.js";
 import { translateInLanguage } from "../../src/i18n/translations.js";
 import {
@@ -58,7 +59,7 @@ async function verifyFinancialRows(root, language) {
   // subtotals reconcile with the available rows, never fabricated zero values.
   await expect(metric(root, translate, "clientCharges").locator("dd")).toHaveText(translate("weeklyClose.incomplete"));
   await expect(metric(root, translate, "clientCharges")).toContainText(translate("weeklyClose.pendingService", { count: 1 }));
-  await expect(root.locator(".weekly-close-attention")).toContainText(translate("weeklyClose.attentionSummary", { count: 4 }));
+  await expect(root.locator(".weekly-close-attention")).toContainText(periodMessage(language, "attention", { count: 4 }));
   await expect(metric(root, translate, "clientCharges")).toContainText(currency(870));
   await expect(metric(root, translate, "grossOperationalMargin")).toContainText(translate("weeklyClose.pendingServices", { count: 2 }));
   await expect(metric(root, translate, "grossOperationalMargin")).not.toContainText(translate("weeklyClose.pendingServices", { count: 4 }));
@@ -72,11 +73,28 @@ async function verifyFinancialRows(root, language) {
   await expect(root.getByRole("button", { name: /invoice|record payment|mark paid/i })).toHaveCount(0);
 }
 
-test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
+async function applyDates(root, start, end, language = "en") {
+  await root.getByLabel(periodMessage(language, "start"), { exact: true }).fill(start);
+  await root.getByLabel(periodMessage(language, "end"), { exact: true }).fill(end);
+  await root.getByRole("button", { name: periodMessage(language, "apply"), exact: true }).click();
+}
+
+function isEmulatorWebChannelError(message, browserName) {
+  if (browserName !== "webkit") return false;
+  return /^(?:Fetch API cannot load http:\/\/)?\/?127\.0\.0\.1:\d+\/google\.firestore\.v1\.Firestore\/(Listen|Write)\/channel\?\S+ due to access control checks\.$/.test(message);
+}
+
+test("weekly-close", async ({ page, browser, browserName, baseURL }, testInfo) => {
   const fixture = await step(0, "Seed synthetic Weekly Close fixtures", () => seedWeeklyCloseFixture(testInfo));
   const before = await weeklyCloseDomainSnapshot(fixture);
   const runtimeErrors = [];
-  page.on("pageerror", (error) => runtimeErrors.push(error.message));
+  let unrelatedEmulatorWebChannelErrors = 0;
+  page.on("pageerror", (error) => {
+    // On WebKit, unrelated realtime subscriptions can report local CORS during
+    // a page reload. The Weekly Close result still requires server-only reads.
+    if (isEmulatorWebChannelError(error.message, browserName)) unrelatedEmulatorWebChannelErrors += 1;
+    else runtimeErrors.push(error.message);
+  });
   try {
     await step(10, "Anonymous route does not expose financial data", async () => {
       const anonymous = await browser.newContext({ baseURL, serviceWorkers: "block" });
@@ -102,29 +120,55 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
       await page.getByRole("button", { name: "Weekly close · Preview", exact: true }).click();
       await page.reload();
       await expect(page.locator(".weekly-close-preview")).toBeVisible();
-      await page.getByLabel("Week starting", { exact: true }).fill("2026-09-21");
+      await applyDates(page.locator(".weekly-close-preview"), "2026-09-21", "2026-09-27");
       await verifyFinancialRows(page.locator(".weekly-close-preview"), "en");
     });
     await step(40, "Week selection and refresh are deterministic read-only actions", async () => {
       const root = page.locator(".weekly-close-preview");
       await root.getByRole("button", { name: "This week", exact: true }).click();
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-28");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-28");
       await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("1");
       await root.getByRole("button", { name: "Previous week", exact: true }).click();
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-21");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-21");
       await verifyFinancialRows(root, "en");
-      await root.getByLabel("Week starting", { exact: true }).fill("2026-09-24");
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-21");
+      await applyDates(root, "2026-09-24", "2026-09-25");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-24");
+      await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("2");
+      await applyDates(root, "2026-09-21", "2026-09-27");
       await root.getByRole("button", { name: "Refresh", exact: true }).click();
       await verifyFinancialRows(root, "en");
       await root.getByRole("button", { name: "Previous week", exact: true }).click();
-      await expect(root.getByLabel("Week starting", { exact: true })).toHaveValue("2026-09-14");
+      await expect(root.getByLabel("Service date from", { exact: true })).toHaveValue("2026-09-14");
       await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("1");
-      await root.getByLabel("Week starting", { exact: true }).fill("2026-09-07");
+      await applyDates(root, "2026-09-07", "2026-09-13");
       await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("0");
       await expect(root.locator(".weekly-close-client")).toHaveCount(0);
-      await root.getByLabel("Week starting", { exact: true }).fill("2026-09-21");
+      await applyDates(root, "2026-09-21", "2026-09-27");
       await verifyFinancialRows(root, "en");
+    });
+    await step(50, "Client selection narrows the loaded service rows and totals", async () => {
+      const root = page.locator(".weekly-close-preview");
+      await root.getByLabel("Client", { exact: true }).selectOption({ label: "Weekly Client Alpha" });
+      await expect(root.locator(".weekly-close-client")).toHaveCount(1);
+      await expect(root.locator(".weekly-close-metrics > div").first().locator("dd")).toHaveText("2");
+      await expect(root.locator(".weekly-close-client")).toContainText("Weekly Client Alpha");
+      await root.getByLabel("Client", { exact: true }).selectOption("");
+      await verifyFinancialRows(root, "en");
+    });
+    await step(55, "Dense dates remain partial and a narrower range restores complete totals", async () => {
+      const root = page.locator(".weekly-close-preview");
+      const count = root.locator(".weekly-close-metrics > div").first().locator("dd");
+      const charges = metric(root, (key) => translateInLanguage("en", key), "clientCharges");
+      const partial = root.getByText(/Partial results.*200 Job records/);
+      await applyDates(root, "2026-10-10", "2026-10-11");
+      await expect(partial).toBeVisible();
+      await expect(count).toHaveText("200");
+      await expect(charges.locator("dd")).toHaveText("Incomplete");
+      await expect(charges).toContainText("$200.00");
+      await applyDates(root, "2026-10-11", "2026-10-11");
+      await expect(count).toHaveText("101");
+      await expect(charges.locator("dd")).toHaveText("$101.00");
+      await expect(partial).toHaveCount(0);
     });
     await step(60, "Visual matrix: EN/PT/ES across desktop, tablet and phone", async () => {
       const directory = resolve("test-results/weekly-close", `run-${testInfo.repeatEachIndex}`);
@@ -139,18 +183,20 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
         const root = page.locator(".weekly-close-preview");
         const translate = (key) => translateInLanguage(language, key);
         await expect(root.getByRole("heading", { name: translate("weeklyClose.title"), exact: true })).toBeVisible();
-        await root.getByLabel(translate("weeklyClose.weekStarting"), { exact: true }).fill("2026-09-21");
+        await applyDates(root, "2026-09-21", "2026-09-27", language);
         await verifyFinancialRows(root, language);
         for (const viewport of viewports) {
           await page.setViewportSize(viewport);
           await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-          const dimensions = await page.evaluate(() => ({
-            viewportWidth: window.innerWidth,
-            documentWidth: document.documentElement.scrollWidth,
-            bodyWidth: document.body.scrollWidth,
-          }));
-          expect(dimensions.documentWidth).toBeLessThanOrEqual(viewport.width);
-          expect(dimensions.bodyWidth).toBeLessThanOrEqual(viewport.width);
+          let dimensions;
+          await expect.poll(async () => {
+            dimensions = await page.evaluate(() => ({
+              viewportWidth: window.innerWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              bodyWidth: document.body.scrollWidth,
+            }));
+            return Math.max(dimensions.documentWidth, dimensions.bodyWidth);
+          }, { message: `${language} layout at ${viewport.width}px` }).toBeLessThanOrEqual(viewport.width);
           const bounds = await root.boundingBox();
           expect(bounds.x).toBeGreaterThanOrEqual(0);
           expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
@@ -165,6 +211,12 @@ test("weekly-close", async ({ page, browser, baseURL }, testInfo) => {
     await step(100, "All seeded Job and Payout values remain unchanged", async () => {
       expect(await weeklyCloseDomainSnapshot(fixture)).toEqual(before);
       expect(runtimeErrors).toEqual([]);
+      if (unrelatedEmulatorWebChannelErrors) {
+        await testInfo.attach("emulator-webchannel-cors-count", {
+          body: JSON.stringify({ count: unrelatedEmulatorWebChannelErrors }),
+          contentType: "application/json",
+        });
+      }
     });
   } finally { await cleanupWeeklyCloseFixture(fixture); }
 });

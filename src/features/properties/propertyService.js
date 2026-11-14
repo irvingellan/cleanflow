@@ -10,6 +10,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -34,6 +35,15 @@ export async function getProperties({ includeArchived = false } = {}) {
     ...propertyDocument.data(),
     id: propertyDocument.id,
   })), includeArchived);
+}
+
+/** One document-ID batch for read-only service reconciliation. */
+export async function getPropertySummariesById(ids) {
+  const records = await getServerRecordsById(organizationId, "properties", ids);
+  return records.map((row) => {
+    const { name, clientId } = row.data();
+    return { id: row.id, name, clientId };
+  });
 }
 
 export async function getPropertiesForClient(clientId, { includeArchived = false } = {}) {

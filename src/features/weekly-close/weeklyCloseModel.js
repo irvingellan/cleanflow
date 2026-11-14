@@ -2,6 +2,7 @@ import { normalizeDataProvenance } from "../../lib/dataProvenance.js";
 import { getAssignedCleanerIds, isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
 const dayMilliseconds = 86_400_000;
+export const maxServicePeriodDays = 31;
 const text = (value) => typeof value === "string" ? value.trim() : "";
 
 function dateNumber(value) {
@@ -12,6 +13,15 @@ function dateNumber(value) {
 }
 
 const dateString = (value) => new Date(value).toISOString().slice(0, 10);
+
+export function servicePeriod({ start, end }) {
+  const firstDay = dateNumber(start);
+  const lastDay = dateNumber(end);
+  if (firstDay === null || lastDay === null || lastDay < firstDay || lastDay - firstDay >= maxServicePeriodDays * dayMilliseconds) {
+    throw new RangeError("A valid service period of up to 31 days is required.");
+  }
+  return { start, end };
+}
 
 /** Service dates are date-only values; completion timestamps do not select a week. */
 export function serviceWeekForDate(value) {
@@ -138,14 +148,14 @@ function payoutEvidence(job, payoutCents, index, organizationId, complete) {
   return { status: "PAID", paidCents: recordedAmount, outstandingCents: 0 };
 }
 
-function totals(rows) {
+function totals(rows, truncated = false) {
   const sum = (field) => {
     const total = rows.reduce((value, row) => value + (row[field] ?? 0), 0);
     return Number.isSafeInteger(total) ? total : null;
   };
-  const clientComplete = rows.every((row) => row.clientCents !== null);
-  const payoutComplete = rows.every((row) => row.payoutCents !== null);
-  const stateComplete = rows.every((row) => row.payoutStatus !== "UNKNOWN");
+  const clientComplete = !truncated && rows.every((row) => row.clientCents !== null);
+  const payoutComplete = !truncated && rows.every((row) => row.payoutCents !== null);
+  const stateComplete = !truncated && rows.every((row) => row.payoutStatus !== "UNKNOWN");
   return {
     completedServiceCount: rows.length,
     clientCharges: clientComplete ? dollars(sum("clientCents")) : null,
@@ -179,10 +189,10 @@ function publicRow(row) {
 
 /** A read-only, allowlisted reconciliation view; it never infers client payments. */
 export function buildWeeklyClose({
-  weekStart, jobs = [], payouts = [], clients, properties = [], cleanerNamesById = {},
-  organizationId = "cleanflow-demo", payoutLookupComplete = true,
+  weekStart, period = serviceWeekForDate(weekStart), jobs = [], payouts = [], clients, properties = [], cleanerNamesById = {},
+  organizationId = "cleanflow-demo", payoutLookupComplete = true, coverage,
 }) {
-  const week = serviceWeekForDate(weekStart);
+  const dates = servicePeriod(period);
   const clientsById = new Map((clients || []).map((client) => [client.id, client]));
   const propertiesById = new Map(properties.map((property) => [property.id, property]));
   const excluded = {
@@ -212,7 +222,7 @@ export function buildWeeklyClose({
     if (job.archivedAt) { excluded.archived += 1; continue; }
     if (job.operationalStatus !== "COMPLETED") { excluded.nonCompleted += 1; continue; }
     if (dateNumber(job.scheduledDate) === null) { excluded.invalidDate += 1; continue; }
-    if (job.scheduledDate < week.start || job.scheduledDate > week.end) {
+    if (job.scheduledDate < dates.start || job.scheduledDate > dates.end) {
       excluded.outsideWeek += 1; continue;
     }
     const clientId = text(job.clientId);
@@ -255,10 +265,10 @@ export function buildWeeklyClose({
   }
   const clientGroups = [...groups.entries()].map(([key, group]) => ({
     key, clientId: group[0].clientId, clientName: group[0].clientName,
-    legacySnapshot: !group[0].clientId, ...totals(group), serviceCount: group.length,
+    legacySnapshot: !group[0].clientId, ...totals(group, coverage?.truncated), serviceCount: group.length,
     jobs: group.map(publicRow),
   })).sort((a, b) => a.clientName.localeCompare(b.clientName) || a.key.localeCompare(b.key));
-  const overall = totals(rows);
+  const overall = totals(rows, coverage?.truncated);
   // Contradictory IDs are deliberately omitted, not counted as zero dollars.
   // Known subtotals still reconcile to the displayed rows, but a full-week total
   // cannot be certified until the conflicting source record is reviewed.
@@ -267,7 +277,7 @@ export function buildWeeklyClose({
       "cleanerOutstandingTotal", "grossOperationalMargin"]) overall[field] = null;
   }
   return {
-    week, jobs: rows.map(publicRow), clients: clientGroups, overall,
+    period: dates, coverage, jobs: rows.map(publicRow), clients: clientGroups, overall,
     excluded, duplicateInputCount,
   };
 }

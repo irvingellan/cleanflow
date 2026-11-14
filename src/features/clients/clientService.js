@@ -11,6 +11,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -34,6 +35,15 @@ export async function getClients({ includeArchived = false } = {}) {
     ...clientDocument.data(),
     id: clientDocument.id,
   })), includeArchived);
+}
+
+/** One document-ID batch for read-only service reconciliation. */
+export async function getClientSummariesById(ids) {
+  const records = await getServerRecordsById(organizationId, "clients", ids);
+  return records.map((row) => {
+    const { name } = row.data();
+    return { id: row.id, name };
+  });
 }
 
 /** Name and contact of one client, for sending a report from the manager's own apps. */

@@ -1,35 +1,15 @@
 import {
   collection,
-  connectFirestoreEmulator,
-  documentId,
   getDocs,
-  getFirestore,
   limit,
   orderBy,
   query,
-  setLogLevel,
   Timestamp,
   where,
 } from "firebase/firestore/lite";
-import { emulatorPorts, firebaseApp, useFirebaseEmulators } from "../../services/firebase/client.js";
+import { getServerRecordsById, serverFirestore } from "../../services/firebase/serverReads.js";
 import { cleanerLookupBatches } from "../cleaners/cleanerLookupBatches.js";
 import { managerDecisionOf } from "../jobs/offerSlots.js";
-
-// Dashboard queries are one-shot server reads. Lite shares the Firebase
-// app and its Auth provider, without starting queries on the realtime Watch.
-// The Lite logger includes request paths and query bodies on some failures.
-// App diagnostics capture only the phase, elapsed time and allowlisted code.
-let db;
-
-function dashboardDb() {
-  if (!db) {
-    setLogLevel("silent");
-    const instance = getFirestore(firebaseApp);
-    if (useFirebaseEmulators) connectFirestoreEmulator(instance, "127.0.0.1", emulatorPorts.firestore);
-    db = instance;
-  }
-  return db;
-}
 
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
@@ -60,11 +40,11 @@ export function createDashboardRead(isActive) {
 }
 
 function jobsCollection() {
-  return collection(dashboardDb(), "organizations", organizationId, "jobs");
+  return collection(serverFirestore(), "organizations", organizationId, "jobs");
 }
 
 function propertiesCollection() {
-  return collection(dashboardDb(), "organizations", organizationId, "properties");
+  return collection(serverFirestore(), "organizations", organizationId, "properties");
 }
 
 export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart }, read) {
@@ -120,7 +100,7 @@ export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, w
 }
 
 async function readJobRecords(jobId, subcollection, status, max, read) {
-  const records = collection(dashboardDb(), "organizations", organizationId, "jobs", jobId, subcollection);
+  const records = collection(serverFirestore(), "organizations", organizationId, "jobs", jobId, subcollection);
   const snapshot = await read(query(records, where("status", "==", status), limit(max)));
   return snapshot.docs.map((record) => ({ ...record.data(), id: record.id }));
 }
@@ -141,11 +121,8 @@ export function getOpenJobIssues(jobId, read = getDocs) {
 
 export async function getCleanerNamesById(cleanerIds, read = getDocs) {
   const batches = cleanerLookupBatches(cleanerIds);
-  const cleaners = collection(dashboardDb(), "organizations", organizationId, "cleaners");
-  const snapshots = await Promise.all(batches.map((batch) => (
-    read(query(cleaners, where(documentId(), "in", batch)))
-  )));
-  return Object.fromEntries(snapshots.flatMap(({ docs }) => (
+  const records = await Promise.all(batches.map((batch) => getServerRecordsById(organizationId, "cleaners", batch, read)));
+  return Object.fromEntries(records.flatMap((docs) => (
     docs.map((cleaner) => [cleaner.id, cleaner.data().name])
   )));
 }
