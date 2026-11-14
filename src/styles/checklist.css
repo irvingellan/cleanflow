@@ -268,3 +268,41 @@ fieldset.public-checklist__inventory-item.public-checklist__control--missing .pu
 .public-checklist__photo-pointer--missing a { color: var(--color-error-text); }
 /* Room for the round back-to-top button, so it never covers the send button. */
 .checklist-public-page { padding-bottom: 84px; }
+
+.public-checklist__completion-send { display: contents; }
+.public-checklist__completion-send.is-pending { visibility: hidden; }
+.public-checklist__send-slot { display: contents; }
+.public-checklist__send-emphasis > .button { width: 100%; }
+
+.public-checklist__inventory-quantity {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: var(--cf-text-secondary);
+}
+.public-checklist__inventory-quantity input { width: 5rem; }
+
+.public-checklist__photo-orientation {
+  padding: 12px 16px;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-lg);
+  background: var(--cf-surface-subtle);
+}
+.public-checklist__photo-orientation h3 { margin: 0; font-size: 1rem; }
+.public-checklist__photo-orientation ul { margin: 8px 0 0; padding-inline-start: 1.25rem; }
+
+@media (max-width: 600px) {
+  .public-checklist__send-emphasis { min-height: 44px; }
+  .public-checklist__send-emphasis > .button {
+    position: fixed;
+    z-index: 4;
+    inset-inline-start: max(16px, env(safe-area-inset-left, 0px));
+    inset-inline-end: max(74px, calc(env(safe-area-inset-right, 0px) + 62px));
+    bottom: max(18px, env(safe-area-inset-bottom, 0px));
+    width: auto;
+    min-height: 44px;
+    box-shadow: 0 6px 18px var(--shadow-card);
+  }
+}

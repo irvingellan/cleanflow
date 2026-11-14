@@ -25,7 +25,7 @@ describe("CleaningChecklistPreview", () => {
     expect(screen.getByLabelText("Cleaner name")).toHaveValue("Alex Rivera");
     expect(screen.getByLabelText("Property / listing")).toHaveValue("Cedar Grove Apartment");
     expect(checklistSections.flatMap((section) => section.items)).toHaveLength(28);
-    expect(inventoryItems).toHaveLength(13);
+    expect(inventoryItems).toHaveLength(15);
     expect(screen.getByText("Photo required")).toBeVisible();
     expect(screen.getByLabelText("Check for cigarette butts inside the property")).toBeVisible();
     expect(screen.getByLabelText("Check for cigarette butts in exterior/outdoor areas")).toBeVisible();

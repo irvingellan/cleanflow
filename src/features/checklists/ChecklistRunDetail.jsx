@@ -3,6 +3,13 @@ import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { formatDate } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
+import { formatChecklistInventoryAnswer, withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
+import {
+  checklistInventoryLevels,
+  checklistInventoryQuantityMax,
+  supportsChecklistInventoryQuantity,
+  validChecklistInventoryQuantity,
+} from "../../../functions/src/checklistInventory.js";
 import { correctChecklistAnswer, getChecklistEvidence, setReportPhotoVisibility } from "./checklistRunService.js";
 import { ClientReportControls } from "./ClientReportControls.jsx";
 import { ChecklistPhotoGrid } from "./ChecklistPhotoGrid.jsx";
@@ -47,7 +54,8 @@ function attentionSummary(checklistRun, translate) {
   const unansweredInventory = inventoryItems
     .filter((item) => !item.answer || item.answer === "UNANSWERED")
     .map((item) => ({ id: `inventory-${item.id}`, label: checklistLabel(item, translate) }));
-  const restockItems = inventoryItems.filter((item) => item.answer === "NEEDS_RESTOCK");
+  const restockItems = inventoryItems.filter((item) => item.answer === "NEEDS_RESTOCK"
+    || (checklistRun.definitionVersion === 2 && ["LOW", "EMPTY"].includes(item.answer)));
 
   return {
     done,
@@ -85,7 +93,9 @@ export function ChecklistRunDetail({
   loadEvidence = getChecklistEvidence, assignments = [], onApproveAndComplete, onAbandonAndComplete,
   onSubmitForReview, setPhotoVisibility = setReportPhotoVisibility, correctAnswer = correctChecklistAnswer,
 }) {
-  const { language, translate } = useTranslation();
+  const { language, translate: baseTranslate } = useTranslation();
+  const translate = withChecklistInventoryMessages(baseTranslate, language);
+  const definitionVersion = checklistRun.definitionVersion;
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
   const requiredPhotoCount = Number.isInteger(checklistRun.requiredPhotoCount)
@@ -136,6 +146,8 @@ export function ChecklistRunDetail({
   const [photoVisibilityError, setPhotoVisibilityError] = useState(false);
   // One answer at a time can be open for correction: "checklist:<id>" or "inventory:<id>".
   const [correcting, setCorrecting] = useState(null);
+  const [inventoryCorrectionLevel, setInventoryCorrectionLevel] = useState("");
+  const [inventoryCorrectionQuantity, setInventoryCorrectionQuantity] = useState("");
   const [savingCorrection, setSavingCorrection] = useState(false);
   const [correctionError, setCorrectionError] = useState(false);
   const canCorrect = isReadyForReview && !job.archivedAt && typeof onRefresh === "function";
@@ -146,15 +158,48 @@ export function ChecklistRunDetail({
     finally { setSavingCorrection(false); }
   };
   const answerRow = (kind, item) => {
-    const key = `${kind}:${item.id}`; const prefix = kind === "inventory" ? "checklists.inventory" : "checklists.answer";
-    const options = kind === "inventory" ? ["LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"] : ["DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
+    const key = `${kind}:${item.id}`;
+    const inventory = kind === "inventory";
+    const newInventory = inventory && definitionVersion === 2;
+    const prefix = inventory ? "checklists.inventory" : "checklists.answer";
+    const options = inventory ? (newInventory ? checklistInventoryLevels(definitionVersion) : ["LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"])
+      : ["DONE", ...(item.canBeNotApplicable ? ["NOT_APPLICABLE"] : [])];
+    const displayAnswer = (answer, quantity) => inventory
+      ? formatChecklistInventoryAnswer(translate, answer, quantity)
+      : translate(`${prefix}${answer || "UNANSWERED"}`);
+    const quantityApplicable = newInventory && supportsChecklistInventoryQuantity(definitionVersion, inventoryCorrectionLevel);
+    const parsedQuantity = quantityApplicable && inventoryCorrectionQuantity !== "" ? Number(inventoryCorrectionQuantity) : null;
+    const validCorrection = options.includes(inventoryCorrectionLevel)
+      && (parsedQuantity === null || validChecklistInventoryQuantity(parsedQuantity));
     return <li key={item.id} className={item.correctedByManager ? "is-corrected" : undefined}>
       <span>{checklistLabel(item, translate)}</span>
-      <strong>{translate(`${prefix}${item.answer || "UNANSWERED"}`)}</strong>
-      {item.correctedByManager && <small className="checklist-run__corrected">{translate("checklists.correctedByManager", { answer: translate(`${prefix}${item.cleanerAnswer || "UNANSWERED"}`) })}</small>}
-      {canCorrect && correcting !== key && <button className="button button--text checklist-run__correct" type="button" onClick={() => { setCorrectionError(false); setCorrecting(key); }}>{translate("checklists.correctAnswer")}</button>}
+      <strong>{displayAnswer(item.answer, item.quantity)}</strong>
+      {item.correctedByManager && <small className="checklist-run__corrected">{translate("checklists.correctedByManager", { answer: displayAnswer(item.cleanerAnswer, item.originalQuantity) })}</small>}
+      {canCorrect && correcting !== key && <button className="button button--text checklist-run__correct" type="button" onClick={() => {
+        setCorrectionError(false);
+        setCorrecting(key);
+        setInventoryCorrectionLevel(options.includes(item.answer) ? item.answer : "");
+        setInventoryCorrectionQuantity(Number.isInteger(item.quantity) ? String(item.quantity) : "");
+      }}>{translate("checklists.correctAnswer")}</button>}
       {canCorrect && correcting === key && <div className="checklist-run__correction" role="group" aria-label={translate("checklists.correctAnswerFor", { item: checklistLabel(item, translate) })}>
-        {options.filter((answer) => answer !== item.answer).map((answer) => (
+        {newInventory ? <>
+          <label>{translate("checklists.inventoryLevel")}
+            <select value={inventoryCorrectionLevel} disabled={savingCorrection} onChange={(event) => {
+              setInventoryCorrectionLevel(event.target.value);
+              if (!supportsChecklistInventoryQuantity(definitionVersion, event.target.value)) setInventoryCorrectionQuantity("");
+            }}>
+              <option value="">{translate("checklists.inventoryUNANSWERED")}</option>
+              {options.map((level) => <option key={level} value={level}>{translate(`${prefix}${level}`)}</option>)}
+            </select>
+          </label>
+          {quantityApplicable && <label>{translate("checklists.inventoryQuantityOptional")}
+            <input type="number" inputMode="numeric" min={0} max={checklistInventoryQuantityMax} step={1}
+              value={inventoryCorrectionQuantity} disabled={savingCorrection} onChange={(event) => setInventoryCorrectionQuantity(event.target.value)} />
+          </label>}
+          <button className="button button--small" type="button" disabled={savingCorrection || !validCorrection} onClick={() => saveCorrection(
+            kind, item.id, parsedQuantity === null ? inventoryCorrectionLevel : { level: inventoryCorrectionLevel, quantity: parsedQuantity },
+          )}>{translate("checklists.inventorySaveCorrection")}</button>
+        </> : options.filter((answer) => answer !== item.answer).map((answer) => (
           <button key={answer} className="button button--small" type="button" disabled={savingCorrection} onClick={() => saveCorrection(kind, item.id, answer)}>{translate(`${prefix}${answer}`)}</button>
         ))}
         {item.correctedByManager && <button className="button button--small button--secondary" type="button" disabled={savingCorrection} onClick={() => saveCorrection(kind, item.id, null)}>{translate("checklists.undoCorrection")}</button>}

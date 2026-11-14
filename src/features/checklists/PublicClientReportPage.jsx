@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PhotoLightbox } from "../../components/PhotoLightbox.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
+import { formatChecklistInventoryAnswer, withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
 import { formatDate } from "../../lib/presentation.js";
 import { getPublicClientReport, publicClientReportPhotoUrl } from "./clientReportService.js";
 
@@ -9,7 +10,7 @@ function textFor(entry, translate) {
   return entry?.label || translate(entry?.labelKey || "clientReport.checklistItem");
 }
 
-const restockAnswers = new Set(["NEEDS_RESTOCK", "LOW"]);
+const restockAnswers = new Set(["NEEDS_RESTOCK", "LOW", "EMPTY"]);
 
 function ReportPhoto({ token, translate, evidenceId, photoUrl, className = "client-report__photo", loading = "lazy", thumbnail = false }) {
   const [hasError, setHasError] = useState(false);
@@ -55,7 +56,8 @@ export function PublicClientReportPage({ token }) {
 
 /** The standalone link and portal reuse the same read-only report presentation. */
 export function ClientReportView({ token, report, isLoading, errorKind, onRetry, photoUrl, onBack = null }) {
-  const { language, setLanguage, translate } = useTranslation();
+  const { language, setLanguage, translate: baseTranslate } = useTranslation();
+  const translate = withChecklistInventoryMessages(baseTranslate, language);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [viewerEvidenceId, setViewerEvidenceId] = useState(null);
   const photos = useMemo(() => report?.evidence?.length > 0
@@ -165,7 +167,7 @@ export function ClientReportView({ token, report, isLoading, errorKind, onRetry,
                   {restock.map((item, index) => (
                     <li key={textFor(item, translate) + index}>
                       <span>{textFor(item, translate)}</span>
-                      <strong>{translate("checklists.inventory" + item.answer)}</strong>
+                      <strong>{formatChecklistInventoryAnswer(translate, item.answer, item.quantity)}</strong>
                     </li>
                   ))}
                 </ul>
@@ -228,7 +230,7 @@ export function ClientReportView({ token, report, isLoading, errorKind, onRetry,
                     {report.inventoryItems.map((item, index) => (
                       <li key={textFor(item, translate) + index}>
                         <span>{textFor(item, translate)}</span>
-                        <strong>{translate("checklists.inventory" + item.answer)}</strong>
+                        <strong>{formatChecklistInventoryAnswer(translate, item.answer, item.quantity)}</strong>
                       </li>
                     ))}
                   </ul>

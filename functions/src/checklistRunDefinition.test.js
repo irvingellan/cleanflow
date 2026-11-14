@@ -115,4 +115,34 @@ describe("FB07 property checklist edits", () => {
     expect(projectChecklistRunForCleaner({ status: "DRAFT", ...snapshot }).photoRequirements)
       .toEqual([{ id: "under-beds", label: "Embaixo das camas" }, { id: "fridge", label: "Geladeira aberta" }]);
   });
+
+  it("uses the new stock defaults only in new Run snapshots and keeps matching Property overrides", () => {
+    const oldInventory = [
+      { id: "dish-soap", labelKey: "checklistPreview.dishSoap" },
+      { id: "k-cups", labelKey: "checklistPreview.kCups" },
+      { id: "tissues", labelKey: "checklistPreview.tissues" },
+    ];
+    const legacyRun = { definitionVersion: 1, resolvedDefinition: { definitionVersion: 1, inventoryItems: oldInventory } };
+    const updatedProperty = { checklistSettings: { inventoryItems: [
+      { id: "dish-soap", label: "Special dish detergent" },
+      { id: "tea", hidden: true },
+      { id: "extra", label: "Extra stock" },
+    ] } };
+    const newRun = buildChecklistRunSnapshot({ job: {}, property: updatedProperty });
+
+    expect(newRun.definitionVersion).toBe(2);
+    expect(resolveChecklistDefinition({}).inventoryItems.map(({ id }) => id)).toEqual([
+      "hand-soap", "dish-soap", "dishwasher-pods", "dryer-sheets", "laundry-pods", "coffee", "tea",
+      "paper-towels", "toilet-paper", "sponges", "large-trash-bags", "small-trash-bags", "shampoo", "conditioner", "body-wash",
+    ]);
+    expect(projectChecklistRunForCleaner(newRun).definitionVersion).toBe(2);
+    expect(projectChecklistRunForCleaner(newRun).inventoryItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "dish-soap", label: "Special dish detergent" }),
+      { id: "extra", label: "Extra stock" },
+    ]));
+    expect(projectChecklistRunForCleaner(newRun).inventoryItems.map(({ id }) => id)).not.toContain("tea");
+    expect(projectChecklistRunForCleaner(legacyRun)).toMatchObject({ definitionVersion: 1, inventoryItems: oldInventory });
+    expect(projectChecklistRunForCleaner({ resolvedDefinition: { inventoryItems: oldInventory } }))
+      .toMatchObject({ definitionVersion: null, inventoryItems: oldInventory });
+  });
 });

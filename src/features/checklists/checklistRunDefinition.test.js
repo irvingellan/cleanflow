@@ -12,7 +12,7 @@ describe("property-aware checklist definitions", () => {
   it("uses the complete validated global checklist when a Property has no settings", () => {
     const definition = resolveChecklistDefinition({ id: "property-1", name: "Example Property" });
 
-    expect(definition.definitionVersion).toBe(1);
+    expect(definition.definitionVersion).toBe(2);
     expect(definition.sections.flatMap((section) => section.items)).toHaveLength(defaultItemCount);
     expect(definition.inventoryItems).toEqual(inventoryItems);
     expect(definition.requiredPhotoTypes).toEqual([]);

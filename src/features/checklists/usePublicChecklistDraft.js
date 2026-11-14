@@ -31,10 +31,15 @@ function hasChanges(changes) {
 }
 
 export function mergeChecklistChanges(draft, changes) {
+  const inventoryQuantities = { ...draft?.inventoryQuantities, ...changes?.inventoryQuantities };
+  for (const [id, quantity] of Object.entries(inventoryQuantities)) {
+    if (quantity === null) delete inventoryQuantities[id];
+  }
   return {
     ...draft,
     checklistAnswers: { ...(draft?.checklistAnswers || {}), ...(changes?.checklistAnswers || {}) },
     inventoryAnswers: { ...(draft?.inventoryAnswers || {}), ...(changes?.inventoryAnswers || {}) },
+    ...(draft?.inventoryQuantities || changes?.inventoryQuantities ? { inventoryQuantities } : {}),
     ...(Object.hasOwn(changes || {}, "issueNotes") ? { issueNotes: changes.issueNotes } : {}),
     ...(Object.hasOwn(changes || {}, "generalNotes") ? { generalNotes: changes.generalNotes } : {}),
   };
@@ -48,6 +53,9 @@ export function mergeSparseChecklistChanges(current = {}, next = {}) {
     } : {}),
     ...(next.inventoryAnswers ? {
       inventoryAnswers: { ...(current.inventoryAnswers || {}), ...next.inventoryAnswers },
+    } : {}),
+    ...(next.inventoryQuantities ? {
+      inventoryQuantities: { ...current.inventoryQuantities, ...next.inventoryQuantities },
     } : {}),
   };
   for (const field of ["issueNotes", "generalNotes"]) {

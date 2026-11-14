@@ -1,12 +1,13 @@
 // Synthetic in-memory test boundary. No Firebase/provider/config or real data.
 let checklist; let draft; let revision; let uploads = 0;
-export function reset({ count = 0, ready = false } = {}) {
+export function reset({ count = 0, ready = false, newDefinition = false, taskAnswer = "DONE" } = {}) {
   revision = count; uploads = 0;
   checklist = { status: ready ? "READY_FOR_REVIEW" : "DRAFT", preferredLanguage: "en", propertyName: "Synthetic property",
     evidencePolicy: { version: 2, maxPhotos: 20 }, evidenceRevision: revision,
     evidence: Array.from({ length: count }, (_, i) => ({ evidenceId: crypto.randomUUID(), requirementId: i ? "additional" : "living-belongings", contentType: "image/jpeg", sizeBytes: 100 })),
-    sections: [{ id: "living", title: "Living room", items: [{ id: "living-belongings", label: "Check belongings", requiresPhoto: true }] }], inventoryItems: [] };
-  draft = { revision: 0, checklistAnswers: { "living-belongings": "DONE" }, inventoryAnswers: {}, issueNotes: "", generalNotes: "" };
+    sections: [{ id: "living", title: "Living room", items: [{ id: "living-belongings", label: "Check belongings", requiresPhoto: true }] }], inventoryItems: [],
+    ...(newDefinition ? { definitionVersion: 2, requiredPhotoTypes: [{ id: "final-room", label: "Final room" }] } : {}) };
+  draft = { revision: 0, checklistAnswers: { "living-belongings": taskAnswer }, inventoryAnswers: {}, issueNotes: "", generalNotes: "" };
 }
 reset();
 export const getPublicChecklist = async () => ({ checklist: structuredClone(checklist), draft: structuredClone(draft) });

@@ -1,4 +1,4 @@
-export const CHECKLIST_DEFINITION_VERSION = 1;
+export const CHECKLIST_DEFINITION_VERSION = 2;
 
 export const checklistSections = [
   {
@@ -73,18 +73,20 @@ export const checklistSections = [
 
 export const inventoryItems = [
   { id: "hand-soap", labelKey: "checklistPreview.handSoap" },
-  { id: "dish-soap", labelKey: "checklistPreview.dishSoap" },
+  { id: "dish-soap", labelKey: "checklistPreview.dishDetergentLiquid" },
   { id: "dishwasher-pods", labelKey: "checklistPreview.dishwasherPods" },
   { id: "dryer-sheets", labelKey: "checklistPreview.dryerSheets" },
   { id: "laundry-pods", labelKey: "checklistPreview.laundryPods" },
-  { id: "k-cups", labelKey: "checklistPreview.kCups" },
+  { id: "coffee", labelKey: "checklistPreview.coffee" },
   { id: "tea", labelKey: "checklistPreview.tea" },
   { id: "paper-towels", labelKey: "checklistPreview.paperTowels" },
   { id: "toilet-paper", labelKey: "checklistPreview.toiletPaper" },
-  { id: "sponges", labelKey: "checklistPreview.sponges" },
+  { id: "sponges", labelKey: "checklistPreview.dishSponge" },
   { id: "large-trash-bags", labelKey: "checklistPreview.largeTrashBags" },
   { id: "small-trash-bags", labelKey: "checklistPreview.smallTrashBags" },
-  { id: "tissues", labelKey: "checklistPreview.tissues" },
+  { id: "shampoo", labelKey: "checklistPreview.shampoo" },
+  { id: "conditioner", labelKey: "checklistPreview.conditioner" },
+  { id: "body-wash", labelKey: "checklistPreview.bodyWash" },
 ];
 
 export const photoPlaceholderGroups = [

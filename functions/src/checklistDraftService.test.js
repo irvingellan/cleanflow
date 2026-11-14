@@ -3,6 +3,7 @@ import {
   applyChecklistDraftMutation,
   assertChecklistDraftReadyForReview,
   checklistDraftReviewRequirements,
+  checklistDraftMutationHash,
   checklistReadyForReviewRequestHash,
   normalizeChecklistDraftMutation,
   normalizeChecklistReadyForReviewRequest,
@@ -18,10 +19,11 @@ const run = {
     inventoryItems: [{ id: "soap" }],
   },
 };
+const newRun = { ...run, resolvedDefinition: { ...run.resolvedDefinition, definitionVersion: 2 } };
 
-function mutation(changes) {
-  return normalizeChecklistDraftMutation(run, {
-    mutationId: "mutation-identifier-1", baseRevision: 0, changes,
+function mutation(changes, target = run, baseRevision = 0) {
+  return normalizeChecklistDraftMutation(target, {
+    mutationId: "mutation-identifier-1", baseRevision, changes,
   });
 }
 
@@ -119,5 +121,46 @@ describe("Checklist draft definition boundary", () => {
       inventoryAnswers: { soap: "LOW" },
     })));
     expect(complete).toMatchObject({ missingChecklistCount: 0, missingInventoryCount: 0 });
+  });
+
+  it("keeps the exact legacy mutation and draft shape while rejecting new stock fields", () => {
+    const request = mutation({ inventoryAnswers: { soap: "NEEDS_RESTOCK" } });
+    expect(request.changes).toEqual({ inventoryAnswers: { soap: "NEEDS_RESTOCK" } });
+    expect(checklistDraftMutationHash(request))
+      .toBe("f9c8ccd4bd483040690cb0099c0cb6c491ed17535709769d2ad8637fe02381a4");
+    expect(projectChecklistDraftForRead(run, applyChecklistDraftMutation(run, null, request)))
+      .not.toHaveProperty("inventoryQuantities");
+    expect(() => mutation({ inventoryAnswers: { soap: "EMPTY" } })).toThrow("Draft answer is invalid");
+    expect(() => mutation({ inventoryQuantities: { soap: 1 } })).toThrow("Draft changes are invalid");
+    expect(() => mutation({ inventoryAnswers: { soap: "NEEDS_RESTOCK" } }, newRun)).toThrow("Draft answer is invalid");
+  });
+
+  it("accepts empty as complete, with an optional quantity saved and clearable independently", () => {
+    const empty = applyChecklistDraftMutation(newRun, null, mutation({ inventoryAnswers: { soap: "EMPTY" } }, newRun));
+    expect(checklistDraftReviewRequirements(newRun, empty).missingInventoryCount).toBe(0);
+    const withQuantity = applyChecklistDraftMutation(newRun, empty, mutation({ inventoryQuantities: { soap: 0 } }, newRun, 1));
+    expect(projectChecklistDraftForRead(newRun, withQuantity)).toMatchObject({
+      inventoryAnswers: { soap: "EMPTY" },
+      inventoryQuantities: { soap: 0 },
+      progress: { inventory: { answered: 1, needsRestock: 1 } },
+    });
+    const cleared = applyChecklistDraftMutation(newRun, withQuantity, mutation({ inventoryQuantities: { soap: null } }, newRun, 2));
+    expect(assertChecklistDraftReadyForReview(newRun, cleared).inventoryQuantities).toEqual({});
+    const high = applyChecklistDraftMutation(newRun, withQuantity, mutation({ inventoryAnswers: { soap: "HIGH" } }, newRun, 2));
+    expect(assertChecklistDraftReadyForReview(newRun, high).inventoryQuantities).toEqual({});
+  });
+
+  it("validates quantity shape, IDs, bounds and the effective level without mutating the latest revision", () => {
+    for (const quantities of [[], { missing: 2 }, { soap: -1 }, { soap: 100 }, { soap: 1.5 }, { soap: "2" }]) {
+      expect(() => mutation({ inventoryQuantities: quantities }, newRun)).toThrow("Inventory quantit");
+    }
+    const high = mutation({ inventoryAnswers: { soap: "HIGH" }, inventoryQuantities: { soap: 1 } }, newRun);
+    expect(() => applyChecklistDraftMutation(newRun, null, high)).toThrow("Inventory quantity requires a low or empty level");
+    const low = mutation({ inventoryAnswers: { soap: "LOW" }, inventoryQuantities: { soap: 99 } }, newRun);
+    const saved = applyChecklistDraftMutation(newRun, null, low);
+    expect(assertChecklistDraftReadyForReview(newRun, saved).inventoryQuantities).toEqual({ soap: 99 });
+    const badSaved = { ...saved, inventoryQuantities: { soap: 100, missing: 1 } };
+    expect(projectChecklistDraftForRead(newRun, badSaved).inventoryQuantities).toEqual({});
+    expect(() => assertChecklistDraftReadyForReview(newRun, badSaved)).toThrow("Checklist draft is invalid");
   });
 });

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   clientReportCapabilityState,
   projectClientReport,
 } from "./clientReportService.js";
+import { correctChecklistAnswerForManager } from "./checklistManagerCorrection.js";
+import { projectChecklistRunForManager } from "./checklistRunService.js";
 
 function frozenRun(overrides = {}) {
   return {
@@ -89,6 +91,72 @@ describe("client report projection", () => {
       generalNotes: "",
     }, null))
       .toThrow("The saved checklist revision is unavailable.");
+  });
+
+  it("overlays a new stock correction for the report and preserves the original only in manager view", async () => {
+    const run = frozenRun({ definitionVersion: 2 });
+    const draft = {
+      revision: 2,
+      checklistAnswers: { "bathroom-sanitize": "DONE" },
+      inventoryAnswers: { "hand-soap": "LOW" },
+      inventoryQuantities: { "hand-soap": 3 },
+      issueNotes: "",
+      generalNotes: "",
+    };
+    const savedDraft = structuredClone(draft);
+    const runRef = {};
+    let stored;
+    const database = {
+      doc: () => runRef,
+      runTransaction: (work) => work({
+        get: async () => ({ data: () => run }),
+        update: (ref, field, value) => {
+          expect(ref).toBe(runRef);
+          expect(field.isEqual(new FieldPath("managerCorrections", "inventory", "hand-soap"))).toBe(true);
+          stored = value;
+        },
+      }),
+    };
+    const params = { organizationId: "org", jobId: "job", kind: "inventory", itemId: "hand-soap", actorUid: "fake-manager-uid" };
+    await expect(correctChecklistAnswerForManager(database, { ...params, answer: { level: "EMPTY", quantity: 0 } }))
+      .resolves.toEqual({ kind: "inventory", itemId: "hand-soap", corrected: true, answer: "EMPTY", quantity: 0 });
+    expect(stored).toEqual({ answer: "EMPTY", quantity: 0, byUid: "fake-manager-uid", at: FieldValue.serverTimestamp() });
+    run.managerCorrections = { inventory: { "hand-soap": stored } };
+
+    expect(projectChecklistRunForManager(run, undefined, draft).inventoryItems).toEqual([
+      expect.objectContaining({ answer: "EMPTY", quantity: 0, correctedByManager: true, cleanerAnswer: "LOW", originalQuantity: 3 }),
+    ]);
+    expect(projectClientReport(run, draft, null)).toMatchObject({
+      inventoryItems: [{ labelKey: "checklistPreview.handSoap", answer: "EMPTY", quantity: 0 }],
+      summary: { restockCount: 1 },
+    });
+    expect(projectClientReport(run, draft, null).inventoryItems[0])
+      .toEqual({ labelKey: "checklistPreview.handSoap", answer: "EMPTY", quantity: 0 });
+
+    await expect(correctChecklistAnswerForManager(database, { ...params, answer: "LOW" })).resolves.toMatchObject({ answer: "LOW" });
+    run.managerCorrections.inventory["hand-soap"] = stored;
+    expect(projectClientReport(run, draft, null).inventoryItems[0]).not.toHaveProperty("quantity");
+
+    await expect(correctChecklistAnswerForManager(database, { ...params, answer: null })).resolves.toMatchObject({ corrected: false });
+    expect(stored.isEqual(FieldValue.delete())).toBe(true);
+    delete run.managerCorrections.inventory["hand-soap"];
+    expect(projectClientReport(run, draft, null).inventoryItems[0]).toMatchObject({ answer: "LOW", quantity: 3 });
+    expect(draft).toEqual(savedDraft);
+  });
+
+  it("rejects quantity corrections on legacy Runs or above the allowed stock levels", async () => {
+    const run = frozenRun();
+    const database = {
+      doc: () => ({}),
+      runTransaction: (work) => work({ get: async () => ({ data: () => run }) }),
+    };
+    const input = { organizationId: "org", jobId: "job", kind: "inventory", itemId: "hand-soap", actorUid: "uid" };
+    await expect(correctChecklistAnswerForManager(database, { ...input, answer: { level: "LOW", quantity: 2 } }))
+      .rejects.toMatchObject({ code: "invalid-argument" });
+    run.definitionVersion = 2;
+    for (const answer of [{ level: "HIGH", quantity: 2 }, { level: "LOW", quantity: 100 }, { level: "LOW", quantity: 1, extra: true }]) {
+      await expect(correctChecklistAnswerForManager(database, { ...input, answer })).rejects.toMatchObject({ code: "invalid-argument" });
+    }
   });
 
   it("reports active, expired, revoked and replaced capability states without token data", () => {

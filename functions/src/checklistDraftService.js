@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import {
+  checklistInventoryLevels,
+  checklistInventoryNeedsRestock,
+  checklistRunDefinitionVersion,
+  supportsChecklistInventoryQuantity,
+  validChecklistInventoryQuantity,
+} from "./checklistInventory.js";
 
 export const currentChecklistDraftId = "current";
 export const checklistDraftNoteLimit = 2000;
@@ -9,7 +16,6 @@ export const checklistDraftRequestLimit = 32_000;
 const mutationIdPattern = /^[A-Za-z0-9_-]{16,128}$/;
 const safeKeyPattern = /^(?!__proto__$|prototype$|constructor$)[A-Za-z0-9_-]{1,128}$/;
 const checklistAnswerValues = new Set(["UNANSWERED", "DONE", "NOT_APPLICABLE"]);
-const inventoryAnswerValues = new Set(["UNANSWERED", "LOW", "MEDIUM", "HIGH", "NEEDS_RESTOCK"]);
 
 function plainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -36,11 +42,16 @@ function frozenInventory(run) {
     .filter((item) => typeof item?.id === "string" && safeKeyPattern.test(item.id));
 }
 
+function inventoryAnswerValues(run) {
+  return new Set(["UNANSWERED", ...checklistInventoryLevels(checklistRunDefinitionVersion(run))]);
+}
+
 export function virtualChecklistDraft(run) {
   return {
     revision: 0,
     checklistAnswers: Object.fromEntries(frozenItems(run).map((item) => [item.id, "UNANSWERED"])),
     inventoryAnswers: Object.fromEntries(frozenInventory(run).map((item) => [item.id, "UNANSWERED"])),
+    ...(checklistRunDefinitionVersion(run) === 2 ? { inventoryQuantities: {} } : {}),
     issueNotes: "",
     generalNotes: "",
     updatedAt: null,
@@ -53,6 +64,7 @@ export function normalizedChecklistDraft(run, draft) {
   const revision = Number.isInteger(draft.revision) && draft.revision >= 0 ? draft.revision : 0;
   const checklistAnswers = { ...defaults.checklistAnswers };
   const inventoryAnswers = { ...defaults.inventoryAnswers };
+  const allowedInventoryAnswers = inventoryAnswerValues(run);
   const checklistItemsById = new Map(frozenItems(run).map((item) => [item.id, item]));
   for (const [id, value] of Object.entries(draft.checklistAnswers || {})) {
     if (Object.hasOwn(checklistAnswers, id) && checklistAnswerValues.has(value)
@@ -61,16 +73,25 @@ export function normalizedChecklistDraft(run, draft) {
     }
   }
   for (const [id, value] of Object.entries(draft.inventoryAnswers || {})) {
-    if (Object.hasOwn(inventoryAnswers, id) && inventoryAnswerValues.has(value)) inventoryAnswers[id] = value;
+    if (Object.hasOwn(inventoryAnswers, id) && allowedInventoryAnswers.has(value)) inventoryAnswers[id] = value;
   }
   return {
     revision,
     checklistAnswers,
     inventoryAnswers,
+    ...(defaults.inventoryQuantities ? { inventoryQuantities: inventoryQuantitiesForRead(run, inventoryAnswers, draft.inventoryQuantities) } : {}),
     issueNotes: typeof draft.issueNotes === "string" ? draft.issueNotes : "",
     generalNotes: typeof draft.generalNotes === "string" ? draft.generalNotes : "",
     updatedAt: draft.updatedAt || null,
   };
+}
+
+function inventoryQuantitiesForRead(run, answers, quantities) {
+  const definitionVersion = checklistRunDefinitionVersion(run);
+  return Object.fromEntries(Object.entries(plainObject(quantities) ? quantities : {}).filter(([id, quantity]) => (
+    Object.hasOwn(answers, id) && supportsChecklistInventoryQuantity(definitionVersion, answers[id])
+    && validChecklistInventoryQuantity(quantity)
+  )));
 }
 
 function validatePatchMap(value, allowedItems, allowedValues, canUseNotApplicable) {
@@ -95,6 +116,7 @@ export function normalizeChecklistDraftMutation(run, request) {
   if (!plainObject(request?.changes)) fail("Draft changes are invalid.");
   if (JSON.stringify(request).length > checklistDraftRequestLimit) fail("Draft request is too large.");
   const allowedChangeKeys = new Set(["checklistAnswers", "inventoryAnswers", "issueNotes", "generalNotes"]);
+  if (checklistRunDefinitionVersion(run) === 2) allowedChangeKeys.add("inventoryQuantities");
   const keys = Object.keys(request.changes);
   if (!keys.length || keys.some((key) => !allowedChangeKeys.has(key))) fail("Draft changes are invalid.");
   const mutation = { mutationId: request.mutationId, baseRevision: request.baseRevision, changes: {} };
@@ -106,8 +128,19 @@ export function normalizeChecklistDraftMutation(run, request) {
   }
   if (Object.hasOwn(request.changes, "inventoryAnswers")) {
     mutation.changes.inventoryAnswers = validatePatchMap(
-      request.changes.inventoryAnswers, frozenInventory(run), inventoryAnswerValues, () => false,
+      request.changes.inventoryAnswers, frozenInventory(run), inventoryAnswerValues(run), () => false,
     );
+  }
+  if (Object.hasOwn(request.changes, "inventoryQuantities")) {
+    const quantities = request.changes.inventoryQuantities;
+    if (!plainObject(quantities) || Object.keys(quantities).length === 0) fail("Inventory quantities are invalid.");
+    const inventoryIds = new Set(frozenInventory(run).map(({ id }) => id));
+    for (const [id, quantity] of Object.entries(quantities)) {
+      if (!inventoryIds.has(id) || (quantity !== null && !validChecklistInventoryQuantity(quantity))) {
+        fail("Inventory quantity is invalid.");
+      }
+    }
+    mutation.changes.inventoryQuantities = { ...quantities };
   }
   for (const field of ["issueNotes", "generalNotes"]) {
     if (Object.hasOwn(request.changes, field)) {
@@ -157,8 +190,15 @@ export function assertChecklistDraftReadyForReview(run, draft) {
     }
   }
   const inventoryItemsById = new Map(frozenInventory(run).map((item) => [item.id, item]));
+  const allowedInventoryAnswers = inventoryAnswerValues(run);
   for (const [id, answer] of Object.entries(draft.inventoryAnswers)) {
-    if (!inventoryItemsById.has(id) || !inventoryAnswerValues.has(answer)) fail("Checklist draft is invalid.");
+    if (!inventoryItemsById.has(id) || !allowedInventoryAnswers.has(answer)) fail("Checklist draft is invalid.");
+  }
+  if (checklistRunDefinitionVersion(run) === 2 && Object.hasOwn(draft, "inventoryQuantities")) {
+    if (!plainObject(draft.inventoryQuantities)
+      || Object.keys(draft.inventoryQuantities).length !== Object.keys(current.inventoryQuantities).length) {
+      fail("Checklist draft is invalid.");
+    }
   }
   for (const field of ["issueNotes", "generalNotes"]) {
     if (typeof draft[field] !== "string" || draft[field].length > checklistDraftNoteLimit) {
@@ -185,17 +225,26 @@ export function checklistDraftReviewRequirements(run, draft) {
 
 export function applyChecklistDraftMutation(run, draft, mutation) {
   const current = normalizedChecklistDraft(run, draft);
+  const inventoryAnswers = { ...current.inventoryAnswers, ...(mutation.changes.inventoryAnswers || {}) };
+  const definitionVersion = checklistRunDefinitionVersion(run);
+  const inventoryQuantities = inventoryQuantitiesForRead(run, inventoryAnswers, current.inventoryQuantities);
+  for (const [id, quantity] of Object.entries(mutation.changes.inventoryQuantities || {})) {
+    if (quantity === null) delete inventoryQuantities[id];
+    else if (supportsChecklistInventoryQuantity(definitionVersion, inventoryAnswers[id])) inventoryQuantities[id] = quantity;
+    else fail("Inventory quantity requires a low or empty level.");
+  }
   return {
     revision: current.revision + 1,
     checklistAnswers: { ...current.checklistAnswers, ...(mutation.changes.checklistAnswers || {}) },
-    inventoryAnswers: { ...current.inventoryAnswers, ...(mutation.changes.inventoryAnswers || {}) },
+    inventoryAnswers,
+    ...(definitionVersion === 2 ? { inventoryQuantities } : {}),
     issueNotes: Object.hasOwn(mutation.changes, "issueNotes") ? mutation.changes.issueNotes : current.issueNotes,
     generalNotes: Object.hasOwn(mutation.changes, "generalNotes") ? mutation.changes.generalNotes : current.generalNotes,
     updatedAt: FieldValue.serverTimestamp(),
   };
 }
 
-export function checklistDraftProgress(draft) {
+export function checklistDraftProgress(draft, definitionVersion) {
   const checklist = Object.values(draft.checklistAnswers || {});
   const inventory = Object.values(draft.inventoryAnswers || {});
   return {
@@ -208,7 +257,8 @@ export function checklistDraftProgress(draft) {
     inventory: {
       total: inventory.length,
       answered: inventory.filter((value) => value !== "UNANSWERED").length,
-      needsRestock: inventory.filter((value) => value === "NEEDS_RESTOCK").length,
+      needsRestock: inventory.filter((value) => definitionVersion === 2
+        ? checklistInventoryNeedsRestock(value) : value === "NEEDS_RESTOCK").length,
     },
   };
 }
@@ -219,6 +269,6 @@ export function projectChecklistDraftForRead(run, draft) {
   return {
     ...safeDraft,
     lastSavedAt: updatedAt?.toDate?.()?.toISOString() || null,
-    progress: checklistDraftProgress(normalized),
+    progress: checklistDraftProgress(normalized, checklistRunDefinitionVersion(run)),
   };
 }
