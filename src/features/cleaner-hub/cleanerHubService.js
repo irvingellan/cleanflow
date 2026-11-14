@@ -136,6 +136,16 @@ export async function getMyJobAccess(jobId) {
   return data;
 }
 
+/** Wakes the Functions a cleaner waits on when opening a service or checklist. */
+export function cleanerWarmupTasks() {
+  const { functions } = cleanerHubFirebase();
+  return [
+    ["openMyChecklist", () => httpsCallable(functions, "openMyChecklist", { timeout: 30_000 })({ warmup: true })],
+    ["getMyJobAccess", () => httpsCallable(functions, "getMyJobAccess", { timeout: 30_000 })({ warmup: true })],
+    ["publicChecklist", () => fetch("/api/public-checklist?warmup=1", { cache: "no-store", credentials: "omit" })],
+  ];
+}
+
 export async function openMyChecklist(jobId) {
   const { functions } = cleanerHubFirebase();
   const { data } = await httpsCallable(functions, "openMyChecklist")({ jobId });

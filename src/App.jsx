@@ -27,6 +27,7 @@ import {
 } from "./features/auth/authService.js";
 import { useInitialManagerSession } from "./features/auth/useInitialManagerSession.js";
 import { recordManagerAccessDiagnostic } from "./features/auth/managerAccessDiagnostics.js";
+import { startManagerFunctionWarmup } from "./services/firebase/managerFunctionWarmup.js";
 import { CleanerDetail } from "./features/cleaners/CleanerDetail.jsx";
 import { CleanerDirectory } from "./features/cleaners/CleanerDirectory.jsx";
 import {
@@ -466,6 +467,7 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
   const { language, setLanguage, translate } = useTranslation();
   const isWideWorkspace = useMediaQuery("(min-width: 1280px)");
   useOneSignalIdentity(authUser?.uid);
+  useEffect(() => startManagerFunctionWarmup(), []);
   const inbox = useNotificationInbox({ role: "MANAGER", sessionKey: authUser.uid });
   const [activeSection, setActiveSection] = useState(() => (
     isManagerLoadDiagnosticsPath() ? "dev-center" : isWeeklyClosePreviewPath() ? "payouts" : "dashboard"

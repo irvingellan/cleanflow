@@ -130,6 +130,16 @@ export function JobsPage({
     onScrollRestored?.();
   }, [hasError, isLoading, onScrollRestored, restoreScroll, sortedJobs]);
 
+  // Clients come from the properties already loaded: no extra reads.
+  const clientOptions = useMemo(() => {
+    const names = new Map();
+    for (const property of properties) {
+      if (property.clientId && !names.has(property.clientId)) {
+        names.set(property.clientId, property.clientName || translate("common.notProvided"));
+      }
+    }
+    return [...names].sort(([, first], [, second]) => first.localeCompare(second, language));
+  }, [properties, language, translate]);
   const defaultFilters = createJobListFilters();
   const hasActiveFilters = Object.entries(filters).some(
     ([key, value]) => value !== defaultFilters[key],
@@ -347,6 +357,20 @@ export function JobsPage({
                       {cleaner.name || translate("common.notProvided")}
                     </option>
                   ))}
+              </select>
+            </label>
+            <label>
+              {translate("jobs.clientFilter")}
+              <select
+                value={filters.clientId}
+                onChange={(event) =>
+                  onFiltersChange({ clientId: event.target.value, clientName: "" })
+                }
+              >
+                <option value="">{translate("jobs.anyClient")}</option>
+                {clientOptions.map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
               </select>
             </label>
             <label>
