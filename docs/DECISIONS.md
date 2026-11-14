@@ -977,31 +977,29 @@ system; eight more Functions and one IAM permission (custom-token signing) in
 Production; projection documents to clean up later (TTL). Phone/email sign-in and
 cleaner push notifications are deferred.
 
-## DEC-047 — First valid authenticated acceptance may fill one explicitly offered slot
+## DEC-047 — Authenticated acceptance fills available slots in an automatic offer batch
 
-**Status:** Implemented in the local Issue #86 candidate. Publication requires
-separate approval.
+**Status:** Implemented for review in Issue #86. Enabling it in Production
+requires a separate release.
 
-**Decision.** Keep manual interest as the default. A manager can select
-`FIRST_ACCEPT_WINS` for the first batch of an empty single-slot v2 Job. An
-authenticated recipient sends a distinct `ACCEPTED` action. The server awards the
-single slot in the same transaction as the canonical Assignment and its audit
-event. The manager's direct assignment reads the same roster. The public link
-prompts authentication and holds no assignment authority.
+**Decision.** When the feature is enabled, eligible new schema-v2 Jobs with an
+empty roster and no previous Offers or Assignments default to automatic. A
+manager can select manual distribution before sending. Each new automatic batch
+freezes capacity at 1–10. Each authenticated invitee can reserve one available
+spot once. The server writes the Assignment, roster, acceptance and manager
+notice in one Firestore transaction. Public links point to the signed-in
+agenda; only the authenticated recipient can answer.
 
-**Multi-slot contract draft (2026-11-13).** New versioned batches freeze a
-capacity from 1 to 10. Each valid authenticated acceptance reserves one slot
-and records its own Assignment and notification in the same transaction.
-The marker closes the batch permanently when full or after a direct manager
-override. Previous batches retain their stored interpretation. The UI may
-default to the automatic option only when the manager can choose an eligible
-new Job and explicitly submits the selected distribution mode.
+The batch closes permanently when full, or when a manager assigns or removes
+a cleaner directly. A manager can fill a vacant spot within the frozen
+capacity after closure. On each automatic assignment, the manager receives
+one notice. Filling every spot creates one additional notice.
 
-**Consequences.** No migration for manual Offers. The immutable batch and
-close marker prevent later retries or removal from reopening old offers. The
-existing agenda projection converges after the commit. Per-recipient closed
-entries keep original invitation data. The existing notification, checklist,
-and payout boundaries apply. See [First Accept Wins V1](FIRST_ACCEPT_WINS_V1.md).
+**Consequences.** Existing manual Offers and unversioned automatic batches
+keep their interpretation. The agenda projects the recipient's state without
+revealing other recipients. The existing checklist and payout boundaries apply.
+See [First Accept Wins V1](FIRST_ACCEPT_WINS_V1.md) for the current contract and
+rollout checks.
 
 
 ## DEC-048 — Persist notification history independently of push

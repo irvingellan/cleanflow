@@ -37,7 +37,9 @@ export function OfferCleaners({
   const visibleCleaners = sortByCleanerExperience(filterCleanersByName(cleaners, cleanerSearch), context.result);
 
   function toggleCleaner(cleanerId) {
-    if (canOptIn && currentDistribution === null) setDistribution({ jobId: job.id, mode: "automatic" });
+    if (currentDistribution === null) {
+      setDistribution({ jobId: job.id, mode: canOptIn ? "automatic" : "manual" });
+    }
     setSelectedCleanerIds((currentIds) =>
       currentIds.includes(cleanerId)
         ? currentIds.filter((id) => id !== cleanerId)

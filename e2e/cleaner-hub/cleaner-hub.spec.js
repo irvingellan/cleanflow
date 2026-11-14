@@ -338,8 +338,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await page.getByLabel(fixture.cleanerAName).check();
     await page.getByLabel(fixture.cleanerBName).check();
     const optIn = page.getByLabel("Assign automatically to the first cleaner who accepts");
-    await expect(optIn).not.toBeChecked();
-    await optIn.check();
+    await expect(optIn).toBeChecked();
     await page.getByRole("button", { name: "Create offers" }).click();
     await expect(page.locator(".offers-section__success")).toContainText("Automatic offers created (2)");
     expect((await job.get()).data().offerDistributionMode).toBe("FIRST_ACCEPT_WINS");
@@ -421,8 +420,11 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     expect(assignments.docs.map((snapshot) => snapshot.data().assignmentMethod)).toEqual(["FIRST_ACCEPT_WINS"]);
     await expect.poll(async () => {
       const events = await job.collection("managerNotificationDeliveries").get();
-      return events.docs.map((snapshot) => [snapshot.get("eventType"), snapshot.get("deliveryStatus")]);
-    }).toEqual([["ASSIGNMENT_CONFIRMED", "NO_ACTIVE_DEVICES"]]);
+      return events.docs.map((snapshot) => [snapshot.get("eventType"), snapshot.get("deliveryStatus")])
+        .sort(([left], [right]) => left.localeCompare(right));
+    }).toEqual([
+      ["AUTO_ASSIGNMENT_CONFIRMED", "NO_ACTIVE_DEVICES"], ["AUTO_OFFER_BATCH_FILLED", "NO_ACTIVE_DEVICES"],
+    ]);
 
     await expect(otherOffer).toContainText("Unavailable");
     await page.locator("details.job-detail-section > summary", { hasText: "Cleaner & assignment" }).click();
@@ -433,6 +435,8 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await page.getByRole("button", { name: /\bInbox\b/ }).click();
     const managerJobItems = page.getByRole("listitem").filter({ hasText: fixture.mapleName });
     await expect(managerJobItems.getByRole("heading", { name: "Automatic assignment confirmed" })).toHaveCount(1);
+    await expect(managerJobItems.getByRole("heading", { name: "All spots filled" })).toHaveCount(1);
+    await expect(managerJobItems.getByText(/11:15/)).toHaveCount(2);
     await expect(managerJobItems.getByRole("heading", { name: "Cleaner expressed interest" })).toHaveCount(0);
     await evidence(page, "85-02-manager-inbox");
 

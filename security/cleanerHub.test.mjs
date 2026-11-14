@@ -30,6 +30,7 @@ const {
   listNotificationInbox,
   openMyChecklist,
   redeemCleanerAccessCode,
+  removeAutomaticCleanerAssignment,
   getMyJobAccess,
   rescheduleJob,
   respondToMyOffer,
@@ -250,9 +251,11 @@ test("assignment through the real manager callable appears only in that cleaner'
     { jobId: "job-a", propertyName: "Maple Example House", scheduledDate: dateKey(3), scheduledStart: "10:30", jobStatus: "ASSIGNED" },
   );
   const serialized = JSON.stringify(mine.docs.map((doc) => doc.data()));
-  for (const secret of ["250", "150", "private-", "Synthetic Client", "Bia", "cleaner-b", "Birch"]) {
+  for (const secret of ["clientPrice", "cleanerPayout", "private-", "Synthetic Client", "Bia", "cleaner-b", "Birch"]) {
     assert.ok(!serialized.includes(secret), `agenda must not expose ${secret}`);
   }
+
+  assert.equal(entries[0].offeredCompensation, null);
 
   // Cleaner B cannot list or read A's entries; neither can query without the filter.
   const dbB = cleanerDb(uidB);
@@ -832,11 +835,14 @@ async function assignmentsFor(job) {
   return snapshot.docs.map((entry) => entry.data());
 }
 
-test("three invited cleaners race for one automatic assignment with idempotent retry, isolated agenda, and checklist access", async () => {
-  await createJob("auto-race");
-  const job = jobDocument("auto-race");
-  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: automaticCleaners.map(([id]) => id) }));
-  for (const [cleanerId] of automaticCleaners) await link(cleanerId);
+test("three invitees for an unversioned automatic batch retain one assignment, private agenda, and checklist access", async () => {
+  const job = await createAutomaticJob("auto-race");
+  for (const [cleanerId] of automaticCleaners) {
+    await createAutomaticOffer(job.id, cleanerId, {
+      offeredPropertyName: "Maple Example House", offeredScheduledDate: dateKey(3), offeredScheduledStart: "10:30",
+    });
+    await link(cleanerId);
+  }
   // An old Hub build's "interested" action cannot claim an automatic Offer.
   const interest = await respondToMyOffer.run(cleanerRequest(uidA, { jobId: job.id, status: "INTERESTED" }));
   assert.deepEqual(interest, { state: "unavailable", status: null });
@@ -913,6 +919,186 @@ test("three invited cleaners race for one automatic assignment with idempotent r
   for (const [, uid] of losers) {
     assert.equal((await openMyChecklist.run(cleanerRequest(uid, { jobId: job.id }))).state, "unavailable");
   }
+});
+
+test("three simultaneous acceptances fill exactly two versioned slots and retries keep the same assignments", async () => {
+  await createJob("auto-two-slots-race", { requiredCleanerCount: 2 });
+  const job = jobDocument("auto-two-slots-race");
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: automaticCleaners.map(([id]) => id) }));
+  for (const [cleanerId] of automaticCleaners) await link(cleanerId);
+
+  const results = await Promise.all(automaticCleaners.map(([, uid]) => accept(job.id, uid)));
+  assert.deepEqual(results.map(({ state }) => state).sort(), ["already-taken", "assigned", "assigned"]);
+  const winners = automaticCleaners.filter((_, index) => results[index].state === "assigned");
+  const [loserId, loserUid] = automaticCleaners.find((_, index) => results[index].state === "already-taken");
+  const committedJob = (await job.get()).data();
+  assert.equal(committedJob.operationalStatus, "ASSIGNED");
+  assert.deepEqual([...committedJob.assignedCleanerIds].sort(), winners.map(([id]) => id).sort());
+  assert.equal(committedJob.checklistContextRevision, 2);
+  assert.deepEqual(committedJob.automaticOfferBatch, {
+    version: 2, capacity: 2, openingContextRevision: 0, currentContextRevision: 2,
+  });
+  assert.ok(committedJob.offerDistributionClosedAt);
+  assert.equal(committedJob.firstAcceptClaim, undefined);
+  assert.equal(committedJob.cleanerPayout, 150);
+
+  const committedAssignments = await assignmentsFor(job);
+  assert.equal(committedAssignments.length, 2);
+  for (const [cleanerId, uid] of winners) {
+    const offer = (await job.collection("offers").doc(cleanerId).get()).data();
+    assert.equal(offer.status, "ACCEPTED");
+    const assignment = (await job.collection("assignments").doc(offer.acceptedAssignmentId).get()).data();
+    assert.deepEqual([assignment.cleanerId, assignment.assignmentMethod, assignment.sourceOfferId, assignment.isActive],
+      [cleanerId, autoMode, cleanerId, true]);
+    assert.deepEqual(await accept(job.id, uid), { state: "assigned", status: "ACCEPTED" });
+  }
+  assert.deepEqual(await accept(job.id, loserUid), { state: "already-taken", status: null });
+  assert.equal((await job.collection("offers").doc(loserId).get()).data().status, "PENDING");
+  assert.deepEqual(await assignmentsFor(job), committedAssignments);
+  assert.deepEqual((await job.get()).data(), committedJob);
+  assert.equal((await admin.collection(`${root}/payouts`).get()).size, 0);
+
+  await sync(job.id);
+  const loserAgenda = await assertSucceeds(cleanerDb(loserUid).collection(`${root}/cleanerAgenda`).where("cleanerId", "==", loserId).get());
+  assert.deepEqual(loserAgenda.docs.map((snapshot) => [snapshot.get("kind"), snapshot.get("offerStatus")]), [["OFFER", "ALREADY_TAKEN"]]);
+  for (const [winnerId, winnerUid] of winners) {
+    const assigned = (await agendaFor(winnerId)).filter(({ jobId, kind }) => jobId === job.id && kind === "ASSIGNED");
+    assert.equal(assigned.length, 1);
+    assert.deepEqual([assigned[0].acknowledged, assigned[0].offeredCompensation], [true, null]);
+    assert.ok(!JSON.stringify(loserAgenda.docs[0].data()).includes(winnerId));
+    await assertFails(cleanerDb(loserUid).doc(`${root}/cleanerAgenda/${winnerId}__${job.id}`).get());
+    await assertFails(cleanerDb(loserUid).doc(`${job.path}/offers/${winnerId}`).get());
+    await assertFails(cleanerDb(winnerUid).doc(job.path).get());
+  }
+});
+
+test("a partial versioned batch keeps active invitations private and allows only their authorized reset or revoke", async () => {
+  await createJob("auto-two-slots-partial", { requiredCleanerCount: 2 });
+  const job = jobDocument("auto-two-slots-partial");
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: automaticCleaners.map(([id]) => id) }));
+  for (const [cleanerId] of automaticCleaners) await link(cleanerId);
+
+  assert.equal((await accept(job.id, uidA)).state, "assigned");
+  const partial = (await job.get()).data();
+  assert.deepEqual([partial.assignedCleanerIds, partial.operationalStatus, partial.checklistContextRevision],
+    [["cleaner-a"], "ASSIGNED", 1]);
+  assert.equal(partial.offerDistributionClosedAt, undefined);
+  await sync(job.id);
+  const [pending] = await agendaFor("cleaner-b");
+  assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", null]);
+  assert.doesNotMatch(JSON.stringify(pending), /cleaner-a|Ana Example|assignedCleanerIds|private-|clientPrice|cleanerPayout/);
+
+  const db = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
+  const offerPath = `${job.path}/offers/cleaner-b`;
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  await assertFails(cleanerDb(uidB).doc(offerPath).update({ publicOfferTokenHash: tokenHash }));
+  await assertFails(db.doc(offerPath).update({ publicOfferTokenHash: tokenHash, acceptedAssignmentId: "forged" }));
+  await assertSucceeds(db.doc(offerPath).update({ publicOfferTokenHash: tokenHash }));
+  const publicLink = await requestPublicOffer("GET", token);
+  assert.equal(publicLink.code, 200);
+  assert.deepEqual(publicLink.body, { offer: { offerDistributionMode: autoMode, preferredLanguage: "pt" } });
+  const forwarded = await requestPublicOffer("POST", token, { status: "ACCEPTED" });
+  assert.ok(forwarded.code >= 400);
+  assert.deepEqual(await assignmentsFor(job).then((rows) => rows.map(({ cleanerId }) => cleanerId)), ["cleaner-a"]);
+
+  await assertSucceeds(db.doc(offerPath).update({ status: "REVOKED", revokedAt: serverTimestamp() }));
+  assert.equal((await accept(job.id, uidB)).state, "unavailable");
+  assert.equal((await accept(job.id, uidC)).state, "assigned");
+  assert.ok((await job.get()).get("offerDistributionClosedAt"));
+  await assertFails(db.doc(offerPath).update({ status: "PENDING" }));
+});
+
+test("manager roster correction closes the batch and cannot remove another organization's assignment", async () => {
+  const jobId = "auto-two-slots-correction";
+  await createJob(jobId, { requiredCleanerCount: 2 });
+  const job = jobDocument(jobId);
+  await createAutomaticJobOffers.run(managerRequest({ jobId, cleanerIds: automaticCleaners.map(([id]) => id) }));
+  for (const [cleanerId] of automaticCleaners) await link(cleanerId);
+  assert.equal((await accept(jobId, uidA)).state, "assigned");
+  assert.equal((await accept(jobId, uidB)).state, "assigned");
+  const closedAt = (await job.get()).get("offerDistributionClosedAt");
+  const assignments = job.collection("assignments");
+  const [[a], [b]] = await Promise.all(["cleaner-a", "cleaner-b"].map(async (cleanerId) =>
+    (await assignments.where("cleanerId", "==", cleanerId).get()).docs));
+  const removal = { jobId, assignmentId: a.id };
+  const offers = async () => (await job.collection("offers").get()).docs.map((snapshot) => snapshot.data());
+  const originalOffers = await offers();
+  const db = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
+  await assertFails(db.doc(a.ref.path).update({ isActive: false, removedAt: serverTimestamp(), removedByUid: "manager" }));
+  await assert.rejects(removeAutomaticCleanerAssignment.run(cleanerRequest(uidA, removal)), { code: "permission-denied" });
+  await assert.rejects(removeAutomaticCleanerAssignment.run({
+    auth: { uid: "other-manager", token: { firebase: { sign_in_provider: "password" } } }, data: removal,
+  }), { code: "permission-denied" });
+
+  const corrected = await removeAutomaticCleanerAssignment.run(managerRequest(removal));
+  assert.deepEqual(corrected, {
+    jobId, assignmentId: a.id, assignedCleanerIds: ["cleaner-b"], operationalStatus: "ASSIGNED", checklistContextRevision: 3,
+  });
+  const removed = (await a.ref.get()).data();
+  assert.equal(removed.isActive, false);
+  assert.equal(removed.removedByUid, "manager");
+  assert.ok(removed.removedAt);
+  assert.equal((await b.ref.get()).get("isActive"), true);
+  assert.ok((await job.get()).get("offerDistributionClosedAt").isEqual(closedAt));
+  assert.deepEqual(await offers(), originalOffers);
+  assert.equal((await accept(jobId, uidC)).state, "already-taken");
+  assert.equal((await accept(jobId, uidB)).state, "assigned");
+  await assert.rejects(removeAutomaticCleanerAssignment.run(managerRequest(removal)), { code: "failed-precondition" });
+
+  await removeAutomaticCleanerAssignment.run(managerRequest({ jobId, assignmentId: b.id }));
+  const empty = (await job.get()).data();
+  assert.deepEqual([empty.operationalStatus, empty.assignedCleanerIds, empty.checklistContextRevision], ["UNASSIGNED", [], 4]);
+  assert.ok(empty.offerDistributionClosedAt.isEqual(closedAt));
+  assert.deepEqual(await offers(), originalOffers);
+  assert.equal((await accept(jobId, uidC)).state, "already-taken");
+});
+
+test("manager roster correction preserves a saved Checklist while Job status is still assigned", async () => {
+  const jobId = "auto-two-slots-checklist-started";
+  await createJob(jobId, { requiredCleanerCount: 2 });
+  const job = jobDocument(jobId);
+  await createAutomaticJobOffers.run(managerRequest({ jobId, cleanerIds: ["cleaner-a", "cleaner-b"] }));
+  await link("cleaner-a");
+  assert.equal((await accept(jobId, uidA)).state, "assigned");
+  await createChecklistRun.run(managerRequest({ jobId }));
+  const run = job.collection("checklistRuns").doc("initial");
+  const itemId = (await run.get()).get("resolvedDefinition.sections")[0].items[0].id;
+  const draft = run.collection("drafts").doc("current");
+  await draft.set({ revision: 1, checklistAnswers: { [itemId]: "DONE" } }, { merge: true });
+  const [active] = (await job.collection("assignments").where("isActive", "==", true).get()).docs;
+  const beforeJob = (await job.get()).data();
+  const beforeDraft = (await draft.get()).data();
+  assert.equal(beforeJob.operationalStatus, "ASSIGNED");
+  await assert.rejects(removeAutomaticCleanerAssignment.run(managerRequest({ jobId, assignmentId: active.id })),
+    { code: "failed-precondition" });
+  assert.deepEqual((await job.get()).data(), beforeJob);
+  assert.deepEqual((await draft.get()).data(), beforeDraft);
+  assert.deepEqual((await active.ref.get()).data(), active.data());
+});
+
+test("rescheduling a partial versioned batch blocks acceptance, token refresh, and revoke for its old context", async () => {
+  await createJob("auto-two-slots-reschedule", { requiredCleanerCount: 2 });
+  const job = jobDocument("auto-two-slots-reschedule");
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a", "cleaner-b"] }));
+  await link("cleaner-a");
+  await link("cleaner-b");
+  assert.equal((await accept(job.id, uidA)).state, "assigned");
+
+  await rescheduleJob.run(managerRequest({ jobId: job.id, scheduledDate: dateKey(4), scheduledStart: "13:00" }));
+  const db = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
+  const staleOffer = db.doc(`${job.path}/offers/cleaner-b`);
+  await assertFails(staleOffer.update({ status: "REVOKED", revokedAt: serverTimestamp() }));
+  await assertFails(staleOffer.update({ publicOfferTokenHash: "f".repeat(64) }));
+  assert.equal((await accept(job.id, uidB)).state, "unavailable");
+  assert.equal((await accept(job.id, uidA)).state, "assigned");
+
+  await sync(job.id);
+  const [kept] = (await agendaFor("cleaner-a")).filter(({ kind }) => kind === "ASSIGNED");
+  assert.ok(kept);
+  assert.deepEqual([kept.scheduledDate, kept.scheduledStart], [dateKey(4), "13:00"]);
+  assert.deepEqual(await agendaFor("cleaner-b"), []);
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), ["cleaner-a"]);
 });
 
 test("automatic acceptance and a simultaneous manual assignment contend for the same slot", async () => {
@@ -1042,6 +1228,40 @@ test("the manager explicitly opts in once; a browser cannot forge automatic resp
   await assertSucceeds(managerDb.doc(offerPath).update({ status: "REVOKED", revokedAt: serverTimestamp() }));
   assert.equal((await accept(job.id, uidA)).state, "unavailable");
   assert.deepEqual(await assignmentsFor(job), []);
+});
+
+test("browser Job and Offer writes cannot forge or remove versioned automatic provenance", async () => {
+  const db = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
+  const batch = { version: 2, capacity: 2, openingContextRevision: 0, currentContextRevision: 0 };
+  const lastAcceptance = { cleanerId: "cleaner-a", assignmentId: "forged" };
+  for (const fields of [{ automaticOfferBatch: batch }, { lastAutomaticOfferAcceptance: lastAcceptance }]) {
+    await assertFails(db.doc(`${root}/jobs/forged-new`).set({
+      organizationId: org, schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], ...fields,
+    }));
+  }
+
+  await createJob("manual-provenance");
+  const manual = db.doc(`${root}/jobs/manual-provenance`);
+  await assertFails(manual.update({ automaticOfferBatch: batch }));
+  await assertFails(manual.update({ lastAutomaticOfferAcceptance: lastAcceptance }));
+  for (const fields of [{ automaticOfferBatchVersion: 2 }, { acceptedAssignmentId: "forged" }]) {
+    await assertFails(manual.collection("offers").doc("forged").set({
+      jobId: manual.id, cleanerId: "cleaner-a", status: "PENDING", ...fields,
+    }));
+  }
+  const ordinaryOffer = manual.collection("offers").doc("ordinary");
+  await assertSucceeds(ordinaryOffer.set({ jobId: manual.id, cleanerId: "cleaner-a", status: "PENDING" }));
+  await assertFails(ordinaryOffer.update({ automaticOfferBatchVersion: 2 }));
+  await assertFails(ordinaryOffer.update({ acceptedAssignmentId: "forged" }));
+
+  await createJob("automatic-provenance", { requiredCleanerCount: 2 });
+  await createAutomaticJobOffers.run(managerRequest({ jobId: "automatic-provenance", cleanerIds: ["cleaner-a", "cleaner-b"] }));
+  await link("cleaner-a");
+  assert.equal((await accept("automatic-provenance", uidA)).state, "assigned");
+  const automatic = db.doc(`${root}/jobs/automatic-provenance`);
+  await assertFails(automatic.update({ "automaticOfferBatch.capacity": 3 }));
+  await assertFails(automatic.update({ automaticOfferBatch: null }));
+  await assertFails(automatic.update({ lastAutomaticOfferAcceptance: null }));
 });
 
 test("rescheduling through the manager endpoint invalidates acceptance of the earlier schedule", async () => {

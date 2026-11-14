@@ -101,6 +101,27 @@ describe("Notification Inbox", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("This item is no longer available.");
   });
 
+  it("renders each manager assignment and batch completion with the authorized service", async () => {
+    const current = {
+      ...items[0],
+      type: "AUTO_ASSIGNMENT_CONFIRMED",
+      automaticOffer: { cleanerLabel: "Example Cleaner", scheduledDate: "2026-11-16", scheduledStart: "10:30" },
+    };
+    const closed = { ...current, id: "filled", type: "AUTO_OFFER_BATCH_FILLED",
+      automaticOffer: { scheduledDate: "2026-11-16" } };
+    const onOpen = vi.fn(() => true);
+    const inbox = { state: "ready", items: [current, closed], loadedUnreadCount: 2, refresh: vi.fn(),
+      open: vi.fn().mockResolvedValue({ state: "opened", destination: { kind: "JOB", jobId: "current" } }) };
+    render(<NotificationInbox inbox={inbox} language="pt" onOpen={onOpen} />);
+    const confirmation = screen.getByRole("heading", { name: "Atribuição automática confirmada" }).closest("li");
+    const filled = screen.getByRole("heading", { name: "Todas as vagas preenchidas" }).closest("li");
+    expect(within(confirmation).getByText("Example Cleaner ficou com o serviço.")).toBeInTheDocument();
+    expect(within(confirmation).getByText(/10:30/)).toBeInTheDocument();
+    expect(within(filled).queryByText(/Example Cleaner/)).not.toBeInTheDocument();
+    await userEvent.click(within(filled).getByRole("button", { name: "Ver serviço" }));
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith({ kind: "JOB", jobId: "current" });
+  });
+
   it("labels zero as a partial count until an older unread notification is loaded", async () => {
     const service = {
       list: vi.fn()

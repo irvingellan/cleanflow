@@ -28,6 +28,8 @@ const messages = {
   "inbox.event.generic": ["Atualização operacional", "Operational update", "Actualización operativa"],
   "inbox.event.CLEANER_INTERESTED": ["Cleaner demonstrou interesse", "Cleaner expressed interest", "Una cleaner expresó interés"],
   "inbox.event.AUTO_ASSIGNMENT_CONFIRMED": ["Atribuição automática confirmada", "Automatic assignment confirmed", "Asignación automática confirmada"],
+  "inbox.event.AUTO_OFFER_BATCH_FILLED": ["Todas as vagas preenchidas", "All spots filled", "Todas las plazas cubiertas"],
+  "inbox.automatic.assignee": ["{cleaner} ficou com o serviço.", "{cleaner} was assigned to this job.", "{cleaner} quedó asignada al servicio."],
   "inbox.event.ASSIGNMENT_CONFIRMED": ["Atribuição confirmada", "Assignment confirmed", "Asignación confirmada"],
   "inbox.event.CHECKLIST_READY_FOR_REVIEW": ["Checklist pronto para revisão", "Checklist ready for review", "Checklist listo para revisión"],
   "inbox.event.TOMORROW_19": ["Lembrete de serviços de amanhã", "Reminder for tomorrow's jobs", "Recordatorio de servicios de mañana"],

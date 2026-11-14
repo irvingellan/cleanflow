@@ -22,6 +22,7 @@ import { isJobFilled, managerDecisionOf, maxCleanersPerJob, requiredCleanerCount
 const organizationId = "cleanflow-demo";
 const assignmentSchemaVersion = 1;
 const assignCleanerDirectlyCall = httpsCallable(functions, "assignCleanerDirectly");
+const removeAutomaticCleanerAssignmentCall = httpsCallable(functions, "removeAutomaticCleanerAssignment");
 
 function jobDocument(jobId) {
   return doc(db, "organizations", organizationId, "jobs", jobId);
@@ -73,12 +74,24 @@ export function canAssignInterestedOffer(job, offer) {
   );
 }
 
+export function canDirectlyFillJob(job) {
+  if (job?.schemaVersion !== 2 || job.archivedAt
+    || !["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus)) return false;
+  if (!isAutomaticOfferJob(job)) return true;
+
+  const roster = getAssignedCleanerIds(job);
+  const batch = job.automaticOfferBatch;
+  if (batch === undefined) return roster.length === 0;
+
+  return batch?.version === 2 && Number.isInteger(batch.capacity)
+    && batch.capacity === requiredCleanerCount(job)
+    && batch.capacity >= 1 && batch.capacity <= maxCleanersPerJob
+    && roster.length < batch.capacity;
+}
+
 export function canAssignCleanerDirectly(job, cleaner) {
   return (
-    job?.schemaVersion === 2 &&
-    !job.archivedAt &&
-    (!isAutomaticOfferJob(job) || getAssignedCleanerIds(job).length === 0) &&
-    ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus) &&
+    canDirectlyFillJob(job) &&
     cleaner?.active === true &&
     !cleaner.archivedAt &&
     typeof cleaner.id === "string" &&
@@ -225,6 +238,12 @@ async function hasActionableOffers(jobId) {
 
 export async function removeAssignment(jobId, assignmentId, actorUid) {
   const jobReference = jobDocument(jobId);
+  const job = assertRosterEditable(await getDoc(jobReference));
+  if (isAutomaticOfferJob(job) && job.automaticOfferBatch?.version === 2) {
+    await removeAutomaticCleanerAssignmentCall({ jobId, assignmentId });
+    return jobFromSnapshot(await getDoc(jobReference));
+  }
+
   const assignmentReference = assignmentDocument(jobId, assignmentId);
   // Firestore transactions can only read documents; this immediate bounded offer read
   // determines the post-removal parent state without introducing a collection-group query.

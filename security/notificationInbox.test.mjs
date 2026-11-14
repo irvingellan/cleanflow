@@ -175,9 +175,14 @@ test("rollback gates all Inbox callables while keeping the durable event and its
   }
 });
 
-test("automatic award makes one manager inbox entry with per-manager reading and one cleaner assignment", async () => {
-  await writeJob("first-accept");
-  await createAutomaticJobOffers.run(manager("manager", { jobId: "first-accept", cleanerIds: ["ana", "bia"] }));
+test("an unversioned automatic award retains its single manager event and per-manager reading", async () => {
+  await writeJob("first-accept", { operationalStatus: "OFFERED", offerDistributionMode: "FIRST_ACCEPT_WINS" });
+  const offers = job("first-accept").collection("offers");
+  const endsTomorrow = Timestamp.fromMillis(Date.now() + 86_400_000);
+  await Promise.all(["ana", "bia"].map((cleanerId) => offers.doc(cleanerId).set({
+    organizationId, jobId: "first-accept", cleanerId, cleanerName: cleanerId, status: "PENDING",
+    offerDistributionMode: "FIRST_ACCEPT_WINS", offeredChecklistContextRevision: 0, publicOfferExpiresAt: endsTomorrow,
+  })));
   const beforeJob = await job("first-accept").get();
   const results = await Promise.all(["ana", "bia"].map((id) => respondToMyOffer.run(
     cleaner(id, { jobId: "first-accept", status: "ACCEPTED" }),
@@ -205,6 +210,65 @@ test("automatic award makes one manager inbox entry with per-manager reading and
   assert.equal((await listNotificationInbox.run(manager("manager"))).unreadCount, 0);
   assert.equal((await listNotificationInbox.run(manager("second-manager"))).unreadCount, 1);
   assert.equal((await job("first-accept").collection("managerNotificationDeliveries").get()).size, 1);
+});
+
+test("versioned batch writes one confirmation for each assignment and one filled notice, with no replay duplicates", async () => {
+  const jobId = "auto-two-slot-notices";
+  const target = job(jobId);
+  const delivery = target.collection("managerNotificationDeliveries");
+  await writeJob(jobId, { requiredCleanerCount: 2 });
+  await createAutomaticJobOffers.run(manager("manager", { jobId, cleanerIds: ["ana", "bia", "carla"] }));
+  const offered = await target.get();
+  assert.deepEqual(await respondToMyOffer.run(cleaner("ana", { jobId, status: "ACCEPTED" })), { state: "assigned", status: "ACCEPTED" });
+  const partial = await target.get();
+  const { items: initialItems } = await listNotificationInbox.run(manager("manager"));
+  assert.equal(initialItems.length, 1);
+  assert.deepEqual([initialItems[0].type, initialItems[0].openable, initialItems[0].automaticOffer], [
+    "AUTO_ASSIGNMENT_CONFIRMED", true,
+    { cleanerLabel: "ana", scheduledDate: "2026-11-04", scheduledStart: "10:30" },
+  ]);
+
+  assert.deepEqual(await respondToMyOffer.run(cleaner("bia", { jobId, status: "ACCEPTED" })), { state: "assigned", status: "ACCEPTED" });
+  const filled = await target.get();
+  // Trigger redelivery repeats the same assignment event, but not its inbox item.
+  for (const [eventId, before, after] of [["first-committed-acceptance", offered, partial], ["second-committed-acceptance", partial, filled]]) {
+    const counts = await Promise.all([
+      jobTransition(jobId, eventId, before, after),
+      jobTransition(jobId, eventId, before, after),
+    ]);
+    assert.deepEqual(counts.sort(), [0, 1]);
+  }
+  for (const id of ["ana", "bia"]) {
+    assert.deepEqual(await respondToMyOffer.run(cleaner(id, { jobId, status: "ACCEPTED" })), { state: "assigned", status: "ACCEPTED" });
+    const { items } = await listNotificationInbox.run(cleaner(id));
+    assert.deepEqual(items.map(({ type }) => type), ["AUTO_ASSIGNED"]);
+  }
+  assert.equal((await respondToMyOffer.run(cleaner("carla", { jobId, status: "ACCEPTED" }))).state, "already-taken");
+  assert.equal((await listNotificationInbox.run(cleaner("carla"))).items.length, 0);
+
+  const { items, unreadCount } = await listNotificationInbox.run(manager("manager"));
+  assert.equal(unreadCount, 3);
+  assert.equal(new Set(items.map(({ id }) => id)).size, 3);
+  assert.deepEqual(items.map(({ type }) => type).sort(), [
+    "AUTO_ASSIGNMENT_CONFIRMED", "AUTO_ASSIGNMENT_CONFIRMED", "AUTO_OFFER_BATCH_FILLED",
+  ]);
+  assert.deepEqual(items.map(({ automaticOffer }) => automaticOffer.cleanerLabel ?? "").sort(), ["", "ana", "bia"]);
+  assert.doesNotMatch(JSON.stringify(items), /PRIVATE_GUEST|clientPrice|assignmentId|offerId/);
+  const filledNotice = items.find(({ type }) => type === "AUTO_OFFER_BATCH_FILLED");
+  assert.deepEqual(filledNotice.automaticOffer, { scheduledDate: "2026-11-04", scheduledStart: "10:30" });
+  assert.deepEqual(await openNotificationInboxItem.run(manager("manager", { id: filledNotice.id })), {
+    state: "opened", destination: { kind: "JOB", jobId },
+  });
+  assert.equal((await listNotificationInbox.run(manager("manager"))).unreadCount, 2);
+  assert.equal((await listNotificationInbox.run(manager("second-manager"))).unreadCount, 3);
+
+  const rows = (await delivery.get()).docs.map((snapshot) => snapshot.data());
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows.map(({ eventType }) => eventType).sort(), [
+    "AUTO_ASSIGNMENT_CONFIRMED", "AUTO_ASSIGNMENT_CONFIRMED", "AUTO_OFFER_BATCH_FILLED",
+  ]);
+  assert.ok(rows.every(({ deliveryStatus }) => deliveryStatus === "PENDING"));
+  assert.equal((await target.collection("assignments").get()).size, 2);
 });
 
 test("reschedule push rejects the superseded revision and cancellation never reopens job details", async () => {

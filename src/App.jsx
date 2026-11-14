@@ -1573,11 +1573,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
 
         {view === "offer-cleaners" && selectedJob && (
           <OfferCleaners
+            key={selectedJob.id}
             job={selectedJob}
             cleaners={cleaners}
             isLoading={isLoadingCleaners}
             hasError={hasCleanerError}
-            canOfferAutomatically={!isLoadingAssignments && !hasAssignmentsError && !hasOffersError
+            canOfferAutomatically={!isLoadingAssignments && !isLoadingOffers && !hasAssignmentsError && !hasOffersError
               && jobOffers.length === 0 && jobAssignments.length === 0}
             onBack={returnToJobDetail}
             onSent={(count, updatedJob) => {
