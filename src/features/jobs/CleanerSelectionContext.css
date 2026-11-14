@@ -1,0 +1,23 @@
+.cleaner-option input,
+.direct-cleaner-picker .direct-cleaner-picker__option input {
+  flex-shrink: 0;
+}
+
+.cleaner-selection-option__text,
+.cleaner-selection-option__context {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.cleaner-selection-option__context {
+  color: var(--cf-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.cleaner-selection-option__schedule {
+  color: var(--color-warning-text);
+  font-weight: 650;
+}

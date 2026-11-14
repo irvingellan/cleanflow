@@ -11,6 +11,7 @@ import { createIssue } from "../issues/issueService.js";
 import { createJobOffers, respondToJobOffer } from "./jobOfferService.js";
 import { canOptIntoAutomaticOffers } from "./automaticOffers.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
+import { CleanerSelectionOption, CleanerSelectionStatus, sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 
 export function OfferCleaners({
   job,
@@ -21,7 +22,7 @@ export function OfferCleaners({
   onBack,
   onSent,
 }) {
-  const { translate } = useTranslation();
+  const { language, translate } = useTranslation();
   const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
   const [cleanerSearch, setCleanerSearch] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -29,7 +30,8 @@ export function OfferCleaners({
   const canOptIn = import.meta.env.VITE_AUTOMATIC_OFFERS_MODE === "enabled"
     && canOfferAutomatically && canOptIntoAutomaticOffers(job);
   const [hasSendError, setHasSendError] = useState(false);
-  const visibleCleaners = filterCleanersByName(cleaners, cleanerSearch);
+  const context = useCleanerSelectionContext(job, !isLoading && !hasError && cleaners.length > 0);
+  const visibleCleaners = sortByCleanerExperience(filterCleanersByName(cleaners, cleanerSearch), context.result);
 
   function toggleCleaner(cleanerId) {
     setSelectedCleanerIds((currentIds) =>
@@ -108,21 +110,17 @@ export function OfferCleaners({
             />
           </div>
 
+          <CleanerSelectionStatus {...context} language={language} />
           {visibleCleaners.length === 0 ? (
             <StateCard message={translate("offers.searchNoCleaners")} />
           ) : (
             <div className="cleaner-list">
               {visibleCleaners.map((cleaner) => (
-                <label key={cleaner.id} className="cleaner-option">
-                  <input
-                    type="checkbox"
-                    checked={selectedCleanerIds.includes(cleaner.id)}
-                    onChange={() => toggleCleaner(cleaner.id)}
-                  />
-                  <span>
-                    {cleaner.name || translate("common.notProvided")}
-                  </span>
-                </label>
+                <CleanerSelectionOption key={cleaner.id} className="cleaner-option"
+                  cleanerId={cleaner.id} name={cleaner.name || translate("common.notProvided")}
+                  context={context.result} language={language} type="checkbox"
+                  checked={selectedCleanerIds.includes(cleaner.id)}
+                  onChange={() => toggleCleaner(cleaner.id)} />
               ))}
             </div>
           )}
