@@ -70,8 +70,10 @@ capped by eight sessions and one FCM batch per eligible event.
 - A user gesture is required to request permission. iOS/iPadOS Web Push
   requires launching the Home Screen app on a supported OS. Ineligible,
   unavailable and offline states keep the Inbox available when connected.
-  Repair is bounded and checks the current session. A neutral push message
-  points to the authenticated Hub and contains no service or recipient details.
+  Repair is bounded and checks the current session. Push opens the authenticated
+  Hub. The existing neutral copy remains the default. For the latest actionable
+  reschedule, the worker may display a validated day and time using copy defined
+  in the app. The payload excludes property information, names and access details.
 - The server rechecks current event and device eligibility and claims one FCM
   attempt. A post-claim retry or ambiguous response cannot cause a second send.
   Provider acceptance is reported as acceptance. Background display and

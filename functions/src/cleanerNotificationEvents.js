@@ -5,6 +5,7 @@ import {
   offerInboxGeneration, validInboxSegment,
 } from "./notificationInboxEvents.js";
 import { publicOfferState } from "./publicOfferResponseService.js";
+import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
 
 const assignmentStates = new Set(["ASSIGNED", "IN_PROGRESS", "COMPLETED"]);
 
@@ -89,9 +90,9 @@ export function recordCleanerJobInboxEvents(database, { organizationId, jobId, b
   return storeCleanerEvents(database, organization, records);
 }
 
-function issuedPendingOffer(offer) {
+function issuedPendingOffer(offer, replacement) {
   return offer?.status === "PENDING" && !offer.revokedAt
-    && (isAutomaticOfferJob(offer) || typeof offer.publicOfferTokenHash === "string")
+    && (replacement || isAutomaticOfferJob(offer) || typeof offer.publicOfferTokenHash === "string")
     && typeof offer.publicOfferExpiresAt?.toMillis === "function";
 }
 
@@ -99,12 +100,14 @@ function issuedPendingOffer(offer) {
 export async function recordCleanerOfferInboxEvent(database, { organizationId, jobId, offerId, before, after }) {
   if (![organizationId, jobId, offerId].every(validInboxSegment)) return 0;
   const offer = after?.data();
-  if (!issuedPendingOffer(offer) || offer.cleanerId !== offerId
+  const replacement = offer?.offerKind === "MANUAL_REPLACEMENT";
+  if (!issuedPendingOffer(offer, replacement) || !validInboxSegment(offer.cleanerId)
+    || (!replacement && offer.cleanerId !== offerId)
     || (offer.organizationId != null && offer.organizationId !== organizationId)
     || (offer.jobId != null && offer.jobId !== jobId)) return 0;
   const previous = before?.data();
   const generation = offerInboxGeneration(offer);
-  if (issuedPendingOffer(previous) && previous.cleanerId === offer.cleanerId
+  if (issuedPendingOffer(previous, replacement) && previous.cleanerId === offer.cleanerId
     && offerInboxGeneration(previous) === generation) return 0;
 
   const issuedAt = after.updateTime?.toDate() || new Date();
@@ -127,12 +130,13 @@ export async function recordCleanerOfferInboxEvent(database, { organizationId, j
     const job = jobSnapshot.data();
     const cleaner = cleanerSnapshot.data();
     if (existing.exists || !job || (job.organizationId != null && job.organizationId !== organizationId)
-      || isAutomaticOfferJob(job) !== isAutomaticOfferJob(offer)
+      || (replacement ? !currentManualReplacementOffer(job, offer, offerId, issuedAt)
+        : isAutomaticOfferJob(job) !== isAutomaticOfferJob(offer))
       || cleaner?.active !== true || cleaner.archivedAt
       || (cleaner.organizationId != null && cleaner.organizationId !== organizationId)) return 0;
     // Old deliveries remain useful in the inbox when the offer is closed by a
     // later assignment or archive. A trigger must still prove it was issued.
-    const currentState = publicOfferState(offer, job, issuedAt);
+    const currentState = replacement ? "available" : publicOfferState(offer, job, issuedAt);
     if (currentState !== "available" && !["ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus)
       && !job.archivedAt && !job.offerDistributionClosedAt) return 0;
     transaction.create(eventRef, inboxEventRecord(record));

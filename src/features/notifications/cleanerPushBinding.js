@@ -72,19 +72,33 @@ export async function cleanerPushBinding(action, sessionId, bindingId, language,
   }
 }
 
-/** One neutral lock-screen message. Never use FCM-provided copy, links or labels. */
+/** Build lock-screen copy locally from an installation-bound event. */
 export function cleanerPushDisplay(payload, currentBinding) {
   const data = payload?.data;
   if (payload?.notification || !data || !currentBinding?.bindingId
     || data.cleanerBindingId !== currentBinding.bindingId
     || typeof data.eventId !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(data.eventId)) return null;
+  const language = currentBinding.language;
+  let body = {
+    pt: "Abra o CleanFlow para ver seus avisos.",
+    es: "Abre CleanFlow para ver tus avisos.",
+  }[language] || "Open CleanFlow to see your notifications.";
+  if (typeof data.rescheduleDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.rescheduleDate)
+    && typeof data.rescheduleStart === "string" && /^(?:(?:[01]\d|2[0-3]):[0-5]\d)?$/.test(data.rescheduleStart)) {
+    const date = new Date(data.rescheduleDate + "T00:00:00Z");
+    if (date.toJSON()?.slice(0, 10) === data.rescheduleDate) {
+      const locale = { pt: "pt-BR", es: "es-ES" }[language] || "en-US";
+      const day = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(date);
+      const time = [day, data.rescheduleStart].filter(Boolean).join(" · ");
+      body = language === "pt" ? "A data mudou para " + time + ". Você pode?"
+        : language === "es" ? "El servicio cambió a " + time + ". ¿Puedes?"
+          : "The service moved to " + time + ". Can you make it?";
+    }
+  }
   return {
     title: "CleanFlow",
     options: {
-      body: {
-        pt: "Abra o CleanFlow para ver seus avisos.",
-        es: "Abre CleanFlow para ver tus avisos.",
-      }[currentBinding.language] || "Open CleanFlow to see your notifications.",
+      body,
       tag: `cleanflow-cleaner-${data.eventId}`,
       icon: "/icon-192.png",
       badge: "/icon-192.png",

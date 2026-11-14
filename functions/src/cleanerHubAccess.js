@@ -1,3 +1,4 @@
+import { isManualReplacementOfferId } from "./managerManualReplacementOfferService.js";
 import { createHash, randomBytes } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -365,14 +366,18 @@ export async function openChecklistForCleaner(database, {
 }
 
 /** Answers only the Offer addressed to this authenticated, active Cleaner. */
-export async function respondToOfferForCleaner(database, { organizationId, cleanerId, uid, sessionId, jobId, status }) {
-  if (!validCleanerId(jobId) || !["INTERESTED", "DECLINED", "ACCEPTED"].includes(status)) {
+export async function respondToOfferForCleaner(database, {
+  organizationId, cleanerId, uid, sessionId, jobId, status, scheduleRevision, offerId,
+}) {
+  if (!validCleanerId(jobId) || !["INTERESTED", "DECLINED", "ACCEPTED"].includes(status)
+    || (scheduleRevision !== undefined && (!Number.isSafeInteger(scheduleRevision) || scheduleRevision < 0))
+    || (offerId !== undefined && !isManualReplacementOfferId(offerId))) {
     throw new HttpsError("invalid-argument", "Offer response is invalid.");
   }
   const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
-  const offerReference = jobReference.collection("offers").doc(cleanerId);
+  const offerReference = jobReference.collection("offers").doc(offerId ?? cleanerId);
   return respondToAuthenticatedOffer(database, {
-    organizationId, jobReference, offerReference, status,
+    organizationId, jobReference, offerReference, status, scheduleRevision,
   }, { cleanerId, uid }, (transaction) => (
     assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId })
   ));

@@ -10,6 +10,7 @@ export const managerOperationalNotificationCollection = "managerNotificationDeli
 export const managerOperationalNotificationTypes = Object.freeze({
   interest: "CLEANER_INTERESTED", acknowledgment: "ASSIGNMENT_CONFIRMED",
   automatic: managerInboxTypes.automatic, automaticBatchFilled: managerInboxTypes.automaticBatchFilled,
+  rescheduleDeclined: managerInboxTypes.rescheduleDeclined,
 });
 const copies = {
   en: {
@@ -17,6 +18,7 @@ const copies = {
     ASSIGNMENT_CONFIRMED: ["✅ Cleaner confirmed", (cleaner, property) => `${cleaner} confirmed ${property}.`],
     AUTO_ASSIGNMENT_CONFIRMED: ["Cleaner assigned automatically", (cleaner, property, when) => `${cleaner} accepted ${property}${when ? ` for ${when}` : ""}.`],
     AUTO_OFFER_BATCH_FILLED: ["All spots filled", (_cleaner, property, when) => `All spots for ${property}${when ? ` on ${when}` : ""} are filled.`],
+    RESCHEDULE_DECLINED: ["Replacement needed", (cleaner, property) => cleaner + " cannot work the new time for " + property + "."],
     cleaner: "A cleaner", property: "a property",
   },
   pt: {
@@ -24,6 +26,7 @@ const copies = {
     ASSIGNMENT_CONFIRMED: ["✅ Cleaner confirmou", (cleaner, property) => `${cleaner} confirmou ${property}.`],
     AUTO_ASSIGNMENT_CONFIRMED: ["Cleaner atribuída automaticamente", (cleaner, property, when) => `${cleaner} aceitou ${property}${when ? ` para ${when}` : ""}.`],
     AUTO_OFFER_BATCH_FILLED: ["Todas as vagas preenchidas", (_cleaner, property, when) => `Todas as vagas de ${property}${when ? ` em ${when}` : ""} foram preenchidas.`],
+    RESCHEDULE_DECLINED: ["Vaga a preencher", (cleaner, property) => cleaner + " não pode fazer o serviço de " + property + " na nova data."],
     cleaner: "Um cleaner", property: "uma propriedade",
   },
   es: {
@@ -31,6 +34,7 @@ const copies = {
     ASSIGNMENT_CONFIRMED: ["✅ Cleaner confirmó", (cleaner, property) => `${cleaner} confirmó ${property}.`],
     AUTO_ASSIGNMENT_CONFIRMED: ["Cleaner asignada automáticamente", (cleaner, property, when) => `${cleaner} aceptó ${property}${when ? ` para ${when}` : ""}.`],
     AUTO_OFFER_BATCH_FILLED: ["Todas las plazas cubiertas", (_cleaner, property, when) => `Todas las plazas de ${property}${when ? ` del ${when}` : ""} están cubiertas.`],
+    RESCHEDULE_DECLINED: ["Vacante por cubrir", (cleaner, property) => cleaner + " no puede trabajar en " + property + " en el nuevo horario."],
     cleaner: "Un cleaner", property: "una propiedad",
   },
 };
@@ -48,9 +52,18 @@ export function managerOfferNotificationGeneration(offer) {
 
 export function managerOperationalNotificationEventId({
   organizationId, jobId, eventType, offerId, assignmentId, offerGeneration = "legacy", batchId,
+  cleanerId, scheduleRevision,
 }) {
   const automatic = eventType === managerOperationalNotificationTypes.automatic;
   const filled = eventType === managerOperationalNotificationTypes.automaticBatchFilled;
+  if (eventType === managerOperationalNotificationTypes.rescheduleDeclined) {
+    if (![organizationId, jobId, cleanerId].every(validInboxSegment)
+      || !(assignmentId == null || validInboxSegment(assignmentId))
+      || !Number.isSafeInteger(scheduleRevision) || scheduleRevision < 1) {
+      throw new Error("Manager schedule notification context is invalid.");
+    }
+    return inboxEventId(organizationId, jobId, eventType, scheduleRevision, cleanerId, assignmentId ?? null);
+  }
   if (automatic || filled) {
     if (![organizationId, jobId].every(validInboxSegment) || typeof batchId !== "string"
       || !/^(0|[1-9]\d{0,15})$/.test(batchId) || !Number.isSafeInteger(Number(batchId))
@@ -117,6 +130,25 @@ export function createAutomaticOfferConfirmationNotices(transaction, organizatio
   if (filled) publish(managerOperationalNotificationTypes.automaticBatchFilled, {}, null);
 }
 
+export function createRescheduleDeclineNotice(transaction, organization, job, {
+  organizationId, cleanerId, scheduleRevision, assignmentId, cleanerName, propertyName, scheduledDate, scheduledStart,
+}) {
+  if (organization.path !== "organizations/" + organizationId || job.path !== organization.path + "/jobs/" + job.id) {
+    throw new Error("Manager schedule notification scope is invalid.");
+  }
+  const eventType = managerOperationalNotificationTypes.rescheduleDeclined;
+  const eventId = managerOperationalNotificationEventId({
+    organizationId, jobId: job.id, eventType, cleanerId, scheduleRevision, assignmentId,
+  });
+  const notice = automaticOfferNotice(eventType, { cleanerLabel: cleanerName, scheduledDate, scheduledStart });
+  transaction.create(job.collection(managerOperationalNotificationCollection).doc(eventId), {
+    eventId, eventType, cleanerId, scheduleRevision, assignmentId: assignmentId ?? null,
+    propertyName: safeName(propertyName, null), ...(notice ? { automaticOffer: notice } : {}),
+    deliveryProvider: "fcm", deliveryStatus: "PENDING", createdAt: FieldValue.serverTimestamp(),
+  });
+  createManagerInboxItem(transaction, organization, { eventId, jobId: job.id, type: eventType, automaticOffer: notice });
+}
+
 function safeName(value, fallback) {
   return typeof value === "string" && value.trim()
     ? value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120) : fallback;
@@ -168,7 +200,8 @@ export async function processManagerOperationalNotification({
     const data = snapshot.data();
     let expected;
     try { expected = managerOperationalNotificationEventId({ ...data, organizationId, jobId }); } catch { return null; }
-    const validCleanerId = data.eventType === managerOperationalNotificationTypes.automatic ? validInboxSegment : validSegment;
+    const validCleanerId = [managerOperationalNotificationTypes.automatic, managerOperationalNotificationTypes.rescheduleDeclined]
+      .includes(data.eventType) ? validInboxSegment : validSegment;
     if (eventId !== expected || data.eventId !== eventId || data.deliveryProvider !== "fcm"
       || ([managerOperationalNotificationTypes.acknowledgment, managerOperationalNotificationTypes.automatic].includes(data.eventType)
         && !validCleanerId(data.cleanerId))

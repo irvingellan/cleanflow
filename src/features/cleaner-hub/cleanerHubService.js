@@ -142,9 +142,9 @@ export async function openMyChecklist(jobId) {
   return data;
 }
 
-export async function respondToMyOffer(jobId, status) {
+export async function respondToMyOffer(jobId, status, current = {}) {
   const { functions } = cleanerHubFirebase();
-  const { data } = await httpsCallable(functions, "respondToMyOffer")({ jobId, status });
+  const { data } = await httpsCallable(functions, "respondToMyOffer", { timeout: 15_000 })({ jobId, status, ...current });
   return data;
 }
 

@@ -1,5 +1,6 @@
 import { isJobFilled, manualOfferAvailability } from "../jobs/offerSlots.js";
 import { jobReminderState } from "../jobs/cleanerReminderLog.js";
+import { pendingScheduleConfirmationCount, scheduleConfirmationMessage } from "../jobs/scheduleConfirmation.js";
 import { Icon } from "../../components/Icon.jsx";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
@@ -162,6 +163,7 @@ export function Dashboard({
     counts.needsAssignment > attentionJobs.length ||
     visibleAttentionItems.length === 5;
   const next48HourGroups = groupNext48HourJobs(next48HoursJobs, translate);
+  const upcomingAwaitingConfirmation = next48HoursJobs.filter((job) => pendingScheduleConfirmationCount(job) > 0).length;
 
   const todayLabel = new Intl.DateTimeFormat(localeFor(language), {
     weekday: "long", day: "numeric", month: "long",
@@ -306,7 +308,14 @@ export function Dashboard({
         <div className="cf-home__secondary">
           <section className="dashboard-panel cf-block" aria-labelledby="next-48-hours-title">
             <div className="cf-block__header">
-              <h3 id="next-48-hours-title">{translate("dashboard.next48Hours")}</h3>
+              <div>
+                <h3 id="next-48-hours-title">{translate("dashboard.next48Hours")}</h3>
+                {upcomingAwaitingConfirmation > 0 && (
+                  <p className="cf-block__subtitle">
+                    {scheduleConfirmationMessage(language, "upcomingCount", { count: upcomingAwaitingConfirmation })}
+                  </p>
+                )}
+              </div>
               <button className="button button--small" type="button" onClick={onShowJobs}>
                 {translate("dashboard.viewAll")}
               </button>
@@ -399,6 +408,7 @@ function formatNoticeTime(ms, language) {
 
 function DashboardNextJob({ job, cleanerNamesById, offers, onOpen }) {
   const { language, translate } = useTranslation();
+  const pendingConfirmations = pendingScheduleConfirmationCount(job);
   const schedule = [
     formatDate(job.scheduledDate, translate, language),
     job.scheduledStart,
@@ -421,6 +431,10 @@ function DashboardNextJob({ job, cleanerNamesById, offers, onOpen }) {
           )}
         </span>
         <span className="visually-hidden">{schedule}</span>
+        {pendingConfirmations > 0 && <span className="dashboard-next-item__reminder is-pending">
+          {scheduleConfirmationMessage(language, "awaiting")} ·{" "}
+          {scheduleConfirmationMessage(language, "pendingCount", { count: pendingConfirmations })}
+        </span>}
         {jobReminderState(job) && <span className={`dashboard-next-item__reminder is-${jobReminderState(job)}`}>
           {translate(jobReminderState(job) === "sent" ? "dashboard.reminderSent" : "dashboard.reminderPending")}
         </span>}

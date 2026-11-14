@@ -15,7 +15,7 @@ import {
 import { getCleaners } from "../cleaners/cleanerService.js";
 import { getJobIssues, resolveIssue } from "../issues/issueService.js";
 import {
-  closeOfferByManager, createPublicOfferLink, getJobOffers, reopenOfferByManager, revokeAutomaticOffer,
+  closeOfferByManager, createPublicOfferLink, getJobOffers, reopenOfferByManager, revokeAutomaticOffer, subscribeToJobOffer,
 } from "./jobOfferService.js";
 import {
   assignInterestedCleaner,
@@ -39,7 +39,11 @@ import {
   archiveJob,
   restoreJob,
 } from "./jobService.js";
-import { rescheduleJob as rescheduleJobRequest } from "./jobScheduleService.js";
+import {
+  createManualReplacementOffer as createManualReplacementOfferRequest,
+  rescheduleJob as rescheduleJobRequest,
+} from "./jobScheduleService.js";
+import { currentScheduleRevision } from "./scheduleConfirmation.js";
 import {
   createManagerOperationTracker,
   createManagerPageVisitId,
@@ -83,6 +87,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const [isLoadingCleaners, setIsLoadingCleaners] = useState(false);
   const [hasCleanerError, setHasCleanerError] = useState(false);
   const [offersCreatedCount, setOffersCreatedCount] = useState(null);
+  const [replacementObservation, setReplacementObservation] = useState(null);
   const checklistRunCreateInFlight = useRef(false);
   const checklistCapabilityInFlight = useRef(false);
   const capabilityJobsInFlight = useRef(new Set());
@@ -92,18 +97,38 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const selectedJobIdRef = useRef(null);
   const selectedJobEpochRef = useRef(0);
   const operationTrackerRef = useRef(null);
-  const automaticJobId = isAutomaticOfferJob(selectedJob) ? selectedJob.id : null;
+  const watchedJobId = isAutomaticOfferJob(selectedJob) || selectedJob?.operationalStatus === "ASSIGNED"
+    || currentScheduleRevision(selectedJob) > 0 ? selectedJob.id : null;
+  const latestServerJobRef = useRef(null);
+  const replacementId = selectedJob?.manualReplacementOffer?.scheduleRevision === currentScheduleRevision(selectedJob)
+    ? selectedJob.manualReplacementOffer.offerId : null;
+  const replacementJobId = replacementId ? selectedJob.id : null;
+  const replacementRevision = replacementId ? currentScheduleRevision(selectedJob) : null;
   const onJobUpdatedRef = useRef(onJobUpdated);
   onJobUpdatedRef.current = onJobUpdated;
 
   useEffect(() => {
-    if (view !== "job-detail" || !automaticJobId) return undefined;
-    return subscribeToJob(automaticJobId, (updatedJob) => {
-      if (selectedJobIdRef.current !== automaticJobId) return;
+    if (view !== "job-detail" || !watchedJobId) return undefined;
+    const epoch = selectedJobEpochRef.current;
+    return subscribeToJob(watchedJobId, (updatedJob) => {
+      if (selectedJobIdRef.current !== watchedJobId || selectedJobEpochRef.current !== epoch) return;
+      latestServerJobRef.current = updatedJob;
       setSelectedJob(updatedJob);
       onJobUpdatedRef.current(updatedJob);
     });
-  }, [view, automaticJobId]);
+  }, [view, watchedJobId]);
+
+  useEffect(() => {
+    if (view !== "job-detail" || !replacementId) return undefined;
+    const epoch = selectedJobEpochRef.current;
+    let current = true;
+    const unsubscribe = subscribeToJobOffer(replacementJobId, replacementId, (offer) => {
+      if (current && selectedJobIdRef.current === replacementJobId && selectedJobEpochRef.current === epoch) {
+        setReplacementObservation({ jobId: replacementJobId, offerId: replacementId, revision: replacementRevision, offer });
+      }
+    });
+    return () => { current = false; unsubscribe(); };
+  }, [view, replacementJobId, replacementId, replacementRevision]);
 
   useEffect(() => {
     operationTrackerRef.current = view === "job-detail" && selectedJob?.id && actorUid
@@ -294,6 +319,8 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
   function openJob(job) {
     selectedJobEpochRef.current += 1;
+    latestServerJobRef.current = null;
+    setReplacementObservation(null);
     checklistRunCreateInFlight.current = null;
     checklistCapabilityInFlight.current = null;
     checklistRunRequestId.current += 1;
@@ -378,9 +405,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     if (updatedJob) await refreshChecklistCapability(updatedJob);
   }
 
-  async function assignCleanerDirectly(cleanerId) {
+  async function assignCleanerDirectly(cleanerId, replacementOfferId) {
     const updatedJob = await updateJob((job) =>
-      assignCleanerDirectlyRequest(job.id, cleanerId));
+      assignCleanerDirectlyRequest(job.id, cleanerId, replacementOfferId));
     if (updatedJob) {
       await refreshAssignments(updatedJob);
       await refreshChecklistCapability(updatedJob);
@@ -463,20 +490,66 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   async function saveJobSchedule(schedule) {
     if (!selectedJob) return null;
     const job = selectedJob;
-    const result = await rescheduleJobRequest({ jobId: job.id, ...schedule });
-    const updatedJob = {
-      ...job,
-      scheduledDate: result.scheduledDate,
-      scheduleRevision: result.scheduleRevision,
-      checklistContextRevision: result.checklistContextRevision,
+    const epoch = selectedJobEpochRef.current;
+    const isCurrent = () => selectedJobIdRef.current === job.id && selectedJobEpochRef.current === epoch;
+    const readCurrent = async () => {
+      const previousObservation = latestServerJobRef.current;
+      const snapshot = await getJobById(job.id, { serverOnly: true });
+      const observation = latestServerJobRef.current;
+      return observation?.id === job.id
+        && (currentScheduleRevision(observation) > currentScheduleRevision(snapshot)
+          || (observation !== previousObservation
+            && currentScheduleRevision(observation) === currentScheduleRevision(snapshot)))
+        ? observation : snapshot;
     };
-    if (result.scheduledStart) {
-      updatedJob.scheduledStart = result.scheduledStart;
-    } else {
-      delete updatedJob.scheduledStart;
+    let result;
+    try {
+      result = await rescheduleJobRequest({
+        ...schedule, jobId: job.id,
+        expectedScheduleRevision: schedule.expectedScheduleRevision ?? currentScheduleRevision(job),
+      });
+    } catch (error) {
+      if (error?.details?.reason === "stale-schedule" && isCurrent()) {
+        try {
+          const currentJob = await readCurrent();
+          if (isCurrent()) updateSelectedJob(currentJob);
+        } catch {
+          // Preserve the actionable conflict even when the readback is unavailable.
+        }
+      }
+      throw error;
     }
+    if (!isCurrent()) return null;
+    let updatedJob;
+    let needsScheduleReload = false;
+    try {
+      updatedJob = await readCurrent();
+    } catch {
+      const observed = latestServerJobRef.current;
+      if (observed?.id === job.id && currentScheduleRevision(observed) >= result.scheduleRevision) {
+        updatedJob = observed;
+      } else {
+        updatedJob = {
+          ...job,
+          scheduledDate: result.scheduledDate,
+          scheduledStart: result.scheduledStart || undefined,
+          scheduleRevision: result.scheduleRevision,
+          checklistContextRevision: result.checklistContextRevision,
+          scheduleConfirmation: result.scheduleConfirmation,
+        };
+        needsScheduleReload = result.changed && !Object.hasOwn(result, "scheduleConfirmation");
+      }
+    }
+    if (!isCurrent()) return null;
     updateSelectedJob(updatedJob);
-    return { job: updatedJob, changed: result.changed };
+    return { job: updatedJob, changed: result.changed, needsScheduleReload };
+  }
+
+  async function offerManualReplacement(cleanerId, scheduleRevision) {
+    return updateJob(async (job) => {
+      await createManualReplacementOfferRequest({ jobId: job.id, cleanerId, scheduleRevision });
+      return getJobById(job.id, { serverOnly: true });
+    });
   }
 
   async function saveDataProvenance(dataProvenance) {
@@ -702,7 +775,10 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   return {
     job: selectedJob,
     detail: {
-      offers: detailData.offers,
+      offers: replacementObservation && replacementObservation.jobId === replacementJobId
+        && replacementObservation.offerId === replacementId && replacementObservation.revision === replacementRevision
+        ? [...detailData.offers.filter(({ id }) => id !== replacementId), ...(replacementObservation.offer ? [replacementObservation.offer] : [])]
+        : detailData.offers,
       isLoadingOffers: detailData.isLoadingOffers,
       hasOffersError: detailData.hasOffersError,
       assignments: detailData.assignments,
@@ -756,6 +832,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       saveJobPrices,
       saveJobDetails,
       saveJobSchedule,
+      offerManualReplacement,
       saveDataProvenance,
       archive,
       restore,

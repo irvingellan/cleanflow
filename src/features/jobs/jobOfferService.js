@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   runTransaction,
   serverTimestamp,
   Timestamp,
@@ -85,6 +86,14 @@ export async function getJobOffers(jobId) {
     ...offerDocumentSnapshot.data(),
     id: offerDocumentSnapshot.id,
   }));
+}
+
+export function subscribeToJobOffer(jobId, offerId, onChange) {
+  return onSnapshot(offerDocument(jobId, offerId), (snapshot) => {
+    if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) {
+      onChange(snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null);
+    }
+  }, () => { /* Job Detail can still reload its offers explicitly. */ });
 }
 
 export async function respondToJobOffer({ jobId, cleanerId, status }) {

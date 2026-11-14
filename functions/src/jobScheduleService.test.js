@@ -1,19 +1,30 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
+import { FIRST_ACCEPT_WINS } from "./firstAcceptWins.js";
 import {
   isValidScheduledDate,
   normalizeRescheduleInput,
   rescheduleJobForManager,
 } from "./jobScheduleService.js";
 
+function copyRecord(record) {
+  // Preserve Timestamp prototypes in fixture data.
+  return { ...record };
+}
+
 function fakeDatabase({ initialRecords = {}, failCommit = false } = {}) {
-  const records = new Map(Object.entries(initialRecords).map(([path, data]) => [path, structuredClone(data)]));
+  const records = new Map(Object.entries(initialRecords).map(([path, data]) => [path, copyRecord(data)]));
   const reference = (path) => ({
     path,
+    id: path.split("/").at(-1),
     collection(name) {
       return reference(`${path}/${name}`);
     },
     doc(id) {
       return reference(`${path}/${id}`);
+    },
+    where(field, operator, value) {
+      return { limit: max => ({ path, field, operator, value, max }) };
     },
   });
   const database = {
@@ -22,10 +33,19 @@ function fakeDatabase({ initialRecords = {}, failCommit = false } = {}) {
       const writes = [];
       const transaction = {
         async get(ref) {
+          if (ref.field) {
+            const docs = [...records].filter(([path, data]) => (
+              path.startsWith(`${ref.path}/`) && path.split("/").length === ref.path.split("/").length + 1
+              && ref.operator === "==" && data[ref.field] === ref.value
+            )).slice(0, ref.max).map(([path, data]) => ({
+              id: path.split("/").at(-1), data: () => copyRecord(data),
+            }));
+            return { docs };
+          }
           const data = records.get(ref.path);
           return {
             exists: Boolean(data),
-            data: () => data && structuredClone(data),
+            data: () => data && copyRecord(data),
           };
         },
         create(ref, data) {
@@ -42,7 +62,11 @@ function fakeDatabase({ initialRecords = {}, failCommit = false } = {}) {
           if (records.has(write.path)) throw new Error("already exists");
           records.set(write.path, { ...write.data });
         } else {
-          records.set(write.path, { ...records.get(write.path), ...write.data });
+          const saved = { ...records.get(write.path), ...write.data };
+          for (const [key, value] of Object.entries(write.data)) {
+            if (value?.isEqual?.(FieldValue.delete())) delete saved[key];
+          }
+          records.set(write.path, saved);
         }
       }
       return result;
@@ -153,4 +177,71 @@ describe("rescheduleJobForManager atomicity", () => {
     expect(records.get(jobPath)).toEqual(beforeJob);
     expect(records.has(`${jobPath}/scheduleHistory/3`)).toBe(false);
   });
+
+  const teamJob = {
+    ...job, schemaVersion: 2, organizationId: "cleanflow-demo", assignedCleanerIds: ["cleaner-a"],
+    requiredCleanerCount: 2, offerDistributionMode: FIRST_ACCEPT_WINS,
+    automaticOfferBatch: { version: 2, capacity: 2, openingContextRevision: 3, currentContextRevision: 4 },
+  };
+  const assignmentPath = `${jobPath}/assignments/assignment-a`;
+  const assignment = {
+    organizationId: "cleanflow-demo", jobId: "job", isActive: true, cleanerId: "cleaner-a",
+    assignmentMethod: FIRST_ACCEPT_WINS, executionStatus: "ASSIGNED", scheduledDate: job.scheduledDate,
+  };
+
+  it("freezes only current Assignment bindings and advances an open batch without rewriting history", async () => {
+    const offerPath = `${jobPath}/offers/cleaner-b`;
+    const offer = { offeredScheduledDate: job.scheduledDate, offeredChecklistContextRevision: 3 };
+    const { database, records } = fakeDatabase({ initialRecords: {
+      [jobPath]: teamJob, [assignmentPath]: assignment, [offerPath]: offer,
+    } });
+
+    const result = await rescheduleJobForManager(database, { ...request, expectedScheduleRevision: 2 });
+    expect(result.scheduleConfirmation).toEqual({
+      revision: 3, byCleaner: { "cleaner-a": { state: "PENDING", assignmentId: "assignment-a" } },
+    });
+    expect(records.get(jobPath).automaticOfferBatch).toEqual({ ...teamJob.automaticOfferBatch, currentContextRevision: 5 });
+    expect(records.get(assignmentPath)).toEqual(assignment);
+    expect(records.get(offerPath)).toEqual(offer);
+  });
+
+  it("keeps date rescheduling available but opens no actionable state for an inconsistent roster", async () => {
+    const { database, records } = fakeDatabase({ initialRecords: {
+      [jobPath]: teamJob, [assignmentPath]: { ...assignment, organizationId: "other" },
+    } });
+    const result = await rescheduleJobForManager(database, request);
+    expect(result).not.toHaveProperty("scheduleConfirmation");
+    expect(records.get(jobPath).automaticOfferBatch).toEqual(teamJob.automaticOfferBatch);
+  });
+
+  it("does not let a stale manager command overwrite a newer date", async () => {
+    const { database, records } = fakeDatabase({ initialRecords: {
+      [jobPath]: teamJob, [assignmentPath]: assignment,
+    } });
+    const first = await rescheduleJobForManager(database, { ...request, expectedScheduleRevision: 2 });
+    await expect(rescheduleJobForManager(database, { ...request, expectedScheduleRevision: 2, scheduledStart: "14:00" }))
+      .rejects.toMatchObject({ code: "failed-precondition", details: { reason: "stale-schedule" } });
+    expect(await rescheduleJobForManager(database, { ...request, expectedScheduleRevision: 2 }))
+      .toMatchObject({ changed: false, scheduleConfirmation: first.scheduleConfirmation });
+    expect(records.get(jobPath).scheduledStart).toBe(request.scheduledStart);
+  });
+
+  it.each(["PENDING", "INTERESTED"])("only carries a pending replacement across reschedule (%s)", async (status) => {
+    const offerId = "replacement-01234567890123456789";
+    const current = { ...teamJob, offerDistributionClosedAt: true, manualReplacementOffer: {
+      offerId, cleanerId: "cleaner-b", scheduleRevision: 2, issuedScheduleRevision: 2,
+    } };
+    const offerPath = `${jobPath}/offers/${offerId}`;
+    const offer = {
+      organizationId: request.organizationId, jobId: request.jobId, scheduleRevision: 2, cleanerId: "cleaner-b",
+      offerKind: "MANUAL_REPLACEMENT", replacementOfferId: offerId, status, publicOfferExpiresAt: { toMillis: () => Date.UTC(2026, 10, 1) },
+    };
+    const { database, records } = fakeDatabase({ initialRecords: { [jobPath]: current, [assignmentPath]: assignment, [offerPath]: offer } });
+    await rescheduleJobForManager(database, { ...request, now: () => new Date("2026-10-01T10:00Z") });
+    expect(records.get(jobPath).manualReplacementOffer).toEqual(status === "PENDING"
+      ? { ...current.manualReplacementOffer, scheduleRevision: 3 } : undefined);
+    expect(records.get(jobPath).automaticOfferBatch).toEqual(teamJob.automaticOfferBatch);
+    expect(records.get(offerPath)).toEqual(offer);
+  });
+
 });

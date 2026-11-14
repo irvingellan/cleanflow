@@ -223,8 +223,8 @@ export async function assignInterestedCleaner(jobId, offerId, { addSpot = false 
   return jobFromSnapshot(await getDoc(jobReference));
 }
 
-export async function assignCleanerDirectly(jobId, cleanerId) {
-  await assignCleanerDirectlyCall({ jobId, cleanerId });
+export async function assignCleanerDirectly(jobId, cleanerId, replacementOfferId) {
+  await assignCleanerDirectlyCall({ jobId, cleanerId, ...(replacementOfferId ? { replacementOfferId } : {}) });
   return jobFromSnapshot(await getDoc(jobDocument(jobId)));
 }
 

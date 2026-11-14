@@ -122,6 +122,45 @@ describe("Notification Inbox", () => {
     expect(onOpen).toHaveBeenCalledExactlyOnceWith({ kind: "JOB", jobId: "current" });
   });
 
+  it("sends only the cleaner's notification id and schedule revision and waits for the decision", async () => {
+    const notice = { ...items[0], type: "RESCHEDULED", reschedule: {
+      state: "PENDING", scheduleRevision: 4, scheduledDate: "2026-11-16", scheduledStart: "10:30",
+    } };
+    let resolveDecision;
+    const service = {
+      list: vi.fn().mockResolvedValue({ items: [notice], unreadCount: 1 }),
+      respondToReschedule: vi.fn(() => new Promise(resolve => { resolveDecision = resolve; })),
+    };
+    render(<Example service={service} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Não posso" }));
+    expect(service.respondToReschedule).toHaveBeenCalledExactlyOnceWith("CLEANER", "a", {
+      scheduleRevision: 4, decision: "DECLINED",
+    });
+    expect(screen.queryByText(/você informou/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar" })).toBeDisabled();
+    await act(() => resolveDecision({ state: "DECLINED", scheduleRevision: 4 }));
+    expect(await screen.findByText("Você informou que não pode na nova data.")).toBeVisible();
+    expect(screen.queryByText(/10:30|Synthetic Flat/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ver serviço" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes the Inbox on a stale decision before offering the newer schedule", async () => {
+    const notice = { ...items[0], type: "RESCHEDULED", reschedule: {
+      state: "PENDING", scheduleRevision: 4, scheduledDate: "2026-11-16", scheduledStart: "10:30",
+    } };
+    const updated = { ...notice, id: "current", reschedule: { ...notice.reschedule, scheduleRevision: 5, scheduledStart: "12:00" } };
+    const service = {
+      list: vi.fn().mockResolvedValueOnce({ items: [notice], unreadCount: 1 })
+        .mockResolvedValue({ items: [updated], unreadCount: 1 }),
+      respondToReschedule: vi.fn().mockRejectedValue({ details: { reason: "stale-schedule" } }),
+    };
+    render(<Example service={service} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("O horário mudou de novo.");
+    expect(await screen.findByText(/12:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/10:30/)).not.toBeInTheDocument();
+  });
+
   it("labels zero as a partial count until an older unread notification is loaded", async () => {
     const service = {
       list: vi.fn()

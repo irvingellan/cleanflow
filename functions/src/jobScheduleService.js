@@ -1,5 +1,10 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import {
+  automaticOfferBatch, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob, isCanonicalRoster,
+} from "./firstAcceptWins.js";
+import { currentManualReplacementOffer, isManualReplacementOfferId } from "./managerManualReplacementOfferService.js";
+import { jobScheduleRevision, readScheduleRoster } from "./rescheduleConfirmations.js";
 
 const reschedulableStatuses = new Set(["UNASSIGNED", "OFFERED", "ASSIGNED"]);
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -36,11 +41,6 @@ export function normalizeRescheduleInput({ jobId, scheduledDate, scheduledStart 
   return { jobId: jobId.trim(), scheduledDate, scheduledStart: time };
 }
 
-function validRevision(job, field) {
-  if (!Object.prototype.hasOwnProperty.call(job, field)) return 0;
-  return Number.isSafeInteger(job[field]) && job[field] >= 0 ? job[field] : null;
-}
-
 function precondition(message, reason) {
   return new HttpsError("failed-precondition", message, { reason });
 }
@@ -55,8 +55,14 @@ export async function rescheduleJobForManager(database, {
   jobId,
   scheduledDate,
   scheduledStart,
+  expectedScheduleRevision,
   actorUid,
+  now = () => new Date(),
 }) {
+  if (expectedScheduleRevision !== undefined
+    && (!Number.isSafeInteger(expectedScheduleRevision) || expectedScheduleRevision < 0)) {
+    throw new HttpsError("invalid-argument", "Schedule revision is invalid.");
+  }
   const normalized = normalizeRescheduleInput({ jobId, scheduledDate, scheduledStart });
   if (typeof organizationId !== "string" || !organizationId || typeof actorUid !== "string" || !actorUid) {
     throw new HttpsError("unauthenticated", "An authenticated manager is required.");
@@ -73,16 +79,17 @@ export async function rescheduleJobForManager(database, {
     if (!jobSnapshot.exists) throw new HttpsError("not-found", "Job not found.");
 
     const job = jobSnapshot.data();
+    if (job.organizationId != null && job.organizationId !== organizationId) throw new HttpsError("not-found", "Job not found.");
     if (job.archivedAt) throw precondition("Archived services cannot be rescheduled.", "archived");
-    if (!reschedulableStatuses.has(job.operationalStatus)) {
+    if (!reschedulableStatuses.has(job.operationalStatus) || job.startedAt != null) {
       throw precondition("Schedule can only be changed before work starts.", "status");
     }
     if (runSnapshot.exists) {
       throw precondition("The schedule is locked because a Checklist Run has frozen this service context.", "checklist-run-exists");
     }
 
-    const scheduleRevision = validRevision(job, "scheduleRevision");
-    const contextRevision = validRevision(job, "checklistContextRevision");
+    const scheduleRevision = jobScheduleRevision(job);
+    const contextRevision = checklistContextRevision(job);
     if (scheduleRevision === null || contextRevision === null
       || scheduleRevision >= Number.MAX_SAFE_INTEGER
       || contextRevision >= Number.MAX_SAFE_INTEGER) {
@@ -98,15 +105,46 @@ export async function rescheduleJobForManager(database, {
         scheduledStart: normalized.scheduledStart || null,
         scheduleRevision,
         checklistContextRevision: contextRevision,
+        ...(job.scheduleConfirmation?.revision === scheduleRevision ? { scheduleConfirmation: job.scheduleConfirmation } : {}),
       };
     }
 
+    if (expectedScheduleRevision !== undefined && expectedScheduleRevision !== scheduleRevision) {
+      throw precondition("The schedule changed. Reload the service before rescheduling.", "stale-schedule");
+    }
     const nextScheduleRevision = scheduleRevision + 1;
     const historyReference = jobReference.collection("scheduleHistory").doc(String(nextScheduleRevision));
-    const existingHistory = await transaction.get(historyReference);
+    const replacementId = job.manualReplacementOffer?.offerId;
+    const [existingHistory, roster, replacement] = await Promise.all([
+      transaction.get(historyReference),
+      readScheduleRoster(transaction, jobReference, job, organizationId),
+      isManualReplacementOfferId(replacementId)
+        ? transaction.get(jobReference.collection("offers").doc(replacementId)) : null,
+    ]);
     if (existingHistory.exists) {
       throw precondition("Schedule history is inconsistent and was not changed.", "history-conflict");
     }
+
+    const scheduleConfirmation = roster?.length ? {
+      revision: nextScheduleRevision,
+      byCleaner: Object.fromEntries(roster.map(([cleanerId, { assignmentId }]) => [
+        cleanerId, { state: "PENDING", assignmentId },
+      ])),
+    } : null;
+    const batch = isAutomaticOfferJob(job) ? automaticOfferBatch(job) : null;
+    // Only already-valid open batches follow an explicit reschedule.
+    const keepOpenBatch = batch && !job.offerDistributionClosedAt && !job.firstAcceptClaim
+      && job.schemaVersion === 2 && job.organizationId === organizationId
+      && (job.assignedCleanerId == null || job.assignedCleanerId === "")
+      && ["OFFERED", "ASSIGNED"].includes(job.operationalStatus)
+      && isCanonicalRoster(job) && job.assignedCleanerIds.length < batch.capacity
+      && roster?.every(([, assignment]) => assignment.assignmentMethod === FIRST_ACCEPT_WINS)
+      && batch.currentContextRevision === contextRevision;
+    const priorOffer = replacement?.data();
+    const carryReplacement = priorOffer?.status === "PENDING" && priorOffer.jobId === normalized.jobId
+      && currentManualReplacementOffer(job, priorOffer, replacementId, now())
+      ? { ...job.manualReplacementOffer, scheduleRevision: nextScheduleRevision }
+      : FieldValue.delete();
 
     transaction.create(historyReference, {
       scheduleRevision: nextScheduleRevision,
@@ -124,6 +162,10 @@ export async function rescheduleJobForManager(database, {
       scheduledStart: normalized.scheduledStart || FieldValue.delete(),
       scheduleRevision: nextScheduleRevision,
       checklistContextRevision: contextRevision + 1,
+      ...(scheduleConfirmation ? { scheduleConfirmation } : Object.hasOwn(job, "scheduleConfirmation")
+        ? { scheduleConfirmation: FieldValue.delete() } : {}),
+      ...(keepOpenBatch ? { automaticOfferBatch: { ...batch, currentContextRevision: contextRevision + 1 } } : {}),
+      ...(Object.hasOwn(job, "manualReplacementOffer") ? { manualReplacementOffer: carryReplacement } : {}),
     });
 
     return {
@@ -133,6 +175,7 @@ export async function rescheduleJobForManager(database, {
       scheduledStart: normalized.scheduledStart || null,
       scheduleRevision: nextScheduleRevision,
       checklistContextRevision: contextRevision + 1,
+      ...(scheduleConfirmation ? { scheduleConfirmation } : {}),
     };
   });
 }

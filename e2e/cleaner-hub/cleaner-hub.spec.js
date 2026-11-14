@@ -144,6 +144,25 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await expect(card).toContainText("13:00");
     await expect(pageA.locator(".hb-change.is-moved")).toContainText("Mudou de");
     await evidence(pageA, "02-rescheduled-live");
+
+    const service = page.getByRole("heading", { name: "New date confirmation" });
+    await expect(service).toBeVisible();
+    await page.getByRole("button", { name: "Notify on WhatsApp" }).click();
+    await expect(page.getByText(/https:\/\/clean-flow-prototipo.web.app\/agenda/)).toBeVisible();
+    await expect(page.getByText(/Review the draft and send it in WhatsApp/i)).toBeVisible();
+
+    await pageA.goto("/agenda?inbox=1");
+    const prompt = pageA.getByRole("listitem").filter({ hasText: /A data mudou para .*13:00/ });
+    await expect(prompt).toBeVisible();
+    await evidence(pageA, "58-01-confirm-new-schedule");
+    await prompt.getByRole("button", { name: "Confirmar", exact: true }).click();
+    await expect(pageA.getByText("Novo horário confirmado.")).toBeVisible();
+    await expect.poll(async () => {
+      const schedule = (await mapleRef.get()).data().scheduleConfirmation;
+      return schedule?.byCleaner[fixture.cleanerAId]?.state;
+    }).toBe("CONFIRMED");
+    await evidence(pageA, "58-02-confirmed");
+    await pageA.goto("/agenda");
   });
 
   let birchRef;

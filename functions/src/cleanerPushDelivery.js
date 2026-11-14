@@ -8,7 +8,7 @@ import {
   boundedManagerFcmSend, invalidManagerFcmToken, managerFcmCleanupTimeoutMs,
   managerFcmFailureCode, normalizeManagerFcmResult,
 } from "./managerFcmDelivery.js";
-import { notificationDestination } from "./notificationInbox.js";
+import { cleanerNotificationTarget } from "./notificationInbox.js";
 import { approvedCleanerPushPilotDevice } from "./cleanerPushPilot.js";
 import { cleanerInbox, cleanerInboxTypes, inboxEventVersion, isInboxId, validInboxSegment } from "./notificationInboxEvents.js";
 
@@ -26,13 +26,17 @@ function deviceAudit(snapshot, outcome) {
   return { installationKey, registrationRevision, outcome };
 }
 
-function cleanerFcmMessage(snapshot, eventId) {
+function cleanerFcmMessage(snapshot, eventId, reschedule) {
   const { language, token, bindingId } = snapshot.data();
   return {
     token,
     data: {
       title: "CleanFlow",
       body: notices[language] || notices.pt,
+      ...(reschedule && {
+        rescheduleDate: reschedule.scheduledDate,
+        rescheduleStart: reschedule.scheduledStart || "",
+      }),
       cleanerBindingId: bindingId,
       eventId,
       link: "/agenda",
@@ -97,11 +101,11 @@ async function claimDelivery(database, { organization, cleanerId, eventId, deliv
     // A cleaner's own test reaches only the installation that asked for it.
     const sessions = event.type === cleanerInboxTypes.pilotTest && typeof event.targetSessionId === "string"
       ? recipient.sessions.filter((sessionId) => sessionId === event.targetSessionId) : recipient.sessions;
-    const destination = activeRecipient && await notificationDestination(transaction, organization, event, identity, { forPush: true });
-    const devices = destination
+    const target = activeRecipient && await cleanerNotificationTarget(transaction, organization, event, identity);
+    const devices = target
       ? await chooseDevices(transaction, database, identity, sessions, mode, event.createdAt.toMillis()) : [];
     const skipped = !activeRecipient ? "RECIPIENT_INELIGIBLE"
-      : !destination ? "STALE_EVENT" : devices.length === 0 ? "NO_ACTIVE_DEVICES" : null;
+      : !target ? "STALE_EVENT" : devices.length === 0 ? "NO_ACTIVE_DEVICES" : null;
     const stages = ["EVENT_CREATED", "RECIPIENT_SELECTED", "INBOX_STORED"];
     if (devices.length > 0) stages.push("DEVICE_SELECTED");
     transaction.create(deliveryReference, {
@@ -113,7 +117,7 @@ async function claimDelivery(database, { organization, cleanerId, eventId, deliv
       unknownDevices: devices.length,
       devices: devices.map((snapshot) => deviceAudit(snapshot, "UNKNOWN")),
     });
-    return { devices, stages, skipped };
+    return { devices, stages, skipped, reschedule: target?.reschedule };
   });
 }
 
@@ -171,14 +175,14 @@ export async function processCleanerNotification({ database, organizationId, cle
   const reference = organization.collection("cleanerNotificationDeliveries").doc(eventId);
   const claim = await claimDelivery(database, { organization, cleanerId, eventId, deliveryReference: reference, mode });
   if (!claim || claim.skipped) return { skipped: claim?.skipped || "already-claimed-or-invalid" };
-  const { devices, stages } = claim;
+  const { devices, stages, reschedule } = claim;
 
   // The committed claim already records an unknown result. Start the attempt
   // without waiting for another Firestore write after the authorization check.
   const attemptedAt = Timestamp.now();
   let outcome;
   try {
-    const response = await boundedManagerFcmSend(sendFcm, devices.map((device) => cleanerFcmMessage(device, eventId)));
+    const response = await boundedManagerFcmSend(sendFcm, devices.map((device) => cleanerFcmMessage(device, eventId, reschedule)));
     const { deliveryStatus, acceptedByFcmDevices, failedDevices, unknownDevices } = normalizeManagerFcmResult(response, devices.length);
     const rejectedDevices = failedDevices - unknownDevices;
     const cleanup = await cleanInvalidDevices(database, devices, response.responses);

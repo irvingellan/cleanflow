@@ -1,3 +1,4 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
 import {
   assignCleanerDirectlyForManager,
@@ -66,7 +67,11 @@ function fakeDatabase(initialRecords, { failCommit = false } = {}) {
           if (records.has(write.path)) throw new Error("already exists");
           records.set(write.path, write.data);
         } else {
-          records.set(write.path, { ...records.get(write.path), ...write.data });
+          const saved = { ...records.get(write.path), ...write.data };
+          for (const [field, value] of Object.entries(write.data)) {
+            if (value?.isEqual?.(FieldValue.delete())) delete saved[field];
+          }
+          records.set(write.path, saved);
         }
       }
       return result;
@@ -166,6 +171,28 @@ describe("manager direct Assignment", () => {
     expect(records.get(`${jobPath}/offers/offer-pending`)).toEqual({
       cleanerId: "cleaner-a", status: "PENDING",
     });
+  });
+
+  it("retires an unrelated pending replacement when a direct assignment fills the last slot", async () => {
+    const replacementOfferId = "replacement-01234567890123456789";
+    const replacementPath = `${jobPath}/offers/${replacementOfferId}`;
+    const pending = { cleanerId: "cleaner-c", status: "PENDING", offerKind: "MANUAL_REPLACEMENT" };
+    const { database, records } = fakeDatabase(fixtures({
+      job: {
+        ...baseJob, organizationId, operationalStatus: "OFFERED", scheduleRevision: 2,
+        offerDistributionMode: "FIRST_ACCEPT_WINS", offerDistributionClosedAt: "permanent-close",
+        automaticOfferBatch: { version: 2, capacity: 1, openingContextRevision: 1, currentContextRevision: 2 },
+        manualReplacementOffer: { offerId: replacementOfferId, cleanerId: "cleaner-c", scheduleRevision: 2, issuedScheduleRevision: 2 },
+      },
+      extra: { [replacementPath]: pending },
+    }));
+
+    await assignCleanerDirectlyForManager(database, request);
+    expect(records.get(jobPath)).toMatchObject({
+      assignedCleanerIds: ["cleaner-a"], offerDistributionClosedAt: "permanent-close",
+    });
+    expect(records.get(jobPath)).not.toHaveProperty("manualReplacementOffer");
+    expect(records.get(replacementPath)).toEqual(pending);
   });
 
   it("requires active manager membership and an active, unarchived Cleaner", async () => {

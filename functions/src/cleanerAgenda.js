@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { publicOfferState } from "./publicOfferResponseService.js";
 import { automaticOfferBatchVersion, FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
+import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
 
 /**
  * Cleaner agenda projection (Cleaner Hub V1).
@@ -118,7 +119,11 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
       checklistStarted: checklistSummary.started,
     });
   }
-  for (const offer of offers) {
+  const activeReplacement = job.manualReplacementOffer?.offerId;
+  const replacement = activeReplacement && offers.find(offer => offer.offerReferenceId === activeReplacement && offer.jobId === jobId
+    && currentManualReplacementOffer(job, offer, activeReplacement, now));
+  const visibleOffers = replacement ? [replacement, ...offers.filter(offer => offer !== replacement)] : offers;
+  for (const offer of visibleOffers) {
     const cleanerId = offer?.cleanerId;
     if (!validId(cleanerId) || entries.has(cleanerId)) continue;
     // Keep a closed automatic Offer visible only to its original recipient
@@ -129,7 +134,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
     const expiry = offer.publicOfferExpiresAt;
     const offerExpiresAtMs = typeof expiry?.toMillis === "function" ? expiry.toMillis() : null;
     if (!Number.isFinite(offerExpiresAtMs)) continue;
-    const state = publicOfferState(offer, job, now);
+    const state = offer === replacement ? "available" : publicOfferState(offer, job, now);
     if (state !== "available" && state !== "already-taken") continue;
     const closed = state === "already-taken";
     // A former automatic invite recipient is not entitled to learn later Job
@@ -149,6 +154,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
       offerExpiresAtMs,
       offeredCompensation: offeredCompensationFor(offer, job),
       ...(automatic ? { offerDistributionMode: FIRST_ACCEPT_WINS } : {}),
+      ...(offer === replacement ? { replacementOfferId: activeReplacement } : {}),
     });
   }
   return entries;
@@ -161,7 +167,7 @@ export function agendaEntryId(cleanerId, jobId) {
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offerExpiresAtMs",
-  "offerDistributionMode", "checklistStatus", "checklistStarted",
+  "offerDistributionMode", "replacementOfferId", "checklistStatus", "checklistStarted",
 ];
 
 export function sameEntry(previous, next) {
@@ -243,7 +249,7 @@ export async function syncCleanerAgendaForJob(database, {
       organizationId,
       jobId,
       job,
-      offers: offersSnapshot.docs.map((snapshot) => snapshot.data()),
+      offers: offersSnapshot.docs.map((snapshot) => ({ ...snapshot.data(), offerReferenceId: snapshot.id })),
       assignments: assignmentsSnapshot.docs.map((snapshot) => snapshot.data()),
       now: current,
       checklist: checklistAgendaSummary({

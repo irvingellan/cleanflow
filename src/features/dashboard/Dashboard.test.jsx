@@ -104,6 +104,25 @@ describe("Dashboard near-term cleaner attention", () => {
     vi.restoreAllMocks();
   });
 
+  it("counts only Jobs awaiting current schedule responses in the upcoming list", () => {
+    window.localStorage.setItem("cleanflow-language", "en");
+    const assigned = {
+      id: "pending", propertyName: "Current Slot", scheduledDate: localDateKey(0),
+      operationalStatus: "ASSIGNED", assignedCleanerIds: ["ana", "becca"], scheduleRevision: 2,
+      scheduleConfirmation: { revision: 2, byCleaner: {
+        ana: { assignmentId: "a", state: "PENDING" },
+        becca: { assignmentId: "b", state: "CONFIRMED" },
+      } },
+    };
+    const stale = { ...assigned, id: "stale", propertyName: "Newer Slot", scheduleRevision: 3 };
+    const legacy = { ...assigned, id: "legacy", propertyName: "Legacy Slot", assignedCleanerIds: undefined,
+      assignedCleanerId: "ana", scheduleConfirmation: { revision: 2, byCleaner: { ana: { state: "PENDING", assignmentId: null } } } };
+    render(<TranslationProvider><DashboardHarness dashboardData={{ next48HoursJobs: [assigned, stale, legacy] }} /></TranslationProvider>);
+    expect(screen.getByText("Jobs awaiting confirmation of the new date: 2")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Current Slot.*Awaiting confirmation of the new date.*Pending responses: 1/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Newer Slot/i })).not.toHaveTextContent("Awaiting confirmation of the new date");
+  });
+
   it.each(["en", "pt", "es"])("shows a usable localized retry instead of loading after failure (%s)", (language) => {
     const retry = vi.fn();
     window.localStorage.setItem("cleanflow-language", language);

@@ -417,6 +417,11 @@ test("only the latest reschedule attempts delivery and cancellation can notify w
     return { responses: [{ success: true, messageId: "synthetic-change-accepted" }], successCount: 1, failureCount: 0 };
   };
 
+  assert.deepEqual(await dispatch(cleanerA, latestEvent.id, provider, organizationId, "disabled"), { skipped: "transport-disabled" });
+  assert.equal(attempts.length, 0);
+  assert.equal((await receiptReference(latestEvent.id).get()).exists, false);
+  assert.ok((await list(auth)).items.some(({ id }) => id === latestEvent.id));
+
   assert.deepEqual(await dispatch(cleanerA, staleEvent.id, provider), { skipped: "STALE_EVENT" });
   assert.equal((await receiptReference(staleEvent.id).get()).data().targetDeviceCount, 0);
   assert.deepEqual(await dispatch(cleanerA, latestEvent.id, provider), {
@@ -446,7 +451,20 @@ test("only the latest reschedule attempts delivery and cancellation can notify w
     assert.deepEqual(messages.map(({ token, data }) => [token, data.cleanerBindingId, data.eventId]),
       [[installationA.token, registration.bindingId, event.id]]);
     assert.equal(messages[0].data.link, "/agenda");
-    assert.doesNotMatch(JSON.stringify(messages[0].data), /Synthetic property marker|synthetic-reschedule-cancel|2026-11-19|14:15/);
+    assert.doesNotMatch(JSON.stringify(messages[0].data), /Synthetic property marker|synthetic-reschedule-cancel|private-|12:30/);
+    const display = cleanerPushDisplay(messages[0], { bindingId: registration.bindingId, language: "pt" });
+    assert.ok(display);
+    if (index === 0) {
+      assert.deepEqual([messages[0].data.rescheduleDate, messages[0].data.rescheduleStart], ["2026-11-19", "14:15"]);
+      assert.doesNotMatch(messages[0].data.body, /2026-11-19|14:15|Você pode/);
+      const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone: "UTC" })
+        .format(new Date("2026-11-19T00:00:00Z"));
+      assert.equal(display.options.body, `A data mudou para ${date} · 14:15. Você pode?`);
+    } else {
+      assert.equal(messages[0].data.rescheduleDate, undefined);
+      assert.equal(messages[0].data.rescheduleStart, undefined);
+      assert.equal(display.options.body, "Abra o CleanFlow para ver seus avisos.");
+    }
   }
   const { items } = await list(auth);
   for (const event of [assignment, staleEvent, latestEvent, cancelled[0]]) {

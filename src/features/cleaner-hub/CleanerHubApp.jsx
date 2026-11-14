@@ -477,6 +477,10 @@ function JobView({ t, hub, jobId, today }) {
 function OfferView({ t, hub, jobId, today, wasAutomatic }) {
   const entry = findAgendaEntry(hub.entries, jobId);
   const [reply, setReply] = useState("idle");
+  const observedSchedule = entry?.scheduleRevision;
+  useEffect(() => {
+    setReply(previous => previous === "staleSchedule" ? "idle" : previous);
+  }, [observedSchedule]);
 
   if (entry?.kind === "ASSIGNED" || (!entry && !wasAutomatic)) {
     return <JobView key={jobId} t={t} hub={hub} jobId={jobId} today={today} />;
@@ -493,11 +497,19 @@ function OfferView({ t, hub, jobId, today, wasAutomatic }) {
   async function answer(status) {
     setReply("sending");
     try {
-      const result = await hub.respondToOffer(entry.jobId, status);
+      const revision = entry.scheduleRevision;
+      const current = {
+        ...(Number.isSafeInteger(revision) && revision > 0 ? { scheduleRevision: revision } : {}),
+        ...(entry.replacementOfferId ? { offerId: entry.replacementOfferId } : {}),
+      };
+      const result = Object.keys(current).length
+        ? await hub.respondToOffer(entry.jobId, status, current) : await hub.respondToOffer(entry.jobId, status);
       if (result?.state === "assigned" && result.status === "ACCEPTED" && status === "ACCEPTED") {
         setReply("assigned");
       } else if (result?.state === "already-taken") {
         setReply("alreadyTaken");
+      } else if (result?.state === "stale-schedule") {
+        setReply("staleSchedule");
       } else {
         setReply(result?.state === "answered" ? "sent" : "unavailable");
       }
@@ -526,6 +538,7 @@ function OfferView({ t, hub, jobId, today, wasAutomatic }) {
         </div>
       )}
       {!taken && ["sent", "unavailable", "error"].includes(reply) && <p className="mw-hint" role="status">{t(`hb.offer.${reply}`)}</p>}
+      {!taken && reply === "staleSchedule" && <p className="mw-hint" role="status">{inboxMessage(t.lang, "inbox.reschedule.stale")}</p>}
       {waitingForNetwork && <p className="mw-hint" role="status">{t("hb.offer.onlineRequired")}</p>}
       {!taken && reply !== "assigned" && <p className="mw-hint">{t(automatic ? "hb.offers.autoNote" : "hb.offers.note")}</p>}
     </div>

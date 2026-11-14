@@ -9,6 +9,8 @@ import {
   managerInboxCollection, managerInboxTypes as managerTypes, offerInboxGeneration, validInboxSegment,
 } from "./notificationInboxEvents.js";
 import { publicOfferState } from "./publicOfferResponseService.js";
+import { currentScheduleConfirmation } from "./rescheduleConfirmations.js";
+import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
 
 const inboxWindow = 100;
 const managerRole = "MANAGER";
@@ -100,13 +102,14 @@ function projectAuthorizedTarget(organization, event, identity, job, offer, { fo
     return { destination: { kind: "JOB", jobId: event.jobId }, serviceLabel: safeServiceLabel(job) };
   }
   if (event.type === cleanerTypes.offer) {
+    const replacement = currentManualReplacementOffer(job, offer, event.offerId, now);
     const visibleStatuses = forPush ? ["PENDING"] : ["PENDING", "INTERESTED"];
     if (!offer || offer.cleanerId !== identity.cleanerId || !visibleStatuses.includes(offer.status)
       || (offer.organizationId != null && offer.organizationId !== organization.id)
       || (offer.jobId != null && offer.jobId !== event.jobId)
       || offerInboxGeneration(offer) !== event.offerGeneration
-      || (!isAutomaticOfferJob(offer) && typeof offer.publicOfferTokenHash !== "string")
-      || publicOfferState(offer, job, now) !== "available") return null;
+      || (!replacement && ((!isAutomaticOfferJob(offer) && typeof offer.publicOfferTokenHash !== "string")
+        || publicOfferState(offer, job, now) !== "available"))) return null;
     return { destination: { kind: "OFFER", jobId: event.jobId }, serviceLabel: safeServiceLabel(job) };
   }
   if (!rosterIncludesCleaner) return null;
@@ -135,7 +138,27 @@ async function authorizedTarget(transaction, organization, event, identity, opti
   const offerRef = targetOfferReference(jobRef, job, event, organization.id);
   const offer = offerRef ? (await transaction.get(offerRef)).data() : null;
   const target = projectAuthorizedTarget(organization, event, normalized, job, offer, options);
-  if (!target || !options.forPush || event.type !== cleanerTypes.automatic || !validInboxSegment(event.automaticAssignmentId)) return target;
+  if (!target || !options.forPush) return target;
+  if (event.type === cleanerTypes.rescheduled && job.operationalStatus === "ASSIGNED") {
+    const decision = currentScheduleConfirmation(job, identity.cleanerId, event.scheduleRevision);
+    if (!decision) return target;
+    const assignment = decision.assignmentId
+      ? (await transaction.get(jobRef.collection("assignments").doc(decision.assignmentId))).data() : null;
+    const currentAssignment = decision.assignmentId === null ? job.schemaVersion !== 2
+      : assignment?.isActive === true && assignment.cleanerId === identity.cleanerId
+        && assignment.jobId === event.jobId && assignment.organizationId === organization.id;
+    if (!currentAssignment || decision.state !== "PENDING") return null;
+    if (typeof job.scheduledDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(job.scheduledDate)) return target;
+    return {
+      ...target,
+      reschedule: {
+        scheduledDate: job.scheduledDate,
+        scheduledStart: typeof job.scheduledStart === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(job.scheduledStart)
+          ? job.scheduledStart : null,
+      },
+    };
+  }
+  if (event.type !== cleanerTypes.automatic || !validInboxSegment(event.automaticAssignmentId)) return target;
   const assignment = (await transaction.get(jobRef.collection("assignments").doc(event.automaticAssignmentId))).data();
   return assignment?.isActive === true && assignment.assignmentMethod === FIRST_ACCEPT_WINS
     && assignment.organizationId === organization.id && assignment.jobId === event.jobId
@@ -143,6 +166,10 @@ async function authorizedTarget(transaction, organization, event, identity, opti
 }
 
 /** Rechecks the current source before a device attempt. Device authorization is separate. */
+export async function cleanerNotificationTarget(transaction, organization, event, identity) {
+  return authorizedTarget(transaction, organization, event, identity, { forPush: true });
+}
+
 export async function notificationDestination(transaction, organization, event, identity, options) {
   return (await authorizedTarget(transaction, organization, event, identity, options))?.destination ?? null;
 }
@@ -208,11 +235,31 @@ export async function listNotificationInboxForRequest(database, { organizationId
       targetOfferReference(jobRefs[index], jobs[index], event, organizationId)
     ));
     const offers = await readInboxDocuments(transaction, offerRefs);
+    const confirmations = entries.map(({ event }, index) => identity.role === cleanerRole
+      && event.type === cleanerTypes.rescheduled && jobs[index]?.operationalStatus === "ASSIGNED"
+      && notificationRoster(jobs[index]).includes(identity.cleanerId)
+      ? currentScheduleConfirmation(jobs[index], identity.cleanerId, event.scheduleRevision) : null);
+    const assignmentRefs = confirmations.map((confirmation, index) => confirmation?.assignmentId
+      ? jobRefs[index].collection("assignments").doc(confirmation.assignmentId) : null);
+    const assignments = await readInboxDocuments(transaction, assignmentRefs);
     const now = new Date();
     const items = entries.map(({ id, event }, index) => {
       const target = projectAuthorizedTarget(organization, event, identity, jobs[index],
         offers.get(offerRefs[index]?.path), { now });
       const notice = target && identity.role === managerRole ? automaticOfferNotice(event.type, event.automaticOffer) : null;
+      const job = jobs[index];
+      const decision = confirmations[index];
+      const assignment = assignments.get(assignmentRefs[index]?.path);
+      const currentAssignment = decision?.assignmentId === null ? job?.schemaVersion !== 2
+        : assignment?.isActive === true && assignment.cleanerId === identity.cleanerId
+          && assignment.jobId === event.jobId && assignment.organizationId === organizationId;
+      const reschedule = target && decision && currentAssignment && typeof job.scheduledDate === "string"
+        ? {
+          state: decision.state,
+          scheduleRevision: event.scheduleRevision,
+          scheduledDate: job.scheduledDate,
+          scheduledStart: job.scheduledStart || null,
+        } : null;
       return {
         id,
         type: event.type,
@@ -222,6 +269,7 @@ export async function listNotificationInboxForRequest(database, { organizationId
         openable: Boolean(target),
         serviceLabel: target?.serviceLabel ?? null,
         ...(notice ? { automaticOffer: notice } : {}),
+        ...(reschedule ? { reschedule } : {}),
       };
     });
     return { items, unreadCount: items.filter((item) => !item.read).length, hasOlder, nextCursor };

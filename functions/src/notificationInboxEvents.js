@@ -21,6 +21,7 @@ export const managerInboxTypes = Object.freeze({
   interest: "CLEANER_INTERESTED",
   automatic: "AUTO_ASSIGNMENT_CONFIRMED",
   automaticBatchFilled: "AUTO_OFFER_BATCH_FILLED",
+  rescheduleDeclined: "RESCHEDULE_DECLINED",
   confirmed: "ASSIGNMENT_CONFIRMED",
   checklist: "CHECKLIST_READY_FOR_REVIEW",
   tomorrow: "TOMORROW_19",
@@ -65,8 +66,8 @@ export function inboxEventRecord({ eventId, organizationId, type, jobId, created
 }
 
 export function automaticOfferNotice(type, value) {
-  if (type !== managerInboxTypes.automatic && type !== managerInboxTypes.automaticBatchFilled) return null;
-  const cleanerLabel = type === managerInboxTypes.automatic && typeof value?.cleanerLabel === "string"
+  if (![managerInboxTypes.automatic, managerInboxTypes.automaticBatchFilled, managerInboxTypes.rescheduleDeclined].includes(type)) return null;
+  const cleanerLabel = type !== managerInboxTypes.automaticBatchFilled && typeof value?.cleanerLabel === "string"
     ? value.cleanerLabel.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120) : "";
   const scheduledDate = typeof value?.scheduledDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.scheduledDate)
     && new Date(value.scheduledDate).toJSON()?.slice(0, 10) === value.scheduledDate ? value.scheduledDate : "";

@@ -85,6 +85,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         onUpdatePrices={callbacks.onUpdatePrices || noOp}
         onUpdateDetails={callbacks.onUpdateDetails || noOp}
         onUpdateSchedule={callbacks.onUpdateSchedule || noOp}
+        onOfferManualReplacement={callbacks.onOfferManualReplacement}
         onSimulateAssignedCleaner={noOp}
         onResolveIssue={noOp}
         onArchive={callbacks.onArchive || noOp}
@@ -268,7 +269,9 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
     expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-06");
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
-    await waitFor(() => expect(update).toHaveBeenCalledWith({ scheduledDate: "2026-10-06", scheduledStart: "12:00" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith({
+      scheduledDate: "2026-10-06", scheduledStart: "12:00", expectedScheduleRevision: 0,
+    }));
   });
   it("lets an eligible Job schedule change and warns that an external cleaner message may be stale", async () => {
     const onUpdateSchedule = vi.fn().mockResolvedValue({
@@ -294,6 +297,7 @@ describe("JobDetail lifecycle actions", () => {
       expect(onUpdateSchedule).toHaveBeenCalledWith({
         scheduledDate: "2026-10-02",
         scheduledStart: "14:30",
+        expectedScheduleRevision: 0,
       });
       expect(screen.getByRole("status")).toHaveTextContent("Schedule updated.");
       expect(screen.getByText(/please resend the updated details/i)).toBeVisible();
@@ -315,6 +319,7 @@ describe("JobDetail lifecycle actions", () => {
     await waitFor(() => expect(onUpdateSchedule).toHaveBeenCalledWith({
       scheduledDate: "2026-10-02",
       scheduledStart: "",
+      expectedScheduleRevision: 0,
     }));
   });
 
@@ -352,6 +357,68 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update the schedule.");
     expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-03");
+  });
+
+  it("holds the revision captured when editing and requires review after a conflict", async () => {
+    const onUpdateSchedule = vi.fn().mockRejectedValue({ details: { reason: "stale-schedule" } });
+    renderJobDetail("UNASSIGNED", { scheduledDate: "2026-10-01", scheduleRevision: 3 }, { onUpdateSchedule });
+    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
+    fireEvent.change(screen.getByLabelText("Scheduled date"), { target: { value: "2026-10-03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/schedule changed while this form was open/i);
+    expect(onUpdateSchedule).toHaveBeenCalledWith(expect.objectContaining({ expectedScheduleRevision: 3 }));
+    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review current schedule" }));
+    expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-01");
+  });
+
+  it("shows responses and lets the manager open only a safe, manual draft for a pending cleaner", () => {
+    renderJobDetail("ASSIGNED", {
+      schemaVersion: 2, assignedCleanerIds: ["ana", "becca"], scheduleRevision: 4,
+      scheduledDate: "2026-10-03", scheduledStart: "14:30",
+      guestName: "Private Guest", notes: "Private ops",
+      scheduleConfirmation: { revision: 4, byCleaner: {
+        ana: { assignmentId: "a", state: "PENDING" },
+        becca: { assignmentId: "b", state: "CONFIRMED" },
+        tina: { assignmentId: "c", state: "DECLINED" },
+      } },
+    }, {}, { knownCleaners: [
+      { id: "ana", name: "Ana", phone: "+1 202 555 0100", preferredLanguage: "pt" },
+      { id: "becca", name: "Becca" }, { id: "tina", name: "Tina" },
+    ] });
+    const section = within(screen.getByRole("region", { name: "New date confirmation" }));
+    expect(section.getByRole("status")).toHaveTextContent("Awaiting confirmation of the new date · Pending responses: 1");
+    expect(section.getByText("Confirmed")).toBeVisible();
+    expect(section.getByText("Unavailable")).toBeVisible();
+    expect(section.queryByRole("link")).not.toBeInTheDocument();
+    fireEvent.click(section.getByRole("button", { name: "Notify on WhatsApp" }));
+    const draft = new URL(section.getByRole("link", { name: "Open draft in WhatsApp" }).href);
+    expect(draft.origin).toBe("https://wa.me");
+    expect(draft.pathname).toBe("/12025550100");
+    const message = draft.searchParams.get("text");
+    expect(message).toContain("Pacific Beach Condo");
+    expect(message).toContain("14:30");
+    expect(message).toContain("Minha agenda: https://clean-flow-prototipo.web.app/agenda");
+    expect(message).not.toMatch(/Private Guest|Private ops|\?token|\/offer\//);
+  });
+
+  it("lets the manager explicitly offer a new vacancy without issuing a public link", async () => {
+    const onOfferManualReplacement = vi.fn().mockRejectedValue({ details: { reason: "automatic-offers-active" } });
+    renderJobDetail("UNASSIGNED", {
+      schemaVersion: 2, assignedCleanerIds: [], scheduleRevision: 4,
+      requiredCleanerCount: 1, offerDistributionMode: "FIRST_ACCEPT_WINS",
+      automaticOfferBatch: { version: 2, capacity: 1 },
+      scheduleConfirmation: { revision: 4, byCleaner: { ana: { assignmentId: "a", state: "DECLINED" } } },
+    }, { onOfferManualReplacement }, { availableCleaners: [
+      { id: "ana", name: "Ana", active: true }, { id: "becca", name: "Becca", active: true },
+    ] });
+    const section = within(screen.getByRole("region", { name: "New date confirmation" }));
+    expect(section.queryByRole("option", { name: "Ana" })).not.toBeInTheDocument();
+    fireEvent.change(section.getByRole("combobox", { name: "Cleaner for the open spot" }), { target: { value: "becca" } });
+    fireEvent.click(section.getByRole("button", { name: "Offer the spot to another cleaner" }));
+    expect(await section.findByRole("alert")).toHaveTextContent(/automatic offers are still awaiting responses/i);
+    expect(onOfferManualReplacement).toHaveBeenCalledExactlyOnceWith("becca", 4);
+    expect(section.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("lets a manager edit only guest name and notes and reports the saved result", async () => {
