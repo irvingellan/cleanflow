@@ -64,8 +64,8 @@ function JobsPageHarness({ initialFilters = createJobListFilters(), loadPhotoCou
         filters={filters}
         cleaners={[{ id: "cleaner-1", name: "Carla Perez" }]}
         properties={[
-          { id: "property-a", name: "Pacific Beach Condo", clientId: "client-carl" },
-          { id: "property-b", name: "Sunset House", clientId: "client-sara" },
+          { id: "property-a", name: "Pacific Beach Condo", clientId: "client-carl", clientName: "Carl" },
+          { id: "property-b", name: "Sunset House", clientId: "client-sara", clientName: "Sara" },
         ]}
         onFiltersChange={(updates) =>
           setFilters((currentFilters) => ({ ...currentFilters, ...updates }))
@@ -333,6 +333,22 @@ describe("JobsPage filters", () => {
     expect(screen.getByText("Client: Carl")).toBeVisible();
     expect(screen.getAllByText("Pacific Beach Condo")).toHaveLength(2);
     expect(screen.queryByText("Sunset House")).not.toBeInTheDocument();
+  });
+
+  it("filters by client from the advanced filters", async () => {
+    const user = userEvent.setup();
+    render(<JobsPageHarness />);
+
+    await user.click(screen.getByRole("button", { name: /^filters$/i }));
+    const client = screen.getByLabelText("Client");
+    expect([...client.options].map((option) => option.textContent)).toEqual(["Any client", "Carl", "Sara"]);
+    await user.selectOptions(client, "client-sara");
+
+    const listed = (name) => screen.queryAllByText(name).filter((element) => element.tagName !== "OPTION");
+    expect(listed("Pacific Beach Condo")).toHaveLength(0);
+    expect(listed("Sunset House").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /clear filters/i }));
+    expect(screen.getByLabelText("Client")).toHaveValue("");
   });
 
   it("toggles quick filters using the existing filter state", async () => {
