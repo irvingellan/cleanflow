@@ -22,6 +22,8 @@ const { initializeApp } = await import("firebase-admin/app");
 initializeApp({ projectId: "demo-cleanflow", storageBucket: "demo-cleanflow.appspot.com" });
 const { FieldValue, getFirestore, Timestamp } = await import("firebase-admin/firestore");
 const { deleteField, serverTimestamp } = await import("firebase/firestore");
+const { cleanerSelectionHistoryLimit, cleanerSelectionScheduleLimit, committedCleanerStatuses } =
+  await import("../src/features/jobs/cleanerSelectionContext.js");
 const {
   createChecklistRun,
   approveChecklistRun,
@@ -1089,6 +1091,46 @@ test("current-device transaction prevents concurrent duplicate sends and unknown
   const audits = await admin.collection(`${root}/currentDeviceNotificationTests`).get();
   assert.equal(audits.size, 1);
   assert.equal(audits.docs[0].data().status, "UNKNOWN");
+});
+
+test("cleaner picker's bounded day and property queries are restricted to active managers of the organization", async () => {
+  const date = "2026-11-13";
+  const propertyId = "fixture-property";
+  const fixtures = admin.batch();
+  for (let index = 0; index <= cleanerSelectionHistoryLimit; index += 1) {
+    fixtures.set(admin.doc(`${root}/jobs/history-${index}`), {
+      schemaVersion: 2, propertyId, operationalStatus: "COMPLETED",
+      completedAt: Timestamp.fromMillis(1700000000000 + index), assignedCleanerIds: ["cleaner-a"],
+    });
+  }
+  for (let index = 0; index <= cleanerSelectionScheduleLimit; index += 1) {
+    fixtures.set(admin.doc(`${root}/jobs/same-day-${index}`), {
+      schemaVersion: 2, scheduledDate: date, operationalStatus: "ASSIGNED", assignedCleanerIds: ["cleaner-b"],
+    });
+  }
+  fixtures.set(admin.doc(`${root}/jobs/history-elsewhere`), {
+    propertyId: "other-fixture", operationalStatus: "COMPLETED",
+    completedAt: Timestamp.fromMillis(1800000000000), assignedCleanerId: "cleaner-a",
+  });
+  fixtures.set(admin.doc(`${root}/jobs/other-date`), { scheduledDate: "2026-11-14", operationalStatus: "ASSIGNED" });
+  await fixtures.commit();
+
+  const queries = (ctx) => {
+    const jobs = ctx.firestore().collection(`${root}/jobs`);
+    return [
+      jobs.where("scheduledDate", "==", date).where("operationalStatus", "in", committedCleanerStatuses).limit(cleanerSelectionScheduleLimit + 1),
+      jobs.where("propertyId", "==", propertyId).where("operationalStatus", "==", "COMPLETED").orderBy("completedAt", "desc").limit(cleanerSelectionHistoryLimit + 1),
+    ];
+  };
+  const [schedule, history] = await Promise.all(queries(account("manager")).map((query) => assertSucceeds(query.get())));
+  assert.equal(schedule.size, cleanerSelectionScheduleLimit + 1);
+  assert.equal(history.size, cleanerSelectionHistoryLimit + 1);
+  assert.ok(schedule.docs.every((doc) => doc.data().scheduledDate === date));
+  assert.ok(history.docs.every((doc) => doc.data().propertyId === propertyId));
+  for (const outsider of [account("cleaner"), account("other-manager"), account("inactive"),
+    account("anonymous-member", true), environment.unauthenticatedContext()]) {
+    await Promise.all(queries(outsider).map((query) => assertFails(query.get())));
+  }
 });
 
 async function seedChecklistJob({ checklistSettings } = {}) {

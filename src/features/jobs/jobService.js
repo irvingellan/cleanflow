@@ -35,6 +35,10 @@ import {
   optionalJobPrice,
 } from "./jobCompatibility.js";
 import { buildChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
+import {
+  cleanerSelectionHistoryLimit, cleanerSelectionScheduleLimit, committedCleanerStatuses,
+  projectCleanerSelectionContext,
+} from "./cleanerSelectionContext.js";
 
 const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
@@ -79,6 +83,27 @@ export function subscribeToJob(jobId, onChange) {
 
 const servicePeriodPageSize = 50;
 const maxServicePeriodJobs = 200;
+
+/** Both reads use the existing organization-scoped manager Job Rules. */
+export async function getCleanerSelectionContext(target, { signal } = {}) {
+  signal?.throwIfAborted();
+  const records = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const { propertyId, scheduledDate } = target;
+  const [schedule, history] = await Promise.all([
+    scheduledDate ? getServerDocs(serverQuery(records,
+      serverWhere("scheduledDate", "==", scheduledDate),
+      serverWhere("operationalStatus", "in", committedCleanerStatuses),
+      serverLimit(cleanerSelectionScheduleLimit + 1))) : null,
+    propertyId ? getServerDocs(serverQuery(records,
+      serverWhere("propertyId", "==", propertyId),
+      serverWhere("operationalStatus", "==", "COMPLETED"),
+      serverOrderBy("completedAt", "desc"),
+      serverLimit(cleanerSelectionHistoryLimit + 1))) : null,
+  ]);
+  signal?.throwIfAborted();
+  const rows = (results) => results?.docs.map((row) => ({ ...row.data(), id: row.id })) || [];
+  return projectCleanerSelectionContext(target, rows(schedule), rows(history));
+}
 
 /** Cursor includes the document ID, so jobs on the same date cannot be skipped. */
 export async function getServicePeriodJobs({ start, end }, { signal } = {}) {

@@ -45,6 +45,15 @@ Manager creates Job
 Interest never automatically assigns a Job. Cleaners must not see competing
 Offers, responses, assignment count, or another cleaner's compensation.
 
+**Cleaner picker context.** When the manager chooses cleaners, the picker
+can show existing assignments on the service date, with recorded start
+times, and sort candidates with recent completed work at the property first.
+It uses at most 60 committed Jobs for the day and the last 40 completed Jobs
+with a recorded completion timestamp for that property. One extra record per
+query detects a truncated result. Counts describe the records consulted.
+These hints preserve the existing selection and assignment rules. Only active
+managers can read the underlying organization-scoped Jobs.
+
 **Issue #86 local candidate:** the manager can opt an eligible single-slot Job
 into automatic distribution. The Cleaner Hub sends an explicit `ACCEPTED`
 response. The first valid server commit produces the Assignment. The manager

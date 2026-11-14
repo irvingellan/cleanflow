@@ -22,6 +22,9 @@ import {
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
+import {
+  CleanerSelectionOption, CleanerSelectionStatus, cleanerReplacementOption, sortByCleanerExperience, useCleanerSelectionContext,
+} from "./CleanerSelectionContext.jsx";
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { FIRST_ACCEPT_WINS, automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
@@ -244,9 +247,10 @@ export function JobDetail({
   const canDirectAssign = isAssignmentAware && !job.archivedAt
     && (!automaticOfferJob || assignedCleanerIds.length === 0)
     && ["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus);
-  const directCleanerOptions = filterCleanersByName(
-    availableCleaners.filter((cleaner) => canAssignCleanerDirectly(job, cleaner)),
-    directCleanerSearch,
+  const cleanerSelection = useCleanerSelectionContext(job, (canDirectAssign && isDirectAssignmentOpen) || (canEditRoster && Boolean(replacementTargetId)));
+  const directCleanerOptions = sortByCleanerExperience(
+    filterCleanersByName(availableCleaners.filter((cleaner) => canAssignCleanerDirectly(job, cleaner)), directCleanerSearch),
+    cleanerSelection.result,
   );
   const canManageOffers = isAssignmentAware
     ? canManageAssignmentAwareOffers(job)
@@ -1363,15 +1367,16 @@ export function JobDetail({
                     <input type="search" value={directCleanerSearch}
                       onChange={(event) => setDirectCleanerSearch(event.target.value)} />
                   </label>
+                  <CleanerSelectionStatus {...cleanerSelection} language={language} />
                   <fieldset className="direct-cleaner-picker">
                     <legend>{translate("jobs.cleanerPickerResults")}</legend>
                       {directCleanerOptions.map((cleaner) => (
-                        <label key={cleaner.id} className={`direct-cleaner-picker__option${directCleanerId === cleaner.id ? " direct-cleaner-picker__option--selected" : ""}`}>
-                          <input type="radio" name="direct-cleaner" value={cleaner.id}
-                            checked={directCleanerId === cleaner.id} disabled={isAssigningDirectly}
-                            onChange={() => setDirectCleanerId(cleaner.id)} />
-                          <span>{cleaner.name}</span>
-                        </label>
+                        <CleanerSelectionOption key={cleaner.id}
+                          className={`direct-cleaner-picker__option${directCleanerId === cleaner.id ? " direct-cleaner-picker__option--selected" : ""}`}
+                          cleanerId={cleaner.id} name={cleaner.name || translate("common.notProvided")}
+                          context={cleanerSelection.result} language={language} type="radio" inputName="direct-cleaner" value={cleaner.id}
+                          checked={directCleanerId === cleaner.id} disabled={isAssigningDirectly}
+                          onChange={() => setDirectCleanerId(cleaner.id)} />
                       ))}
                   </fieldset>
                   {directCleanerId && (
@@ -1485,6 +1490,7 @@ export function JobDetail({
                     )}
                     {canEditRoster && isReplacing && (
                       <div className="assignment-replacement">
+                        <CleanerSelectionStatus {...cleanerSelection} language={language} />
                         <label>
                           {translate("jobs.replacementCleaner")}
                           <select
@@ -1492,14 +1498,14 @@ export function JobDetail({
                             onChange={(event) => setReplacementOfferId(event.target.value)}
                           >
                             <option value="">{translate("common.notProvided")}</option>
-                            {eligibleReplacementOffers.map((offer) => (
+                            {sortByCleanerExperience(eligibleReplacementOffers, cleanerSelection.result, (offer) => offer.cleanerId).map((offer) => (
                               <option key={offer.id} value={offer.id}>
-                                {currentCleanerName(
+                                {cleanerReplacementOption(currentCleanerName(
                                   offer.cleanerId,
                                   offer.cleanerName,
                                   cleanerNamesById,
                                   translate("common.notProvided"),
-                                )}
+                                ), offer.cleanerId, cleanerSelection.result, language)}
                               </option>
                             ))}
                           </select>
