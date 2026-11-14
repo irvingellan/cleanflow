@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { requireMission2Writes } from "./mission2WriteControl.js";
 import {
   automaticOfferBatch, automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob,
   isAutomaticOfferRecord, matchesAutomaticOfferBatch, rosterMatchesActiveAssignments, validRosterId,
@@ -84,7 +85,7 @@ async function respondToOffer(database, {
       if (!identity) return { state: state === "available" ? "hub-required" : state };
       return respondToAutomaticOffer(transaction, {
         organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity,
-        now, scheduleRevision,
+        now, scheduleRevision, database,
       });
     }
     if (status === "ACCEPTED" || (identity && !replacement && typeof offer.publicOfferTokenHash !== "string")) {
@@ -108,6 +109,7 @@ async function respondToOffer(database, {
         ...notificationContext, jobId: jobReference.id,
       })),
     ) : null;
+    if (replacement) await requireMission2Writes(transaction, database);
     transaction.update(offerReference, { status, respondedAt: FieldValue.serverTimestamp() });
     if (status === "INTERESTED" && !existingEvent.exists) {
       createManagerOperationalNotification(transaction, organizationReference, jobReference, notificationContext);
@@ -117,7 +119,7 @@ async function respondToOffer(database, {
 }
 
 async function respondToAutomaticOffer(transaction, {
-  organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity, now, scheduleRevision,
+  organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity, now, scheduleRevision, database,
 }) {
   const assignments = jobReference.collection("assignments");
   const claim = job.firstAcceptClaim;
@@ -145,6 +147,7 @@ async function respondToAutomaticOffer(transaction, {
   if (status === "INTERESTED") return { state: "unavailable" };
   if (offer.status !== "PENDING") return { state: "answered", status: offer.status };
 
+  if (isVersioned) await requireMission2Writes(transaction, database);
   const acceptedAt = FieldValue.serverTimestamp();
   if (status === "DECLINED") {
     transaction.update(offerReference, { status, respondedAt: acceptedAt });

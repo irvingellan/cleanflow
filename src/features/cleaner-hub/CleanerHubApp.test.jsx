@@ -284,7 +284,7 @@ describe("CleanerHubApp (live data boundary)", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
     const card = document.querySelector('[data-job-id="j1"]');
     expect(card).toHaveTextContent("Maple Example House");
-    expect(card).toHaveTextContent("Confirmada para você");
+    expect(card).toHaveTextContent("Vaga atribuída a você");
     expect(document.querySelector('[data-job-id="j2"]')).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));

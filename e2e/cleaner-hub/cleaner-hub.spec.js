@@ -111,7 +111,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     const card = pageA.locator(`[data-job-id="${mapleRef.id}"]`);
     await expect(card).toContainText(fixture.mapleName);
     await expect(card).toContainText("10:30");
-    await expect(card).toContainText("Confirmada para você");
+    await expect(card).toContainText("Vaga atribuída a você");
     await expect(pageA.locator(".hb-fresh")).toContainText("Atualizada");
     await evidence(pageA, "01-agenda-upcoming");
     const text = await pageA.locator("body").innerText();
@@ -407,7 +407,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     expect((await job.get()).data().assignedCleanerIds).toEqual([]);
     releaseAcceptance();
 
-    const confirmed = pageA.getByText("Serviço confirmado para você.").or(pageA.getByText("Confirmada para você"));
+    const confirmed = pageA.getByText("Serviço confirmado para você.").or(pageA.getByText("Vaga atribuída a você"));
     await expect(confirmed.first()).toBeVisible();
     await evidence(pageA, "86-02-server-confirmed");
     const unavailable = "Unavailable — this job has already been filled.";
@@ -419,7 +419,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await pageA.goto("/agenda");
     await expect(pageA.getByRole("button", { name: /^Agendadas/ })).toBeVisible();
     await pageA.getByRole("button", { name: /^Agendadas/ }).click();
-    await expect(pageA.locator(`[data-job-id="${job.id}"]`)).toContainText("Confirmada para você");
+    await expect(pageA.locator(`[data-job-id="${job.id}"]`)).toContainText("Vaga atribuída a você");
     await evidence(pageA, "86-04-confirmed-agenda-after-reload");
     await pageB.goto("/agenda");
     await expect(pageB.getByRole("button", { name: /^Scheduled/ })).toBeVisible();

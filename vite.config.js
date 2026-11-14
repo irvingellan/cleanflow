@@ -334,6 +334,10 @@ export default defineConfig(({ mode }) => {
     buildInfo.deploymentId = `${buildInfo.buildId}-cleaner-push`
   }
 
+  if (mode === "production" && environment.VITE_AUTOMATIC_OFFERS_MODE === "enabled") {
+    buildInfo.deploymentId = (buildInfo.deploymentId || buildInfo.buildId) + "-automatic-offers";
+  }
+
   return {
     define: {
       __CLEANFLOW_PRIVATE_EMULATOR_ORIGIN__: JSON.stringify(mode === "emulator" ? approvedPrivateEmulatorOrigin : ""),

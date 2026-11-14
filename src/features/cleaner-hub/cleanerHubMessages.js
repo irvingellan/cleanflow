@@ -62,7 +62,7 @@ const M = {
   "hb.access.kind.note": ["Observação", "Note", "Nota"],
   "hb.job.record": ["Registro do serviço (situação e ciência)", "Job record (status and acknowledgment)", "Registro del servicio (estado y confirmación)"],
   "hb.seg.completed": ["Concluídas", "Completed", "Completadas"],
-  "hb.st.confirmed": ["Confirmada para você", "Confirmed for you", "Confirmada para usted"],
+  "hb.st.confirmed": ["Vaga atribuída a você", "Spot assigned to you", "Vacante asignada a ti"],
   "hb.st.progress": ["Em andamento", "In progress", "En curso"],
   "hb.st.done": ["Concluída", "Completed", "Completada"],
   "hb.st.offer": ["Oferta — ainda não é sua", "Offer — not yours yet", "Oferta — aún no es suya"],

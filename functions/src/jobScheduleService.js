@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { hasMission2JobState, requireMission2Writes } from "./mission2WriteControl.js";
 import {
   automaticOfferBatch, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob, isCanonicalRoster,
 } from "./firstAcceptWins.js";
@@ -146,6 +147,9 @@ export async function rescheduleJobForManager(database, {
       ? { ...job.manualReplacementOffer, scheduleRevision: nextScheduleRevision }
       : FieldValue.delete();
 
+    if (job.operationalStatus === "ASSIGNED" || hasMission2JobState(job)) {
+      await requireMission2Writes(transaction, database);
+    }
     transaction.create(historyReference, {
       scheduleRevision: nextScheduleRevision,
       previousScheduledDate: typeof job.scheduledDate === "string" ? job.scheduledDate : null,
