@@ -97,8 +97,8 @@
 
 .cf-services .job-filters__advanced {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 12px 14px;
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius-lg);
   padding: 14px;
@@ -108,9 +108,39 @@
 .cf-services .job-filters__advanced label {
   display: grid;
   gap: 6px;
+  min-width: 0;
   color: var(--cf-text-secondary);
   font-size: var(--cf-text-sm);
   font-weight: 600;
+}
+
+/* Long property names must not widen the panel; every select fills its cell. */
+.cf-services .job-filters__advanced select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--cf-border-input);
+  border-radius: var(--cf-radius-md);
+  padding: 8px 32px 8px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cf-text);
+  background-color: var(--cf-surface);
+  font-size: var(--cf-text-md);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cf-services .job-filters__advanced select:hover {
+  border-color: var(--cf-brand);
+}
+
+.cf-services .job-filters__advanced select:focus-visible {
+  border-color: var(--cf-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring-strong);
 }
 
 .cf-services .job-filters__context {
