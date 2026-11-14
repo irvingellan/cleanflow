@@ -134,6 +134,19 @@ for review. Deployment is a separate operation.
    A blind rollback to the old Functions could re-enable public interest or
    widen the roster for automatic Jobs.
 
+## Compatible pause after a write
+
+The release operator can pause Mission 2 with the server-only document
+`cleanflowReleaseControl/mission2Writers` set to `{mode: "paused"}`. The
+affected transactions recheck the document before a write. The Firestore
+rules also check it before editing a versioned invitation or changing a
+roster with a recorded schedule confirmation. Existing state, readers,
+checklist execution and previously committed notification records remain
+available. Ordinary manual workflows on unaffected Jobs remain available.
+An absent document or explicit `active` mode permits writes. Any other
+stored mode pauses them. Changing this control in Production is a separate
+operational action. Test on synthetic data before relying on the procedure.
+
 ## Two-phone pilot and visual review
 
 **Existing published Hub V1:** use two authorized test accounts and separate

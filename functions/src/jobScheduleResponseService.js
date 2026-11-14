@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { requireMission2Writes } from "./mission2WriteControl.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { assertSessionForMutation } from "./cleanerHubAccess.js";
 import {
@@ -136,6 +137,7 @@ export function respondToRescheduleForCleaner(database, {
       });
     }
 
+    await requireMission2Writes(transaction, database);
     const respondedAt = FieldValue.serverTimestamp();
     transaction.create(receiptRef, {
       organizationId, jobId: jobRef.id, cleanerId, actorUid: uid, assignmentId: entry.assignmentId,

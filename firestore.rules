@@ -168,6 +168,17 @@ service cloud.firestore {
         && resource.data.get('acceptedAssignmentId', null) == null;
     }
 
+    function mission2WritesActive() {
+      let control = /databases/$(database)/documents/cleanflowReleaseControl/mission2Writers;
+      return !exists(control) || get(control).data.get('mode', null) == 'active';
+    }
+
+    function browserKeepsPausedScheduleRoster() {
+      return !('scheduleConfirmation' in resource.data)
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['assignedCleanerIds', 'assignedCleanerId'])
+        || mission2WritesActive();
+    }
+
     function managerCanUpdateAutomaticOffer(orgId, jobId, offerId) {
       let job = get(/databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId)).data;
       let changes = request.resource.data.diff(resource.data).affectedKeys();
@@ -175,7 +186,7 @@ service cloud.firestore {
         && resource.data.status == 'PENDING'
         && resource.data.publicOfferExpiresAt > request.time
         && ('automaticOfferBatch' in job || 'automaticOfferBatchVersion' in resource.data
-          ? currentVersionedAutomaticOffer(job, orgId, jobId, offerId)
+          ? (mission2WritesActive() && currentVersionedAutomaticOffer(job, orgId, jobId, offerId))
           : (resource.data.offeredChecklistContextRevision == checklistContextRevision(job)
             && job.operationalStatus == 'OFFERED'))
         && job.get('firstAcceptClaim', null) == null
@@ -191,10 +202,11 @@ service cloud.firestore {
 
     function assignmentParentRevisionAdvanced(orgId, jobId) {
       let jobPath = /databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId);
+      let job = get(jobPath).data;
       return exists(jobPath)
+        && (!('scheduleConfirmation' in job) || mission2WritesActive())
         && getAfter(jobPath).data.checklistContextRevision is int
-        && getAfter(jobPath).data.checklistContextRevision
-          == checklistContextRevision(get(jobPath).data) + 1;
+        && getAfter(jobPath).data.checklistContextRevision == checklistContextRevision(job) + 1;
     }
 
     function assignmentCleanerContextChanged() {
@@ -343,6 +355,7 @@ service cloud.firestore {
             && validJobChecklistContextRevisionUpdate()
             && browserJobKeepsCompletionState()
             && browserJobKeepsAutomaticOfferProvenance()
+            && browserKeepsPausedScheduleRoster()
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedAt']));
       }
 

@@ -1,5 +1,6 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { requireMission2Writes } from "./mission2WriteControl.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
 import {
   FIRST_ACCEPT_WINS,
@@ -66,6 +67,7 @@ export async function createAutomaticJobOffersForManager(database, {
       throw new HttpsError("failed-precondition", "Select active cleaners with valid profiles.");
     }
 
+    await requireMission2Writes(transaction, database);
     const expiresAt = Timestamp.fromMillis(now() + lifetimeMs);
     for (const cleaner of cleaners) {
       transaction.create(offers.doc(cleaner.id), {

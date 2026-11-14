@@ -1,5 +1,6 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { requireMission2Writes } from "./mission2WriteControl.js";
 import {
   automaticOfferBatch, automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS,
   isAutomaticOfferJob, isCanonicalRoster, rosterMatchesActiveAssignments, validRosterId,
@@ -100,6 +101,7 @@ export function createManualReplacementOfferForManager(database, {
       throw new HttpsError("failed-precondition", "An offer is already open for this vacancy.", { reason: "replacement-pending" });
     }
 
+    await requireMission2Writes(transaction, database);
     transaction.create(offerRef, {
       organizationId, jobId, cleanerId, cleanerName: cleaner.name.trim(), status: "PENDING",
       offerKind: manualReplacementOfferKind, replacementOfferId: offerRef.id, scheduleRevision,

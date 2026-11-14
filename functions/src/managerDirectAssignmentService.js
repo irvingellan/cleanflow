@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { hasMission2JobState, requireMission2Writes } from "./mission2WriteControl.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { initialChecklistRunId } from "./checklistRunService.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
@@ -145,6 +146,7 @@ export async function assignCleanerDirectlyForManager(database, {
       throw precondition("The Job context revision needs manager review.", "invalid-revision");
     }
 
+    if (replacementRef || hasMission2JobState(job)) await requireMission2Writes(transaction, database);
     const assignedCleanerIds = [...job.assignedCleanerIds, cleanerId];
     const nextAssignment = buildManagerDirectAssignmentData(job, { organizationId, jobId, cleanerId, cleanerName, actorUid });
     if (replacementRef) {
@@ -245,6 +247,7 @@ export async function removeAutomaticCleanerAssignmentForManager(database, {
       throw precondition("This Assignment cannot be removed.", "assignment-not-editable");
     }
 
+    await requireMission2Writes(transaction, database);
     const assignedCleanerIds = job.assignedCleanerIds.filter((cleanerId) => cleanerId !== assignment.cleanerId);
     const operationalStatus = assignedCleanerIds.length ? "ASSIGNED" : "UNASSIGNED";
     const removedAt = FieldValue.serverTimestamp();
