@@ -49,6 +49,12 @@ describe("environment isolation", () => {
   it("keeps navigation origins explicit and rejects a cross-project destination", () => {
     expect(environmentNavigationTarget("sandbox")).toEqual({ href: "https://clean-flow-prototipo.web.app", labelKey: "environment.backToProduction" });
     expect(environmentNavigationTarget("production", { sandboxProjectId: projectId })).toEqual({ href: `https://${projectId}.web.app`, labelKey: "environment.openSandbox" });
+    // Local development switches between the two local servers.
+    const local = { currentOrigin: "http://localhost:5175", peerOrigin: "http://localhost:5176" };
+    expect(environmentNavigationTarget("production", { sandboxProjectId: projectId }, local)).toEqual({ href: "http://localhost:5176", labelKey: "environment.openSandbox" });
+    expect(environmentNavigationTarget("sandbox", {}, { currentOrigin: "http://localhost:5176", peerOrigin: "http://localhost:5175" })).toEqual({ href: "http://localhost:5175", labelKey: "environment.backToProduction" });
+    // A hosted page never follows a local peer.
+    expect(environmentNavigationTarget("sandbox", {}, { currentOrigin: "https://clean-flow-prototipo.web.app", peerOrigin: "http://localhost:5175" }).href).toBe("https://clean-flow-prototipo.web.app");
     expect(environmentNavigationTarget("unknown")).toBeNull();
     expect(() => environmentNavigationTarget("production", { sandboxProjectId: projectId, sandboxOrigin: "https://clean-flow-prototipo.web.app" })).toThrow();
   });
