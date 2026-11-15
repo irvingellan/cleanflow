@@ -19,7 +19,6 @@ import { requireOrganizationManager } from "./managerAuthorization.js";
 import { syncCleanerAgendaForJob } from "./cleanerAgenda.js";
 import { loadCleanerJobAccess } from "./cleanerJobAccess.js";
 import { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } from "./cleanerNotificationEvents.js";
-import { loadJobPhotoCounts, validPhotoCountRequest } from "./jobPhotoCounts.js";
 import { createManagerReminderInboxItem, inboxEventId, managerInboxCollection } from "./notificationInboxEvents.js";
 import { changeNotificationInboxItemForRequest, listNotificationInboxForRequest } from "./notificationInbox.js";
 import { deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice } from "./cleanerPushDevices.js";
@@ -41,25 +40,19 @@ import { publicOfferState as offerState, respondToPublicOffer } from "./publicOf
 import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import {
   initialChecklistRunId,
-  validChecklistRunJobId,
 } from "./checklistRunService.js";
 import {
-  getChecklistCapabilityForManager,
-  issueChecklistCapabilityForManager,
   loadPublicChecklistCapability,
   readyPublicChecklistForReview,
-  revokeChecklistCapabilityForManager,
   savePublicChecklistDraft,
   validChecklistCleanerId,
 } from "./checklistCapabilityService.js";
 import {
-  downloadManagerChecklistEvidence,
   downloadPublicChecklistEvidence,
   loadPublicChecklistEvidenceView,
   uploadPublicChecklistEvidence,
 } from "./checklistEvidenceService.js";
 import { removePublicChecklistEvidence } from "./checklistMultiPhotoService.js";
-import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { respondToRescheduleForCleaner } from "./jobScheduleResponseService.js";
 import {
   acknowledgePublicOfferAssignment,
@@ -68,17 +61,13 @@ import {
 } from "./publicOfferAssignmentAcknowledgment.js";
 import {
   downloadPublicClientReportPhoto,
-  getClientReportCapabilityForManager,
-  issueClientReportForManager,
-  updateClientReportForManager,
   loadPublicClientReport,
-  revokeClientReportForManager,
-  setReportPhotoVisibilityForManager,
 } from "./clientReportService.js";
 import { notificationOutcomeLog } from "./notificationOutcomeLog.js";
 import {
-  downloadPublicClientPortalPhoto, getClientPortalForManager, issueClientPortalForManager,
-  loadPublicClientPortal, loadPublicClientPortalReport, revokeClientPortalForManager,
+  downloadPublicClientPortalPhoto,
+  loadPublicClientPortal,
+  loadPublicClientPortalReport,
 } from "./clientPortalService.js";
 import {
   calculateManagerReminder,
@@ -125,6 +114,8 @@ const feedback = () => import("./handlers/feedback.js");
 const managerDevices = () => import("./handlers/managerDevices.js");
 const checklistRuns = () => import("./handlers/checklistRuns.js");
 const assignments = () => import("./handlers/assignments.js");
+const checklistAccess = () => import("./handlers/checklistAccess.js");
+const clientReports = () => import("./handlers/clientReports.js");
 
 const supportedCleanerLanguages = new Set(["en", "pt", "es"]);
 
@@ -390,124 +381,37 @@ export const rescheduleJob = onCall(
 
 export const getChecklistCapability = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    if (isWarmupCall(request)) return { warm: true };
-    const jobId = request.data?.jobId;
-    if (!validChecklistRunJobId(jobId)) {
-      throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
-    }
-    return {
-      capability: await getChecklistCapabilityForManager(db, {
-        organizationId,
-        jobId,
-        runId: initialChecklistRunId,
-      }),
-    };
-  },
+  lazyHandler(checklistAccess, "getChecklistCapability"),
 );
 
 export const issueChecklistCapability = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    const jobId = request.data?.jobId;
-    const cleanerId = request.data?.cleanerId;
-    if (!validChecklistRunJobId(jobId) || !validChecklistCleanerId(cleanerId)) {
-      throw new HttpsError("invalid-argument", "Checklist capability request is invalid.");
-    }
-    const token = newChecklistCapabilityToken();
-    return issueChecklistCapabilityForManager(db, {
-      organizationId,
-      jobId,
-      runId: initialChecklistRunId,
-      cleanerId,
-      actorUid: request.auth.uid,
-      token,
-      tokenHash: hashToken(token),
-    });
-  },
+  lazyHandler(checklistAccess, "issueChecklistCapability"),
 );
 
 export const revokeChecklistCapability = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    const jobId = request.data?.jobId;
-    if (!validChecklistRunJobId(jobId)) {
-      throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
-    }
-    return {
-      capability: await revokeChecklistCapabilityForManager(db, {
-        organizationId,
-        jobId,
-        runId: initialChecklistRunId,
-        actorUid: request.auth.uid,
-      }),
-    };
-  },
+  lazyHandler(checklistAccess, "revokeChecklistCapability"),
 );
 
-// Services list: how many checklist photos each Job has (counts only).
 export const getJobPhotoCounts = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    if (isWarmupCall(request)) return { warm: true };
-    const jobIds = request.data?.jobIds;
-    if (!validPhotoCountRequest(jobIds)) throw new HttpsError("invalid-argument", "Photo count request is invalid.");
-    return loadJobPhotoCounts(db, { organizationId, jobIds });
-  },
+  lazyHandler(checklistAccess, "getJobPhotoCounts"),
 );
 
 export const getChecklistEvidence = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    if (isWarmupCall(request)) return { warm: true };
-    const jobId = request.data?.jobId;
-    const requirementId = request.data?.requirementId;
-    const evidenceId = request.data?.evidenceId;
-    if (!validChecklistRunJobId(jobId) || (evidenceId === undefined && requirementId !== pilotChecklistPhotoRequirementId)) {
-      throw new HttpsError("invalid-argument", "Checklist photo request is invalid.");
-    }
-    const evidence = await downloadManagerChecklistEvidence(db, {
-      organizationId,
-      jobId,
-      runId: initialChecklistRunId,
-      requirementId,
-      evidenceId,
-      variant: request.data?.variant === "thumbnail" ? "thumbnail" : undefined,
-    });
-    return { contentType: evidence.contentType, base64: evidence.bytes.toString("base64") };
-  },
+  lazyHandler(checklistAccess, "getChecklistEvidence"),
 );
 
 export const getClientReportCapability = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    const jobId = request.data?.jobId;
-    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
-    return {
-      capability: await getClientReportCapabilityForManager(db, {
-        organizationId, jobId, runId: initialChecklistRunId,
-      }),
-    };
-  },
+  lazyHandler(clientReports, "getClientReportCapability"),
 );
 
 export const setReportPhotoVisibility = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    const jobId = request.data?.jobId;
-    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
-    return setReportPhotoVisibilityForManager(db, {
-      organizationId, jobId, evidenceId: request.data?.evidenceId, hidden: request.data?.hidden,
-      reason: request.data?.reason, actorUid: request.auth.uid,
-    });
-  },
+  lazyHandler(clientReports, "setReportPhotoVisibility"),
 );
 
 export const correctChecklistAnswer = onCall(
@@ -517,72 +421,17 @@ export const correctChecklistAnswer = onCall(
 
 export const createClientReport = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    const jobId = request.data?.jobId;
-    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
-    // The same callable changes how the active link presents the report, or
-    // records that the manager sent it herself; nothing is sent from here.
-    if (request.data?.update === true) {
-      return updateClientReportForManager(db, {
-        organizationId,
-        jobId,
-        runId: initialChecklistRunId,
-        actorUid: request.auth.uid,
-        presentation: request.data?.presentation,
-        markSent: request.data?.markSent,
-      });
-    }
-    const token = newChecklistCapabilityToken();
-    return issueClientReportForManager(db, {
-      organizationId,
-      jobId,
-      runId: initialChecklistRunId,
-      actorUid: request.auth.uid,
-      token,
-      tokenHash: hashToken(token),
-      replaceExisting: request.data?.replaceExisting === true,
-      presentation: request.data?.presentation,
-    });
-  },
+  lazyHandler(clientReports, "createClientReport"),
 );
 
 export const revokeClientReport = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    const jobId = request.data?.jobId;
-    if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
-    return {
-      capability: await revokeClientReportForManager(db, {
-        organizationId, jobId, runId: initialChecklistRunId,
-      }),
-    };
-  },
+  lazyHandler(clientReports, "revokeClientReport"),
 );
 
-/**
- * The manager reads, creates (or replaces) and turns off one client's portal
- * link. The link itself is returned only when it is created.
- */
 export const clientPortalAccess = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    const clientId = request.data?.clientId;
-    const action = request.data?.action;
-    if (action === "issue") {
-      const token = newChecklistCapabilityToken();
-      return { access: await issueClientPortalForManager(db, {
-        organizationId, clientId, actorUid: request.auth.uid, token, tokenHash: hashToken(token),
-      }) };
-    }
-    if (action === "revoke") {
-      return { access: await revokeClientPortalForManager(db, { organizationId, clientId, actorUid: request.auth.uid }) };
-    }
-    if (action !== "get") throw new HttpsError("invalid-argument", "Client portal request is invalid.");
-    return { access: await getClientPortalForManager(db, { organizationId, clientId }) };
-  },
+  lazyHandler(clientReports, "clientPortalAccess"),
 );
 
 async function activeManagerPushDevices(targetOrganizationId = organizationId) {
