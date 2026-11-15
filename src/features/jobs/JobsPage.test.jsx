@@ -51,13 +51,17 @@ const jobs = [
 
 afterEach(() => vi.restoreAllMocks());
 
-function JobsPageHarness({ initialFilters = createJobListFilters(), loadPhotoCounts = vi.fn().mockResolvedValue({}) }) {
+function JobsPageHarness({
+  initialFilters = createJobListFilters(),
+  loadPhotoCounts = vi.fn().mockResolvedValue({}),
+  loadedJobs = jobs,
+}) {
   const [filters, setFilters] = useState(initialFilters);
 
   return (
     <TranslationProvider>
       <JobsPage
-        jobs={jobs}
+        jobs={loadedJobs}
         isLoading={false}
         hasError={false}
         onSelect={vi.fn()}
@@ -349,6 +353,34 @@ describe("JobsPage filters", () => {
     expect(listed("Sunset House").length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: /clear filters/i }));
     expect(screen.getByLabelText("Client")).toHaveValue("");
+  });
+
+  it("offers a historical client from a loaded Job even when the property now belongs to someone else", async () => {
+    const user = userEvent.setup();
+    render(<JobsPageHarness loadedJobs={[
+      { ...jobs[0], clientId: "client-previous", clientName: "Previous client" },
+      jobs[1],
+    ]} />);
+
+    await user.click(screen.getByRole("button", { name: /^filters$/i }));
+    const client = screen.getByLabelText("Client");
+    expect(screen.getByRole("option", { name: "Previous client" })).toHaveValue("client-previous");
+    await user.selectOptions(client, "client-previous");
+    const rows = screen.getAllByRole("button", { name: /^View / });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("data-job-id", jobs[0].id);
+  });
+
+  it("keeps the selected client visible when no loaded Job or Property supplies its label", async () => {
+    const user = userEvent.setup();
+    render(<JobsPageHarness initialFilters={createJobListFilters({
+      clientId: "client-context",
+      clientName: "Context client",
+    })} />);
+
+    await user.click(screen.getByRole("button", { name: /^filters/i }));
+    expect(screen.getByLabelText("Client")).toHaveValue("client-context");
+    expect(screen.getByRole("option", { name: "Context client" })).toBeInTheDocument();
   });
 
   it("toggles quick filters using the existing filter state", async () => {

@@ -130,16 +130,17 @@ export function JobsPage({
     onScrollRestored?.();
   }, [hasError, isLoading, onScrollRestored, restoreScroll, sortedJobs]);
 
-  // Clients come from the properties already loaded: no extra reads.
+  // Current properties and historical Jobs both supply IDs the filter matches.
   const clientOptions = useMemo(() => {
     const names = new Map();
-    for (const property of properties) {
-      if (property.clientId && !names.has(property.clientId)) {
-        names.set(property.clientId, property.clientName || translate("common.notProvided"));
-      }
+    for (const { clientId, clientName } of [...properties, ...jobs]) {
+      if (clientId && !names.get(clientId)) names.set(clientId, clientName);
     }
-    return [...names].sort(([, first], [, second]) => first.localeCompare(second, language));
-  }, [properties, language, translate]);
+    if (filters.clientId && !names.get(filters.clientId)) names.set(filters.clientId, filters.clientName);
+    return [...names]
+      .map(([id, name]) => [id, name || translate("common.notProvided")])
+      .sort(([, first], [, second]) => first.localeCompare(second, language));
+  }, [properties, jobs, filters.clientId, filters.clientName, language, translate]);
   const defaultFilters = createJobListFilters();
   const hasActiveFilters = Object.entries(filters).some(
     ([key, value]) => value !== defaultFilters[key],
