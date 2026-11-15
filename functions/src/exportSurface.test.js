@@ -15,10 +15,6 @@ describe("Functions export surface", () => {
       .filter(([, value]) => !value?.__endpoint)
       .map(([name]) => name)
       .sort();
-    expect(helpers).toMatchInlineSnapshot(`
-      [
-        "publicOfferResult",
-      ]
-    `);
+    expect(helpers).toMatchInlineSnapshot(`[]`);
   });
 });
