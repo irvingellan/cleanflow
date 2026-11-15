@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { publicOfferResult } from "./index.js";
+import { publicOfferResult } from "./handlers/publicOffer.js";
 
 function availableOffer() {
   return {
