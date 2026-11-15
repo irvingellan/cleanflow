@@ -118,10 +118,28 @@ test("weekly-close", async ({ page, browser, browserName, baseURL }, testInfo) =
       await expect(page).toHaveURL(baseURL + "/");
       await expect(page.getByRole("heading", { name: "Cleaner payouts", exact: true })).toBeVisible();
       await page.getByRole("button", { name: "Weekly close · Preview", exact: true }).click();
-      await page.reload();
-      await expect(page.locator(".weekly-close-preview")).toBeVisible();
-      await applyDates(page.locator(".weekly-close-preview"), "2026-09-21", "2026-09-27");
       await verifyFinancialRows(page.locator(".weekly-close-preview"), "en");
+      const firestorePort = process.env.VITE_CLEANFLOW_EMULATOR_FIRESTORE_PORT || process.env.FIRESTORE_EMULATOR_HOST?.split(":").at(-1);
+      const lookup = (url) => url.origin === `http://127.0.0.1:${firestorePort}` && url.pathname.endsWith(":runQuery");
+      let propertyLookups = 0;
+      const dropFirstPropertyLookup = async (route) => {
+        const request = route.request();
+        if (request.method() === "POST"
+          && request.postDataJSON()?.structuredQuery?.from?.[0]?.collectionId === "properties"
+          && ++propertyLookups === 1) {
+          await route.abort("failed");
+        } else {
+          await route.continue();
+        }
+      };
+      await page.route(lookup, dropFirstPropertyLookup);
+      try {
+        await page.reload();
+        await verifyFinancialRows(page.locator(".weekly-close-preview"), "en");
+        expect(propertyLookups).toBe(2);
+      } finally {
+        await page.unroute(lookup, dropFirstPropertyLookup);
+      }
     });
     await step(40, "Week selection and refresh are deterministic read-only actions", async () => {
       const root = page.locator(".weekly-close-preview");
