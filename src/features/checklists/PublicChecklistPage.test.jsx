@@ -312,15 +312,31 @@ describe("PublicChecklistPage", () => {
     const response = deferred();
     readyPublicChecklistForReview.mockReturnValueOnce(response.promise);
     renderPage();
-    await screen.findByRole("heading", { name: "Cleaning checklist" });
-    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    const send = await screen.findByRole("button", { name: "Send checklist for review" });
+    await waitFor(() => expect(send).toBeEnabled());
+    fireEvent.click(send);
+    const dialog = await screen.findByRole("dialog");
     expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
-    const confirm = within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" });
-    fireEvent.click(confirm); fireEvent.click(confirm);
-    expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(1);
+
+    const confirm = within(dialog).getByRole("button", { name: "Send checklist for review" });
+    // Dispatch both clicks in one React batch so the duplicate guard is tested
+    // before the pending render has disabled the button.
+    act(() => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    const pending = await within(dialog).findByRole("button", { name: "Sending checklist for review…" });
+    expect(pending).toBeDisabled();
+    expect(screen.getByText(/Waiting for server confirmation/)).toBeVisible();
+    expect(readyPublicChecklistForReview).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      baseRevision: acknowledgedDraft.revision,
+      submissionId: expect.any(String),
+    }));
     expect(screen.queryByText(/Checklist submitted\./)).not.toBeInTheDocument();
+
     await act(async () => response.resolve({ checklist: { ...frozenChecklist, status: "READY_FOR_REVIEW" }, draft: acknowledgedDraft }));
     expect(await screen.findByText(/Checklist submitted\./)).toBeVisible();
+    expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(1);
   });
 
   it("reveals missing requirements before confirmation without sending an incomplete draft", async () => {
