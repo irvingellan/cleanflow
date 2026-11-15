@@ -38,6 +38,28 @@ Os modelos V1 são dados de código, separados do resolvedor. Limpeza pesada cob
 2. Formulário e telas de leitura, com textos locais.
 3. Composição do checklist e projeções de Functions, com testes unitários, de emulador e de navegador.
 
+### Functions
+
+| Function existente | Alteração |
+| --- | --- |
+| `createChecklistRun` | Congela o tipo e acrescenta as tarefas do modelo ao montar o Run inicial. |
+| `getChecklistRun` | Retorna o tipo congelado à gerente. |
+| `publicChecklist` | Retorna o tipo e as tarefas do Run à cleaner. |
+| `publicClientReport` | Retorna o tipo congelado no relatório liberado. |
+| `publicClientPortal` | Retorna o tipo atual nas visitas e o tipo do Run nos relatórios liberados. A lista consulta o Run quando há liberação. |
+| `redeemCleanerAccessCode` | Inclui o tipo ao recompor os serviços atribuídos da agenda no provisionamento. |
+| `syncCleanerAgendaOnJobWrite` | Atualiza a projeção quando o Job muda, inclusive em uma edição apenas de tipo. |
+| `syncCleanerAgendaOnAssignmentWrite` | Preserva o tipo na recomposição disparada por uma Assignment. |
+| `syncCleanerAgendaOnOfferWrite` | Preserva o tipo dos serviços atribuídos na recomposição disparada por uma Offer. |
+| `syncCleanerAgendaOnChecklistRunWrite` | Preserva o tipo na recomposição disparada pelo estado do Run. |
+| `syncCleanerAgendaOnChecklistStart` | Preserva o tipo na recomposição disparada pelo primeiro progresso do checklist. |
+
+Functions novas na V1 **0**. Atualizar juntos os seis pontos que recompõem a agenda, pois todos gravam a projeção.
+
+### Ordem e volta atrás
+
 Revisar nessa ordem. Publicar a pilha como uma única entrega funcional, com autorização independente da integração dos PRs. Validar o SHA oficial e as revisões atualmente ativas de Hosting, Functions e Rules. Guardar versões e artefatos de volta atrás. Aplicar a Rule aditiva, publicar as Functions existentes afetadas e verificar sua prontidão antes do Hosting que permite escolher o tipo. O teste de criação, alteração, congelamento, relatório e portal roda com dados fictícios em emulador. A verificação inicial em Production é somente leitura.
 
 Para voltar atrás, restaurar primeiro o Hosting anterior. Se a escolha de tipo ainda não foi usada, é possível restaurar as versões anteriores das Functions afetadas e das Rules. Uma vez gravados Jobs de outros tipos, preservar as Functions capazes de montar e ler seus Runs e manter as Rules aditivas válidas. Uma correção posterior deve preservar os Runs existentes e seus snapshots. Nenhuma etapa requer migração ou reescrita de Runs.
+
+Os novos itens guardam texto em inglês no snapshot junto com as chaves de tradução. O Hosting anterior consegue ler as tarefas pelo texto guardado. Um build de recuperação com o leitor atual preserva também o tipo e a tradução local. Revalidar Rules, inventário de Functions e os dois domínios de Hosting após cada etapa. Os executores existentes de Hosting-only e de atualização de notificações não cobrem esta combinação de alvos.

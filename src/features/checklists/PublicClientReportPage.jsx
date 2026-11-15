@@ -5,10 +5,11 @@ import { languageOptions, useTranslation } from "../../i18n/translations.js";
 import { formatChecklistInventoryAnswer, withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
 import { formatDate } from "../../lib/presentation.js";
 import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
+import { checklistDefinitionText, withServiceTypeChecklistMessages } from "./serviceTypeChecklistMessages.js";
 import { getPublicClientReport, publicClientReportPhotoUrl } from "./clientReportService.js";
 
 function textFor(entry, translate) {
-  return entry?.label || translate(entry?.labelKey || "clientReport.checklistItem");
+  return checklistDefinitionText(translate, entry?.labelKey || "clientReport.checklistItem", entry?.label);
 }
 
 const restockAnswers = new Set(["NEEDS_RESTOCK", "LOW", "EMPTY"]);
@@ -58,7 +59,7 @@ export function PublicClientReportPage({ token }) {
 /** The standalone link and portal reuse the same read-only report presentation. */
 export function ClientReportView({ token, report, isLoading, errorKind, onRetry, photoUrl, onBack = null }) {
   const { language, setLanguage, translate: baseTranslate } = useTranslation();
-  const translate = withChecklistInventoryMessages(baseTranslate, language);
+  const translate = withServiceTypeChecklistMessages(withChecklistInventoryMessages(baseTranslate, language), language);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [viewerEvidenceId, setViewerEvidenceId] = useState(null);
   const photos = useMemo(() => report?.evidence?.length > 0
@@ -214,7 +215,7 @@ export function ClientReportView({ token, report, isLoading, errorKind, onRetry,
             <div className="client-report__tasks" hidden={!showAllTasks}>
               {report.sections?.map((section, sectionIndex) => (
                 <div className="client-report__task-group" key={textFor(section, translate) + sectionIndex}>
-                  <h3>{section.title || translate(section.titleKey || "clientReport.checklistSection")}</h3>
+                  <h3>{checklistDefinitionText(translate, section.titleKey || "clientReport.checklistSection", section.title)}</h3>
                   <ul>
                     {section.items?.map((item, itemIndex) => (
                       <li key={textFor(item, translate) + itemIndex}>

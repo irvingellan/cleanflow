@@ -1,5 +1,20 @@
 # CleanFlow — Current State
 
+## 2026-11-15 — Service types V1 · review candidate
+
+The manager can choose Standard, Deep cleaning, Move-out / move-in, or
+Post-construction. The current type appears in the manager's Jobs and the
+cleaner's assigned Agenda. Old Jobs default to Standard. New Runs freeze
+the selected type and append its tasks to the Property checklist. The client
+report and its portal entry read the frozen type. Legacy Runs retain their
+stored task, evidence and inventory definitions.
+
+The review stack starts at `2d4b565` with [model and Rules #123](https://github.com/irvingellan/cleanflow/pull/123),
+then [forms and screens #124](https://github.com/irvingellan/cleanflow/pull/124)
+and the checklist and Functions diff. The [design and release plan](SERVICE_TYPES_V1.md)
+lists the existing Functions in scope. Validation uses synthetic emulator
+records. Production rollout and physical acceptance are pending.
+
 <!-- cleanflow-engineering:begin -->
 ## Unified Engineering checkpoint · 2026-11-11
 

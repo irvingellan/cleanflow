@@ -36,7 +36,7 @@ describe("cleaner agenda projection", () => {
     expect(entries.get("ana")).toEqual({
       organizationId: "org", cleanerId: "ana", jobId: "j1", jobStatus: "ASSIGNED",
       scheduledDate: "2026-11-06", scheduledStart: "10:30", propertyName: "Maple Example House",
-      scheduleRevision: 2, kind: "ASSIGNED", acknowledged: true, offerStatus: null, offeredCompensation: null,
+      scheduleRevision: 2, kind: "ASSIGNED", serviceType: "STANDARD", acknowledged: true, offerStatus: null, offeredCompensation: null,
       checklist: { status: "NONE", started: false }, checklistStatus: "NONE", checklistStarted: false,
     });
     expect(JSON.stringify([...entries.values()])).not.toMatch(/250|150|private/);
@@ -77,6 +77,19 @@ describe("cleaner agenda projection", () => {
     ]);
     expect(entries.get("bia").offerExpiresAtMs).toBe(future.toMillis());
     expect(sameEntry(entries.get("bia"), { ...entries.get("bia"), offerExpiresAtMs: future.toMillis() + 1 })).toBe(false);
+  });
+
+  it("updates the type on assigned agenda entries without publishing it on offers", () => {
+    const input = {
+      organizationId: "o", jobId: "j", now,
+      offers: [{ cleanerId: "bia", status: "PENDING", publicOfferExpiresAt: future }],
+    };
+    const before = computeAgendaEntries({ ...input, job: job() });
+    const after = computeAgendaEntries({ ...input, job: job({ serviceType: "POST_CONSTRUCTION" }) });
+    expect(after.get("ana").serviceType).toBe("POST_CONSTRUCTION");
+    expect(sameEntry(before.get("ana"), after.get("ana"))).toBe(false);
+    expect(after.get("bia")).not.toHaveProperty("serviceType");
+    expect(sameEntry(before.get("bia"), after.get("bia"))).toBe(true);
   });
 
 

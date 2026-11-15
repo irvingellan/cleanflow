@@ -3,8 +3,9 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { operatingDate } from "./cleanerJobAccess.js";
 import {
-  clientReportReleasedForJob, downloadReleasedClientReportPhoto, loadReleasedClientReport,
+  downloadReleasedClientReportPhoto, loadReleasedClientReport, releasedClientReportServiceTypeForJob,
 } from "./clientReportService.js";
+import { normalizeServiceType } from "./serviceTypes.js";
 
 /**
  * Client portal: one private, read-only link per client. Through it a property
@@ -152,16 +153,17 @@ function text(value, maximum = 120) {
 }
 
 /** Owner-safe projection: what the owner sees, built from allow-listed fields only. */
-export function projectClientPortal({ client, properties, jobs, releasedJobIds, today }) {
+export function projectClientPortal({ client, properties, jobs, releasedServiceTypesByJobId, today }) {
   const visibleProperties = properties.filter((property) => !property.archivedAt)
     .map((property) => ({ id: property.id, name: text(property.name) }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const propertyNames = new Map(visibleProperties.map((property) => [property.id, property.name]));
   const visibleJobs = jobs.filter((job) => !job.archivedAt && datePattern.test(job.scheduledDate || "") && propertyNames.has(job.propertyId));
-  const entry = (job) => ({
+  const entry = (job, serviceType) => ({
     propertyId: job.propertyId,
     propertyName: propertyNames.get(job.propertyId),
     date: job.scheduledDate,
+    serviceType: normalizeServiceType(serviceType),
     ...(timePattern.test(job.scheduledStart || "") ? { start: job.scheduledStart } : {}),
   });
   return {
@@ -169,10 +171,10 @@ export function projectClientPortal({ client, properties, jobs, releasedJobIds, 
     properties: visibleProperties,
     coming: visibleJobs.filter((job) => job.scheduledDate >= today && job.operationalStatus !== "COMPLETED")
       .sort((a, b) => `${a.scheduledDate}${a.scheduledStart || ""}`.localeCompare(`${b.scheduledDate}${b.scheduledStart || ""}`))
-      .map(entry),
-    reports: visibleJobs.filter((job) => releasedJobIds.has(job.id))
+      .map((job) => entry(job, job.serviceType)),
+    reports: visibleJobs.filter((job) => releasedServiceTypesByJobId.has(job.id))
       .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
-      .map((job) => ({ jobId: job.id, ...entry(job) })),
+      .map((job) => ({ jobId: job.id, ...entry(job, releasedServiceTypesByJobId.get(job.id)) })),
   };
 }
 
@@ -196,12 +198,13 @@ export async function loadPublicClientPortal(database, { organizationId, tokenHa
   const allowedPropertyIds = new Set(properties.filter((property) => !property.archivedAt).map((property) => property.id));
   const candidates = jobs.filter((job) => !job.archivedAt && allowedPropertyIds.has(job.propertyId)
     && reportDateAllowed(job.scheduledDate, today)).slice(0, maximumReports);
-  const released = await Promise.all(candidates.map((job) => clientReportReleasedForJob(database, { organizationId, jobId: job.id })
-    .catch(() => false)));
+  const serviceTypes = await Promise.all(candidates.map((job) => releasedClientReportServiceTypeForJob(database, { organizationId, jobId: job.id })
+    .catch(() => null)));
   return projectClientPortal({
     client, jobs, today,
     properties,
-    releasedJobIds: new Set(candidates.filter((_, index) => released[index]).map((job) => job.id)),
+    releasedServiceTypesByJobId: new Map(candidates.map((job, index) => [job.id, serviceTypes[index]])
+      .filter(([, serviceType]) => serviceType !== null)),
   });
 }
 

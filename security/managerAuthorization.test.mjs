@@ -1162,7 +1162,7 @@ test("cleaner picker's bounded day and property queries are restricted to active
   }
 });
 
-async function seedChecklistJob({ checklistSettings } = {}) {
+async function seedChecklistJob({ checklistSettings, serviceType } = {}) {
   await admin.doc(`${root}/properties/property`).set({
     organizationId: org,
     name: "Fixture Property",
@@ -1172,11 +1172,12 @@ async function seedChecklistJob({ checklistSettings } = {}) {
     organizationId: org,
     propertyId: "property",
     propertyName: "Fixture Property",
+    ...(serviceType ? { serviceType } : {}),
   });
 }
 
-async function seedEligibleChecklistJob({ checklistSettings, multiPhoto = false } = {}) {
-  await seedChecklistJob({ checklistSettings });
+async function seedEligibleChecklistJob({ checklistSettings, multiPhoto = false, serviceType } = {}) {
+  await seedChecklistJob({ checklistSettings, serviceType });
   await admin.doc(`${root}/jobs/job`).update({
     schemaVersion: 2,
     operationalStatus: "ASSIGNED",
@@ -1261,8 +1262,9 @@ async function saveRequiredChecklistPhoto(token) {
   return result;
 }
 
-async function prepareReadyClientReportRun({ legacyInventory = true } = {}) {
+async function prepareReadyClientReportRun({ legacyInventory = true, serviceType } = {}) {
   await seedEligibleChecklistJob({
+    serviceType,
     checklistSettings: {
       additionalChecklistItems: [{ id: "client-window-check", sectionId: "living-general", label: "Check windows" }],
       inventoryItems: [{ id: "client-tea", label: "Tea" }],
@@ -1349,13 +1351,15 @@ test("active manager creates one default DRAFT Checklist Run and a retry returns
   assert.equal(run.status, "DRAFT");
   assert.deepEqual(run.evidencePolicy, { version: 2, maxPhotos: 60, maxTotalBytes: 120 * 1024 * 1024 });
   assert.equal(run.definitionVersion, 2);
+  assert.equal(run.jobSnapshot.serviceType, "STANDARD");
   assert.equal(run.resolvedDefinition.inventoryItems.length, 15);
   assert.equal(run.resolvedDefinition.sections.flatMap((section) => section.items).length, 28);
   assert.equal(run.createdByUid, "manager");
 });
 
-test("Checklist Run creation snapshots configured Property fields and ignores later Property edits", async () => {
+test("Checklist Run creation snapshots the service type and Property fields across edits and retries", async () => {
   await seedChecklistJob({
+    serviceType: "POST_CONSTRUCTION",
     checklistSettings: {
       additionalChecklistItems: [{
         id: "kitchen-wine-glasses",
@@ -1368,12 +1372,21 @@ test("Checklist Run creation snapshots configured Property fields and ignores la
     },
   });
 
-  await createChecklistRun.run(request("manager", { jobId: "job" }));
+  const created = await createChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(created.run.serviceType, "POST_CONSTRUCTION");
+  await assertSucceeds(account("manager").firestore().doc(`${root}/jobs/job`).update({ serviceType: "MOVE_IN_OUT" }));
   await admin.doc(`${root}/properties/property`).update({
     checklistSettings: { cleanerInstructions: "Changed later." },
   });
 
-  const run = (await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data();
+  const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
+  const run = (await runRef.get()).data();
+  assert.equal(run.jobSnapshot.serviceType, "POST_CONSTRUCTION");
+  assert.equal(run.resolvedDefinition.sections.at(-1).id, "service-type-post-construction");
+  const retried = await createChecklistRun.run(request("manager", { jobId: "job" }));
+  assert.equal(retried.created, false);
+  assert.equal(retried.run.serviceType, "POST_CONSTRUCTION");
+  assert.deepEqual((await runRef.get()).data(), run);
   assert.equal(run.resolvedDefinition.cleanerInstructions, "Check the balcony.");
   assert.deepEqual(run.resolvedDefinition.requiredPhotoTypes, [
     { id: "balcony", label: "Balcony photo", maximum: 2 },
@@ -2260,7 +2273,7 @@ test("a manager corrects a cleaner's answer without rewriting it, and the client
 });
 
 test("client portal link shows one client only what the manager released and can be turned off", async () => {
-  const { runRef } = await prepareReadyClientReportRun();
+  const { runRef } = await prepareReadyClientReportRun({ legacyInventory: false, serviceType: "POST_CONSTRUCTION" });
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
   const later = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   await admin.doc(`${root}/clients/client-a`).set({ organizationId: org, name: "Owner A", email: "owner-a@example.test", notes: "private client note" });
@@ -2268,6 +2281,7 @@ test("client portal link shows one client only what the manager released and can
   await admin.doc(`${root}/properties/property`).update({ clientId: "client-a", accessInstructions: "gate code 4821" });
   await admin.doc(`${root}/properties/property-b`).set({ organizationId: org, name: "Other Owner Property", clientId: "client-b" });
   await admin.doc(`${root}/jobs/job`).update({ clientId: "client-a", scheduledDate: today, scheduledStart: "09:00", assignedCleanerName: "Private Cleaner" });
+  await assertSucceeds(account("manager").firestore().doc(`${root}/jobs/job`).update({ serviceType: "MOVE_IN_OUT" }));
   await admin.doc(`${root}/jobs/job-coming`).set({ organizationId: org, propertyId: "property", clientId: "client-a", scheduledDate: later, scheduledStart: "11:00", operationalStatus: "ASSIGNED", clientPrice: 777 });
   await admin.doc(`${root}/jobs/job-b`).set({ organizationId: org, propertyId: "property-b", clientId: "client-b", scheduledDate: later, operationalStatus: "ASSIGNED" });
 
@@ -2302,6 +2316,7 @@ test("client portal link shows one client only what the manager released and can
   assert.equal(portal.body.portal.clientName, "Owner A");
   assert.deepEqual(portal.body.portal.properties, [{ id: "property", name: "Fixture Property" }]);
   assert.deepEqual(portal.body.portal.coming.map((visit) => visit.date), [today, later]);
+  assert.deepEqual(portal.body.portal.coming.map((visit) => visit.serviceType), ["MOVE_IN_OUT", "STANDARD"]);
   assert.deepEqual(portal.body.portal.reports, []);
   assert.equal((await publicClientPortalGet(access.token, { job: "job" })).code, 404);
   assert.equal((await publicClientPortalGet(access.token, { job: "job", photo: "1" })).code, 404);
@@ -2310,7 +2325,7 @@ test("client portal link shows one client only what the manager released and can
   // The report's own seven-day link expiring does not hide it from the portal.
   await runRef.collection("clientReportCapabilities").doc("active").update({ expiresAt: Timestamp.fromMillis(Date.now() - 1) });
   portal = await publicClientPortalGet(access.token);
-  assert.deepEqual(portal.body.portal.reports, [{ jobId: "job", propertyId: "property", propertyName: "Fixture Property", date: today, start: "09:00" }]);
+  assert.deepEqual(portal.body.portal.reports, [{ jobId: "job", propertyId: "property", propertyName: "Fixture Property", date: today, start: "09:00", serviceType: "POST_CONSTRUCTION" }]);
   const serialized = JSON.stringify(portal.body);
   for (const secret of ["Private Cleaner", "4821", "777", "999", "manager-only", "owner-a@example.test", "private client note", "Other Owner Property", "job-b", "cleaner-a"]) {
     assert.equal(serialized.includes(secret), false, `portal leaked ${secret}`);
@@ -2319,6 +2334,7 @@ test("client portal link shows one client only what the manager released and can
   const report = await publicClientPortalGet(access.token, { job: "job" });
   assert.equal(report.code, 200);
   assert.equal(report.body.report.propertyName, "Fixture Property");
+  assert.equal(report.body.report.serviceType, "POST_CONSTRUCTION");
   assert.equal(report.body.report.issueNotes, "A lamp bulb needs replacement.");
   for (const secret of ["private access instructions", "private code", "internal manager note", "private guest", "Cleaner-facing instruction."]) {
     assert.equal(JSON.stringify(report.body).includes(secret), false, `report leaked ${secret}`);

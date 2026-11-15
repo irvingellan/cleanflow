@@ -10,6 +10,8 @@ import { StateCard } from "../../components/UiPrimitives.jsx";
 import { withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
 import { languageOptions, usePublicTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
+import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
+import { checklistDefinitionText, withServiceTypeChecklistMessages } from "./serviceTypeChecklistMessages.js";
 import { checklistSaveStates, usePublicChecklistDraft } from "./usePublicChecklistDraft.js";
 import { useChecklistPhotoGallery } from "./useChecklistPhotoGallery.js";
 import { ChecklistPhotoGallery } from "./ChecklistPhotoGallery.jsx";
@@ -52,7 +54,7 @@ function SectionCount({ done, total, translate }) {
 }
 
 function itemLabel(item, translate) {
-  return item.label || translate(item.labelKey || item.id);
+  return checklistDefinitionText(translate, item.labelKey || item.id, item.label);
 }
 
 function ChecklistPhoto({ item, token, evidence, disabled, missing, onEvidenceSaved, targetRef, translate }) {
@@ -351,7 +353,9 @@ export function PublicChecklistPage({ token }) {
     updateEvidence,
   } = usePublicChecklistDraft(token);
   const { language, setLanguage, translate: baseTranslate } = usePublicTranslation(checklist?.preferredLanguage);
-  const translate = useMemo(() => withChecklistInventoryMessages(baseTranslate, language), [baseTranslate, language]);
+  const translate = useMemo(() => withServiceTypeChecklistMessages(
+    withChecklistInventoryMessages(baseTranslate, language), language,
+  ), [baseTranslate, language]);
   const fieldTargetsRef = useRef(new Map());
   const [hasAttemptedValidation, setHasAttemptedValidation] = useState(false);
   const [confirmedEvidenceIds, setConfirmedEvidenceIds] = useState(() => new Set());
@@ -502,6 +506,7 @@ export function PublicChecklistPage({ token }) {
             <p className="public-checklist__brand"><span className="public-checklist__mark" aria-hidden="true"><Icon name="broom" size={14} /></span>CleanFlow</p>
             <h1 id="public-checklist-title" className="panel__title">{translate("checklists.publicTitle")}</h1>
             {checklist.propertyName && <p className="public-checklist__context">{checklist.propertyName}</p>}
+            <p className="public-checklist__context">{serviceTypeLabel(language, checklist.serviceType)}</p>
             {checklist.scheduledDate && <p className="public-checklist__context">{formatDate(checklist.scheduledDate, translate, language)}{checklist.scheduledStart ? ` · ${checklist.scheduledStart}` : ""}</p>}
             {checklist.assignedCleanerName && <p className="public-checklist__context">{translate("jobs.assignedCleaner")}: {checklist.assignedCleanerName}</p>}
           </div>
@@ -602,7 +607,7 @@ export function PublicChecklistPage({ token }) {
         {checklist.sections.map((section) => (
           <section className="public-checklist__section" key={section.id} aria-labelledby={`public-section-${section.id}`}>
             <h2 id={`public-section-${section.id}`} className="public-checklist__section-title">
-              <span>{section.title || section.label || translate(section.titleKey || section.id)}</span>
+              <span>{checklistDefinitionText(translate, section.titleKey || section.id, section.title || section.label)}</span>
               <SectionCount done={section.items.filter((item) => (draft.checklistAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length} total={section.items.length} translate={translate} />
             </h2>
             {section.items.map((item) => (

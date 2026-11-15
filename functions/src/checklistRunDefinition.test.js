@@ -146,3 +146,70 @@ describe("FB07 property checklist edits", () => {
       .toMatchObject({ definitionVersion: null, inventoryItems: oldInventory });
   });
 });
+
+describe("service types in Checklist Runs", () => {
+  const property = { checklistSettings: {
+    itemOverrides: [{ id: "living-belongings", label: "Under beds and furniture" }],
+    additionalChecklistItems: [{ id: "custom-window", sectionId: "living-general", label: "Check window latches" }],
+    inventoryItems: [{ id: "tea", hidden: true }],
+    requiredPhotoTypes: [{ id: "balcony", label: "Balcony photo" }],
+  } };
+
+  it.each([
+    [undefined, "STANDARD", undefined, 0],
+    ["STANDARD", "STANDARD", undefined, 0],
+    ["UNKNOWN", "STANDARD", undefined, 0],
+    ["DEEP_CLEANING", "DEEP_CLEANING", "service-type-deep-cleaning", 4],
+    ["MOVE_IN_OUT", "MOVE_IN_OUT", "service-type-move-in-out", 3],
+    ["POST_CONSTRUCTION", "POST_CONSTRUCTION", "service-type-post-construction", 5],
+  ])("resolves %s from the Property and appends the selected template", (input, type, sectionId, itemCount) => {
+    const propertyDefinition = resolveChecklistDefinition(property);
+    const snapshot = buildChecklistRunSnapshot({ job: { serviceType: input }, property });
+    const { sections, ...details } = snapshot.resolvedDefinition;
+
+    expect(snapshot.jobSnapshot.serviceType).toBe(type);
+    expect({ ...details, sections: sections.slice(0, propertyDefinition.sections.length) }).toEqual(propertyDefinition);
+    const extras = sections.slice(propertyDefinition.sections.length);
+    if (sectionId) {
+      expect(extras).toHaveLength(1);
+      expect(extras[0]).toMatchObject({ id: sectionId, title: expect.any(String) });
+      expect(extras[0].items).toHaveLength(itemCount);
+      expect(extras[0].items.every((item) => item.label && item.labelKey && !item.requiresPhoto)).toBe(true);
+    } else {
+      expect(extras).toEqual([]);
+    }
+  });
+
+  it("preserves existing Property items when their IDs collide with a type template", () => {
+    const id = "service-type-post-construction-fine-dust";
+    const source = { checklistSettings: { additionalChecklistItems: [
+      { id, sectionId: "bedrooms", label: "Existing Property item" },
+      { id: `${id}-2`, sectionId: "bedrooms", label: "Another Property item" },
+    ] } };
+    const { resolvedDefinition } = buildChecklistRunSnapshot({ job: { serviceType: "POST_CONSTRUCTION" }, property: source });
+    const items = resolvedDefinition.sections.flatMap((section) => section.items);
+    expect(items).toEqual(expect.arrayContaining([
+      { id, label: "Existing Property item" },
+      { id: `${id}-2`, label: "Another Property item" },
+      expect.objectContaining({ id: `${id}-3`, labelKey: "serviceTypeChecklist.post-construction.fine-dust" }),
+    ]));
+    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+  });
+
+  it("projects the stored type and definition after the Job changes, and leaves legacy sections intact", () => {
+    const job = { serviceType: "POST_CONSTRUCTION" };
+    const frozenRun = buildChecklistRunSnapshot({ job, property });
+    job.serviceType = "MOVE_IN_OUT";
+    const nextRun = buildChecklistRunSnapshot({ job, property });
+
+    expect(projectChecklistRunForCleaner(frozenRun)).toMatchObject({
+      serviceType: "POST_CONSTRUCTION", sections: frozenRun.resolvedDefinition.sections,
+    });
+    expect(frozenRun.resolvedDefinition.sections.at(-1).id).toBe("service-type-post-construction");
+    expect(nextRun.resolvedDefinition.sections.at(-1).id).toBe("service-type-move-in-out");
+
+    const sections = [{ id: "legacy", items: [{ id: "original-task", label: "Original task" }] }];
+    expect(projectChecklistRunForCleaner({ definitionVersion: 1, resolvedDefinition: { sections } }))
+      .toMatchObject({ serviceType: "STANDARD", definitionVersion: 1, sections });
+  });
+});
