@@ -20,7 +20,8 @@ describe("SystemStatusPanel", () => {
     expect(screen.getByText(/automatic approval: on|aprovação automática: ligado/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /measure|medir/i }));
     expect(await screen.findByText(/4100 ms/)).toBeTruthy();
-    expect(screen.getByText(/4100 ms · (was asleep|estava dormindo)/i)).toBeTruthy();
+    expect(screen.getByText("4100 ms · Slow response")).toBeVisible();
+    expect(screen.getAllByText("350 ms · Fast response")).toHaveLength(3);
     expect(measure).toHaveBeenCalledTimes(4);
   });
 
