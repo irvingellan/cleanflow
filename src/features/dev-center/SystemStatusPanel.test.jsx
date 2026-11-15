@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 
@@ -27,5 +27,25 @@ describe("SystemStatusPanel", () => {
   it("reports when version.json cannot be read", async () => {
     render(<TranslationProvider><SystemStatusPanel loadVersion={() => Promise.reject(new Error("offline"))} measure={vi.fn()} /></TranslationProvider>);
     expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+
+  it("times out and aborts when the version response body never finishes", async () => {
+    vi.useFakeTimers();
+    const fetchVersion = vi.fn().mockResolvedValue({ ok: true, json: () => new Promise(() => {}) });
+    vi.stubGlobal("fetch", fetchVersion);
+    try {
+      render(<TranslationProvider><SystemStatusPanel /></TranslationProvider>);
+      expect(screen.getByRole("status")).toHaveTextContent("Reading version");
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+
+      expect(screen.getByRole("alert")).toHaveTextContent("Could not read version.json");
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(fetchVersion.mock.calls[0][1].signal.aborted).toBe(true);
+      expect(screen.getByRole("button", { name: "Measure Functions" })).toBeEnabled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
   });
 });
