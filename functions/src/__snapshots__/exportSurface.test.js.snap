@@ -1,0 +1,887 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Functions export surface > keeps the name, trigger and options of every deployed Function 1`] = `
+[
+  [
+    "abandonChecklistRunAndCompleteJob",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "approveChecklistRun",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "assignCleanerDirectly",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "cleanerPushTest",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "clearDevCenterData",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "DEV_CENTER_DEVELOPER_UIDS",
+        },
+      ],
+    },
+  ],
+  [
+    "clientPortalAccess",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "completeJobWithoutChecklist",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "correctChecklistAnswer",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "createAutomaticJobOffers",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "createChecklistRun",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "createClientReport",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "createManualReplacementOffer",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "deactivateCleanerPushDevice",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "deactivateManagerPushDevice",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "generateDevCenterScenario",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "DEV_CENTER_DEVELOPER_UIDS",
+        },
+      ],
+    },
+  ],
+  [
+    "getChecklistCapability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "getChecklistEvidence",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "getChecklistRun",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "getCleanerPushDeviceStatus",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "getClientReportCapability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "getDevCenterAccess",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "DEV_CENTER_DEVELOPER_UIDS",
+        },
+      ],
+    },
+  ],
+  [
+    "getJobPhotoCounts",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "getManagerNotificationDiagnostics",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "DEV_CENTER_DEVELOPER_UIDS",
+        },
+      ],
+    },
+  ],
+  [
+    "getMyJobAccess",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "issueChecklistCapability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "issueCleanerAccessCode",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "listNotificationInbox",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "markNotificationRead",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "notifyCleanerInboxEvent",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/cleanerNotificationInboxes/{cleanerId}/items/{eventId}",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.created",
+        "retry": true,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "notifyManagersChecklistReadyForReview",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}/managerNotificationDeliveries/{eventId}",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.created",
+        "retry": false,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "notifyManagersOperationalEvent",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}/managerNotificationDeliveries/{eventId}",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.created",
+        "retry": false,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "openMyChecklist",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "openNotificationInboxItem",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "previewManagerReminder",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "DEV_CENTER_DEVELOPER_UIDS",
+        },
+      ],
+    },
+  ],
+  [
+    "publicChecklist",
+    {
+      "httpsTrigger": {
+        "invoker": [
+          "public",
+        ],
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "publicClientPortal",
+    {
+      "httpsTrigger": {
+        "invoker": [
+          "public",
+        ],
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "publicClientReport",
+    {
+      "httpsTrigger": {
+        "invoker": [
+          "public",
+        ],
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "publicOffer",
+    {
+      "httpsTrigger": {
+        "invoker": [
+          "public",
+        ],
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "redeemCleanerAccessCode",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "registerCleanerPushDevice",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "registerManagerPushDevice",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "removeAutomaticCleanerAssignment",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "reportManagerNotificationHealth",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "rescheduleJob",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "respondToMyOffer",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "respondToMyReschedule",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "revokeChecklistCapability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "revokeCleanerHubAccess",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "revokeClientReport",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "sendCurrentManagerTestNotification",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "sendDeveloperTestNotification",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "DEV_CENTER_DEVELOPER_UIDS",
+        },
+      ],
+    },
+  ],
+  [
+    "sendTodayExecutionReminder",
+    {
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "scheduleTrigger": {
+        "retryConfig": {},
+        "schedule": "0 7 * * *",
+        "timeZone": "America/Los_Angeles",
+      },
+    },
+  ],
+  [
+    "sendTomorrowPlanningReminder",
+    {
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "scheduleTrigger": {
+        "retryConfig": {},
+        "schedule": "0 19 * * *",
+        "timeZone": "America/Los_Angeles",
+      },
+    },
+  ],
+  [
+    "setReportPhotoVisibility",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "submitChecklistRunForReview",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "submitFeedback",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "GITHUB_FEEDBACK_TOKEN",
+        },
+      ],
+    },
+  ],
+  [
+    "syncCleanerAgendaOnAssignmentWrite",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}/assignments/{assignmentId}",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.written",
+        "retry": true,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "syncCleanerAgendaOnChecklistRunWrite",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.written",
+        "retry": true,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "syncCleanerAgendaOnChecklistStart",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}/{progressCollection}/current",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.created",
+        "retry": true,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "syncCleanerAgendaOnJobWrite",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.written",
+        "retry": true,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "syncCleanerAgendaOnOfferWrite",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}/offers/{offerId}",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.written",
+        "retry": true,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+]
+`;
