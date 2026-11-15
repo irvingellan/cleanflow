@@ -22,7 +22,7 @@ export function describeBuild(version) {
   };
 }
 
-/** A warm Function answers in well under a second; a cold start takes seconds. */
+/** Groups the round-trip latency measured by the browser. */
 export function classifyLatency(milliseconds) {
   if (!Number.isFinite(milliseconds)) return "failed";
   return milliseconds >= 1500 ? "cold" : "warm";
