@@ -1,0 +1,205 @@
+/* CleanFlow Design System — definitive tokens (V2 roles, light-first, dark designed).
+ * Components use the --cf-* roles. The --color-* names below are aliases kept so
+ * every existing screen inherits the same palette without a per-screen rewrite. */
+:root {
+  color-scheme: light;
+  /* Surfaces */
+  --cf-canvas: #f3f6f4;
+  --cf-surface: #ffffff;
+  --cf-surface-subtle: #f7faf8;
+  --cf-surface-elevated: #ffffff;
+  --cf-surface-selected: #e9f2ed;
+  --cf-surface-sunken: #ecf2ee;
+  --cf-surface-internal: #f3f4f6;
+  /* Text */
+  --cf-text: #16241e;
+  --cf-text-secondary: #4f6158;
+  --cf-text-muted: #5f6d66;
+  --cf-text-disabled: #98a39d;
+  /* Lines */
+  --cf-border: #dbe4df;
+  --cf-border-strong: #b8c9c1;
+  --cf-border-input: #84978d;
+  --cf-border-selected: #6f9a84;
+  --cf-divider: #e6ece9;
+  --cf-focus: #2f6d52;
+  /* Brand */
+  --cf-brand: #2d5a46;
+  --cf-brand-hover: #234a39;
+  --cf-brand-text: #2f5a47;
+  --cf-on-brand: #ffffff;
+  --cf-brand-soft: #dcebe3;
+  /* Shell (the forest rail that carries the identity) */
+  --cf-shell: #1c3329;
+  --cf-shell-raised: #264337;
+  --cf-shell-text: #d5e6dc;
+  --cf-shell-muted: #9fbcad;
+  --cf-shell-active: #eaf5ee;
+  --cf-shell-title: #f1f8f3;
+  --cf-shell-active-text: #1c3329;
+  --cf-shell-line: rgb(255 255 255 / 9%);
+  /* States: icon + words + colour, never colour alone */
+  --cf-info-bg: #edf3f8;
+  --cf-info-border: #c9d9e6;
+  --cf-info-text: #36546b;
+  --cf-attention-bg: #fff5e2;
+  --cf-attention-border: #ebd29e;
+  --cf-attention-text: #6b4c17;
+  --cf-warning-bg: #fdf1e7;
+  --cf-warning-border: #efcaa9;
+  --cf-warning-text: #8a4518;
+  --cf-risk-bg: #fdf2f0;
+  --cf-risk-border: #e7c2ba;
+  --cf-risk-text: #8a3628;
+  --cf-success-bg: #eaf4ee;
+  --cf-success-border: #c1dacb;
+  --cf-success-text: #2b5c44;
+  --cf-sandbox-bg: #ecf2ee;
+  --cf-sandbox-border: #9db5a9;
+  --cf-sandbox-text: #2f5a47;
+  --cf-scrim: rgb(22 36 30 / 44%);
+  /* Elevation: only things that float carry a shadow */
+  --cf-shadow-raise: 0 1px 2px rgb(22 46 36 / 6%);
+  --cf-shadow-float: 0 14px 36px rgb(22 46 36 / 14%), 0 3px 8px rgb(22 46 36 / 7%);
+  /* Type */
+  --cf-font: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cf-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --cf-text-xs: 0.75rem;
+  --cf-text-sm: 0.8125rem;
+  --cf-text-md: 0.9375rem;
+  --cf-text-lg: 1.0625rem;
+  --cf-text-xl: 1.25rem;
+  --cf-text-2xl: 1.625rem;
+  /* Space, radius, size */
+  --cf-space-1: 4px;
+  --cf-space-2: 8px;
+  --cf-space-3: 12px;
+  --cf-space-4: 16px;
+  --cf-space-5: 20px;
+  --cf-space-6: 24px;
+  --cf-space-8: 32px;
+  --cf-radius-sm: 8px;
+  --cf-radius-md: 10px;
+  --cf-radius-lg: 14px;
+  --cf-radius-xl: 18px;
+  --cf-control: 44px;
+  --cf-control-sm: 36px;
+  --cf-sidebar: 248px;
+  --cf-rail: 88px;
+  --cf-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Legacy aliases → roles */
+  --color-page-bg: var(--cf-canvas);
+  --color-surface: var(--cf-surface);
+  --color-surface-subtle: var(--cf-surface-subtle);
+  --color-text: var(--cf-text);
+  --color-heading: var(--cf-text);
+  --color-button-text: var(--cf-brand-text);
+  --color-brand: var(--cf-brand);
+  --color-brand-text: var(--cf-brand-text);
+  --color-success: var(--cf-success-text);
+  --color-text-secondary: var(--cf-text-secondary);
+  --color-focus: var(--cf-focus);
+  --color-brand-muted: var(--cf-text-muted);
+  --color-readonly-text: var(--cf-text-muted);
+  --color-text-support: var(--cf-text-secondary);
+  --color-chart: #5e9078;
+  --color-muted: var(--cf-text-muted);
+  --color-warning-text: var(--cf-attention-text);
+  --color-warning-label: var(--cf-attention-text);
+  --color-selected-border: var(--cf-border-selected);
+  --color-error-text: var(--cf-risk-text);
+  --color-alert-text: var(--cf-risk-text);
+  --color-urgent: var(--cf-warning-text);
+  --color-auth-error: var(--cf-risk-text);
+  --color-border-strong: var(--cf-border-strong);
+  --color-input-border: var(--cf-border-input);
+  --color-border: var(--cf-border);
+  --color-error-border: var(--cf-risk-border);
+  --color-status-dot: #e3a64b;
+  --color-divider: var(--cf-divider);
+  --color-nav-active: var(--cf-surface-selected);
+  --color-badge-bg: var(--cf-surface-sunken);
+  --color-selected-bg: var(--cf-surface-selected);
+  --color-status-warning-bg: var(--cf-attention-bg);
+  --color-attention-bg: var(--cf-attention-bg);
+  --color-error-bg: var(--cf-risk-bg);
+  --color-on-brand: var(--cf-on-brand);
+  --shadow-card: rgb(22 46 36 / 6%);
+  --shadow-card-subtle: rgb(22 46 36 / 4%);
+  --focus-ring: rgb(47 109 82 / 16%);
+  --focus-ring-strong: rgb(47 109 82 / 28%);
+
+  font-family: var(--cf-font);
+  font-feature-settings: "cv11", "ss01";
+  color: var(--cf-text);
+  background: var(--cf-canvas);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  accent-color: var(--cf-brand);
+}
+
+:root[data-theme="dark"],
+.hb-root[data-theme="dark"] {
+  color-scheme: dark;
+  --cf-canvas: #141817;
+  --cf-surface: #1c2120;
+  --cf-surface-subtle: #212726;
+  --cf-surface-elevated: #252b2a;
+  --cf-surface-selected: #253a30;
+  --cf-surface-sunken: #262d2b;
+  --cf-surface-internal: #202424;
+  --cf-text: #eef3f0;
+  --cf-text-secondary: #c2ccc7;
+  --cf-text-muted: #a2aea8;
+  --cf-text-disabled: #6f7976;
+  --cf-border: #333b39;
+  --cf-border-strong: #46504d;
+  --cf-border-input: #6f7a77;
+  --cf-border-selected: #5f9476;
+  --cf-divider: #2d3433;
+  --cf-focus: #9dd0b2;
+  --cf-brand: #8cc3a2;
+  --cf-brand-hover: #a3d2b5;
+  --cf-brand-text: #b0d8bf;
+  --cf-on-brand: #0f241a;
+  --cf-brand-soft: #24392e;
+  --cf-shell: #0f1312;
+  --cf-shell-raised: #1a201e;
+  --cf-shell-text: #cfdcd5;
+  --cf-shell-muted: #8c9a93;
+  --cf-shell-active: #24392e;
+  --cf-shell-title: #e6f2ea;
+  --cf-shell-active-text: #d9efe1;
+  --cf-shell-line: rgb(255 255 255 / 7%);
+  --cf-info-bg: #1f2c35;
+  --cf-info-border: #3a5062;
+  --cf-info-text: #a9cbe0;
+  --cf-attention-bg: #3a3117;
+  --cf-attention-border: #66562a;
+  --cf-attention-text: #f8d68a;
+  --cf-warning-bg: #3a2a1f;
+  --cf-warning-border: #6a4a33;
+  --cf-warning-text: #f5b98d;
+  --cf-risk-bg: #3a2725;
+  --cf-risk-border: #714943;
+  --cf-risk-text: #ffb4a8;
+  --cf-success-bg: #213329;
+  --cf-success-border: #3f5f4d;
+  --cf-success-text: #96cfab;
+  --cf-sandbox-bg: #213329;
+  --cf-sandbox-border: #5b7566;
+  --cf-sandbox-text: #b0d8bf;
+  --cf-scrim: rgb(0 0 0 / 60%);
+  --cf-shadow-raise: 0 1px 2px rgb(0 0 0 / 30%);
+  --cf-shadow-float: 0 18px 44px rgb(0 0 0 / 48%), 0 3px 10px rgb(0 0 0 / 30%);
+  --color-chart: #81b895;
+  --color-status-dot: #f0b35c;
+  --shadow-card: rgb(0 0 0 / 22%);
+  --shadow-card-subtle: rgb(0 0 0 / 16%);
+  --focus-ring: rgb(157 208 178 / 26%);
+  --focus-ring-strong: rgb(157 208 178 / 40%);
+}
+
