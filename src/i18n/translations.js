@@ -15,7 +15,7 @@ export function normalizeTranslationLanguage(language) {
   return supportedLanguages.has(language) ? language : "en";
 }
 
-const messages = {
+export const messages = {
   en: {
     "compact.previewSurface": "Synthetic preview screen",
     "jobs.moreActions": "More actions",
