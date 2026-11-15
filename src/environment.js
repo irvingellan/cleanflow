@@ -114,7 +114,16 @@ export function canShowEnvironmentNavigation(user, environment = cleanflowEnviro
 export function environmentNavigationTarget(environment = cleanflowEnvironment, sandboxBinding = {
   sandboxProjectId: import.meta.env.VITE_CLEANFLOW_SANDBOX_PROJECT_ID,
   sandboxOrigin: import.meta.env.VITE_CLEANFLOW_SANDBOX_ORIGIN,
+}, local = {
+  currentOrigin: typeof window === "undefined" ? "" : window.location.origin,
+  peerOrigin: import.meta.env.VITE_CLEANFLOW_LOCAL_PEER_ORIGIN,
 }) {
+  // Local development runs real data and test data side by side on two ports;
+  // the switch stays local. Hosted builds never match a local origin.
+  if (["production", "sandbox"].includes(environment) && localOrigin.test(local.currentOrigin || "")
+    && typeof local.peerOrigin === "string" && localOrigin.test(local.peerOrigin)) {
+    return { href: local.peerOrigin, labelKey: environment === "production" ? "environment.openSandbox" : "environment.backToProduction" };
+  }
   if (environment === "production") {
     const origin = resolveSandboxOrigin(sandboxBinding);
     if (origin) return { href: origin, labelKey: "environment.openSandbox" };
