@@ -5,9 +5,15 @@ import checklistPreview from "./04-checklist-preview.js";
 import checklistPreviewCleaner from "./05-checklist-preview-cleaner.js";
 import common from "./06-common.js";
 import checklistsNotes from "./07-checklists-notes.js";
+import jobsFinancial from "./08-jobs-financial.js";
+import jobsEdit from "./09-jobs-edit.js";
+import publicOffer from "./10-public-offer.js";
+import jobsNewService from "./11-jobs-new-service.js";
+import jobsAssignment from "./12-jobs-assignment.js";
+import devCenter from "./13-dev-center.js";
 
 // Order matters: a later part may override a key from an earlier one.
-const parts = [core, checklistsGallery, checklistsEvidence, checklistPreview, checklistPreviewCleaner, common, checklistsNotes];
+const parts = [core, checklistsGallery, checklistsEvidence, checklistPreview, checklistPreviewCleaner, common, checklistsNotes, jobsFinancial, jobsEdit, publicOffer, jobsNewService, jobsAssignment, devCenter];
 
 export const messages = { en: {}, pt: {}, es: {} };
 for (const part of parts) {
