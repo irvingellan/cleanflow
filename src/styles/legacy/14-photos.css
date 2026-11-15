@@ -1,0 +1,255 @@
+/* FB03 (Pilot feedback): interested cleaners are the manager's first decision. */
+.interest-decision { margin: 0 0 16px; padding: 16px 18px; border: 1px solid var(--color-selected-border); border-radius: 12px; background: var(--color-selected-bg); }
+.interest-decision:focus { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.interest-decision .eyebrow { margin: 0 0 4px; }
+.interest-decision h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.interest-decision__body { margin: 0 0 12px; color: var(--color-text-secondary); }
+.interest-decision__list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.interest-decision__list li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); }
+.interest-decision__list li > div { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-width: 0; overflow-wrap: anywhere; }
+.interest-decision__list .button { min-height: 44px; }
+.interest-decision__time { color: var(--color-text-secondary); font-size: .875rem; }
+.interest-decision__secondary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
+.interest-decision__secondary .button--text { min-height: 44px; }
+.interest-decision__secondary > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.interest-decision__secondary small { color: var(--color-text-secondary); }
+
+/* Photo grid (manager checklist) */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.photo-grid__tile {
+  position: relative;
+  contain: layout paint;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface-muted);
+  cursor: zoom-in;
+}
+
+.photo-grid__tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: photo-fade-in 180ms ease-out;
+}
+
+.photo-grid__tile:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.photo-grid__tile.is-hidden-from-report img {
+  opacity: 0.45;
+}
+
+/* Opacity-only pulse: runs on the compositor, no per-frame repaint (light on
+   older Intel laptops while dozens of tiles wait). */
+.photo-grid__skeleton {
+  position: absolute;
+  inset: 0;
+  background: var(--color-border);
+  opacity: 0.35;
+  animation: photo-pulse 1.1s ease-in-out infinite alternate;
+  will-change: opacity;
+}
+
+.photo-grid__error {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 4px;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.photo-grid__badge {
+  position: absolute;
+  inset: auto 4px 4px;
+  border-radius: 6px;
+  padding: 2px 4px;
+  background: rgb(0 0 0 / 0.65);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Full-screen photo viewer (manager checklist and client report) */
+.photo-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: rgb(8 12 10 / 0.96);
+  color: #fff;
+  animation: photo-fade-in 150ms ease-out;
+}
+
+.photo-lightbox__bar,
+.photo-lightbox__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.photo-lightbox__counter {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.photo-lightbox__close,
+.photo-lightbox__action {
+  min-height: 40px;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 999px;
+  padding: 0 16px;
+  background: rgb(255 255 255 / 0.08);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photo-lightbox__close:focus-visible,
+.photo-lightbox__action:focus-visible,
+.photo-lightbox__arrow:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.photo-lightbox__stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.photo-lightbox__placeholder {
+  position: absolute;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+  filter: blur(6px);
+  transform: scale(1.02);
+}
+
+.photo-lightbox__image {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.photo-lightbox__image.is-loaded {
+  opacity: 1;
+}
+
+.photo-lightbox__spinner {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgb(255 255 255 / 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: photo-spin 0.8s linear infinite;
+}
+
+.photo-lightbox__error {
+  margin: 0;
+  color: rgb(255 255 255 / 0.8);
+}
+
+.photo-lightbox__arrow {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.photo-lightbox__arrow.is-previous { left: 4px; }
+.photo-lightbox__arrow.is-next { right: 4px; }
+
+.photo-lightbox__caption {
+  color: rgb(255 255 255 / 0.85);
+  overflow-wrap: anywhere;
+}
+
+.photo-lightbox__hint {
+  margin: 0;
+  color: rgb(255 255 255 / 0.6);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+@keyframes photo-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes photo-pulse { from { opacity: 0.25; } to { opacity: 0.6; } }
+@keyframes photo-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-grid__tile img,
+  .photo-grid__skeleton,
+  .photo-lightbox,
+  .photo-lightbox__spinner {
+    animation: none;
+  }
+
+  .photo-lightbox__image {
+    transition: none;
+  }
+}
+
+/* Services list: photo count */
+.job-card__photos {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--color-selected-bg);
+  color: var(--color-brand-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Manager correction of a cleaner's answer: the controls sit under the row. */
+.checklist-run__answers li { flex-wrap: wrap; }
+.checklist-run__answers li > span { flex: 1 1 60%; }
+.checklist-run__corrected { flex: 1 1 100%; color: var(--color-text-secondary); font-size: 0.82rem; }
+.checklist-run__answers li.is-corrected strong { color: var(--color-brand-text); }
+.checklist-run__correct { flex: 0 0 auto; min-height: 32px; padding: 0 4px; font-size: 0.82rem; }
+.checklist-run__correction { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.checklist-run__correction .form-error { flex: 1 1 100%; margin: 0; }
+@media print { .checklist-run__correct, .checklist-run__correction { display: none; } }
