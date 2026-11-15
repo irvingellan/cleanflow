@@ -11,7 +11,8 @@ stored task, evidence and inventory definitions.
 
 The review stack starts at `2d4b565` with [model and Rules #123](https://github.com/irvingellan/cleanflow/pull/123),
 then [forms and screens #124](https://github.com/irvingellan/cleanflow/pull/124)
-and the checklist and Functions diff. The [design and release plan](SERVICE_TYPES_V1.md)
+and [checklist and Functions #125](https://github.com/irvingellan/cleanflow/pull/125).
+The [design and release plan](SERVICE_TYPES_V1.md)
 lists the existing Functions in scope. Validation uses synthetic emulator
 records. Production rollout and physical acceptance are pending.
 
