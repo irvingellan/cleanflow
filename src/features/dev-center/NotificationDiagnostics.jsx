@@ -39,7 +39,6 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
   const [testResult, setTestResult] = useState(null);
   const [testError, setTestError] = useState(null);
   const activeDevices = (diagnostics?.devices || []).filter((device) => device.active && device.eligible !== false && device.registrationId);
-  const selectedDevice = activeDevices.find((device) => device.registrationId === targetRegistrationId);
   const healthOnlyReports = (diagnostics?.healthReports || []).filter((report) =>
     !(diagnostics?.devices || []).some((device) => device.registrationId === report.registrationId));
   const healthFor = (device) => (diagnostics?.healthReports || []).find((report) => report.registrationId === device.registrationId);
@@ -50,6 +49,12 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
     const what = health ? deviceLabel({ platform: health.platform, browser: health.browserClass, standalone: health.standalone }, copy("installedApp")) : device.platform;
     const here = device.registrationId && device.registrationId === localHealth?.registrationId ? ` — ${copy("thisBrowser")}` : "";
     return `${who} · ${what}${here}`;
+  };
+  const testTargets = activeDevices.map((device) => ({ device, name: deviceName(device) }));
+  const selectedTarget = testTargets.find(({ device }) => device.registrationId === targetRegistrationId);
+  const testTargetName = ({ device, name }) => {
+    const identicalNames = testTargets.filter((target) => target.name === name);
+    return identicalNames.length > 1 ? `${name} · ${device.deviceId}` : name;
   };
   const isCurrentDevice = (device) => device.active && !["invalidated", "signed-out", "superseded"].includes(device.tokenState);
 
@@ -70,12 +75,12 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
   }, [userId]);
 
   async function sendTest() {
-    if (!isConfirmingTest || !selectedDevice || isSendingTest) return;
+    if (!isConfirmingTest || !selectedTarget || isSendingTest) return;
     setIsSendingTest(true);
     setTestError(null);
     setTestResult(null);
     try {
-      setTestResult(await sendDeveloperTestNotification(selectedDevice.registrationId));
+      setTestResult(await sendDeveloperTestNotification(selectedTarget.device.registrationId));
       void Promise.resolve().then(() => onRefresh?.()).catch(() => undefined);
     } catch (error) {
       setTestError(error?.code === "functions/resource-exhausted" ? "cooldown" : "failed");
@@ -299,24 +304,24 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
               }}
             >
               <option value="">{translate("devCenter.selectTestDevice")}</option>
-              {activeDevices.map((device) => (
-                <option value={device.registrationId} key={device.registrationId}>
-                  {deviceName(device)}
+              {testTargets.map((target) => (
+                <option value={target.device.registrationId} key={target.device.registrationId}>
+                  {testTargetName(target)}
                 </option>
               ))}
             </select>
           </label>
           {activeDevices.length === 0 && <p>{translate("devCenter.noActiveTestDevices")}</p>}
           {!isConfirmingTest ? (
-            <button className="button" type="button" disabled={!selectedDevice || isSendingTest} onClick={() => setIsConfirmingTest(true)}>
+            <button className="button" type="button" disabled={!selectedTarget || isSendingTest} onClick={() => setIsConfirmingTest(true)}>
               {translate("devCenter.prepareTestNotification")}
             </button>
           ) : (
             <div className="dev-center__confirm" role="group" aria-label={translate("devCenter.testConfirmationTitle")}>
-              <p>{translate("devCenter.testConfirmationDescription", { device: selectedDevice ? deviceName(selectedDevice) : "" })}</p>
+              <p>{translate("devCenter.testConfirmationDescription", { device: selectedTarget ? testTargetName(selectedTarget) : "" })}</p>
               <div className="button-row">
                 <button className="button" type="button" disabled={isSendingTest} onClick={() => setIsConfirmingTest(false)}>{translate("common.cancel")}</button>
-                <button className="button button--primary" type="button" disabled={!selectedDevice || isSendingTest} onClick={sendTest}>
+                <button className="button button--primary" type="button" disabled={!selectedTarget || isSendingTest} onClick={sendTest}>
                   {isSendingTest ? translate("devCenter.working") : translate("devCenter.confirmSendTest")}
                 </button>
               </div>
