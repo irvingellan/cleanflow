@@ -208,6 +208,33 @@ describe("NotificationDiagnostics", () => {
     expect(await screen.findByText("FCM accepted the test request. Display on the phone is not verified.")).toBeVisible();
   });
 
+  it("distinguishes duplicate device names when choosing and confirming a test target", async () => {
+    const registrations = ["a".repeat(64), "b".repeat(64)];
+    lab.sendDeveloperTestNotification.mockResolvedValueOnce({ providerAccepted: true });
+    renderDiagnostics({ diagnostics: {
+      devices: registrations.map((registrationId) => ({
+        registrationId, deviceId: registrationId.slice(-8), active: true,
+        eligible: true, userEmail: "manager@example.test", platform: "web",
+      })),
+      healthReports: registrations.map((registrationId) => ({
+        registrationId, platform: "ios", browserClass: "safari", standalone: false,
+      })),
+      deliveries: [],
+    } });
+
+    const device = screen.getByLabelText("Target device");
+    expect(screen.getByRole("option", { name: /Safari · aaaaaaaa$/ })).toHaveValue(registrations[0]);
+    expect(screen.getByRole("option", { name: /Safari · bbbbbbbb$/ })).toHaveValue(registrations[1]);
+    expect(device).not.toHaveTextContent(registrations[1]);
+
+    fireEvent.change(device, { target: { value: registrations[1] } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare test" }));
+    expect(screen.getByRole("group", { name: /confirm/i })).toHaveTextContent("Safari · bbbbbbbb");
+    expect(lab.sendDeveloperTestNotification).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send test notification" }));
+    await waitFor(() => expect(lab.sendDeveloperTestNotification).toHaveBeenCalledExactlyOnceWith(registrations[1]));
+  });
+
   it("shows a safe cooldown error and never offers a test when all devices are inactive", async () => {
     renderDiagnostics({ diagnostics: { devices: [{ registrationId: "inactive", deviceId: "inactive", active: false }], deliveries: [] } });
     expect(screen.getByText("No active registered FCM device is available for a test.")).toBeVisible();
