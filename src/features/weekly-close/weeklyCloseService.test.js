@@ -25,7 +25,7 @@ const job = {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   getServicePeriodJobs.mockResolvedValue(window([job]));
   getClientSummariesById.mockResolvedValue([{ id: "client", name: "Example Client", notes: "PRIVATE_CLIENT_NOTE" }]);
   getPropertySummariesById.mockResolvedValue([{ id: "property", name: "Example Property", keyCodeInfo: "PRIVATE_ACCESS", defaultClientPrice: 999 }]);
@@ -57,6 +57,46 @@ describe("Weekly Close read-only service boundary", () => {
   it.each(["jobs", "payouts"])("rejects %s server-read failure rather than certify an offline/cached total", async (source) => {
     (source === "jobs" ? getServicePeriodJobs : getPayoutEvidenceForJobs).mockRejectedValue(new Error("unavailable"));
     await expect(loadWeeklyClose(period)).rejects.toThrow("unavailable");
+  });
+
+  it.each([
+    ["unavailable", "Service unavailable"],
+    ["unknown", "Request failed with error: undefined"],
+  ])("retries only the source read affected by a transient %s error", async (code, message) => {
+    getPropertySummariesById.mockRejectedValueOnce(Object.assign(new Error(message), { code }));
+    const result = await loadWeeklyClose(period);
+    expect(getServicePeriodJobs).toHaveBeenCalledTimes(1);
+    expect(getClientSummariesById).toHaveBeenCalledTimes(1);
+    expect(getPayoutEvidenceForJobs).toHaveBeenCalledTimes(1);
+    expect(getPropertySummariesById).toHaveBeenCalledTimes(2);
+    expect(result.jobs[0].propertyName).toBe("Example Property");
+  });
+
+  it.each([
+    ["permission-denied", "Denied"],
+    ["unknown", "Unexpected payload"],
+  ])("does not retry a %s error unrelated to transport", async (code, message) => {
+    const error = Object.assign(new Error(message), { code });
+    getPropertySummariesById.mockRejectedValueOnce(error);
+    await expect(loadWeeklyClose(period)).rejects.toBe(error);
+    expect(getPropertySummariesById).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not certify a total after repeated network errors", async () => {
+    const error = Object.assign(new Error("Request failed with error: undefined"), { code: "unknown" });
+    getPropertySummariesById.mockRejectedValueOnce(error).mockRejectedValueOnce(error);
+    await expect(loadWeeklyClose(period)).rejects.toBe(error);
+    expect(getPropertySummariesById).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry the transient failure once the active load is aborted", async () => {
+    const controller = new AbortController();
+    getPropertySummariesById.mockImplementationOnce(async () => {
+      controller.abort();
+      throw Object.assign(new Error("Connection failed"), { code: "unavailable" });
+    });
+    await expect(loadWeeklyClose(period, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    expect(getPropertySummariesById).toHaveBeenCalledTimes(1);
   });
 
   it("loads context for eligible IDs in bounded batches and deduplicates IDs", async () => {

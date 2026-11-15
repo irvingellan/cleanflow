@@ -102,8 +102,13 @@ long polling in the emulator recovered that read. The feature now uses an
 authenticated one-shot transport shared with Dashboard, so financial results
 no longer depend on a Watch subscription. The separate browser scenario
 counts known local WebChannel errors on reload and fails on other page errors
-or any failed financial assertion. This comparison used synthetic data and a
-local WebKit engine.
+or any failed financial assertion. On the current WebKit reload, a standalone
+Firestore Lite property lookup also failed before an HTTP response. The
+financial reader retries that specific no-response error or an unavailable
+source read once within the existing load deadline. It still reports an error
+for denied or repeatedly unavailable reads. The browser scenario drops the first property query after reload and
+requires exact server-calculated totals. The comparison uses synthetic data
+and a local WebKit engine.
 
 Initial V0 release validation: 69 focused tests; full unit suite 103 files / 1,041 tests;
 78 security/emulator tests; Scenario Runner FAST 1/1, repeat-3 3/3 and mobile
