@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { defaultServiceType } from "../../../functions/src/serviceTypes.js";
 import { BackButton } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { maximumGuestNameLength, optionalJobPrice } from "./jobCompatibility.js";
 import { createJob } from "./jobService.js";
+import { JobServiceTypeSelect } from "./JobServiceTypeSelect.jsx";
 
 export function CreateCleaningForm({
   property = null,
@@ -16,6 +18,7 @@ export function CreateCleaningForm({
   const [selectedProperty, setSelectedProperty] = useState(property);
   const [propertySearch, setPropertySearch] = useState("");
   const [formValues, setFormValues] = useState({
+    serviceType: defaultServiceType,
     scheduledDate: "",
     scheduledStart: "11:00",
     clientPrice: property?.defaultClientPrice ?? "",
@@ -91,6 +94,7 @@ export function CreateCleaningForm({
         propertyName,
         ...(selectedProperty.clientId ? { clientId: selectedProperty.clientId } : {}),
         clientName,
+        serviceType: formValues.serviceType,
         scheduledDate: formValues.scheduledDate,
         scheduledStart: formValues.scheduledStart,
         clientPrice,
@@ -167,6 +171,8 @@ export function CreateCleaningForm({
             readOnly
           />
         </label>
+
+        <JobServiceTypeSelect value={formValues.serviceType} onChange={updateField} disabled={isSaving} />
 
         <label>
           {translate("common.date")}

@@ -12,11 +12,12 @@ vi.mock("./clientPortalService.js", () => ({
 const portal = {
   clientName: "Owner Example",
   properties: [{ id: "p1", name: "Seaside House" }],
-  coming: [{ propertyId: "p1", propertyName: "Seaside House", date: "2026-11-12", start: "14:30" }],
+  coming: [{ propertyId: "p1", propertyName: "Seaside House", date: "2026-11-12", start: "14:30", serviceType: "DEEP_CLEANING" }],
   reports: [{ jobId: "job-1", propertyId: "p1", propertyName: "Seaside House", date: "2026-11-03" }],
 };
 const report = {
-  titleKey: "clientReport.title", propertyName: "Seaside House", serviceDate: "2026-11-03", sections: [], inventoryItems: [],
+  titleKey: "clientReport.title", propertyName: "Seaside House", serviceDate: "2026-11-03", serviceType: "POST_CONSTRUCTION",
+  sections: [], inventoryItems: [],
   issueNotes: "", generalNotes: "", managerNote: "All good.", hasPhoto: true, evidence: [{ evidenceId: "photo-1" }],
   summary: { tasksDone: 3, tasksTotal: 3, tasksNotApplicable: 0, photoCount: 1, restockCount: 0 },
 };
@@ -59,6 +60,8 @@ describe("client portal page", () => {
     expect(getPublicClientPortal).toHaveBeenCalledWith("synthetic-token", { signal: expect.any(AbortSignal) });
     expect(screen.getByRole("heading", { name: "Coming cleanings" })).toBeVisible();
     expect(screen.getByText(/14:30/)).toBeVisible();
+    expect(screen.getByText("Deep cleaning")).toBeVisible();
+    expect(screen.getByText("Standard (guest turnover)")).toBeVisible();
     expect(screen.getByRole("button", { name: /Open the report for Seaside House/ })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Your properties" })).toBeVisible();
   });
@@ -67,6 +70,7 @@ describe("client portal page", () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /Open the report for Seaside House/ }));
     expect(await screen.findByText("All good.")).toBeVisible();
+    expect(screen.getByText("Post-construction")).toBeVisible();
     expect(getPublicClientPortalReport).toHaveBeenCalledWith("synthetic-token", "job-1", { signal: expect.any(AbortSignal) });
     expect(publicClientPortalPhotoUrl).toHaveBeenCalledWith("synthetic-token", "job-1", "photo-1", { thumbnail: true });
 

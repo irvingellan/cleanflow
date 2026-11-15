@@ -37,6 +37,17 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("CleanerHubApp (live data boundary)", () => {
+  it("shows the service type on the assigned card and its details", async () => {
+    const { service, handlers } = fakeService();
+    const [assigned, ...rest] = entries;
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [{ ...assigned, serviceType: "POST_CONSTRUCTION", scheduledDate: today }, ...rest], fromCache: false }));
+    const card = screen.getByRole("button", { name: /Maple Example House.*Pós-obra/ });
+    await userEvent.click(card);
+    expect(screen.getByText("Tipo de serviço")).toBeVisible();
+    expect(screen.getByText("Pós-obra")).toBeVisible();
+  });
+
   it.each([
     ["JOB", "JOB_ASSIGNED", "j1", "Maple Example House", "Abrir checklist"],
     ["OFFER", "OFFER_CREATED", "j2", "Birch Example Flat", "Tenho interesse"],

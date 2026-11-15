@@ -1,6 +1,9 @@
 import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
+import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
+import { JobServiceTypeSelect } from "./JobServiceTypeSelect.jsx";
+import { serviceTypeLabel, serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { cleanerReminderState } from "./cleanerReminderLog.js";
 import {
@@ -63,6 +66,16 @@ import {
   parseOfferCompensationInput,
 } from "./offerCompensation.js";
 import { buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
+
+function jobDetailFormValues(job) {
+  const serviceType = normalizeServiceType(job.serviceType);
+  return {
+    guestName: job.guestName || "",
+    notes: job.notes || "",
+    serviceType,
+    initialServiceType: serviceType,
+  };
+}
 
 export function JobDetail({
   job,
@@ -186,10 +199,7 @@ export function JobDetail({
   const [priceSaveError, setPriceSaveError] = useState("");
   const [hasSavedPrices, setHasSavedPrices] = useState(false);
   const [isEditingJobDetails, setIsEditingJobDetails] = useState(false);
-  const [jobDetailValues, setJobDetailValues] = useState(() => ({
-    guestName: job.guestName || "",
-    notes: job.notes || "",
-  }));
+  const [jobDetailValues, setJobDetailValues] = useState(() => jobDetailFormValues(job));
   const [isSavingJobDetails, setIsSavingJobDetails] = useState(false);
   const [jobDetailsSaveError, setJobDetailsSaveError] = useState("");
   const [hasSavedJobDetails, setHasSavedJobDetails] = useState(false);
@@ -641,10 +651,7 @@ export function JobDetail({
   }, [job.id]);
 
   useEffect(() => {
-    setJobDetailValues({
-      guestName: job.guestName || "",
-      notes: job.notes || "",
-    });
+    setJobDetailValues(jobDetailFormValues(job));
     setIsEditingJobDetails(false);
     setIsSavingJobDetails(false);
     setJobDetailsSaveError("");
@@ -683,10 +690,7 @@ export function JobDetail({
 
   function startJobDetailsEdit() {
     if (!canEditJobDetails(job)) return;
-    setJobDetailValues({
-      guestName: job.guestName || "",
-      notes: job.notes || "",
-    });
+    setJobDetailValues(jobDetailFormValues(job));
     setJobDetailsSaveError("");
     setHasSavedJobDetails(false);
     setIsEditingJobDetails(true);
@@ -697,6 +701,8 @@ export function JobDetail({
     const details = {
       guestName: jobDetailValues.guestName.trim(),
       notes: jobDetailValues.notes.trim(),
+      ...(jobDetailValues.serviceType !== jobDetailValues.initialServiceType
+        ? { serviceType: jobDetailValues.serviceType } : {}),
     };
 
     if (details.guestName.length > maximumGuestNameLength) {
@@ -709,15 +715,11 @@ export function JobDetail({
     setHasSavedJobDetails(false);
 
     try {
-      const updatedJob = await onUpdateDetails(details);
-      setJobDetailValues({
-        guestName: updatedJob?.guestName || details.guestName,
-        notes: updatedJob?.notes || details.notes,
-      });
+      await onUpdateDetails(details);
       setIsEditingJobDetails(false);
       setHasSavedJobDetails(true);
     } catch {
-      setJobDetailsSaveError(translate("jobs.detailsUpdateError"));
+      setJobDetailsSaveError(serviceTypeMessage(language, "detailsUpdateError"));
     } finally {
       setIsSavingJobDetails(false);
     }
@@ -1149,6 +1151,7 @@ export function JobDetail({
       <p className="job-detail__context">
         <span>{formatDate(job.scheduledDate, translate, language)}</span>
         {job.scheduledStart && <span>{job.scheduledStart}</span>}
+        <span>{serviceTypeLabel(language, job.serviceType)}</span>
         <span>{job.clientName || translate("common.notProvided")}</span>
       </p>
       {isCompleted && <p className="job-detail__completion">
@@ -1293,7 +1296,7 @@ export function JobDetail({
       </section>
 
 
-      <section className="job-details-edit" aria-label={translate("jobs.editDetails")}>
+      <section className="job-details-edit" aria-label={serviceTypeMessage(language, "editDetails")}>
         {!isEditingJobDetails && (
           <>
             <button
@@ -1302,7 +1305,7 @@ export function JobDetail({
               disabled={!canEditJobDetails(job)}
               onClick={startJobDetailsEdit}
             >
-              {translate("jobs.editDetails")}
+              {serviceTypeMessage(language, "editDetails")}
             </button>
             {!canEditJobDetails(job) && (
               <p className="form-hint">{translate("jobs.detailsReadOnlyHistorical")}</p>
@@ -1310,10 +1313,12 @@ export function JobDetail({
           </>
         )}
         {hasSavedJobDetails && !isEditingJobDetails && (
-          <p className="form-success" role="status">{translate("jobs.detailsSaved")}</p>
+          <p className="form-success" role="status">{serviceTypeMessage(language, "detailsSaved")}</p>
         )}
         {isEditingJobDetails && (
           <form className="cleaning-form" noValidate onSubmit={saveJobDetails}>
+            <JobServiceTypeSelect value={jobDetailValues.serviceType} disabled={isSavingJobDetails}
+              onChange={(event) => setJobDetailValues((current) => ({ ...current, serviceType: event.target.value }))} />
             <label>
               {translate("jobs.guestName")}
               <input
@@ -1348,7 +1353,7 @@ export function JobDetail({
                 onClick={() => {
                   setIsEditingJobDetails(false);
                   setJobDetailsSaveError("");
-                  setJobDetailValues({ guestName: job.guestName || "", notes: job.notes || "" });
+                  setJobDetailValues(jobDetailFormValues(job));
                 }}
               >
                 {translate("common.cancel")}

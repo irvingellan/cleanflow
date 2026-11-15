@@ -4,6 +4,7 @@ import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
 import { formatChecklistInventoryAnswer, withChecklistInventoryMessages } from "../../i18n/checklistInventoryMessages.js";
 import { formatDate } from "../../lib/presentation.js";
+import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
 import { getPublicClientReport, publicClientReportPhotoUrl } from "./clientReportService.js";
 
 function textFor(entry, translate) {
@@ -117,6 +118,7 @@ export function ClientReportView({ token, report, isLoading, errorKind, onRetry,
             <p className="client-report__badge">{translate("clientReport.completedBadge")}</p>
             <h1 id="client-report-title" className="panel__title">{translate(report.titleKey || "clientReport.title")}</h1>
             {report.propertyName && <p className="client-report__property">{report.propertyName}</p>}
+            <p className="public-checklist__context">{serviceTypeLabel(language, report.serviceType)}</p>
             {report.serviceDate && <p className="public-checklist__context">{formatDate(report.serviceDate, translate, language)}</p>}
           </div>
           <div className="client-report__header-actions">

@@ -238,6 +238,10 @@
   white-space: nowrap;
 }
 
+.cf-job-row .job-card__summary .job-card__type {
+  white-space: normal;
+}
+
 .cf-job-row .compact-lifecycle {
   min-width: 0;
 }
