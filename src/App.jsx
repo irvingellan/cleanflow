@@ -80,6 +80,7 @@ import { useManagerPageLoadTelemetry } from "./features/telemetry/useManagerPage
 import { ManagerPageLoadDiagnostics } from "./features/telemetry/ManagerPageLoadDiagnostics.jsx";
 import { WeeklyClosePreview } from "./features/weekly-close/WeeklyClosePreview.jsx";
 import { CleanerAgendaView } from "./features/cleaner-agenda/CleanerAgendaView.jsx";
+import { CleanerAlertsView } from "./features/cleaner-alerts/CleanerAlertsView.jsx";
 import { DeveloperEnvironmentControls } from "./components/EnvironmentBanner.jsx";
 import {
   formatCreatedAt,
@@ -913,6 +914,13 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
     setView("cleaner-agenda");
   }
 
+  function showCleanerAlerts() {
+    setActiveSection("cleaners");
+    clearProperty();
+    closeJobDetail();
+    setView("cleaner-alerts");
+  }
+
   function openCleanerAgendaJob(job) {
     setJobDetailInitialFocus(null);
     setActiveSection("cleaners");
@@ -1315,10 +1323,12 @@ function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut
             showExcluded={showExcludedRecords}
             onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
             onAgenda={showCleanerAgenda}
+            onAlerts={showCleanerAlerts}
           />
         )}
 
         {view === "cleaner-agenda" && <CleanerAgendaView onBack={showCleaners} onOpenJob={openCleanerAgendaJob} />}
+        {view === "cleaner-alerts" && <CleanerAlertsView onBack={showCleaners} onOpenCleaner={openCleaner} />}
 
         {view === "payout-list" && (
           <PayoutDirectory

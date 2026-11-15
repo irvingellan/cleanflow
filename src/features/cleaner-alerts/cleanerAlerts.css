@@ -1,0 +1,21 @@
+.cleaner-alerts { min-width: 0; }
+.cleaner-alerts__summary { margin: 4px 0 16px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--cf-border); background: var(--cf-surface-subtle); font-weight: 600; }
+.cleaner-alerts__summary--done { border-color: var(--cf-brand); }
+.cleaner-alerts__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.cleaner-alerts__row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr) auto; align-items: center; gap: 8px 16px; padding: 14px 16px; border: 1px solid var(--cf-border); border-radius: 12px; background: var(--cf-surface); }
+.cleaner-alerts__who { display: grid; gap: 4px; min-width: 0; }
+.cleaner-alerts__who strong { overflow-wrap: anywhere; }
+.cleaner-alerts__state { justify-self: start; font-size: var(--cf-text-sm); font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--cf-border); color: var(--cf-text-secondary); }
+.cleaner-alerts__state--ready { border-color: var(--cf-brand); color: var(--cf-brand-text); }
+.cleaner-alerts__state--no-app, .cleaner-alerts__state--alerts-off, .cleaner-alerts__state--no-device { border-color: var(--color-warning-border, var(--cf-border)); color: var(--color-warning-text, var(--cf-text)); }
+.cleaner-alerts__next { margin: 0; color: var(--cf-text-secondary); font-size: var(--cf-text-sm); }
+.cleaner-alerts__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.cleaner-alerts__actions .button { min-height: 40px; text-decoration: none; }
+.cleaner-alerts__hint, .cleaner-alerts__privacy { color: var(--cf-text-secondary); font-size: var(--cf-text-sm); }
+.cleaner-alerts__privacy { margin-top: 14px; }
+.cleaner-alerts__error { grid-column: 1 / -1; margin: 0; color: var(--color-danger-text, var(--cf-text)); font-weight: 600; }
+
+@media (max-width: 720px) {
+  .cleaner-alerts__row { grid-template-columns: minmax(0, 1fr); }
+  .cleaner-alerts__actions { justify-content: flex-start; }
+}

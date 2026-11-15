@@ -7,6 +7,7 @@ import { useTranslation } from "../../i18n/translations.js";
 import { preferredLanguageLabel } from "./cleanerPresentation.js";
 import { filterCleanersByName } from "./cleanerSearch.js";
 import { agendaText } from "../cleaner-agenda/cleanerAgendaMessages.js";
+import { alertsText } from "../cleaner-alerts/cleanerAlertsMessages.js";
 
 function InformationIcon({ name }) {
   if (name === "phone") {
@@ -25,7 +26,7 @@ function InformationIcon({ name }) {
   );
 }
 
-export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded, onAgenda }) {
+export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCreate, canManageExcluded, showExcluded, onToggleExcluded, onAgenda, onAlerts }) {
   const { language, translate } = useTranslation();
   const [search, setSearch] = useState("");
 
@@ -54,6 +55,10 @@ export function CleanerDirectory({ cleaners, isLoading, hasError, onSelect, onCr
           {onAgenda && <button className="button button--secondary" type="button" onClick={onAgenda}>
             <Icon name="calendar" size={18} />
             {agendaText(language, "open")}
+          </button>}
+          {onAlerts && <button className="button button--secondary" type="button" onClick={onAlerts}>
+            <Icon name="bell" size={18} />
+            {alertsText(language, "open")}
           </button>}
           {canManageExcluded && <button className="button button--small" type="button" onClick={onToggleExcluded}>{translate(showExcluded ? "archive.hideExcluded" : "archive.showExcluded")}</button>}
           <button className="button button--primary" type="button" onClick={onCreate}>
