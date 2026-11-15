@@ -1,11 +1,9 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { getApps, initializeApp } from "firebase-admin/app";
+import { randomUUID } from "node:crypto";
 import { getAuth } from "firebase-admin/auth";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
+import { FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { defineSecret, defineString, projectID } from "firebase-functions/params";
+import { projectID } from "firebase-functions/params";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -126,36 +124,25 @@ import {
   managerReminderProvider,
   requireAvailablePilotReminderTransport,
 } from "./managerReminderTransport.js";
+import {
+  devCenterDeveloperUids,
+  devCenterSandboxProjectId,
+  githubFeedbackToken,
+  managerReminderProviderParam,
+} from "./runtime/params.js";
+import { db, emulatorPushDisabled, isWarmupCall, liveMessaging, organizationId } from "./runtime/firebase.js";
+import {
+  configureResponse,
+  hashToken,
+  newChecklistCapabilityToken,
+  sendPublicError,
+  validToken,
+} from "./runtime/publicHttp.js";
 
 // Approved Node22 Policy B; preserve unspecified live configuration.
 setGlobalOptions({ preserveExternalChanges: true, maxInstances: 20 });
 
-// A client wakes a cold Function ahead of need (see src/services/firebase/functionWarmup.js).
-// Checked after authorization, so it only confirms the caller and returns nothing.
-function isWarmupCall(request) {
-  return request.data?.warmup === true;
-}
-
-if (getApps().length === 0) {
-  initializeApp();
-}
-
-const db = getFirestore();
-
-function emulatorPushDisabled() {
-  return process.env.FUNCTIONS_EMULATOR === "true" || Boolean(process.env.FIRESTORE_EMULATOR_HOST);
-}
-
-function liveMessaging() {
-  if (emulatorPushDisabled()) {
-    throw new HttpsError("unavailable", "Push transport is disabled in emulators.");
-  }
-  return getMessaging();
-}
-const organizationId = "cleanflow-demo";
-const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
 const supportedCleanerLanguages = new Set(["en", "pt", "es"]);
-const githubFeedbackToken = defineSecret("GITHUB_FEEDBACK_TOKEN");
 const githubFeedbackRepository = "irvingellan/cleanflow";
 const feedbackMessageLimit = 3000;
 const feedbackTypes = {
@@ -163,21 +150,6 @@ const feedbackTypes = {
   bug: "Problem / Bug",
   other: "Other",
 };
-const devCenterDeveloperUids = defineSecret("DEV_CENTER_DEVELOPER_UIDS");
-const devCenterSandboxProjectId = defineString("DEV_CENTER_SANDBOX_PROJECT_ID", { default: "" });
-const managerReminderProviderParam = defineString("MANAGER_REMINDER_PROVIDER", { default: "fcm" });
-
-function hashToken(token) {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function validToken(token) {
-  return typeof token === "string" && tokenPattern.test(token);
-}
-
-function newChecklistCapabilityToken() {
-  return randomBytes(32).toString("base64url");
-}
 
 function allowedDeveloperUids() {
   return developerUidsFromSecret(devCenterDeveloperUids.value());
@@ -500,21 +472,6 @@ export const clearDevCenterData = onCall(
     return result;
   },
 );
-
-function configureResponse(response) {
-  response.set("Cache-Control", "no-store, private");
-  response.set("Referrer-Policy", "no-referrer");
-  response.set("X-Content-Type-Options", "nosniff");
-}
-
-function sendPublicError(response, status, error, diagnostics = null, requirements = null) {
-  configureResponse(response);
-  response.status(status).json({
-    error,
-    ...(diagnostics ? { diagnostics } : {}),
-    ...(requirements ? { requirements } : {}),
-  });
-}
 
 function publicChecklistPhotoErrorCategory(error, stage) {
   if (stage === "storage-write") return "storage_write_failed";
