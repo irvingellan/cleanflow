@@ -5,8 +5,10 @@ import { useTranslation } from "../../i18n/translations.js";
 import { classifyLatency, consoleLinks, describeBuild, measuredFunctions } from "./systemStatus.js";
 import { statusText } from "./systemStatusMessages.js";
 
-async function readVersion() {
-  const response = await fetch("/version.json", { cache: "no-store" });
+const versionReadDeadlineMs = 15_000;
+
+async function readVersion(signal) {
+  const response = await fetch("/version.json", { cache: "no-store", signal });
   if (!response.ok) throw new Error(`version.json ${response.status}`);
   return response.json();
 }
@@ -32,8 +34,21 @@ export function SystemStatusPanel({ loadVersion = readVersion, measure = timeWar
 
   useEffect(() => {
     let current = true;
-    loadVersion().then((value) => { if (current) setVersion(value); }).catch(() => { if (current) setVersionError(true); });
-    return () => { current = false; };
+    const controller = new AbortController();
+    const deadline = setTimeout(() => {
+      current = false;
+      controller.abort();
+      setVersionError(true);
+    }, versionReadDeadlineMs);
+    loadVersion(controller.signal)
+      .then((value) => { if (current) setVersion(value); })
+      .catch(() => { if (current) setVersionError(true); })
+      .finally(() => clearTimeout(deadline));
+    return () => {
+      current = false;
+      clearTimeout(deadline);
+      controller.abort();
+    };
   }, [loadVersion]);
 
   async function runMeasurement() {
