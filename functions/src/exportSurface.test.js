@@ -17,7 +17,6 @@ describe("Functions export surface", () => {
       .sort();
     expect(helpers).toMatchInlineSnapshot(`
       [
-        "processManagerReminderWindow",
         "publicOfferResult",
       ]
     `);
