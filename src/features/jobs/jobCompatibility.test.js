@@ -35,6 +35,15 @@ describe("Job compatibility", () => {
     expect(canEditJobDetails({ operationalStatus: "ASSIGNED", archivedAt: { seconds: 1 } })).toBe(false);
   });
 
+  it("accepts a known service type for creation and editing, and rejects invalid writes", () => {
+    expect(buildCurrentJobCreateData({ serviceType: "POST_CONSTRUCTION" }))
+      .toHaveProperty("serviceType", "POST_CONSTRUCTION");
+    expect(buildJobDetailsUpdate({ serviceType: "MOVE_IN_OUT" }))
+      .toHaveProperty("serviceType", "MOVE_IN_OUT");
+    expect(() => buildCurrentJobCreateData({ serviceType: "custom" })).toThrow("Unknown Job service type.");
+    expect(() => buildJobDetailsUpdate({ serviceType: null })).toThrow("Unknown Job service type.");
+  });
+
   it("keeps versionless legacy singular-cleaner and payout fields readable", () => {
     const legacyJob = normalizeJobRecord({
       assignedCleanerId: "cleaner-1",
@@ -53,6 +62,7 @@ describe("Job compatibility", () => {
       cleanerPayout: 150,
       payoutId: "payout-1",
       operationalStatus: "COMPLETED",
+      serviceType: "STANDARD",
     });
   });
 
@@ -106,6 +116,7 @@ describe("Job compatibility", () => {
       operationalStatus: "UNASSIGNED",
       assignedCleanerIds: [],
       checklistContextRevision: 0,
+      serviceType: "STANDARD",
     });
     expect(job).not.toHaveProperty("clientId");
     expect(job).not.toHaveProperty("guestName");

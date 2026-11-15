@@ -8,8 +8,9 @@ import { syntheticChecklistPng } from "./syntheticChecklistImages.mjs";
 // Fail before loading Admin SDK/handlers unless all access is explicitly local and disposable.
 const firestorePort = Number(process.env.CLEANFLOW_SECURITY_FIRESTORE_PORT || 8080);
 const storagePort = Number(process.env.CLEANFLOW_SECURITY_STORAGE_PORT || 9199);
-assert.ok([8080, 18080].includes(firestorePort));
-assert.ok([9199, 19199].includes(storagePort));
+for (const port of [firestorePort, storagePort]) {
+  assert.ok(Number.isInteger(port) && port > 0 && port <= 65_535);
+}
 for (const [variable, expected] of Object.entries({
   GCLOUD_PROJECT: "demo-cleanflow",
   FIRESTORE_EMULATOR_HOST: `127.0.0.1:${firestorePort}`,
@@ -134,6 +135,34 @@ test("only an active manager can update Job price snapshots without changing che
 
   await assertSucceeds(managerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
   await assertFails(cleanerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
+});
+
+test("only a manager can write a known Job service type without changing the checklist access revision", async () => {
+  const jobs = account("manager").firestore().collection(`${root}/jobs`);
+  const legacy = jobs.doc("job");
+  await assertSucceeds(legacy.update({ notes: "Synthetic note" }));
+  assert.equal((await legacy.get()).data().serviceType, undefined);
+
+  for (const serviceType of ["STANDARD", "DEEP_CLEANING", "MOVE_IN_OUT", "POST_CONSTRUCTION"]) {
+    const created = jobs.doc();
+    await assertSucceeds(created.set({ organizationId: org, serviceType }));
+    await assertSucceeds(legacy.update({ serviceType }));
+  }
+  assert.equal((await legacy.get()).data().checklistContextRevision, undefined);
+  const existing = jobs.doc("typed");
+  await assertSucceeds(existing.set({ organizationId: org, serviceType: "DEEP_CLEANING", checklistContextRevision: 0 }));
+  await assertSucceeds(existing.update({ serviceType: "POST_CONSTRUCTION" }));
+  assert.equal((await existing.get()).data().checklistContextRevision, 0);
+
+  for (const serviceType of ["OTHER", null, 1, ["STANDARD"]]) {
+    await assertFails(jobs.doc().set({ organizationId: org, serviceType }));
+    await assertFails(legacy.update({ serviceType }));
+  }
+  for (const uid of ["cleaner", "other-manager", "inactive"]) {
+    const inaccessibleJobs = account(uid).firestore().collection(`${root}/jobs`);
+    await assertFails(inaccessibleJobs.doc("job").update({ serviceType: "STANDARD" }));
+    await assertFails(inaccessibleJobs.doc().set({ organizationId: org, serviceType: "STANDARD" }));
+  }
 });
 
 test("manager browser cannot complete a Job directly even with the correct context revision", async () => {

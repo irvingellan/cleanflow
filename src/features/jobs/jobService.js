@@ -611,6 +611,7 @@ export async function createJob({
   cleanerPayout,
   notes,
   guestName,
+  serviceType,
 }) {
   const job = buildCurrentJobCreateData({
     organizationId,
@@ -624,6 +625,7 @@ export async function createJob({
     cleanerPayout,
     notes,
     guestName,
+    serviceType,
   });
   const jobDocument = await addDoc(
     jobsCollection(),
@@ -656,7 +658,7 @@ export async function updateJobPrices(jobId, { clientPrice, cleanerPayout }) {
 }
 
 export async function updateJobDetails(jobId, details) {
-  const normalizedDetails = buildJobDetailsUpdate(details);
+  const { guestName, notes, ...updates } = buildJobDetailsUpdate(details);
   const reference = jobDocument(jobId);
 
   await runTransaction(db, async (transaction) => {
@@ -668,8 +670,9 @@ export async function updateJobDetails(jobId, details) {
       throw error;
     }
     transaction.update(reference, {
-      guestName: normalizedDetails.guestName ?? deleteField(),
-      notes: normalizedDetails.notes ?? deleteField(),
+      ...updates,
+      guestName: guestName ?? deleteField(),
+      notes: notes ?? deleteField(),
     });
   });
 
