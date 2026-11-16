@@ -44,9 +44,14 @@ function renderAt(url) {
   return render(<TranslationProvider><App /></TranslationProvider>);
 }
 
+// The manager session hook lives in ManagerRoot: public URLs never call it.
 function expectManagerSessionEnabled(expected) {
+  if (!expected) {
+    expect(useInitialManagerSession).not.toHaveBeenCalled();
+    return;
+  }
   expect(useInitialManagerSession).toHaveBeenCalled();
-  for (const [enabled] of useInitialManagerSession.mock.calls) expect(enabled).toBe(expected);
+  for (const [enabled] of useInitialManagerSession.mock.calls) expect(enabled).toBe(true);
 }
 
 beforeEach(() => { vi.clearAllMocks(); });
