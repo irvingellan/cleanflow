@@ -12,6 +12,10 @@ build marker, and prints a sorted SHA-256 file manifest. The manifest is saved
 outside the published directory at gitignored
 `.firebase/hosting-prepared-manifest.json`. Failed preparation must stop a release.
 Only tracked `public` assets and the current Vite-generated output are allowed.
+The generated output is the entry bundle (`assets/main-*.js`), one stylesheet
+(`assets/main-*.css`), the pinned Inter fonts, and any code-split JavaScript chunk
+that a reviewed script names. A script in `assets/` that nothing references, or a
+second stylesheet, stops the preparation.
 An intentional build-output change requires updating this allowlist.
 
 This command never deploys. Deployment remains a separately approved action.

@@ -5,6 +5,9 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const hostingBundleAsset = /^assets\/(?:index|main)-[A-Za-z0-9_-]+\.(js|css)$/;
+// Code-split JavaScript emitted next to the entry bundle. A chunk is accepted only when a
+// reviewed script names it, so a stray script can never ride along. CSS stays one entry file.
+export const hostingChunkAsset = /^assets\/[A-Za-z0-9_-]+\.js$/;
 // Emitted by Vite from @fontsource-variable/inter 5.2.8's wght.css.
 // Pin both the emitted paths and the SHA-256 of the reviewed package bytes.
 const interFonts = new Map([
@@ -36,6 +39,21 @@ export function inspectHostingFonts(dist, files) {
   return declared;
 }
 
+export function inspectHostingChunks(dist, files) {
+  const scripts = files.filter((name) => hostingChunkAsset.test(name));
+  const reached = new Set(scripts.filter((name) => hostingBundleAsset.test(name)));
+  const pending = [...reached];
+  while (pending.length) {
+    const source = fs.readFileSync(path.join(dist, pending.pop()), "utf8");
+    for (const name of scripts) {
+      if (reached.has(name) || !source.includes(name.slice("assets".length))) continue;
+      reached.add(name);
+      pending.push(name);
+    }
+  }
+  return reached;
+}
+
 export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBinding, { removeFinderMetadata = true } = {}) {
   const files = [];
   function walk(directory, prefix = "") {
@@ -53,11 +71,12 @@ export function inspectHostingBuild(dist, expectedSha, publicFiles, expectedBind
   }
   walk(dist);
   const fonts = inspectHostingFonts(dist, files);
+  const scripts = inspectHostingChunks(dist, files);
   const required = [...publicFiles, "index.html", "agenda.html", "version.json", "sw.js", "firebase-messaging-sw.js"];
   // Builds on the previous source line do not emit the optional cleaner worker.
   const allowed = new Set([...required, "cleaner-messaging-sw.js"]);
   for (const file of files) {
-    if (!allowed.has(file) && !fonts.has(file) && !hostingBundleAsset.test(file)) {
+    if (!allowed.has(file) && !fonts.has(file) && !hostingBundleAsset.test(file) && !scripts.has(file)) {
       throw new Error(`Unexpected Hosting file: ${file}`);
     }
     if (file.split("/").some(part => part.startsWith(".")) || /(?:\.tmp|\.temp|\.swp|\.swo|~)$/.test(file)) {
