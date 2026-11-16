@@ -18,6 +18,12 @@
   deployment notes below describe their original checkpoints.
 <!-- cleanflow-engineering:end -->
 
+## Refactor Phase 2 — one bundle per entry (2026-11-16, not published)
+
+- `App.jsx` loads one lazy entry per URL (manager, cleaner agenda, public offer, public checklist, client report, client portal, checklist preview), so a cleaner or a client no longer downloads the manager application. Sizes are in [the refactor baseline](performance/REFACTOR_BASELINE.md).
+- The HTML startup fallback stays visible until the entry has rendered. A failed entry chunk shows the same recovery message and retry button as a failed startup; nothing inside the manager application is lazy.
+- Module preload is off in the build, because WebKit never retried a module whose preload had failed. Verified in Chromium and Playwright WebKit, not on a physical iPhone.
+
 ## P0 startup reliability — GitHub candidate (2026-11-11)
 
 This candidate started at verified live source `0f9735f` and is based on
