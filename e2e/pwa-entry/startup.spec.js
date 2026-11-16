@@ -231,3 +231,40 @@ test("denied language preference storage cannot prevent the manager entry from o
   await expect(page.locator("#cleanflow-startup")).toBeHidden();
   expect(await trace(page)).toContain("react_mounted");
 });
+
+// Each audience loads its own entry chunk after the shared bundle. Hosting answers a
+// missing chunk with the HTML rewrite, so both a network failure and HTML are covered.
+for (const [path, chunk, ready] of [
+  ["/", /\/assets\/ManagerRoot-[\w-]+\.js$/, 'input[name="email"]'],
+  // On an iPhone the Hub opens on its install guide, so wait for the Hub itself.
+  ["/agenda", /\/assets\/CleanerHubApp-[\w-]+\.js$/, ".cleaner-hub-live"],
+]) {
+  for (const failure of ["aborted", "html"]) {
+    test(`shows the startup recovery when the ${path} entry chunk fails (${failure}) and opens after retry`, async ({ page }) => {
+      let recovered = false;
+      let blocked = 0;
+      await page.route(chunk, (route) => {
+        if (recovered) return route.continue();
+        blocked += 1;
+        return failure === "aborted" ? route.abort("failed") : route.fulfill({
+          status: 200, contentType: "text/html", headers: { "Cache-Control": "no-store" },
+          body: "<!doctype html><title>Wrong asset</title>",
+        });
+      });
+      await page.goto(path);
+      await expect(retryButton(page)).toBeVisible();
+      await expect(page.locator("[data-startup-alert]")).toBeVisible();
+      await expect(page.locator("[data-startup-pending]")).toBeHidden();
+      await expect(page.locator(ready)).toBeHidden();
+      expect(blocked).toBeGreaterThan(0);
+      expect(await trace(page)).toContain("render_error");
+      expect(await trace(page)).not.toContain("react_mounted");
+
+      recovered = true;
+      await retryButton(page).click();
+      await expect(page.locator(ready)).toBeVisible();
+      await expect(page.locator("#cleanflow-startup")).toBeHidden();
+      expect(await trace(page)).toContain("manual_reload");
+    });
+  }
+}

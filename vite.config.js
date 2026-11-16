@@ -344,6 +344,9 @@ export default defineConfig(({ mode }) => {
       __CLEANFLOW_BUILD_ID__: JSON.stringify(buildInfo.deploymentId || buildInfo.buildId),
     },
     build: {
+      // Safari keeps a failed module preload for the whole tab, so a lazy entry chunk that
+      // failed once would never load again on retry. Entry chunks load by import() alone.
+      modulePreload: false,
       rolldownOptions: {
         input: {
           index: path.resolve(import.meta.dirname, 'index.html'),
