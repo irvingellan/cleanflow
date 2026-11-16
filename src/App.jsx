@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { appVersion } from "./appVersion.js";
+import {
+  isChecklistPreviewPath,
+  isCleanerHubPath,
+  isManagerLoadDiagnosticsPath,
+  isWeeklyClosePreviewPath,
+  publicChecklistTokenFromSearch,
+  publicClientPortalTokenFromSearch,
+  publicClientReportTokenFromSearch,
+  publicOfferTokenFromPathname,
+} from "./app/entryRoute.js";
 import { AppShell } from "./components/shell/AppShell.jsx";
 import { useMediaQuery } from "./components/shell/useMediaQuery.js";
 import { Icon } from "./components/Icon.jsx";
@@ -103,64 +113,7 @@ const content = {
   unnamedProperty: "Unnamed property",
 };
 
-function publicOfferTokenFromPathname(pathname = window.location.pathname) {
-  const pathSegments = pathname.split("/").filter(Boolean);
-
-  if (pathSegments[0] !== "offer") {
-    return null;
-  }
-
-  if (pathSegments.length !== 2) {
-    return "";
-  }
-
-  try {
-    return decodeURIComponent(pathSegments[1]);
-  } catch {
-    return "";
-  }
-}
-
-function isChecklistPreviewPath(pathname = window.location.pathname) {
-  return pathname.replace(/\/+$/, "") === "/checklist-preview";
-}
-
-export function isCleanerHubPath(pathname = window.location.pathname) {
-  const route = pathname.replace(/\/+$/, "");
-  return route === "/agenda" || route === "/agenda.html";
-}
-
-function isWeeklyClosePreviewPath(pathname = window.location.pathname) {
-  return pathname.replace(/\/+$/, "") === "/weekly-close-preview";
-}
-
-function isManagerLoadDiagnosticsPath(pathname = window.location.pathname) {
-  return pathname.replace(/\/+$/, "") === "/diagnostics/load-times";
-}
-
-function publicChecklistTokenFromSearch(
-  pathname = window.location.pathname,
-  search = window.location.search,
-) {
-  if (pathname.replace(/\/+$/, "") !== "/checklist") return null;
-  return new URLSearchParams(search).get("t") || "";
-}
-
-function publicClientReportTokenFromSearch(
-  pathname = window.location.pathname,
-  search = window.location.search,
-) {
-  if (pathname.replace(/\/+$/, "") !== "/client-report") return null;
-  return new URLSearchParams(search).get("t") || "";
-}
-
-function publicClientPortalTokenFromSearch(
-  pathname = window.location.pathname,
-  search = window.location.search,
-) {
-  if (pathname.replace(/\/+$/, "") !== "/portal") return null;
-  return new URLSearchParams(search).get("t") || "";
-}
+export { isCleanerHubPath };
 
 function App() {
   const publicOfferToken = publicOfferTokenFromPathname();
