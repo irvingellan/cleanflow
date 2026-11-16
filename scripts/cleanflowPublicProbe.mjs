@@ -35,6 +35,7 @@ function readEntryHtml(html, manifest) {
   const assets = new Map();
   let correctManifest = false;
   let hasEntry = false;
+  let moduleScripts = 0;
   for (const match of html.matchAll(/<(script|link)\b([^>]+)>/gi)) {
     const [, tag, attributes] = match;
     const attrs = new Map(Array.from(attributes.matchAll(/([\w-]+)\s*=\s*(["'])(.*?)\2/g), ([, key, , value]) => [key.toLowerCase(), value]));
@@ -46,13 +47,15 @@ function readEntryHtml(html, manifest) {
     const path = attrs.get(entry ? "src" : "href") || "";
     const extension = rel === "stylesheet" ? "css" : "js";
     if (!browserAsset.test(path) || !path.endsWith(`.${extension}`)) return { issue: "UNEXPECTED_ASSET_REFERENCE" };
+    // A code-split build lists the shared chunks of the entry as module scripts next to it.
     if (entry) {
-      if (!hostingBundleAsset.test(path.slice(1))) return { issue: "UNEXPECTED_ENTRY_REFERENCE" };
-      hasEntry = true;
+      moduleScripts += 1;
+      hasEntry ||= hostingBundleAsset.test(path.slice(1));
     }
     assets.set(path, extension);
     if (assets.size > 24) return { issue: "TOO_MANY_ENTRY_ASSETS" };
   }
+  if (moduleScripts && !hasEntry) return { issue: "UNEXPECTED_ENTRY_REFERENCE" };
   if (!correctManifest || !hasEntry || ![...assets.values()].includes("css")) {
     return { issue: "ENTRY_MARKUP_INCOMPLETE" };
   }

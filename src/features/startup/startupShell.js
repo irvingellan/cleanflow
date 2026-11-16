@@ -118,7 +118,7 @@
 
       const asset = new URL(source, location.href);
       if (asset.origin !== location.origin || asset.search || asset.hash
-        || !/^\/assets\/(?:index|main)-[\w-]+\.(?:js|css)$/.test(asset.pathname)) return;
+        || !/^\/assets\/[\w-]+\.(?:js|css)$/.test(asset.pathname)) return;
       const available = await fetch(asset.pathname, { ...options, method: "HEAD" });
       const mime = available.headers.get("content-type") || "";
       const correctMime = asset.pathname.endsWith(".css")

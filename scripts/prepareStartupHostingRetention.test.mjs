@@ -22,11 +22,13 @@ function writeJson(file, data) {
   return hash(bytes);
 }
 
-function build(directory, sha, asset, { cleanerWorker = "same-cleaner" } = {}) {
+function build(directory, sha, asset, { cleanerWorker = "same-cleaner", chunks = false, entry = `main-${asset}` } = {}) {
   const dist = join(directory, "assets-U");
   mkdirSync(join(dist, "assets"), { recursive: true });
   mkdirSync(join(dist, "onesignal"));
-  const body = `<script type="module" src="/assets/main-${asset}.js"></script><link rel="stylesheet" href="/assets/main-${asset}.css">`;
+  // Vite lists a shared chunk of the entry as a second module script.
+  const shared = chunks ? `<script type="module" src="/assets/shared-${asset}.js"></script>` : "";
+  const body = `${shared}<script type="module" src="/assets/${entry}.js"></script><link rel="stylesheet" href="/assets/main-${asset}.css">`;
   const files = {
     "index.html": `<!-- ${sha} manager -->${body}`,
     "agenda.html": `<!-- ${sha} agenda -->${body}`,
@@ -34,7 +36,9 @@ function build(directory, sha, asset, { cleanerWorker = "same-cleaner" } = {}) {
     "firebase-messaging-sw.js": "same-manager",
     "cleaner-messaging-sw.js": cleanerWorker,
     "onesignal/OneSignalSDKWorker.js": "same-onesignal",
-    [`assets/main-${asset}.js`]: `export default "${sha}";`,
+    [`assets/main-${asset}.js`]: chunks
+      ? `import "./shared-${asset}.js"; import("./ManagerRoot-${asset}.js"); export default "${sha}";` : `export default "${sha}";`,
+    ...(chunks ? { [`assets/shared-${asset}.js`]: `/* shared ${sha} */`, [`assets/ManagerRoot-${asset}.js`]: `/* manager ${sha} */` } : {}),
     [`assets/main-${asset}.css`]: `/* ${sha} */`,
   };
   for (const [file, contents] of Object.entries(files)) writeFileSync(join(dist, file), contents);
@@ -64,9 +68,10 @@ function fixture(t, options = {}) {
   const olderReview = join(root, "older");
   const older = build(olderReview, olderSha, "older");
   const olderBinding = publication(olderReview, older, "c".repeat(16));
-  const baseline = build(baselineReview, baselineSha, "baseline");
+  const baseline = build(baselineReview, baselineSha, "baseline", options.baseline);
   publication(baselineReview, baseline, baselineVersion, olderBinding);
-  const candidate = build(join(root, "candidate"), candidateSha, options.collision ? "baseline" : "candidate", options);
+  const candidate = build(join(root, "candidate"), candidateSha, options.collision ? "baseline" : "candidate",
+    { cleanerWorker: options.cleanerWorker, ...options.candidate });
   const args = { candidateDist: candidate.dist, candidateManifest: candidate.manifest, candidateSha,
     baselineReview, baselineVersion, olderReview, out: join(root, "prepared") };
   return { args, candidate, baseline, older, prepare: () => prepareStartupHostingRetention(args, () => publicFiles) };
@@ -91,6 +96,37 @@ test("preserves both sets of entry files and adds only hashed assets to each var
       assert.equal(hash(readFileSync(join(args.out, variant, file))), sha256);
     }
   }
+});
+
+test("retains the lazy chunks of both generations when a build is code-split", (t) => {
+  const { args, prepare } = fixture(t, { baseline: { chunks: true }, candidate: { chunks: true } });
+  const result = prepare();
+  // Entry JS, CSS and two chunks from the other generation, plus the older single-bundle pair.
+  assert.equal(result.forwardRetained, 6);
+  assert.equal(result.rollbackRetained, 6);
+  for (const [variant, own, other] of [["forward", "candidate", "baseline"], ["rollback", "baseline", "candidate"]]) {
+    for (const asset of [own, other]) {
+      for (const file of [`main-${asset}.js`, `shared-${asset}.js`, `ManagerRoot-${asset}.js`]) {
+        assert.equal(existsSync(join(args.out, variant, "assets", file)), true, `${variant} keeps ${file}`);
+      }
+    }
+    assert.match(readFileSync(join(args.out, variant, "index.html"), "utf8"), new RegExp(`src="/assets/main-${own}\\.js"`));
+  }
+});
+
+test("moves between a single bundle and a code-split build in both directions", (t) => {
+  const { args, prepare } = fixture(t, { candidate: { chunks: true } });
+  const result = prepare();
+  assert.equal(result.forwardRetained, 4);
+  assert.equal(result.rollbackRetained, 6);
+  assert.equal(existsSync(join(args.out, "rollback/assets/ManagerRoot-candidate.js")), true);
+  assert.equal(existsSync(join(args.out, "forward/assets/main-baseline.js")), true);
+});
+
+test("rejects an entry script that is not the reviewed entry bundle", (t) => {
+  const { args, prepare } = fixture(t, { candidate: { chunks: true, entry: "ManagerRoot-candidate" } });
+  assert.throws(prepare, /entry points outside its reviewed JS and CSS/);
+  assert.equal(existsSync(args.out), false);
 });
 
 test("rejects the same asset path with different bytes before creating output", (t) => {
