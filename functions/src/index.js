@@ -1,4 +1,3 @@
-import { getAuth } from "firebase-admin/auth";
 import { logger } from "firebase-functions";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -7,26 +6,15 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { resolveDevCenterEnvironment } from "./devCenterSafety.js";
 import { requireOrganizationManager } from "./managerAuthorization.js";
 import { syncCleanerAgendaForJob } from "./cleanerAgenda.js";
-import { loadCleanerJobAccess } from "./cleanerJobAccess.js";
 import { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } from "./cleanerNotificationEvents.js";
-import { changeNotificationInboxItemForRequest, listNotificationInboxForRequest } from "./notificationInbox.js";
 import { deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice } from "./cleanerPushDevices.js";
 import { awaitCleanerPushTest, cleanerPushOverview, requestCleanerPushTest } from "./cleanerPushTest.js";
 import { processCleanerNotification } from "./cleanerPushDelivery.js";
 import { resolveCleanerPushMode } from "./cleanerPushPilot.js";
 import {
-  issueCleanerAccessCodeForManager,
-  openChecklistForCleaner,
-  redeemCleanerAccessCode as redeemCleanerAccessCodeService,
   requireActiveCleaner,
-  respondToOfferForCleaner,
-  revokeCleanerHubAccessForManager,
 } from "./cleanerHubAccess.js";
 import { isAutomaticOfferJob } from "./firstAcceptWins.js";
-import {
-  initialChecklistRunId,
-} from "./checklistRunService.js";
-import { respondToRescheduleForCleaner } from "./jobScheduleResponseService.js";
 import { notificationOutcomeLog } from "./notificationOutcomeLog.js";
 import {
   pilotReminderTimezone,
@@ -40,14 +28,9 @@ import { devCenterEnvironmentOptions } from "./runtime/devCenter.js";
 import {
   db,
   emulatorPushDisabled,
-  isWarmupCall,
   liveMessaging,
   organizationId,
 } from "./runtime/firebase.js";
-import {
-  hashToken,
-  newChecklistCapabilityToken,
-} from "./runtime/publicHttp.js";
 
 // Approved Node22 Policy B; preserve unspecified live configuration.
 setGlobalOptions({ preserveExternalChanges: true, maxInstances: 20 });
@@ -64,6 +47,8 @@ const managerNotifications = () => import("./handlers/managerNotifications.js");
 const publicOfferHandlers = () => import("./handlers/publicOffer.js");
 const publicChecklistHandlers = () => import("./handlers/publicChecklist.js");
 const publicReports = () => import("./handlers/publicReports.js");
+const cleanerHub = () => import("./handlers/cleanerHub.js");
+const notificationInbox = () => import("./handlers/notificationInbox.js");
 
 export const getDevCenterAccess = onCall(
   { region: "us-central1", secrets: [devCenterDeveloperUids] },
@@ -292,107 +277,52 @@ export const publicClientPortal = onRequest(
 
 export const issueCleanerAccessCode = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    if (request.data?.additionalDevice !== undefined && typeof request.data.additionalDevice !== "boolean") {
-      throw new HttpsError("invalid-argument", "The additional device option must be a boolean.");
-    }
-    return issueCleanerAccessCodeForManager(db, {
-      organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid,
-      additionalDevice: request.data?.additionalDevice === true,
-    });
-  },
+  lazyHandler(cleanerHub, "issueCleanerAccessCode"),
 );
 
 export const revokeCleanerHubAccess = onCall(
   { region: "us-central1" },
-  async (request) => {
-    await requireOrganizationManager(db, request, organizationId);
-    return revokeCleanerHubAccessForManager(db, {
-      organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid,
-    });
-  },
+  lazyHandler(cleanerHub, "revokeCleanerHubAccess"),
 );
 
-/** Unauthenticated by design: the single-use code is the only credential. */
 export const redeemCleanerAccessCode = onCall(
   { region: "us-central1" },
-  async (request) => redeemCleanerAccessCodeService(db, { input: request.data?.code, auth: getAuth(), logger }),
+  lazyHandler(cleanerHub, "redeemCleanerAccessCode"),
 );
 
 export const openMyChecklist = onCall(
   { region: "us-central1" },
-  async (request) => {
-    const { uid, cleanerId, sessionId } = await requireActiveCleaner(db, request, organizationId);
-    if (isWarmupCall(request)) return { warm: true };
-    return openChecklistForCleaner(db, {
-      organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, runId: initialChecklistRunId,
-      newToken: newChecklistCapabilityToken, hashToken,
-    });
-  },
+  lazyHandler(cleanerHub, "openMyChecklist"),
 );
 
-/** FB01: access details the manager shared, for the cleaner on the Job only. */
 export const getMyJobAccess = onCall(
   { region: "us-central1" },
-  async (request) => {
-    const { cleanerId } = await requireActiveCleaner(db, request, organizationId);
-    if (isWarmupCall(request)) return { warm: true };
-    return loadCleanerJobAccess(db, { organizationId, cleanerId, jobId: request.data?.jobId });
-  },
+  lazyHandler(cleanerHub, "getMyJobAccess"),
 );
 
 export const respondToMyOffer = onCall(
   { region: "us-central1" },
-  async (request) => {
-    const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
-    const result = await respondToOfferForCleaner(db, {
-      organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, status: request.data?.status,
-      scheduleRevision: request.data?.scheduleRevision, offerId: request.data?.offerId,
-    });
-    return { state: result.state, status: result.status || null };
-  },
+  lazyHandler(cleanerHub, "respondToMyOffer"),
 );
 
 export const respondToMyReschedule = onCall(
   { region: "us-central1" },
-  async (request) => {
-    const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
-    return respondToRescheduleForCleaner(db, {
-      organizationId, cleanerId, uid, sessionId, eventId: request.data?.eventId,
-      scheduleRevision: request.data?.scheduleRevision, decision: request.data?.decision,
-    });
-  },
+  lazyHandler(cleanerHub, "respondToMyReschedule"),
 );
-
-function requireNotificationInboxEnabled() {
-  if (process.env.NOTIFICATION_INBOX_MODE === "disabled") {
-    throw new HttpsError("failed-precondition", "The notification inbox is temporarily unavailable.");
-  }
-}
 
 export const listNotificationInbox = onCall(
   { region: "us-central1" },
-  (request) => {
-    requireNotificationInboxEnabled();
-    return listNotificationInboxForRequest(db, { organizationId, request });
-  },
+  lazyHandler(notificationInbox, "listNotificationInbox"),
 );
 
 export const markNotificationRead = onCall(
   { region: "us-central1" },
-  (request) => {
-    requireNotificationInboxEnabled();
-    return changeNotificationInboxItemForRequest(db, { organizationId, request, open: false });
-  },
+  lazyHandler(notificationInbox, "markNotificationRead"),
 );
 
 export const openNotificationInboxItem = onCall(
   { region: "us-central1" },
-  (request) => {
-    requireNotificationInboxEnabled();
-    return changeNotificationInboxItemForRequest(db, { organizationId, request, open: true });
-  },
+  lazyHandler(notificationInbox, "openNotificationInboxItem"),
 );
 
 async function cleanerPushIdentity(request) {
