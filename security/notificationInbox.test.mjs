@@ -21,6 +21,8 @@ const {
   openNotificationInboxItem, respondToMyOffer,
   syncCleanerAgendaOnJobWrite, syncCleanerAgendaOnOfferWrite,
 } = await import("../functions/src/index.js");
+// index.js only declares Functions; the Functions Admin app starts with the runtime module.
+await import("../functions/src/runtime/firebase.js");
 const { processManagerReminderWindow } = await import("../functions/src/handlers/managerNotifications.js");
 const { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } = await import("../functions/src/cleanerNotificationEvents.js");
 const { notificationDestination } = await import("../functions/src/notificationInbox.js");

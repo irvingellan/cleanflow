@@ -22,6 +22,8 @@ const {
   issueCleanerAccessCode, listNotificationInbox, openNotificationInboxItem, redeemCleanerAccessCode,
   registerCleanerPushDevice, rescheduleJob, respondToMyOffer, revokeCleanerHubAccess,
 } = await import("../functions/src/index.js");
+// index.js only declares Functions; the Functions Admin app starts with the runtime module.
+await import("../functions/src/runtime/firebase.js");
 const { processCleanerNotification } = await import("../functions/src/cleanerPushDelivery.js");
 const { cleanerPushPilotApprovalReference } = await import("../functions/src/cleanerPushPilot.js");
 const { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } = await import("../functions/src/cleanerNotificationEvents.js");
