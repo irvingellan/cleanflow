@@ -1,3 +1,5 @@
+import { lazy, Suspense, useLayoutEffect } from "react";
+import { guardEntryLoad } from "./app/entryLoadRecovery.js";
 import {
   isChecklistPreviewPath,
   isCleanerHubPath,
@@ -6,51 +8,67 @@ import {
   publicClientReportTokenFromSearch,
   publicOfferTokenFromPathname,
 } from "./app/entryRoute.js";
-import { PublicOfferPage } from "./features/public-offers/PublicOfferPage.jsx";
-import { CleaningChecklistPreview } from "./features/checklist-preview/CleaningChecklistPreview.jsx";
-import { PublicChecklistPage } from "./features/checklists/PublicChecklistPage.jsx";
-import { CleanerHubApp } from "./features/cleaner-hub/CleanerHubApp.jsx";
-import { PublicClientReportPage } from "./features/checklists/PublicClientReportPage.jsx";
-import { PublicClientPortalPage } from "./features/client-portal/PublicClientPortalPage.jsx";
-import { ManagerRoot } from "./features/manager-app/ManagerRoot.jsx";
 import { ThemeProvider } from "./theme/theme.js";
 
 export { isCleanerHubPath };
 
-function App() {
-  const publicOfferToken = publicOfferTokenFromPathname();
-  const isPublicOfferRoute = publicOfferToken !== null;
-  const publicChecklistToken = publicChecklistTokenFromSearch();
-  const isPublicChecklistRoute = publicChecklistToken !== null;
-  const publicClientReportToken = publicClientReportTokenFromSearch();
-  const isPublicClientPortalRoute = publicClientPortalTokenFromSearch() !== null;
-  const isPublicClientReportRoute = publicClientReportToken !== null || isPublicClientPortalRoute;
-  const isChecklistPreviewRoute = isChecklistPreviewPath();
+// One chunk per audience: a cleaner or a client never downloads the manager application.
+const entryLoaders = {
+  cleanerHub: () => import("./features/cleaner-hub/CleanerHubApp.jsx").then((module) => ({ default: module.CleanerHubApp })),
+  publicOffer: () => import("./features/public-offers/PublicOfferPage.jsx").then((module) => ({ default: module.PublicOfferPage })),
+  publicChecklist: () => import("./features/checklists/PublicChecklistPage.jsx").then((module) => ({ default: module.PublicChecklistPage })),
+  clientPortal: () => import("./features/client-portal/PublicClientPortalPage.jsx").then((module) => ({ default: module.PublicClientPortalPage })),
+  clientReport: () => import("./features/checklists/PublicClientReportPage.jsx").then((module) => ({ default: module.PublicClientReportPage })),
+  checklistPreview: () => import("./features/checklist-preview/CleaningChecklistPreview.jsx").then((module) => ({ default: module.CleaningChecklistPreview })),
+  manager: () => import("./features/manager-app/ManagerRoot.jsx").then((module) => ({ default: module.ManagerRoot })),
+};
+
+const entryDownloads = new Map();
+function downloadEntry(name) {
+  if (!entryDownloads.has(name)) entryDownloads.set(name, guardEntryLoad(entryLoaders[name]));
+  return entryDownloads.get(name);
+}
+
+const entries = Object.fromEntries(Object.keys(entryLoaders).map((name) => [name, lazy(() => downloadEntry(name))]));
+
+function currentEntry() {
   // Cleaner Hub has its own Firebase app/session; the manager session is never read there.
-  const isCleanerHubRoute = isCleanerHubPath();
+  if (isCleanerHubPath()) return { name: "cleanerHub" };
+  const publicOfferToken = publicOfferTokenFromPathname();
+  if (publicOfferToken !== null) return { name: "publicOffer", token: publicOfferToken };
+  const publicChecklistToken = publicChecklistTokenFromSearch();
+  if (publicChecklistToken !== null) return { name: "publicChecklist", token: publicChecklistToken };
+  const publicClientPortalToken = publicClientPortalTokenFromSearch();
+  if (publicClientPortalToken !== null) return { name: "clientPortal", token: publicClientPortalToken };
+  const publicClientReportToken = publicClientReportTokenFromSearch();
+  if (publicClientReportToken !== null) return { name: "clientReport", token: publicClientReportToken };
+  if (isChecklistPreviewPath()) return { name: "checklistPreview" };
+  return { name: "manager" };
+}
 
-  if (isCleanerHubRoute) {
-    return <CleanerHubApp />;
-  }
+// Start the download of this page's entry before React renders; lazy() reuses the same promise.
+downloadEntry(currentEntry().name);
 
-  if (isPublicOfferRoute) {
-    return <ThemeProvider><PublicOfferPage token={publicOfferToken} /></ThemeProvider>;
-  }
+function StartupCommit() {
+  useLayoutEffect(() => { window.__cleanflowStartup?.mounted() }, []);
+  return null;
+}
 
-  if (isPublicChecklistRoute) {
-    return <ThemeProvider><PublicChecklistPage token={publicChecklistToken} /></ThemeProvider>;
-  }
+function renderEntry({ name, token }) {
+  const Entry = entries[name];
+  // Cleaner Hub, the checklist preview and the manager root provide their own theme.
+  if (["cleanerHub", "checklistPreview", "manager"].includes(name)) return <Entry />;
+  return <ThemeProvider><Entry token={token} /></ThemeProvider>;
+}
 
-  if (isPublicClientReportRoute) {
-    if (isPublicClientPortalRoute) return <ThemeProvider><PublicClientPortalPage token={publicClientPortalTokenFromSearch()} /></ThemeProvider>;
-    return <ThemeProvider><PublicClientReportPage token={publicClientReportToken} /></ThemeProvider>;
-  }
-
-  if (isChecklistPreviewRoute) {
-    return <CleaningChecklistPreview />;
-  }
-
-  return <ManagerRoot />;
+function App() {
+  // The HTML startup fallback stays visible until the entry has rendered and committed.
+  return (
+    <Suspense fallback={null}>
+      {renderEntry(currentEntry())}
+      <StartupCommit />
+    </Suspense>
+  );
 }
 
 export default App;
