@@ -1241,3 +1241,49 @@ Run that was sent for review. Browsers cannot write the field.
 
 **Consequences.** One more Function in Production. Notes and photos are not
 correctable through this path; photos keep their own hide-from-report control.
+
+## DEC-058 — Refactor conventions: message parts, ordered CSS partials, lazy Function handlers
+
+**Status:** Implemented on the `refactor/p1-*` branches, not deployed.
+
+**Context.** Three files had grown past what a person or an agent can review in
+one diff: `src/i18n/translations.js` (3,246 lines), `src/index.css` (4,831 lines)
+and `functions/src/index.js` (2,024 lines). Every feature touched them, so
+parallel branches conflicted, and one cold Function instance loaded the code of
+all the others.
+
+**Decision.**
+
+- **Messages.** `translations.js` keeps the same API (`TranslationProvider`,
+  `useTranslation`, `usePublicTranslation`, `translateInLanguage`). The texts
+  live in ordered part files, `src/i18n/messages/NN-name.js`, merged by
+  `messages/index.js` in the original order. A fingerprint test
+  (`src/i18n/messageCatalog.test.js`) proves that no key or text changed.
+- **CSS.** `src/index.css` is a list of `@import` lines over ordered partials in
+  `src/styles/legacy/`. The cascade order is frozen first; each split is proven by
+  a byte-identical built stylesheet. New feature styles go in the feature's own
+  CSS file.
+- **Functions.** `functions/src/index.js` keeps every export with its name,
+  region, secrets, schedule and trigger path. The bodies live in
+  `functions/src/handlers/` and are loaded on first call through `lazyHandler`.
+  A snapshot test (`functions/src/exportSurface.test.js`) pins the 61 endpoints,
+  and `functions/src/indexImports.test.js` keeps `index.js` from importing
+  handler code eagerly.
+
+**Trade-offs.**
+
+- The message parts follow the historical blocks, not clean feature
+  boundaries. Re-homing them by feature is optional later.
+- The partial names are approximate (`legacy/NN-*`); the proof is the built
+  file, not the names.
+- The first call on a Function instance pays one extra `import()`. Cold starts
+  improve a little, not a lot: the Admin SDK still dominates.
+
+**Rejected.** i18next or react-intl (a rewrite of every call for no user
+benefit); lazy-loading languages (makes `translate` asynchronous); CSS Modules,
+Tailwind, CSS-in-JS and `@layer` (none can be proven visually identical); one
+Functions codebase per group and bundling Functions with esbuild (more deploy
+targets or a build step in the deploy path).
+
+**Evidence.** The two tests above, the byte-identical stylesheet check recorded
+in each pull request, and `docs/performance/REFACTOR_BASELINE.md`.
