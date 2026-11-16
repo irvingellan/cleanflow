@@ -5,6 +5,7 @@ import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
 import { checklistDraftReviewRequirements, projectChecklistDraftForRead } from "./checklistDraftService.js";
 import { checklistRunDefinitionVersion, validChecklistInventoryQuantity } from "./checklistInventory.js";
 import { createChecklistEvidencePolicy, isPilotChecklistPhotoRequirement, pilotChecklistPhotoRequirementId, projectChecklistEvidence, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
+import { normalizeServiceType } from "./serviceTypes.js";
 
 export const initialChecklistRunId = "initial";
 
@@ -64,6 +65,7 @@ export function projectChecklistRunForManager(run, runId = initialChecklistRunId
         : null,
     },
     serviceDate: typeof run?.jobSnapshot?.scheduledDate === "string" ? run.jobSnapshot.scheduledDate : null,
+    serviceType: normalizeServiceType(run?.jobSnapshot?.serviceType),
     sections: sections.map((section) => ({
       id: typeof section?.id === "string" ? section.id : "",
       titleKey: typeof section?.titleKey === "string" ? section.titleKey : null,

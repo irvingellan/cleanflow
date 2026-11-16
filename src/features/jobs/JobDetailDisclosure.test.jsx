@@ -126,7 +126,7 @@ describe("Job Detail progressive disclosure", () => {
   it("all existing controls remain reachable and opening groups does not mutate", () => {
     const { container, mutation } = setup();
     container.querySelectorAll(".job-detail-section > summary").forEach(summary => fireEvent.click(summary));
-    expect(screen.getByRole("button", { name: "Edit guest / notes" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit service details" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Edit prices" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Offer cleaning to cleaners" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();

@@ -165,6 +165,10 @@ The initial eligible execution set is `ASSIGNED` and `IN_PROGRESS`; moving
 within that set does not advance the revision. Pricing, payout, payment, notes,
 provenance, and checklist answers are outside this revision boundary.
 
+In [Service types V1](SERVICE_TYPES_V1.md), the selected Job type supplies
+extra tasks for a new Run. Later type edits affect future snapshots and do not
+advance the access revision, so an existing Run keeps its type and tasks.
+
 ## Checklist photo evidence
 
 **CURRENT Phase 5D.1 pilot flow:** a cleaner holding an active capability may

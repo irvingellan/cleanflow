@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FIRST_ACCEPT_WINS } from "../jobs/automaticOffers.js";
+import { serviceTypeLabel, serviceTypeMessage } from "../jobs/serviceTypeMessages.js";
 import { HubIcon } from "./HubIcon.jsx";
 import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
@@ -172,6 +173,7 @@ function JobCard({ t, entry, today, onOpen, showDate = false }) {
         </span>
         <span className="mw-grow hb-job-main">
           <strong>{entry.propertyName || "—"}</strong>
+          {!offer && <span className="mw-sec">{serviceTypeLabel(t.lang, entry.serviceType)}</span>}
           {!entry.scheduledStart && <span className="mw-sec">{t("hb.timeNotSet")}</span>}
           {offer
             ? <span className={`hb-status is-${entry.offerStatus === "INTERESTED" ? "interested" : "waiting"}`}>{t(offerStatusKey(entry))}</span>
@@ -442,6 +444,7 @@ function JobView({ t, hub, jobId, today }) {
       <dl className="hb-facts">
         <div><dt><HubIcon name="calendar" size={15} />{t("hb.job.when")}</dt><dd>{`${dayLabel(t, entry.scheduledDate, today)} · ${t.time(entry.scheduledStart) || t("hb.timeNotSet")}`}</dd></div>
         <div><dt><HubIcon name="pin" size={15} />{t("hb.job.where")}</dt><dd>{entry.propertyName || "—"}</dd></div>
+        <div><dt><HubIcon name="clipboard" size={15} />{serviceTypeMessage(t.lang, "field")}</dt><dd>{serviceTypeLabel(t.lang, entry.serviceType)}</dd></div>
       </dl>
       <section className={`hb-checkcard is-${situation.state}`} data-checklist-state={situation.state} aria-labelledby="hb-checklist-title">
         <div className="hb-checkhead">

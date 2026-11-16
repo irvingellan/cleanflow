@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { publicOfferState } from "./publicOfferResponseService.js";
 import { automaticOfferBatchVersion, FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
+import { normalizeServiceType } from "./serviceTypes.js";
 
 /**
  * Cleaner agenda projection (Cleaner Hub V1).
@@ -111,6 +112,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, job),
       kind: agendaKinds.assigned,
+      serviceType: normalizeServiceType(job.serviceType),
       acknowledged: Boolean(assignment?.cleanerAcknowledgedAt),
       offerStatus: null,
       offeredCompensation: null,
@@ -167,7 +169,7 @@ export function agendaEntryId(cleanerId, jobId) {
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offerExpiresAtMs",
-  "offerDistributionMode", "replacementOfferId", "checklistStatus", "checklistStarted",
+  "offerDistributionMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType",
 ];
 
 export function sameEntry(previous, next) {

@@ -1,6 +1,8 @@
 import { globalChecklistDefinition } from "./checklistDefinition.js";
 import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
 import { checklistRunDefinitionVersion } from "./checklistInventory.js";
+import { normalizeServiceType } from "./serviceTypes.js";
+import { appendServiceTypeChecklistSections } from "./serviceTypeChecklistTemplates.js";
 
 const allowedItemKeys = ["id", "label", "requiresPhoto", "canBeNotApplicable", "order"];
 const allowedInventoryKeys = ["id", "label", "hidden"];
@@ -165,6 +167,8 @@ export function buildChecklistRunSnapshot({ job, property }) {
     property?.checklistSettings,
   );
   const resolvedDefinition = resolveChecklistDefinition(property);
+  const serviceType = normalizeServiceType(job?.serviceType);
+  resolvedDefinition.sections = appendServiceTypeChecklistSections(resolvedDefinition.sections, serviceType);
 
   return {
     definitionVersion: resolvedDefinition.definitionVersion,
@@ -175,6 +179,7 @@ export function buildChecklistRunSnapshot({ job, property }) {
     jobSnapshot: {
       scheduledDate: typeof job?.scheduledDate === "string" ? job.scheduledDate : null,
       scheduledStart: typeof job?.scheduledStart === "string" ? job.scheduledStart : null,
+      serviceType,
     },
     propertyChecklistSettingsSnapshot: clone(propertyChecklistSettingsSnapshot),
     resolvedDefinition: clone(resolvedDefinition),
@@ -205,6 +210,7 @@ export function projectChecklistRunForCleaner(checklistRun, {
     propertyName: checklistRun?.propertySnapshot?.propertyName || null,
     scheduledDate: checklistRun?.jobSnapshot?.scheduledDate || null,
     scheduledStart: checklistRun?.jobSnapshot?.scheduledStart || null,
+    serviceType: normalizeServiceType(checklistRun?.jobSnapshot?.serviceType),
     assignedCleanerName: safeAssignedCleanerName,
     preferredLanguage: supportedCleanerLanguages.has(assignedCleanerPreferredLanguage)
       ? assignedCleanerPreferredLanguage

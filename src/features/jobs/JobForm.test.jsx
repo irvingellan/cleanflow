@@ -36,6 +36,7 @@ describe("CreateCleaningForm", () => {
     expect(screen.getByLabelText("Client price")).toHaveValue(350);
     expect(screen.getByLabelText("Cleaner payout")).toHaveValue(200);
     expect(screen.getByLabelText("Scheduled time")).toHaveValue("11:00");
+    expect(screen.getByLabelText("Service type")).toHaveValue("STANDARD");
     expect(screen.getByDisplayValue("Unassigned")).toBeVisible();
     expect(screen.queryByLabelText("Cleaners needed")).not.toBeInTheDocument();
   });
@@ -85,6 +86,9 @@ describe("CreateCleaningForm", () => {
     fireEvent.change(screen.getByLabelText("Guest name (optional)"), {
       target: { value: " Taylor Morgan " },
     });
+    fireEvent.change(screen.getByLabelText("Service type"), {
+      target: { value: "POST_CONSTRUCTION" },
+    });
     fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
 
     await waitFor(() => {
@@ -93,6 +97,7 @@ describe("CreateCleaningForm", () => {
         propertyName: "Pacific Beach Condo",
         clientId: "client-carl",
         clientName: "Carl",
+        serviceType: "POST_CONSTRUCTION",
         scheduledDate: "2026-09-01",
         scheduledStart: "10:00",
         clientPrice: 350,

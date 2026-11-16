@@ -64,6 +64,12 @@ service cloud.firestore {
         && data.operationalStatus in ['ASSIGNED', 'IN_PROGRESS'];
     }
 
+    function validJobServiceType(data) {
+      return data.get('serviceType', 'STANDARD') in [
+        'STANDARD', 'DEEP_CLEANING', 'MOVE_IN_OUT', 'POST_CONSTRUCTION'
+      ];
+    }
+
     function jobChecklistContextChanged() {
       return request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'archivedAt',
@@ -340,6 +346,7 @@ service cloud.firestore {
           && activeManager(orgId)
           || (collectionName == 'jobs'
             && activeManager(orgId)
+            && validJobServiceType(request.resource.data)
             && validJobChecklistContextRevisionCreate()
             && browserJobDoesNotCreateCompletion()
             && !request.resource.data.keys().hasAny([
@@ -351,6 +358,7 @@ service cloud.firestore {
           && activeManager(orgId)
           || (collectionName == 'jobs'
             && activeManager(orgId)
+            && validJobServiceType(request.resource.data)
             && jobScheduleUnchanged()
             && validJobChecklistContextRevisionUpdate()
             && browserJobKeepsCompletionState()

@@ -3,6 +3,7 @@ import { StateCard } from "../../components/UiPrimitives.jsx";
 import { languageOptions, useTranslation } from "../../i18n/translations.js";
 import { formatDate } from "../../lib/presentation.js";
 import { ClientReportView } from "../checklists/PublicClientReportPage.jsx";
+import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
 import { getPublicClientPortal, getPublicClientPortalReport, publicClientPortalPhotoUrl } from "./clientPortalService.js";
 import { usePortalRead } from "./usePortalRead.js";
 import "./clientPortal.css";
@@ -13,6 +14,7 @@ function Visit({ visit, language, translate, children }) {
       <div>
         <strong>{formatDate(visit.date, translate, language)}{visit.start ? ` · ${visit.start}` : ""}</strong>
         <span>{visit.propertyName}</span>
+        <span>{serviceTypeLabel(language, visit.serviceType)}</span>
       </div>
       {children}
     </li>

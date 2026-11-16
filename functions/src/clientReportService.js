@@ -7,6 +7,7 @@ import { downloadSavedChecklistEvidence } from "./checklistEvidenceService.js";
 import { pilotChecklistPhotoRequirementId, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
 import { selectMultiPhotoEvidence } from "./checklistMultiPhotoService.js";
 import { checklistInventoryNeedsRestock, validChecklistInventoryQuantity } from "./checklistInventory.js";
+import { normalizeServiceType } from "./serviceTypes.js";
 
 export const clientReportCapabilityId = "active";
 export const clientReportLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
@@ -146,6 +147,7 @@ export function projectClientReport(run, draft, evidence, presentationInput = {}
     serviceDate: /^\d{4}-\d{2}-\d{2}$/.test(run.jobSnapshot?.scheduledDate || "")
       ? run.jobSnapshot.scheduledDate
       : null,
+    serviceType: normalizeServiceType(run.jobSnapshot?.serviceType),
     sections,
     inventoryItems,
     issueNotes: presentation.includeCleanerNotes ? normalizedDraft.issueNotes || "" : "",
@@ -403,6 +405,13 @@ export async function downloadReleasedClientReportPhoto(database, { organization
 /** Whether the manager released the report of this Job; one read. */
 export async function clientReportReleasedForJob(database, { organizationId, jobId, runId = initialRunId }) {
   return clientReportReleased((await capabilityReference(database, organizationId, jobId, runId).get()).data());
+}
+
+/** The frozen type of a released report, for a reader already authorized for the Job. */
+export async function releasedClientReportServiceTypeForJob(database, { organizationId, jobId, runId = initialRunId }) {
+  if (!await clientReportReleasedForJob(database, { organizationId, jobId, runId })) return null;
+  const run = (await runReference(database, organizationId, jobId, runId).get()).data();
+  return run?.status === "READY_FOR_REVIEW" ? normalizeServiceType(run.jobSnapshot?.serviceType) : null;
 }
 
 export async function loadPublicClientReport(database, options) {
