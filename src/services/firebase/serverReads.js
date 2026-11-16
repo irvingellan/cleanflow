@@ -25,3 +25,18 @@ export async function getServerRecordsById(organizationId, collectionName, ids, 
   const snapshot = await read(query(records, where(documentId(), "in", ids)));
   return snapshot.docs;
 }
+
+/** One server read of a whole organization collection (no realtime Watch). */
+export async function getServerCollection(organizationId, collectionName, read = getDocs) {
+  const snapshot = await read(collection(serverFirestore(), "organizations", organizationId, collectionName));
+  return snapshot.docs;
+}
+
+/** Rejects if the read has not settled in time, so a screen never waits forever. */
+export function withReadDeadline(promise, milliseconds = 15_000) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("read-deadline"), { code: "deadline-exceeded" })), milliseconds);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}

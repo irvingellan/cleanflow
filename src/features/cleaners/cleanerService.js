@@ -10,6 +10,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { getServerCollection, withReadDeadline } from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -87,10 +88,12 @@ export async function getCleaners() {
   })));
 }
 
+// A one-shot server read with a deadline: the realtime channel can stall and
+// leave the Cleaners, Jobs and Payouts screens loading forever.
 export async function getAllCleaners({ includeArchived = false } = {}) {
-  const snapshot = await getDocs(cleanersCollection());
+  const documents = await withReadDeadline(getServerCollection(organizationId, "cleaners"));
 
-  return filterArchivedRecords(snapshot.docs.map((cleanerDocumentSnapshot) => withNormalizedDataProvenance({
+  return filterArchivedRecords(documents.map((cleanerDocumentSnapshot) => withNormalizedDataProvenance({
     ...cleanerDocumentSnapshot.data(),
     id: cleanerDocumentSnapshot.id,
   })), includeArchived);
