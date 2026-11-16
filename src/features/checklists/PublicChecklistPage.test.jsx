@@ -298,10 +298,15 @@ describe("PublicChecklistPage", () => {
     primeReadyChecklist();
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
-    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    // The send button enables only after the draft is acknowledged; clicking
+    // earlier never opens the confirmation (the source of an intermittent failure).
+    const send = screen.getByRole("button", { name: "Send checklist for review" });
+    await waitFor(() => expect(send).toBeEnabled());
+    fireEvent.click(send);
+    const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(itemFieldset("Make the bed")).getByLabelText("Not answered"));
     await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send checklist for review" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("Answer this item before sending for review.")).toBeVisible();
     expect(readyPublicChecklistForReview).not.toHaveBeenCalled();
