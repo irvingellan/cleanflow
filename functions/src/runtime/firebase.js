@@ -9,7 +9,9 @@ export function isWarmupCall(request) {
   return request.data?.warmup === true;
 }
 
-if (getApps().length === 0) {
+// Handlers load lazily, so another named app may already exist (the Functions
+// emulator keeps its own). Only the default app decides whether to initialize.
+if (!getApps().some((app) => app.name === "[DEFAULT]")) {
   initializeApp();
 }
 
