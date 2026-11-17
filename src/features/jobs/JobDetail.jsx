@@ -10,6 +10,7 @@ import { JobChecklistSection } from "./JobChecklistSection.jsx";
 import { JobReminderPreview } from "./JobReminderPreview.jsx";
 import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
 import { JobOffersSection } from "./JobOffersSection.jsx";
+import { useJobPriceEdit } from "./useJobPriceEdit.js";
 import { JobDetailHead } from "./JobDetailHead.jsx";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
@@ -31,7 +32,6 @@ import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { canAssignCleanerDirectly, canDirectlyFillJob } from "./assignmentService.js";
 import {
   formatCreatedAt,
-  hasValue,
 } from "../../lib/presentation.js";
 import { translateInLanguage, useTranslation } from "../../i18n/translations.js";
 import {
@@ -41,7 +41,6 @@ import {
   getJobGrossMargin,
   getAssignedCleanerIds,
   isAssignmentAwareJob,
-  optionalJobPrice,
 } from "./jobCompatibility.js";
 import {
   buildCleanerReminderMessage,
@@ -178,14 +177,10 @@ export function JobDetail({
   const issuesSectionRef = useRef(null);
   const [isPreparingReminderChecklist, setIsPreparingReminderChecklist] = useState(false);
   const [hasReminderChecklistError, setHasReminderChecklistError] = useState(false);
-  const [isEditingPrices, setIsEditingPrices] = useState(false);
-  const [priceValues, setPriceValues] = useState(() => ({
-    clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
-    cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
-  }));
-  const [isSavingPrices, setIsSavingPrices] = useState(false);
-  const [priceSaveError, setPriceSaveError] = useState("");
-  const [hasSavedPrices, setHasSavedPrices] = useState(false);
+  const {
+    isEditingPrices, setIsEditingPrices, priceValues, setPriceValues, isSavingPrices, priceSaveError, setPriceSaveError,
+    hasSavedPrices, startPriceEdit, savePrices,
+  } = useJobPriceEdit({ job, translate, onUpdatePrices });
   const [isEditingJobDetails, setIsEditingJobDetails] = useState(false);
   const [jobDetailValues, setJobDetailValues] = useState(() => jobDetailFormValues(job));
   const [isSavingJobDetails, setIsSavingJobDetails] = useState(false);
@@ -612,17 +607,6 @@ export function JobDetail({
   }, [cleanerLookupKey]);
 
   useEffect(() => {
-    setPriceValues({
-      clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
-      cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
-    });
-    setIsEditingPrices(false);
-    setIsSavingPrices(false);
-    setPriceSaveError("");
-    setHasSavedPrices(false);
-  }, [job.id]);
-
-  useEffect(() => {
     setJobScheduleValues({
       scheduledDate: job.scheduledDate || "",
       scheduledStart: job.scheduledStart || "",
@@ -665,16 +649,6 @@ export function JobDetail({
     setDirectCleanerId("");
     setOfferMessageCopyErrorId(null);
   }, [job.id]);
-
-  function startPriceEdit() {
-    setPriceValues({
-      clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
-      cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
-    });
-    setPriceSaveError("");
-    setHasSavedPrices(false);
-    setIsEditingPrices(true);
-  }
 
   function startJobDetailsEdit() {
     if (!canEditJobDetails(job)) return;
@@ -781,31 +755,6 @@ export function JobDetail({
               : translate("jobs.scheduleUpdateError"));
     } finally {
       if (currentJobIdRef.current === jobId) setIsSavingJobSchedule(false);
-    }
-  }
-
-  async function savePrices(event) {
-    event.preventDefault();
-    const clientPrice = optionalJobPrice(priceValues.clientPrice);
-    const cleanerPayout = optionalJobPrice(priceValues.cleanerPayout);
-
-    if (clientPrice === null || cleanerPayout === null) {
-      setPriceSaveError(translate("jobs.priceInvalid"));
-      return;
-    }
-
-    setIsSavingPrices(true);
-    setPriceSaveError("");
-    setHasSavedPrices(false);
-
-    try {
-      await onUpdatePrices({ clientPrice, cleanerPayout });
-      setIsEditingPrices(false);
-      setHasSavedPrices(true);
-    } catch {
-      setPriceSaveError(translate("jobs.priceUpdateError"));
-    } finally {
-      setIsSavingPrices(false);
     }
   }
 
