@@ -12,8 +12,6 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  startAfter,
-  Timestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -23,7 +21,7 @@ import {
   where as serverWhere,
 } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
-import { serverFirestore } from "../../services/firebase/serverReads.js";
+import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import {
@@ -201,21 +199,21 @@ function scheduledDateConstraints(datePreset) {
   const today = currentLocalDate();
 
   if (datePreset === "today") {
-    return [where("scheduledDate", "==", today)];
+    return [serverWhere("scheduledDate", "==", today)];
   }
 
   if (datePreset === "next-7-days") {
     return [
-      where("scheduledDate", ">=", today),
-      where("scheduledDate", "<=", currentLocalDate(addLocalDays(new Date(), 7))),
+      serverWhere("scheduledDate", ">=", today),
+      serverWhere("scheduledDate", "<=", currentLocalDate(addLocalDays(new Date(), 7))),
     ];
   }
 
   if (datePreset === "past-7-days" || datePreset === "past-30-days") {
     const days = datePreset === "past-7-days" ? 7 : 30;
     return [
-      where("scheduledDate", ">=", currentLocalDate(addLocalDays(new Date(), -days))),
-      where("scheduledDate", "<", today),
+      serverWhere("scheduledDate", ">=", currentLocalDate(addLocalDays(new Date(), -days))),
+      serverWhere("scheduledDate", "<", today),
     ];
   }
 
@@ -227,35 +225,37 @@ function completedAtConstraints(datePreset) {
 
   if (datePreset === "today") {
     return [
-      where("completedAt", ">=", Timestamp.fromDate(dayStart)),
-      where("completedAt", "<", Timestamp.fromDate(addLocalDays(dayStart, 1))),
+      serverWhere("completedAt", ">=", dayStart),
+      serverWhere("completedAt", "<", addLocalDays(dayStart, 1)),
     ];
   }
 
   if (datePreset === "next-7-days") {
     return [
-      where("completedAt", ">=", Timestamp.fromDate(addLocalDays(dayStart, 1))),
-      where("completedAt", "<", Timestamp.fromDate(addLocalDays(dayStart, 8))),
+      serverWhere("completedAt", ">=", addLocalDays(dayStart, 1)),
+      serverWhere("completedAt", "<", addLocalDays(dayStart, 8)),
     ];
   }
 
   if (datePreset === "past-7-days" || datePreset === "past-30-days") {
     const days = datePreset === "past-7-days" ? 7 : 30;
     return [
-      where("completedAt", ">=", Timestamp.fromDate(addLocalDays(dayStart, -days))),
-      where("completedAt", "<", Timestamp.fromDate(dayStart)),
+      serverWhere("completedAt", ">=", addLocalDays(dayStart, -days)),
+      serverWhere("completedAt", "<", dayStart),
     ];
   }
 
   return [];
 }
 
+// One-shot server reads with a deadline: a full-SDK read on a stalled realtime
+// channel (seen on iPhone Safari) could hold the Jobs list for 30 s or more.
 function pagedJobQuery(constraints, cursor) {
-  return query(
-    jobsCollection(),
+  return serverQuery(
+    serverCollection(serverFirestore(), "organizations", organizationId, "jobs"),
     ...constraints,
-    ...(cursor ? [startAfter(cursor)] : []),
-    limit(jobWorklistLimit + 1),
+    ...(cursor ? [serverStartAfter(cursor)] : []),
+    serverLimit(jobWorklistLimit + 1),
   );
 }
 
@@ -283,20 +283,20 @@ export async function getJobs(
   const shouldLoadActive = status !== "completed";
   const activeStatuses = activeStatusesForFilter(status);
   const activeQuery = shouldLoadActive && !activeExhausted
-    ? getDocs(pagedJobQuery([
-        where("operationalStatus", "in", activeStatuses),
+    ? withReadDeadline(getServerDocs(pagedJobQuery([
+        serverWhere("operationalStatus", "in", activeStatuses),
         ...scheduledDateConstraints(datePreset),
-        orderBy("scheduledDate", "asc"),
-      ], activeCursor))
+        serverOrderBy("scheduledDate", "asc"),
+      ], activeCursor)))
     : Promise.resolve(null);
   // Completed work is filtered and ordered by when it actually completed; active work uses
   // its scheduled date so upcoming and overdue operations remain visible in schedule order.
   const completedQuery = shouldLoadCompleted && !completedExhausted
-    ? getDocs(pagedJobQuery([
-        where("operationalStatus", "==", "COMPLETED"),
+    ? withReadDeadline(getServerDocs(pagedJobQuery([
+        serverWhere("operationalStatus", "==", "COMPLETED"),
         ...completedAtConstraints(datePreset),
-        orderBy("completedAt", "desc"),
-      ], completedCursor))
+        serverOrderBy("completedAt", "desc"),
+      ], completedCursor)))
     : Promise.resolve(null);
   const [activeSnapshot, completedSnapshot] = await Promise.all([activeQuery, completedQuery]);
   const activePage = activeSnapshot ? pageFromSnapshot(activeSnapshot, includeArchived) : null;
