@@ -11,6 +11,7 @@ import { JobReminderPreview } from "./JobReminderPreview.jsx";
 import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
 import { JobOffersSection } from "./JobOffersSection.jsx";
 import { useJobPriceEdit } from "./useJobPriceEdit.js";
+import { useIssueResolution } from "./useIssueResolution.js";
 import { JobDetailHead } from "./JobDetailHead.jsx";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
@@ -147,10 +148,10 @@ export function JobDetail({
   const [replacementTargetId, setReplacementTargetId] = useState(null);
   const [replacingAssignmentId, setReplacingAssignmentId] = useState(null);
   const [replacementOfferId, setReplacementOfferId] = useState("");
-  const [resolvingIssueId, setResolvingIssueId] = useState(null);
-  const [resolutionNote, setResolutionNote] = useState("");
-  const [isResolvingIssue, setIsResolvingIssue] = useState(false);
-  const [resolutionError, setResolutionError] = useState(null);
+  const {
+    resolvingIssueId, resolutionNote, setResolutionNote, isResolvingIssue, resolutionError,
+    openResolutionForm, closeResolutionForm, resolveSelectedIssue,
+  } = useIssueResolution({ translate, onResolveIssue });
   const [publicOfferLink, setPublicOfferLink] = useState(null);
   const [isCreatingPublicOfferLinkFor, setIsCreatingPublicOfferLinkFor] =
     useState(null);
@@ -1034,45 +1035,6 @@ export function JobDetail({
       setCopyMessageErrorCleanerId(reminderPreview.cleanerId);
     } finally {
       setIsCopyingReminder(false);
-    }
-  }
-
-  function openResolutionForm(issue) {
-    setResolvingIssueId(issue.id);
-    setResolutionNote("");
-    setResolutionError(null);
-  }
-
-  function closeResolutionForm() {
-    setResolvingIssueId(null);
-    setResolutionNote("");
-    setResolutionError(null);
-  }
-
-  async function resolveSelectedIssue(event) {
-    event.preventDefault();
-
-    if (!resolvingIssueId) {
-      return;
-    }
-
-    setIsResolvingIssue(true);
-    setResolutionError(null);
-
-    try {
-      await onResolveIssue({
-        issueId: resolvingIssueId,
-        resolutionNote,
-      });
-      closeResolutionForm();
-    } catch (error) {
-      setResolutionError(
-        error.code === "issue-not-open"
-          ? translate("issues.alreadyResolved")
-          : translate("issues.resolveError"),
-      );
-    } finally {
-      setIsResolvingIssue(false);
     }
   }
 
