@@ -1,10 +1,9 @@
 import { doc, getDocFromServer, onSnapshot } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
-
-const organizationId = "cleanflow-demo";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
 function membershipReference(user) {
-  return doc(db, "organizations", organizationId, "members", user.uid);
+  return doc(db, "organizations", currentOrganizationId(), "members", user.uid);
 }
 
 function isActiveManager(snapshot) {
