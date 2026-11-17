@@ -1,29 +1,21 @@
 import {
   collection,
   doc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
   runTransaction,
   serverTimestamp,
-  where,
 } from "firebase/firestore";
 import {
-  collection as serverCollection, documentId, getDocs as getServerDocs, query as serverQuery, where as serverWhere,
+  collection as serverCollection, documentId, getDocs as getServerDocs, limit as serverLimit,
+  orderBy as serverOrderBy, query as serverQuery, where as serverWhere,
 } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
-import { serverFirestore } from "../../services/firebase/serverReads.js";
+import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
 const organizationId = "cleanflow-demo";
 const allowedPaymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 const maximumJobsPerPayout = 100;
 const maximumPayoutNoteLength = 500;
-
-function jobsCollection() {
-  return collection(db, "organizations", organizationId, "jobs");
-}
 
 function payoutsCollection() {
   return collection(db, "organizations", organizationId, "payouts");
@@ -62,10 +54,13 @@ function payoutError(code, message) {
   return error;
 }
 
+// One-shot server read with a deadline: a full-SDK read on a stalled realtime
+// channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getUnpaidCompletedJobs() {
-  const snapshot = await getDocs(
-    query(jobsCollection(), where("operationalStatus", "==", "COMPLETED")),
-  );
+  const snapshot = await withReadDeadline(getServerDocs(serverQuery(
+    serverCollection(serverFirestore(), "organizations", organizationId, "jobs"),
+    serverWhere("operationalStatus", "==", "COMPLETED"),
+  )));
 
   // Legacy Jobs have no payout marker. Keep them eligible until a manager explicitly
   // records a payout; some also have no completedAt, so do not order them out of the query.
@@ -76,9 +71,11 @@ export async function getUnpaidCompletedJobs() {
 }
 
 export async function getRecentPayouts() {
-  const snapshot = await getDocs(
-    query(payoutsCollection(), orderBy("paidAt", "desc"), limit(20)),
-  );
+  const snapshot = await withReadDeadline(getServerDocs(serverQuery(
+    serverCollection(serverFirestore(), "organizations", organizationId, "payouts"),
+    serverOrderBy("paidAt", "desc"),
+    serverLimit(20),
+  )));
 
   return snapshot.docs.map(jobFromSnapshot);
 }

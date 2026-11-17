@@ -9,7 +9,20 @@ const firestore = vi.hoisted(() => ({
   runTransaction: vi.fn(),
 }));
 
-vi.mock("../../services/firebase/client.js", () => ({ db: {} }));
+vi.mock("../../services/firebase/client.js", () => ({ db: {}, firebaseApp: {}, useFirebaseEmulators: false, emulatorPorts: {} }));
+// The history summaries are one-shot server reads, so the lite SDK gets the same query stand-ins.
+vi.mock("firebase/firestore/lite", () => ({
+  getDocs: firestore.getDocs,
+  getFirestore: () => ({}),
+  setLogLevel: () => {},
+  connectFirestoreEmulator: () => {},
+  collection: (_db, ...path) => ({ path: path.join("/") }),
+  where: (field, operator, value) => ({ type: "where", field, operator, value }),
+  orderBy: (field, direction) => ({ type: "orderBy", field, direction }),
+  limit: (count) => ({ type: "limit", count }),
+  query: (collection, ...constraints) => ({ collection, constraints }),
+  startAfter: vi.fn(),
+}));
 vi.mock("firebase/firestore", () => ({
   ...firestore,
   collection: (_db, ...path) => ({ path: path.join("/") }),

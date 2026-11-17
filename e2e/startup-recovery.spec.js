@@ -68,8 +68,9 @@ test("an unanswered Dashboard REST request stays actionable and resumes through 
   });
   await page.addInitScript((origin) => {
     const fetchFromBrowser = window.fetch.bind(window);
-    let propertiesSeen = false;
     let holdFirstWave = true;
+    const dashboardTimedOut = () => JSON.parse(sessionStorage.getItem("cleanflow.manager-access.diagnostics") || "[]")
+      .some(({ stage }) => stage === "dashboard_load_timeout");
     const firstWaveReleased = new Promise((resolve) =>
       window.addEventListener("p0-release-rest-response", resolve, { once: true }));
     window.fetch = async (resource, options) => {
@@ -77,13 +78,11 @@ test("an unanswered Dashboard REST request stays actionable and resumes through 
       if (url.origin !== origin || !url.pathname.endsWith(":runQuery") || options?.method !== "POST") {
         return fetchFromBrowser(resource, options);
       }
-      // The second Properties request begins the retry. Hold only the first
-      // wave's results so the retry still uses the real emulator transport.
-      const collection = JSON.parse(options.body).structuredQuery.from[0].collectionId;
-      if (collection === "properties") {
-        if (propertiesSeen) holdFirstWave = false;
-        propertiesSeen = true;
-      }
+      // Other startup lists use the same REST transport, so a request alone
+      // does not say which screen sent it. The Dashboard records its first
+      // timeout before it retries. Hold only the results from before that, so
+      // the retry still uses the real emulator transport.
+      if (holdFirstWave && dashboardTimedOut()) holdFirstWave = false;
       if (!holdFirstWave) return fetchFromBrowser(resource, options);
       try {
         const response = await fetchFromBrowser(resource, options);
@@ -165,7 +164,9 @@ test("Dashboard retries a Firestore Lite fetch failure once without navigating",
     let failed = false;
     window.fetch = (resource, options) => {
       const url = new URL(resource instanceof Request ? resource.url : resource, location.href);
-      if (!failed && url.origin === origin && url.pathname.endsWith(":runQuery") && options?.method === "POST") {
+      // Only the Dashboard reads Jobs at startup; other startup lists use the same REST transport.
+      if (!failed && url.origin === origin && url.pathname.endsWith(":runQuery") && options?.method === "POST"
+          && JSON.parse(options.body).structuredQuery.from[0].collectionId === "jobs") {
         failed = true;
         return Promise.reject(new TypeError("Synthetic request failure before HTTP response"));
       }

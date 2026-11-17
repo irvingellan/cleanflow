@@ -1,16 +1,17 @@
 import {
   addDoc,
   collection,
-  documentId,
-  getDocs,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
   doc,
 } from "firebase/firestore";
+import {
+  collection as serverCollection, getDocs as getServerDocs, query as serverQuery, where as serverWhere,
+} from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
-import { getServerCollection, withReadDeadline } from "../../services/firebase/serverReads.js";
+import {
+  getServerCollection, getServerRecordsById, serverFirestore, withReadDeadline,
+} from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -43,20 +44,14 @@ function assertValidProfileEnums({ teamType, preferredPaymentMethod }) {
 
 export async function getCleanerContactsById(cleanerIds) {
   const cleanerIdBatches = cleanerLookupBatches(cleanerIds);
-  const snapshots = await Promise.all(
-    cleanerIdBatches.map((cleanerIdsBatch) =>
-      getDocs(
-        query(
-          cleanersCollection(),
-          where(documentId(), "in", cleanerIdsBatch),
-        ),
-      ),
-    ),
-  );
+  // One-shot server reads with a deadline (see getAllCleaners).
+  const batches = await withReadDeadline(Promise.all(
+    cleanerIdBatches.map((cleanerIdsBatch) => getServerRecordsById(organizationId, "cleaners", cleanerIdsBatch)),
+  ));
 
   return Object.fromEntries(
-    snapshots.flatMap((snapshot) =>
-      snapshot.docs.map((cleanerSnapshot) => [
+    batches.flatMap((documents) =>
+      documents.map((cleanerSnapshot) => [
         cleanerSnapshot.id,
         {
           name: cleanerSnapshot.data().name,
@@ -76,11 +71,11 @@ export async function getCleanerNamesById(cleanerIds) {
 }
 
 export async function getCleaners() {
-  const cleanersQuery = query(
-    cleanersCollection(),
-    where("active", "==", true),
-  );
-  const snapshot = await getDocs(cleanersQuery);
+  // One-shot server read with a deadline (see getAllCleaners).
+  const snapshot = await withReadDeadline(getServerDocs(serverQuery(
+    serverCollection(serverFirestore(), "organizations", organizationId, "cleaners"),
+    serverWhere("active", "==", true),
+  )));
 
   return filterArchivedRecords(snapshot.docs.map((cleanerDocument) => withNormalizedDataProvenance({
     ...cleanerDocument.data(),

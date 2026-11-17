@@ -3,15 +3,17 @@ import {
   collection,
   deleteField,
   doc,
-  getDoc,
-  getDocs,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
+import {
+  collection as serverCollection, doc as serverDoc, getDoc as getServerDoc, getDocs as getServerDocs,
+  query as serverQuery, where as serverWhere,
+} from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
-import { getServerRecordsById } from "../../services/firebase/serverReads.js";
+import {
+  getServerCollection, getServerRecordsById, serverFirestore, withReadDeadline,
+} from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -28,10 +30,12 @@ function clientDocument(clientId) {
   return doc(db, "organizations", organizationId, "clients", clientId);
 }
 
+// One-shot server read with a deadline: a full-SDK read on a stalled realtime
+// channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getClients({ includeArchived = false } = {}) {
-  const snapshot = await getDocs(clientsCollection());
+  const documents = await withReadDeadline(getServerCollection(organizationId, "clients"));
 
-  return filterArchivedRecords(snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
+  return filterArchivedRecords(documents.map((clientDocument) => withNormalizedDataProvenance({
     ...clientDocument.data(),
     id: clientDocument.id,
   })), includeArchived);
@@ -49,7 +53,9 @@ export async function getClientSummariesById(ids) {
 /** Name and contact of one client, for sending a report from the manager's own apps. */
 export async function getClientContact(clientId) {
   if (typeof clientId !== "string" || !clientId) return null;
-  const snapshot = await getDoc(clientDocument(clientId));
+  const snapshot = await withReadDeadline(getServerDoc(
+    serverDoc(serverFirestore(), "organizations", organizationId, "clients", clientId),
+  ));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
   const text = (value) => (typeof value === "string" ? value.trim() : "");
@@ -57,9 +63,10 @@ export async function getClientContact(clientId) {
 }
 
 export async function getActiveClients() {
-  const snapshot = await getDocs(
-    query(clientsCollection(), where("active", "==", true)),
-  );
+  const snapshot = await withReadDeadline(getServerDocs(serverQuery(
+    serverCollection(serverFirestore(), "organizations", organizationId, "clients"),
+    serverWhere("active", "==", true),
+  )));
 
   return filterArchivedRecords(snapshot.docs.map((clientDocument) => withNormalizedDataProvenance({
     ...clientDocument.data(),
