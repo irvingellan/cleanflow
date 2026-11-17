@@ -2697,13 +2697,20 @@ test("operational notifications: declined, malformed, archived and other-organiz
   assert.equal((await archived.offer.get()).data().status, "PENDING");
   assert.equal((await archived.job.collection("managerNotificationDeliveries").get()).size, 0);
 
+  // A bearer link belongs to the organization its Offer lives in: it is answered
+  // there, and nothing in this organization changes.
   const crossOrg = await syntheticOperationalOffer({ jobId: "cross-org-event", tokenByte: 42, organizationId: "other" });
-  const denied = await operationalOfferHttp({
-    token: crossOrg.token, status: "INTERESTED", organizationId: "other", jobId: "cross-org-event",
+  const eventsHere = async () => (await admin.collectionGroup("managerNotificationDeliveries").get()).docs
+    .filter((snapshot) => snapshot.ref.path.startsWith(`${root}/`)).length;
+  const eventsHereBefore = await eventsHere();
+  const answered = await operationalOfferHttp({
+    token: crossOrg.token, status: "INTERESTED", organizationId: org, jobId: "declined-event",
   });
-  assert.ok([404, 410].includes(denied.code));
-  assert.equal((await crossOrg.offer.get()).data().status, "PENDING");
-  assert.equal((await crossOrg.job.collection("managerNotificationDeliveries").get()).size, 0);
+  assert.equal(answered.code, 200);
+  assert.equal((await crossOrg.offer.get()).data().status, "INTERESTED");
+  assert.equal((await crossOrg.job.collection("managerNotificationDeliveries").get()).size, 1);
+  assert.equal(await eventsHere(), eventsHereBefore);
+  assert.equal((await declined.offer.get()).data().status, "DECLINED");
 });
 
 test("operational notifications: exact Assignment confirmation creates one event across five concurrent/repeated races", async () => {
