@@ -25,6 +25,12 @@ beforeEach(() => {
       cleaners: [{ id: "c1", name: "Ana Example", phone: "+1 555 0100", preferredLanguage: "pt" }],
       properties: [{ id: "p1", name: "Lake House", address: "100 Example St" }],
     }),
+    source: {
+      period, jobs: jobs.map((job) => ({ ...job, scheduledDate: period.start })),
+      cleaners: [{ id: "c1", name: "Ana Example", phone: "+1 555 0100", preferredLanguage: "pt" }],
+      properties: [{ id: "p1", name: "Lake House", address: "100 Example St", clientId: "cl1" }],
+      clients: [{ id: "cl1", name: "North Rentals" }],
+    },
     coverage: { truncated: false, limit: 200 },
     jobsById: new Map(jobs.map((job) => [job.id, job])),
   }));
@@ -51,6 +57,44 @@ describe("CleanerAgendaView", () => {
     fireEvent.click(screen.getByRole("button", { name: /completed|concluídas/i }));
     const group = screen.getByRole("article", { name: "Ana Example" });
     expect(within(group).getAllByText(/90/).length).toBeGreaterThan(0);
+  });
+});
+
+describe("CleanerAgendaView house and client filters", () => {
+  it("narrows the agenda to one house or one client and clears back", async () => {
+    const two = [
+      { id: "h1", propertyId: "p1", operationalStatus: "ASSIGNED", schemaVersion: 2, assignedCleanerIds: ["c1"], dataProvenance: "REAL" },
+      { id: "h2", propertyId: "p2", operationalStatus: "ASSIGNED", schemaVersion: 2, assignedCleanerIds: ["c1"], dataProvenance: "REAL" },
+    ];
+    loadCleanerAgenda.mockImplementation(async (period) => {
+      const source = {
+        period, jobs: two.map((job) => ({ ...job, scheduledDate: period.start })),
+        cleaners: [{ id: "c1", name: "Ana Example", phone: "+1 555 0100", preferredLanguage: "pt" }],
+        properties: [
+          { id: "p1", name: "Lake House", address: "100 Example St", clientId: "cl1" },
+          { id: "p2", name: "Garden Studio", address: "22 Sample Ave", clientId: "cl2" },
+        ],
+        clients: [{ id: "cl1", name: "North Rentals" }, { id: "cl2", name: "South Stays" }],
+      };
+      return { ...buildCleanerAgenda(source), source, coverage: { truncated: false, limit: 200 }, jobsById: new Map() };
+    });
+    render(<TranslationProvider><CleanerAgendaView onBack={() => {}} onOpenJob={() => {}} /></TranslationProvider>);
+    // The view remembers the last tab for the page session; start on the schedule.
+    fireEvent.click(await screen.findByRole("button", { name: /^(by cleaner|por cleaner)/i }));
+    let group = await screen.findByRole("article", { name: "Ana Example" });
+    expect(within(group).getAllByRole("listitem")).toHaveLength(2);
+
+    fireEvent.change(screen.getByLabelText(/^(House|Casa)$/), { target: { value: "p2" } });
+    group = screen.getByRole("article", { name: "Ana Example" });
+    expect(within(group).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(group).getByText("Garden Studio")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /clear filters|limpar filtros/i }));
+    fireEvent.change(screen.getByLabelText(/^(Client|Cliente)$/), { target: { value: "cl1" } });
+    group = screen.getByRole("article", { name: "Ana Example" });
+    expect(within(group).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(group).getByText("Lake House")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /clear filters|limpar filtros/i }));
   });
 });
 

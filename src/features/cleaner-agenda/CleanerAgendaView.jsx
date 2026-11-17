@@ -5,7 +5,7 @@ import { useTranslation } from "../../i18n/translations.js";
 import { formatDate, formatPrice, formatShortWeekday } from "../../lib/presentation.js";
 import { buildWhatsAppHandoffUrl } from "../jobs/whatsappHandoff.js";
 import { previousServiceWeek, servicePeriod, shiftServiceWeek } from "../weekly-close/weeklyCloseModel.js";
-import { agendaMessage } from "./cleanerAgendaModel.js";
+import { agendaFilterOptions, agendaMessage, buildCleanerAgenda } from "./cleanerAgendaModel.js";
 import { agendaStatus, agendaText, cleanerMessageCopy, supportedAgendaLanguage } from "./cleanerAgendaMessages.js";
 import { loadCleanerAgenda } from "./cleanerAgendaService.js";
 import "./cleanerAgenda.css";
@@ -15,7 +15,7 @@ const localeByLanguage = { en: "en-US", pt: "pt-BR", es: "es-US" };
 
 const thisWeek = () => shiftServiceWeek(previousServiceWeek().start, 1);
 // Kept for this page session so returning from a service keeps the same view.
-const remembered = { period: null, tab: "schedule", cleanerId: "" };
+const remembered = { period: null, tab: "schedule", cleanerId: "", propertyId: "", clientId: "" };
 
 function shortDate(value, language) {
   const date = new Date(`${value}T00:00:00`);
@@ -83,8 +83,10 @@ export function CleanerAgendaView({ onBack, onOpenJob }) {
   const [invalidDates, setInvalidDates] = useState(false);
   const [tab, setTab] = useState(remembered.tab);
   const [cleanerId, setCleanerId] = useState(remembered.cleanerId);
+  const [propertyId, setPropertyId] = useState(remembered.propertyId);
+  const [clientId, setClientId] = useState(remembered.clientId);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [model, setModel] = useState(null);
+  const [loaded, setModel] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
@@ -95,8 +97,8 @@ export function CleanerAgendaView({ onBack, onOpenJob }) {
   };
 
   useEffect(() => {
-    Object.assign(remembered, { period, tab, cleanerId });
-  }, [period, tab, cleanerId]);
+    Object.assign(remembered, { period, tab, cleanerId, propertyId, clientId });
+  }, [period, tab, cleanerId, propertyId, clientId]);
 
   useEffect(() => {
     let current = true;
@@ -121,14 +123,23 @@ export function CleanerAgendaView({ onBack, onOpenJob }) {
     return () => { current = false; controller.abort(); clearTimeout(timer); };
   }, [period, refreshKey]);
 
+  const filterOptions = useMemo(() => (loaded?.source ? agendaFilterOptions(loaded.source) : { properties: [], clients: [] }), [loaded]);
+  // A choice from another period that has no service here is ignored, not shown as empty.
+  const activePropertyId = filterOptions.properties.some(([id]) => id === propertyId) ? propertyId : "";
+  const activeClientId = filterOptions.clients.some(([id]) => id === clientId) ? clientId : "";
+  const model = useMemo(() => (loaded?.source && (activePropertyId || activeClientId)
+    ? { ...loaded, ...buildCleanerAgenda({ ...loaded.source, filters: { propertyId: activePropertyId, clientId: activeClientId } }) }
+    : loaded), [loaded, activePropertyId, activeClientId]);
+  const hasFilters = Boolean(activePropertyId || activeClientId || cleanerId);
+  const clearFilters = () => { setPropertyId(""); setClientId(""); setCleanerId(""); };
   const groups = tab === "completed" ? model?.completed : model?.schedule;
   const cleanerOptions = useMemo(() => {
     const seen = new Map();
-    for (const group of [...(model?.schedule || []), ...(model?.completed || [])]) {
+    for (const group of [...(loaded?.schedule || []), ...(loaded?.completed || [])]) {
       if (!seen.has(group.cleanerId)) seen.set(group.cleanerId, group.name);
     }
     return [...seen.entries()];
-  }, [model]);
+  }, [loaded]);
   const visibleGroups = (groups || []).filter((group) => !cleanerId || group.cleanerId === cleanerId);
   const money = (amount) => formatPrice(amount, translate, language);
   const openService = (jobId) => {
@@ -190,14 +201,28 @@ export function CleanerAgendaView({ onBack, onOpenJob }) {
       {model && !isLoading && !hasError && <>
         {model.coverage?.truncated && <p role="status" className="weekly-close-attention">{t("partial", { limit: model.coverage.limit })}</p>}
 
-        {tab !== "unassigned" && cleanerOptions.length > 1 && (
-          <div className="weekly-close-controls">
-            <label>{t("cleaner")}
+        {(filterOptions.properties.length > 1 || filterOptions.clients.length > 1
+          || (tab !== "unassigned" && cleanerOptions.length > 1)) && (
+          <div className="weekly-close-controls cleaner-agenda__filters">
+            {filterOptions.clients.length > 1 && <label>{t("client")}
+              <select id="cleaner-agenda-client" value={activeClientId} onChange={(event) => setClientId(event.target.value)}>
+                <option value="">{t("allClients")}</option>
+                {filterOptions.clients.map(([id, name]) => <option key={id} value={id}>{name || t("unnamedClient")}</option>)}
+              </select>
+            </label>}
+            {filterOptions.properties.length > 1 && <label>{t("house")}
+              <select id="cleaner-agenda-house" value={activePropertyId} onChange={(event) => setPropertyId(event.target.value)}>
+                <option value="">{t("allHouses")}</option>
+                {filterOptions.properties.map(([id, name]) => <option key={id} value={id}>{name || t("unnamedProperty")}</option>)}
+              </select>
+            </label>}
+            {tab !== "unassigned" && cleanerOptions.length > 1 && <label>{t("cleaner")}
               <select id="cleaner-agenda-cleaner" value={cleanerId} onChange={(event) => setCleanerId(event.target.value)}>
                 <option value="">{t("allCleaners")}</option>
                 {cleanerOptions.map(([id, name]) => <option key={id} value={id}>{name || t("unnamedCleaner")}</option>)}
               </select>
-            </label>
+            </label>}
+            {hasFilters && <button className="button button--secondary button--small" type="button" onClick={clearFilters}>{t("clearFilters")}</button>}
           </div>
         )}
 

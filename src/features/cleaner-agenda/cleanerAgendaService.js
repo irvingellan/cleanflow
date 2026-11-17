@@ -28,11 +28,18 @@ export async function loadCleanerAgenda(period, { signal } = {}) {
     readByIds("cleaners", jobs.flatMap(rosterCleanerIds),
       ({ name, phone, preferredLanguage }) => ({ name, phone, preferredLanguage }), signal),
     readByIds("properties", jobs.map((job) => job.propertyId),
-      ({ name, address }) => ({ name, address }), signal),
+      ({ name, address, clientId }) => ({ name, address, clientId }), signal),
   ]);
+  signal?.throwIfAborted();
+  // Client names only, for the client filter.
+  const clients = await readByIds("clients",
+    [...properties.map((property) => property.clientId), ...jobs.map((job) => job.clientId)],
+    ({ name }) => ({ name }), signal);
   signal?.throwIfAborted();
   return {
     ...buildCleanerAgenda({ period: dates, jobs, cleaners, properties }),
+    // Raw rows so the view can rebuild the agenda for a house or client filter.
+    source: { period: dates, jobs, cleaners, properties, clients },
     coverage,
     // Job detail opens from the full record already read here.
     jobsById: new Map(jobs.map((job) => [job.id, job])),
