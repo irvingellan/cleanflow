@@ -11,6 +11,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
@@ -18,14 +19,12 @@ import {
 } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 
-const organizationId = "cleanflow-demo";
-
 function clientsCollection() {
-  return collection(db, "organizations", organizationId, "clients");
+  return collection(db, "organizations", currentOrganizationId(), "clients");
 }
 
 function clientDocument(clientId) {
-  return doc(db, "organizations", organizationId, "clients", clientId);
+  return doc(db, "organizations", currentOrganizationId(), "clients", clientId);
 }
 
 export async function getClients({ includeArchived = false } = {}) {
@@ -39,7 +38,7 @@ export async function getClients({ includeArchived = false } = {}) {
 
 /** One document-ID batch for read-only service reconciliation. */
 export async function getClientSummariesById(ids) {
-  const records = await getServerRecordsById(organizationId, "clients", ids);
+  const records = await getServerRecordsById(currentOrganizationId(), "clients", ids);
   return records.map((row) => {
     const { name } = row.data();
     return { id: row.id, name };
@@ -77,7 +76,7 @@ export async function createClient({
   active,
 }) {
   const client = {
-    organizationId,
+    organizationId: currentOrganizationId(),
     name,
     active,
     createdAt: serverTimestamp(),

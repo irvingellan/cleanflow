@@ -3,8 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { getAuth } from "firebase/auth";
 import { setCleanerPushAlerts as writeCleanerPushAlerts } from "./cleanerService.js";
 import { db, firebaseApp, functions } from "../../services/firebase/client.js";
-
-const organizationId = "cleanflow-demo";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
 function timestampIso(value) {
   return value?.toDate?.()?.toISOString?.() || null;
@@ -12,7 +11,7 @@ function timestampIso(value) {
 
 /** Server-written link status; never contains codes, hashes or account IDs for display. */
 export async function getCleanerHubAccess(cleanerId) {
-  const snapshot = await getDocFromServer(doc(db, "organizations", organizationId, "cleanerHubAccess", cleanerId));
+  const snapshot = await getDocFromServer(doc(db, "organizations", currentOrganizationId(), "cleanerHubAccess", cleanerId));
   if (!snapshot.exists()) return { active: false, linkedAt: null, revokedAt: null, pendingCodeExpiresAt: null };
   const data = snapshot.data();
   return {

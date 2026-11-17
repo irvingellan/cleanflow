@@ -10,6 +10,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { getServerCollection, withReadDeadline } from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
@@ -19,16 +20,15 @@ import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from ".
 
 import { cleanerLookupBatches } from "./cleanerLookupBatches.js";
 
-const organizationId = "cleanflow-demo";
 export const supportedCleanerTeamTypes = ["", "SOLO", "COUPLE", "TEAM"];
 export const supportedPaymentMethods = ["", "ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 
 function cleanersCollection() {
-  return collection(db, "organizations", organizationId, "cleaners");
+  return collection(db, "organizations", currentOrganizationId(), "cleaners");
 }
 
 function cleanerDocument(cleanerId) {
-  return doc(db, "organizations", organizationId, "cleaners", cleanerId);
+  return doc(db, "organizations", currentOrganizationId(), "cleaners", cleanerId);
 }
 
 function assertValidProfileEnums({ teamType, preferredPaymentMethod }) {
@@ -91,7 +91,7 @@ export async function getCleaners() {
 // A one-shot server read with a deadline: the realtime channel can stall and
 // leave the Cleaners, Jobs and Payouts screens loading forever.
 export async function getAllCleaners({ includeArchived = false } = {}) {
-  const documents = await withReadDeadline(getServerCollection(organizationId, "cleaners"));
+  const documents = await withReadDeadline(getServerCollection(currentOrganizationId(), "cleaners"));
 
   return filterArchivedRecords(documents.map((cleanerDocumentSnapshot) => withNormalizedDataProvenance({
     ...cleanerDocumentSnapshot.data(),
@@ -122,7 +122,7 @@ export async function createCleaner({
     internalNotes,
     preferredPaymentMethod,
     paymentContact,
-    organizationId,
+    organizationId: currentOrganizationId(),
     dataProvenance: "REAL",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

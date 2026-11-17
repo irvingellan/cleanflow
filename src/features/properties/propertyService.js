@@ -10,6 +10,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
@@ -18,14 +19,12 @@ import {
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import { normalizePropertyChecklistSettings } from "../checklists/checklistRunDefinition.js";
 
-const organizationId = "cleanflow-demo";
-
 function propertiesCollection() {
-  return collection(db, "organizations", organizationId, "properties");
+  return collection(db, "organizations", currentOrganizationId(), "properties");
 }
 
 function propertyDocument(propertyId) {
-  return doc(db, "organizations", organizationId, "properties", propertyId);
+  return doc(db, "organizations", currentOrganizationId(), "properties", propertyId);
 }
 
 export async function getProperties({ includeArchived = false } = {}) {
@@ -39,7 +38,7 @@ export async function getProperties({ includeArchived = false } = {}) {
 
 /** One document-ID batch for read-only service reconciliation. */
 export async function getPropertySummariesById(ids) {
-  const records = await getServerRecordsById(organizationId, "properties", ids);
+  const records = await getServerRecordsById(currentOrganizationId(), "properties", ids);
   return records.map((row) => {
     const { name, clientId } = row.data();
     return { id: row.id, name, clientId };
@@ -76,7 +75,7 @@ export async function createProperty({
     name,
     clientName,
     active,
-    organizationId,
+    organizationId: currentOrganizationId(),
     dataProvenance: "REAL",
   };
 
