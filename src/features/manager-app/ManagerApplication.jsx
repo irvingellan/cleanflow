@@ -1,9 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { appVersion } from "../../appVersion.js";
-import {
-  isManagerLoadDiagnosticsPath,
-  isWeeklyClosePreviewPath,
-} from "../../app/entryRoute.js";
 import { content } from "../../app/content.js";
 import { LanguageSelector } from "../../components/LanguageSelector.jsx";
 import { AppShell } from "../../components/shell/AppShell.jsx";
@@ -12,74 +8,40 @@ import { Icon } from "../../components/Icon.jsx";
 import {
   ThemeToggle,
 } from "../auth/ManagerSignIn.jsx";
-import {
-  StateCard,
-} from "../../components/UiPrimitives.jsx";
 import { FeedbackPanel } from "../feedback/FeedbackPanel.jsx";
-import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
+import { NotificationInboxBadge, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
 import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
 import { getJobById } from "../jobs/jobService.js";
 import { NotificationControl } from "../notifications/NotificationControl.jsx";
 import { useOneSignalIdentity } from "../notifications/useOneSignalIdentity.js";
 import { PwaUpdatePrompt } from "../pwa/PwaUpdatePrompt.jsx";
-import { PayoutDirectory, PayoutReview } from "../payouts/PayoutViews.jsx";
 import { usePayoutsController } from "../payouts/usePayoutsController.js";
 import { WhatsNewPanel } from "../releases/WhatsNewPanel.jsx";
 import { startManagerFunctionWarmup } from "../../services/firebase/managerFunctionWarmup.js";
-import { CleanerDetail } from "../cleaners/CleanerDetail.jsx";
-import { CleanerDirectory } from "../cleaners/CleanerDirectory.jsx";
-import {
-  CleanerProfileForm,
-  CleanerProfileSuccess,
-} from "../cleaners/CleanerProfileForm.jsx";
 import { useCleanersController } from "../cleaners/useCleanersController.js";
-import { ClientDetail } from "../clients/ClientDetail.jsx";
-import { ClientDirectory } from "../clients/ClientDirectory.jsx";
-import { ClientForm } from "../clients/ClientForm.jsx";
 import { useClientsController } from "../clients/useClientsController.js";
-import { ChecklistRunDetail } from "../checklists/ChecklistRunDetail.jsx";
-import { Dashboard } from "../dashboard/Dashboard.jsx";
 import { useDashboardController } from "../dashboard/useDashboardController.js";
-import { DevCenter } from "../dev-center/DevCenter.jsx";
 import { useDevCenterController } from "../dev-center/useDevCenterController.js";
-import { JobDetail } from "../jobs/JobDetail.jsx";
-import { SandboxLifecyclePreview } from "../jobs/SandboxLifecyclePreview.jsx";
 import { canShowEnvironmentNavigation } from "../../environment.js";
-import { CreateCleaningForm } from "../jobs/JobForm.jsx";
-import { JobsPage } from "../jobs/JobsPage.jsx";
 import {
   createJobListFilters,
   dashboardJobListFilters,
 } from "../jobs/jobListFilters.js";
 import { useJobDetailController } from "../jobs/useJobDetailController.js";
 import { useJobsWorklist } from "../jobs/useJobsWorklist.js";
-import {
-  AssignedCleanerJob,
-  IssueForm,
-  IssueSuccess,
-  OfferCleaners,
-} from "../jobs/JobWorkflowViews.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { useManagerPageLoadTelemetry } from "../telemetry/useManagerPageLoadTelemetry.js";
-import { ManagerPageLoadDiagnostics } from "../telemetry/ManagerPageLoadDiagnostics.jsx";
-import { WeeklyClosePreview } from "../weekly-close/WeeklyClosePreview.jsx";
-import { CleanerAgendaView } from "../cleaner-agenda/CleanerAgendaView.jsx";
-import { CleanerAlertsView } from "../cleaner-alerts/CleanerAlertsView.jsx";
 import { DeveloperEnvironmentControls } from "../../components/EnvironmentBanner.jsx";
-import {
-  formatCreatedAt,
-  formatDate,
-  formatPrice,
-} from "../../lib/presentation.js";
-import { PropertyDetail } from "../properties/PropertyDetail.jsx";
-import { PropertyDirectory } from "../properties/PropertyDirectory.jsx";
-import {
-  PropertyClientLinkForm,
-  PropertyEditForm,
-  PropertyForm,
-} from "../properties/PropertyForm.jsx";
 import { usePropertiesController } from "../properties/usePropertiesController.js";
+import { useManagerNavigation } from "./useManagerNavigation.js";
+import { PropertyViews } from "./views/PropertyViews.jsx";
+import { CleanerViews } from "./views/CleanerViews.jsx";
+import { PayoutViews } from "./views/PayoutViews.jsx";
+import { ClientViews } from "./views/ClientViews.jsx";
+import { HomeViews } from "./views/HomeViews.jsx";
+import { DeveloperViews } from "./views/DeveloperViews.jsx";
+import { JobViews } from "./views/JobViews.jsx";
 
 export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
@@ -87,23 +49,25 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
   useOneSignalIdentity(authUser?.uid);
   useEffect(() => startManagerFunctionWarmup(), []);
   const inbox = useNotificationInbox({ role: "MANAGER", sessionKey: authUser.uid });
-  const [activeSection, setActiveSection] = useState(() => (
-    isManagerLoadDiagnosticsPath() ? "dev-center" : isWeeklyClosePreviewPath() ? "payouts" : "dashboard"
-  ));
-  const [view, setView] = useState(() => (
-    isManagerLoadDiagnosticsPath() ? "load-time-diagnostics" : isWeeklyClosePreviewPath() ? "weekly-close-preview" : "dashboard"
-  ));
-  const homeNoticeRequest = useRef(0);
-  const currentView = useRef(view);
-  if (currentView.current !== view) {
-    currentView.current = view;
-    homeNoticeRequest.current += 1;
-  }
-  useEffect(() => () => { homeNoticeRequest.current += 1; }, []);
-  const [jobDetailOrigin, setJobDetailOrigin] = useState("jobs");
-  const [jobDetailInitialFocus, setJobDetailInitialFocus] = useState(null);
-  const [jobsScrollRestore, setJobsScrollRestore] = useState(null);
-  const [propertyDetailOrigin, setPropertyDetailOrigin] = useState("properties");
+  const {
+    activeSection,
+    setActiveSection,
+    view,
+    setView,
+    homeNoticeRequest,
+    currentView,
+    jobDetailOrigin,
+    setJobDetailOrigin,
+    jobDetailInitialFocus,
+    setJobDetailInitialFocus,
+    jobsScrollRestore,
+    setJobsScrollRestore,
+    propertyDetailOrigin,
+    setPropertyDetailOrigin,
+    showPropertyClientLink,
+    showEditProperty,
+    showEditClient,
+  } = useManagerNavigation();
   const [showExcludedRecords, setShowExcludedRecords] = useState(false);
   const devCenterController = useDevCenterController({ view });
   const canManageExcludedRecords = devCenterController.access.authorized;
@@ -112,14 +76,6 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
     && canShowEnvironmentNavigation(authUser, "sandbox");
   const showServicesPane = isWideWorkspace && jobDetailOrigin === "jobs" && Boolean(jobsScrollRestore);
 
-  useEffect(() => {
-    if (view !== "load-time-diagnostics" && isManagerLoadDiagnosticsPath()) {
-      window.history.replaceState(window.history.state, "", "/");
-    }
-    if (view !== "weekly-close-preview" && isWeeklyClosePreviewPath()) {
-      window.history.replaceState(window.history.state, "", "/");
-    }
-  }, [view]);
   const jobWorklist = useJobsWorklist({
     view,
     detailPaneActive: showServicesPane,
@@ -338,14 +294,6 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
     setView("property-create");
   }
 
-  function showPropertyClientLink() {
-    setView("property-link-client");
-  }
-
-  function showEditProperty() {
-    setView("property-edit");
-  }
-
   function showDashboard() {
     setActiveSection("dashboard");
     clearProperty();
@@ -475,10 +423,6 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
   function showNewClient() {
     clearClient();
     setView("client-create");
-  }
-
-  function showEditClient() {
-    setView("client-edit");
   }
 
   function openClient(client) {
@@ -755,491 +699,241 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           </p>
         )}
         <PwaUpdatePrompt />
-        {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
-          && <SandboxLifecyclePreview onBack={showDashboard} />}
-        {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
-        {notificationInboxEnabled() && view === "notification-inbox" && (
-          <NotificationInbox inbox={inbox} language={language} onBack={showDashboard} onOpen={openInboxTarget} />
-        )}
+        <DeveloperViews
+          view={view}
+          canPreviewLifecycle={canPreviewLifecycle}
+          showDashboard={showDashboard}
+          devCenterController={devCenterController}
+          authUser={authUser}
+          translate={translate}
+          setActiveSection={setActiveSection}
+          setView={setView}
+        />
+        <PayoutViews
+          view={view}
+          showPayouts={showPayouts}
+          payoutGroups={payoutGroups}
+          recentPayouts={recentPayouts}
+          isLoadingPayouts={isLoadingPayouts}
+          hasPayoutsError={hasPayoutsError}
+          paidPayoutSummary={paidPayoutSummary}
+          refreshPayouts={refreshPayouts}
+          showWeeklyClose={showWeeklyClose}
+          openPayoutReview={openPayoutReview}
+          attachProof={attachProof}
+          getProofUrl={getProofUrl}
+          translate={translate}
+          language={language}
+          selectedPayoutGroup={selectedPayoutGroup}
+          recordPayout={recordPayout}
+          showRecordedPayout={showRecordedPayout}
+        />
+        <HomeViews
+          view={view}
+          inbox={inbox}
+          language={language}
+          showDashboard={showDashboard}
+          openInboxTarget={openInboxTarget}
+          dashboardData={dashboardData}
+          isLoadingDashboard={isLoadingDashboard}
+          hasDashboardError={hasDashboardError}
+          translate={translate}
+          refreshDashboard={refreshDashboard}
+          openDashboardJob={openDashboardJob}
+          showJobs={showJobs}
+          showJobsWithFilter={showJobsWithFilter}
+          openInboxItemFromHome={openInboxItemFromHome}
+          setView={setView}
+        />
 
-        {view === "dashboard" && (
-          <Dashboard
-            dashboardData={dashboardData}
-            isLoading={isLoadingDashboard}
-            hasError={hasDashboardError}
-            translate={translate}
-            onRefresh={refreshDashboard}
-            onOpenJob={openDashboardJob}
-            onShowJobs={showJobs}
-            onShowJobsWithFilter={showJobsWithFilter}
-            notices={notificationInboxEnabled() && inbox.state === "ready" ? inbox.items : []}
-            onOpenNotice={openInboxItemFromHome}
-            onShowInbox={notificationInboxEnabled() ? () => setView("notification-inbox") : null}
-          />
-        )}
+        <PropertyViews
+          view={view}
+          properties={properties}
+          isLoadingProperties={isLoadingProperties}
+          hasPropertyError={hasPropertyError}
+          openProperty={openProperty}
+          showNewProperty={showNewProperty}
+          canManageExcludedRecords={canManageExcludedRecords}
+          showExcludedRecords={showExcludedRecords}
+          setShowExcludedRecords={setShowExcludedRecords}
+          propertyDetailOrigin={propertyDetailOrigin}
+          selectedClient={selectedClient}
+          returnToClientDetail={returnToClientDetail}
+          showProperties={showProperties}
+          saveProperty={saveProperty}
+          clearProperty={clearProperty}
+          setView={setView}
+          selectProperty={selectProperty}
+          selectedProperty={selectedProperty}
+          showEditProperty={showEditProperty}
+          openPropertyJob={openPropertyJob}
+          showPropertyClientLink={showPropertyClientLink}
+          savePropertyDataProvenance={savePropertyDataProvenance}
+          archivePropertyRecord={archivePropertyRecord}
+          restorePropertyRecord={restorePropertyRecord}
+          showJobsForProperty={showJobsForProperty}
+          savePropertyChecklistSettings={savePropertyChecklistSettings}
+          savePropertyCleanerAccess={savePropertyCleanerAccess}
+          savePropertyEdit={savePropertyEdit}
+          linkClient={linkClient}
+        />
 
-        {view === "dev-center" && devCenterController.access.authorized && (
-          <DevCenter
-            access={devCenterController.access}
-            isWorking={devCenterController.isWorking}
-            pendingPreviewType={devCenterController.pendingPreviewType}
-            hasError={devCenterController.hasError}
-            lastResult={devCenterController.lastResult}
-            diagnostics={devCenterController.diagnostics}
-            isLoadingDiagnostics={devCenterController.isLoadingDiagnostics}
-            hasDiagnosticsError={devCenterController.hasDiagnosticsError}
-            onGenerate={devCenterController.generate}
-            onClear={devCenterController.clear}
-            onPreviewReminder={devCenterController.previewReminder}
-            onRefreshDiagnostics={devCenterController.loadNotificationDiagnostics}
-            notificationUserId={authUser.uid}
-          />
-        )}
+        <JobViews
+          view={view}
+          selectedProperty={selectedProperty}
+          properties={properties}
+          isLoadingProperties={isLoadingProperties}
+          hasPropertyError={hasPropertyError}
+          setView={setView}
+          returnToJobs={returnToJobs}
+          openJob={openJob}
+          jobs={jobs}
+          isLoadingJobs={isLoadingJobs}
+          hasJobError={hasJobError}
+          showNewJob={showNewJob}
+          jobListFilters={jobListFilters}
+          cleaners={cleaners}
+          jobFilterCleaners={jobFilterCleaners}
+          setJobListFilters={setJobListFilters}
+          hasMoreJobs={hasMoreJobs}
+          isLoadingMoreJobs={isLoadingMoreJobs}
+          loadMoreJobs={loadMoreJobs}
+          jobsScrollRestore={jobsScrollRestore}
+          setJobsScrollRestore={setJobsScrollRestore}
+          canManageExcludedRecords={canManageExcludedRecords}
+          showExcludedRecords={showExcludedRecords}
+          setShowExcludedRecords={setShowExcludedRecords}
+          selectedJob={selectedJob}
+          showServicesPane={showServicesPane}
+          translate={translate}
+          jobDetailInitialFocus={jobDetailInitialFocus}
+          directoryCleaners={directoryCleaners}
+          isLoadingCleaners={isLoadingCleaners}
+          hasCleanerError={hasCleanerError}
+          offersCreatedCount={offersCreatedCount}
+          jobOffers={jobOffers}
+          isLoadingOffers={isLoadingOffers}
+          hasOffersError={hasOffersError}
+          jobAssignments={jobAssignments}
+          isLoadingAssignments={isLoadingAssignments}
+          hasAssignmentsError={hasAssignmentsError}
+          jobIssues={jobIssues}
+          isLoadingIssues={isLoadingIssues}
+          hasIssuesError={hasIssuesError}
+          checklistRun={checklistRun}
+          isLoadingChecklistRun={isLoadingChecklistRun}
+          hasChecklistRunError={hasChecklistRunError}
+          isCreatingChecklistRun={isCreatingChecklistRun}
+          hasCreateChecklistRunError={hasCreateChecklistRunError}
+          checklistCapability={checklistCapability}
+          isLoadingChecklistCapability={isLoadingChecklistCapability}
+          hasChecklistCapabilityError={hasChecklistCapabilityError}
+          isIssuingChecklistCapability={isIssuingChecklistCapability}
+          hasIssueChecklistCapabilityError={hasIssueChecklistCapabilityError}
+          isRevokingChecklistCapability={isRevokingChecklistCapability}
+          hasRevokeChecklistCapabilityError={hasRevokeChecklistCapabilityError}
+          jobDetailOrigin={jobDetailOrigin}
+          showDashboard={showDashboard}
+          returnToPropertyDetail={returnToPropertyDetail}
+          returnToClientDetail={returnToClientDetail}
+          returnToCleanerDetail={returnToCleanerDetail}
+          returnToCleanerAgenda={returnToCleanerAgenda}
+          showOfferCleaners={showOfferCleaners}
+          refreshJobOffers={refreshJobOffers}
+          refreshJobIssues={refreshJobIssues}
+          refreshChecklistRun={refreshChecklistRun}
+          createAndOpenChecklistRun={createAndOpenChecklistRun}
+          openChecklistRun={openChecklistRun}
+          refreshChecklistCapability={refreshChecklistCapability}
+          issueJobChecklistCapability={issueJobChecklistCapability}
+          prepareChecklistReminder={prepareChecklistReminder}
+          revokeJobChecklistCapability={revokeJobChecklistCapability}
+          createCleanerOfferLink={createCleanerOfferLink}
+          revokeCleanerOffer={revokeCleanerOffer}
+          assignCleaner={assignCleaner}
+          decideCleanerOffer={decideCleanerOffer}
+          reopenCleanerOffer={reopenCleanerOffer}
+          setCleanerSpots={setCleanerSpots}
+          markReminderSent={markReminderSent}
+          assignCleanerDirectly={assignCleanerDirectly}
+          removeCleanerAssignment={removeCleanerAssignment}
+          replaceCleanerAssignment={replaceCleanerAssignment}
+          startCleaning={startCleaning}
+          completeCleaning={completeCleaning}
+          saveJobPrices={saveJobPrices}
+          saveJobDetails={saveJobDetails}
+          saveJobSchedule={saveJobSchedule}
+          offerManualReplacement={offerManualReplacement}
+          openAssignedCleanerJob={openAssignedCleanerJob}
+          resolveJobIssue={resolveJobIssue}
+          saveJobDataProvenance={saveJobDataProvenance}
+          archiveJobRecord={archiveJobRecord}
+          removeJobFromWorklist={removeJobFromWorklist}
+          restoreJobRecord={restoreJobRecord}
+          isRefreshingChecklistRun={isRefreshingChecklistRun}
+          approveChecklistRun={approveChecklistRun}
+          submitChecklistRunForReview={submitChecklistRunForReview}
+          abandonChecklistRunAndCompleteJob={abandonChecklistRunAndCompleteJob}
+          returnToJobDetail={returnToJobDetail}
+          recordOffersCreated={recordOffersCreated}
+        />
 
-        {view === "load-time-diagnostics" && devCenterController.access.isChecking && (
-          <StateCard message={translate("auth.managerAccessLoading")} status="status" />
-        )}
+        <CleanerViews
+          view={view}
+          directoryCleaners={directoryCleaners}
+          isLoadingDirectoryCleaners={isLoadingDirectoryCleaners}
+          hasDirectoryCleanersError={hasDirectoryCleanersError}
+          openCleaner={openCleaner}
+          showNewCleaner={showNewCleaner}
+          canManageExcludedRecords={canManageExcludedRecords}
+          showExcludedRecords={showExcludedRecords}
+          setShowExcludedRecords={setShowExcludedRecords}
+          showCleanerAgenda={showCleanerAgenda}
+          showCleanerAlerts={showCleanerAlerts}
+          showCleaners={showCleaners}
+          openCleanerAgendaJob={openCleanerAgendaJob}
+          selectedCleaner={selectedCleaner}
+          showEditCleaner={showEditCleaner}
+          openCleanerJob={openCleanerJob}
+          saveCleanerDataProvenance={saveCleanerDataProvenance}
+          archiveCleanerRecord={archiveCleanerRecord}
+          restoreCleanerRecord={restoreCleanerRecord}
+          saveCleaner={saveCleaner}
+          setView={setView}
+          showCleanerDetail={showCleanerDetail}
+          savedCleaner={savedCleaner}
+        />
 
-        {view === "load-time-diagnostics" && !devCenterController.access.isChecking
-          && !devCenterController.access.authorized && (
-          <section className="panel">
-            <StateCard message={translate("loadDiagnostics.unauthorized")} status="alert" isError />
-            <button className="button" type="button" onClick={() => {
-              setActiveSection("dashboard");
-              setView("dashboard");
-            }}>{translate("navigation.dashboard")}</button>
-          </section>
-        )}
+        <ClientViews
+          view={view}
+          clients={clients}
+          isLoadingClients={isLoadingClients}
+          hasClientsError={hasClientsError}
+          showNewClient={showNewClient}
+          openClient={openClient}
+          canManageExcludedRecords={canManageExcludedRecords}
+          showExcludedRecords={showExcludedRecords}
+          setShowExcludedRecords={setShowExcludedRecords}
+          selectedClient={selectedClient}
+          clientProperties={clientProperties}
+          isLoadingClientProperties={isLoadingClientProperties}
+          hasClientPropertiesError={hasClientPropertiesError}
+          clientJobHistory={clientJobHistory}
+          hasClientJobHistoryError={hasClientJobHistoryError}
+          showClients={showClients}
+          openClientProperty={openClientProperty}
+          showNewPropertyForClient={showNewPropertyForClient}
+          showEditClient={showEditClient}
+          openClientJob={openClientJob}
+          saveClientDataProvenance={saveClientDataProvenance}
+          archiveClientRecord={archiveClientRecord}
+          restoreClientRecord={restoreClientRecord}
+          showJobsForClient={showJobsForClient}
+          setView={setView}
+          saveClientEdit={saveClientEdit}
+          saveClient={saveClient}
+        />
 
-        {view === "load-time-diagnostics" && devCenterController.access.authorized && (
-          <ManagerPageLoadDiagnostics onBack={() => {
-            setActiveSection("dev-center");
-            setView("dev-center");
-          }} />
-        )}
-
-        {view === "property-list" && (
-          <PropertyDirectory
-            properties={properties}
-            isLoading={isLoadingProperties}
-            hasError={hasPropertyError}
-            onSelect={openProperty}
-            onCreate={showNewProperty}
-            canManageExcluded={canManageExcludedRecords}
-            showExcluded={showExcludedRecords}
-            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-          />
-        )}
-
-        {view === "property-create" && (
-          <PropertyForm
-            preselectedClient={
-              propertyDetailOrigin === "client" ? selectedClient : null
-            }
-            onBack={
-              propertyDetailOrigin === "client" ? returnToClientDetail : showProperties
-            }
-            onSaved={async (values) => {
-              const property = await saveProperty(values);
-              if (propertyDetailOrigin === "client") {
-                clearProperty();
-                setView("client-detail");
-              } else {
-                selectProperty(property);
-                setView("property-detail");
-              }
-            }}
-          />
-        )}
-
-        {view === "property-detail" && selectedProperty && (
-          <PropertyDetail
-            property={selectedProperty}
-            onBack={
-              propertyDetailOrigin === "client" ? returnToClientDetail : showProperties
-            }
-            onCreateCleaning={() => setView("create-cleaning")}
-            onEdit={showEditProperty}
-            onOpenJob={openPropertyJob}
-            onLinkClient={showPropertyClientLink}
-            onSaveDataProvenance={(dataProvenance) =>
-              savePropertyDataProvenance(selectedProperty, dataProvenance)
-            }
-            canRestore={canManageExcludedRecords}
-            onArchive={async () => { await archivePropertyRecord(selectedProperty); showProperties(); }}
-            onRestore={() => restorePropertyRecord(selectedProperty)}
-            onViewAllUpcoming={() => showJobsForProperty(selectedProperty)}
-            onSaveChecklistSettings={(settings) => savePropertyChecklistSettings(selectedProperty, settings)}
-            onSaveCleanerAccess={(access) => savePropertyCleanerAccess(selectedProperty, access)}
-          />
-        )}
-
-        {view === "property-edit" && selectedProperty && (
-          <PropertyEditForm
-            property={selectedProperty}
-            onBack={() => setView("property-detail")}
-            onSaved={(values) => savePropertyEdit(selectedProperty, values)}
-          />
-        )}
-
-        {view === "property-link-client" && selectedProperty && (
-          <PropertyClientLinkForm
-            property={selectedProperty}
-            onBack={() => setView("property-detail")}
-            onLinked={async (client) => {
-              await linkClient(selectedProperty, client);
-              setView("property-detail");
-            }}
-          />
-        )}
-
-        {view === "create-cleaning" && (
-          <CreateCleaningForm
-            property={selectedProperty}
-            properties={properties}
-            isLoadingProperties={isLoadingProperties}
-            hasPropertyError={hasPropertyError}
-            onBack={selectedProperty ? () => setView("property-detail") : returnToJobs}
-            onCreated={openJob}
-          />
-        )}
-
-        {view === "job-list" && (
-          <JobsPage
-            jobs={jobs}
-            isLoading={isLoadingJobs}
-            hasError={hasJobError}
-            onSelect={openJob}
-            onCreate={showNewJob}
-            filters={jobListFilters}
-            cleaners={jobFilterCleaners}
-            properties={properties}
-            onFiltersChange={(updates) =>
-              setJobListFilters((currentFilters) => ({ ...currentFilters, ...updates }))
-            }
-            onClearFilters={() => setJobListFilters(createJobListFilters())}
-            hasMore={hasMoreJobs}
-            isLoadingMore={isLoadingMoreJobs}
-            onLoadMore={loadMoreJobs}
-            restoreScroll={jobsScrollRestore}
-            onScrollRestored={() => setJobsScrollRestore(null)}
-            canManageExcluded={canManageExcludedRecords}
-            showExcluded={showExcludedRecords}
-            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-          />
-        )}
-
-        {view === "cleaner-list" && (
-          <CleanerDirectory
-            cleaners={directoryCleaners}
-            isLoading={isLoadingDirectoryCleaners}
-            hasError={hasDirectoryCleanersError}
-            onSelect={openCleaner}
-            onCreate={showNewCleaner}
-            canManageExcluded={canManageExcludedRecords}
-            showExcluded={showExcludedRecords}
-            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-            onAgenda={showCleanerAgenda}
-            onAlerts={showCleanerAlerts}
-          />
-        )}
-
-        {view === "cleaner-agenda" && <CleanerAgendaView onBack={showCleaners} onOpenJob={openCleanerAgendaJob} />}
-        {view === "cleaner-alerts" && <CleanerAlertsView onBack={showCleaners} onOpenCleaner={openCleaner} />}
-
-        {view === "payout-list" && (
-          <PayoutDirectory
-            payoutGroups={payoutGroups}
-            recentPayouts={recentPayouts}
-            isLoading={isLoadingPayouts}
-            hasError={hasPayoutsError}
-            paidSummary={paidPayoutSummary}
-            onRefresh={refreshPayouts}
-            onWeeklyClose={showWeeklyClose}
-            onReview={openPayoutReview}
-            onUploadProof={attachProof}
-            onOpenProof={getProofUrl}
-            formatPrice={(amount) => formatPrice(amount, translate, language)}
-            formatCreatedAt={(date) => formatCreatedAt(date, language)}
-          />
-        )}
-
-        {view === "payout-review" && selectedPayoutGroup && (
-          <PayoutReview
-            cleaner={selectedPayoutGroup.cleaner}
-            jobs={selectedPayoutGroup.jobs}
-            onBack={showPayouts}
-            onRecord={recordPayout}
-            onUploadProof={attachProof}
-            onRecorded={showRecordedPayout}
-            formatDate={(date) => formatDate(date, translate, language)}
-            formatCreatedAt={(date) => formatCreatedAt(date, language)}
-            formatPrice={(amount) => formatPrice(amount, translate, language)}
-          />
-        )}
-
-        {view === "cleaner-detail" && selectedCleaner && (
-          <CleanerDetail
-            cleaner={selectedCleaner}
-            onBack={showCleaners}
-            onEdit={showEditCleaner}
-            onOpenJob={openCleanerJob}
-            onSaveDataProvenance={(dataProvenance) =>
-              saveCleanerDataProvenance(selectedCleaner, dataProvenance)
-            }
-            canRestore={canManageExcludedRecords}
-            onArchive={async () => { await archiveCleanerRecord(selectedCleaner); showCleaners(); }}
-            onRestore={() => restoreCleanerRecord(selectedCleaner)}
-          />
-        )}
-
-        {view === "cleaner-create" && (
-          <CleanerProfileForm
-            key="new-cleaner"
-            onBack={showCleaners}
-            onSave={saveCleaner}
-            onSaved={() => setView("cleaner-success")}
-          />
-        )}
-
-        {view === "cleaner-edit" && selectedCleaner && (
-          <CleanerProfileForm
-            key={selectedCleaner.id}
-            cleaner={selectedCleaner}
-            onBack={showCleanerDetail}
-            onSave={saveCleaner}
-            onSaved={() => setView("cleaner-success")}
-          />
-        )}
-
-        {view === "cleaner-success" && savedCleaner && (
-          <CleanerProfileSuccess
-            cleaner={savedCleaner}
-            onBack={savedCleaner.wasCreated ? showCleaners : showCleanerDetail}
-            backLabel={
-              savedCleaner.wasCreated
-                ? "cleaners.backToDirectory"
-                : "cleaners.backToDetail"
-            }
-          />
-        )}
-
-        {view === "client-list" && (
-          <ClientDirectory
-            clients={clients}
-            isLoading={isLoadingClients}
-            hasError={hasClientsError}
-            onCreate={showNewClient}
-            onSelect={openClient}
-            canManageExcluded={canManageExcludedRecords}
-            showExcluded={showExcludedRecords}
-            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-          />
-        )}
-
-        {view === "client-detail" && selectedClient && (
-          <ClientDetail
-            client={selectedClient}
-            properties={clientProperties}
-            isLoadingProperties={isLoadingClientProperties}
-            hasPropertiesError={hasClientPropertiesError}
-            jobHistory={clientJobHistory}
-            hasJobHistoryError={hasClientJobHistoryError}
-            onBack={showClients}
-            onOpenProperty={openClientProperty}
-            onCreateProperty={showNewPropertyForClient}
-            onEdit={showEditClient}
-            onOpenJob={openClientJob}
-            onSaveDataProvenance={(dataProvenance) =>
-              saveClientDataProvenance(selectedClient, dataProvenance)
-            }
-            canRestore={canManageExcludedRecords}
-            onArchive={async () => { await archiveClientRecord(selectedClient); showClients(); }}
-            onRestore={() => restoreClientRecord(selectedClient)}
-            onViewAllUpcoming={() => showJobsForClient(selectedClient)}
-          />
-        )}
-
-        {view === "client-edit" && selectedClient && (
-          <ClientForm
-            client={selectedClient}
-            onBack={() => setView("client-detail")}
-            onSaved={(values) => saveClientEdit(selectedClient, values)}
-          />
-        )}
-
-        {view === "client-create" && (
-          <ClientForm
-            onBack={showClients}
-            onSaved={async (values) => {
-              await saveClient(values);
-              setView("client-list");
-            }}
-          />
-        )}
-
-        {view === "job-detail" && selectedJob && (
-          <div className={`cf-split${showServicesPane ? " cf-split--with-list" : ""}`}>
-            {showServicesPane && (
-              <aside className="cf-split__list" aria-label={translate("navigation.jobs")}>
-              <JobsPage
-                variant="pane"
-                selectedJobId={selectedJob.id}
-                jobs={jobs}
-                isLoading={isLoadingJobs}
-                hasError={hasJobError}
-                onSelect={openJob}
-                onCreate={showNewJob}
-                filters={jobListFilters}
-                cleaners={jobFilterCleaners}
-                properties={properties}
-                onFiltersChange={(updates) =>
-                  setJobListFilters((currentFilters) => ({ ...currentFilters, ...updates }))
-                }
-                onClearFilters={() => setJobListFilters(createJobListFilters())}
-                hasMore={hasMoreJobs}
-                isLoadingMore={isLoadingMoreJobs}
-                onLoadMore={loadMoreJobs}
-                canManageExcluded={canManageExcludedRecords}
-                showExcluded={showExcludedRecords}
-                onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-              />
-              </aside>
-            )}
-            <div className="cf-split__detail">
-          <JobDetail
-            job={selectedJob}
-            initialFocus={jobDetailInitialFocus}
-            property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
-            knownCleaners={directoryCleaners}
-            availableCleaners={cleaners}
-            isLoadingCleaners={isLoadingCleaners}
-            hasCleanerError={hasCleanerError}
-            offersCreatedCount={offersCreatedCount}
-            offers={jobOffers}
-            isLoadingOffers={isLoadingOffers}
-            hasOffersError={hasOffersError}
-            assignments={jobAssignments}
-            isLoadingAssignments={isLoadingAssignments}
-            hasAssignmentsError={hasAssignmentsError}
-            issues={jobIssues}
-            isLoadingIssues={isLoadingIssues}
-            hasIssuesError={hasIssuesError}
-            checklistRun={checklistRun}
-            isLoadingChecklistRun={isLoadingChecklistRun}
-            hasChecklistRunError={hasChecklistRunError}
-            isCreatingChecklistRun={isCreatingChecklistRun}
-            hasCreateChecklistRunError={hasCreateChecklistRunError}
-            checklistCapability={checklistCapability}
-            isLoadingChecklistCapability={isLoadingChecklistCapability}
-            hasChecklistCapabilityError={hasChecklistCapabilityError}
-            isIssuingChecklistCapability={isIssuingChecklistCapability}
-            hasIssueChecklistCapabilityError={hasIssueChecklistCapabilityError}
-            isRevokingChecklistCapability={isRevokingChecklistCapability}
-            hasRevokeChecklistCapabilityError={hasRevokeChecklistCapabilityError}
-            onBack={
-              jobDetailOrigin === "dashboard"
-                ? showDashboard
-                : jobDetailOrigin === "property"
-                  ? returnToPropertyDetail
-                  : jobDetailOrigin === "client"
-                    ? returnToClientDetail
-                    : jobDetailOrigin === "cleaner"
-                      ? returnToCleanerDetail
-                    : jobDetailOrigin === "cleaner-agenda"
-                      ? returnToCleanerAgenda
-                    : returnToJobs
-            }
-            onOfferToCleaners={showOfferCleaners}
-            onRefreshOffers={refreshJobOffers}
-            onRefreshIssues={refreshJobIssues}
-            onRefreshChecklistRun={refreshChecklistRun}
-            onCreateChecklistRun={createAndOpenChecklistRun}
-            onOpenChecklistRun={openChecklistRun}
-            onRefreshChecklistCapability={refreshChecklistCapability}
-            onIssueChecklistCapability={issueJobChecklistCapability}
-            onPrepareChecklistReminder={prepareChecklistReminder}
-            onRevokeChecklistCapability={revokeJobChecklistCapability}
-            onCreatePublicOfferLink={createCleanerOfferLink}
-            onRevokeAutomaticOffer={revokeCleanerOffer}
-            onAssignCleaner={assignCleaner}
-            onDecideOffer={decideCleanerOffer}
-            onReopenOffer={reopenCleanerOffer}
-            onSetCleanerSpots={setCleanerSpots}
-            onMarkReminderSent={markReminderSent}
-            onAssignCleanerDirectly={assignCleanerDirectly}
-            onRemoveAssignment={removeCleanerAssignment}
-            onReplaceAssignment={replaceCleanerAssignment}
-            onStartCleaning={startCleaning}
-            onCompleteCleaning={completeCleaning}
-            onUpdatePrices={saveJobPrices}
-            onUpdateDetails={saveJobDetails}
-            onUpdateSchedule={saveJobSchedule}
-            onOfferManualReplacement={offerManualReplacement}
-            onSimulateAssignedCleaner={openAssignedCleanerJob}
-            onResolveIssue={resolveJobIssue}
-            onSaveDataProvenance={saveJobDataProvenance}
-            canRestore={canManageExcludedRecords}
-            onArchive={async () => { await archiveJobRecord(); removeJobFromWorklist(selectedJob.id); returnToJobs(); }}
-            onRestore={restoreJobRecord}
-          />
-                    </div>
-          </div>
-        )}
-
-        {view === "checklist-run" && selectedJob && checklistRun && (
-          <ChecklistRunDetail
-            job={selectedJob}
-            checklistRun={checklistRun}
-            isRefreshing={isRefreshingChecklistRun}
-            hasRefreshError={hasChecklistRunError}
-            assignments={jobAssignments}
-            onRefresh={() => refreshChecklistRun(selectedJob, { manual: true })}
-            onApproveAndComplete={approveChecklistRun}
-            onSubmitForReview={submitChecklistRunForReview}
-            onAbandonAndComplete={abandonChecklistRunAndCompleteJob}
-            onBack={() => setView("job-detail")}
-          />
-        )}
-
-        {view === "offer-cleaners" && selectedJob && (
-          <OfferCleaners
-            key={selectedJob.id}
-            job={selectedJob}
-            cleaners={cleaners}
-            isLoading={isLoadingCleaners}
-            hasError={hasCleanerError}
-            canOfferAutomatically={!isLoadingAssignments && !isLoadingOffers && !hasAssignmentsError && !hasOffersError
-              && jobOffers.length === 0 && jobAssignments.length === 0}
-            onBack={returnToJobDetail}
-            onSent={(count, updatedJob) => {
-              recordOffersCreated(count, updatedJob);
-              returnToJobDetail();
-            }}
-          />
-        )}
-
-        {view === "cleaner-job" && selectedJob && (
-          <AssignedCleanerJob
-            job={selectedJob}
-            onBackToJob={returnToJobDetail}
-            onStartCleaning={startCleaning}
-            onCompleteCleaning={completeCleaning}
-            onReportIssue={() => setView("issue-form")}
-          />
-        )}
-
-        {view === "issue-form" && selectedJob && (
-          <IssueForm
-            job={selectedJob}
-            onBack={() => setView("cleaner-job")}
-            onSubmitted={() => setView("issue-success")}
-          />
-        )}
-
-        {view === "issue-success" && selectedJob && (
-          <IssueSuccess onBackToCleaning={() => setView("cleaner-job")} />
-        )}
     </AppShell>
   );
 }
