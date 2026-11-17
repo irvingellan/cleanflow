@@ -66,7 +66,7 @@ beforeEach(() => {
 // The manager entry is a lazy chunk: wait for it before using the screen.
 async function openNotice() {
   render(<TranslationProvider><App /></TranslationProvider>);
-  fireEvent.click(await screen.findByRole("button", { name: "Review notice", exact: true }));
+  fireEvent.click(await screen.findByRole("button", { name: "Review notice", exact: true }, { timeout: 5000 }));
 }
 
 describe("Dashboard notice navigation", () => {
