@@ -9,8 +9,8 @@ import {
 import { collection as serverCollection, getDocs as getServerDocs } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const issueCategories = [
   "ACCESS",
   "SUPPLIES",
@@ -23,7 +23,7 @@ function issuesCollection(jobId) {
   return collection(
     db,
     "organizations",
-    organizationId,
+    currentOrganizationId(),
     "jobs",
     jobId,
     "issues",
@@ -34,7 +34,7 @@ function issueDocument(jobId, issueId) {
   return doc(
     db,
     "organizations",
-    organizationId,
+    currentOrganizationId(),
     "jobs",
     jobId,
     "issues",
@@ -53,7 +53,7 @@ function mapIssue(issueSnapshot) {
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobIssues(jobId) {
   const snapshot = await withReadDeadline(getServerDocs(
-    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "issues"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs", jobId, "issues"),
   ));
 
   return snapshot.docs.map(mapIssue);
