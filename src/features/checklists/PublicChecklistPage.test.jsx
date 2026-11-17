@@ -276,7 +276,7 @@ describe("PublicChecklistPage", () => {
     await screen.findByText("Photo saved");
     expect(screen.getByText("Everything is filled in now. Tap “Send checklist for review” at the end.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     await screen.findByText(/Checklist submitted\./);
     expect(screen.queryByText("Everything is filled in now. Tap “Send checklist for review” at the end.")).not.toBeInTheDocument();
     expect(document.querySelector('.public-checklist__validation-summary')).not.toBeInTheDocument();
@@ -969,7 +969,7 @@ describe("PublicChecklistPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     // The confirmation opens once the saved state has settled.
     expect(await screen.findByText("Saved answers and notes will become read-only. This does not mark the job completed. Your manager will review the saved checklist.")).toBeVisible();
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledWith(expect.objectContaining({
       token: "opaque-capability-token", baseRevision: 0,
@@ -995,10 +995,10 @@ describe("PublicChecklistPage", () => {
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     expect(await screen.findByText("Could not send for review. Try again.")).toBeVisible();
     expect(screen.queryByText(/Checklist submitted\./)).not.toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(2));
     expect(readyPublicChecklistForReview.mock.calls[1][0].submissionId)
@@ -1096,13 +1096,13 @@ describe("PublicChecklistPage", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     await screen.findByText("Everything is filled in now. Tap “Send checklist for review” at the end.");
 
     fireEvent.change(screen.getByLabelText("Other notes"), { target: { value: "Reviewed again" } });
     await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     await waitFor(() => expect(readyPublicChecklistForReview).toHaveBeenCalledTimes(2));
     expect(readyPublicChecklistForReview.mock.calls[1][0]).toMatchObject({ baseRevision: 1 });
@@ -1118,7 +1118,7 @@ describe("PublicChecklistPage", () => {
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
     expect(await screen.findByText("The saved checklist changed. Please review the latest saved version before sending it.")).toBeVisible();
     expect(getPublicChecklist).toHaveBeenCalledTimes(2);
