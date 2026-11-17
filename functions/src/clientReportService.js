@@ -32,14 +32,23 @@ export function normalizeClientReportPresentation(value = {}) {
   if (value.includeCleanerNotes !== undefined && typeof value.includeCleanerNotes !== "boolean") {
     throw new HttpsError("invalid-argument", "Report presentation is invalid.");
   }
-  return { managerNote: note.trim(), includeCleanerNotes: value.includeCleanerNotes !== false };
+  if (value.showInPortal !== undefined && typeof value.showInPortal !== "boolean") {
+    throw new HttpsError("invalid-argument", "Report presentation is invalid.");
+  }
+  // showInPortal: the report also appears in the client's portal. Missing
+  // means shown, which keeps every report issued before this control visible.
+  return {
+    managerNote: note.trim(),
+    includeCleanerNotes: value.includeCleanerNotes !== false,
+    showInPortal: value.showInPortal !== false,
+  };
 }
 
 function storedPresentation(capability) {
   try {
     return normalizeClientReportPresentation(capability?.presentation || {});
   } catch {
-    return { managerNote: "", includeCleanerNotes: true };
+    return { managerNote: "", includeCleanerNotes: true, showInPortal: true };
   }
 }
 
@@ -365,8 +374,9 @@ async function resolvePublicClientReport(database, { organizationId, tokenHash, 
  * report and has not turned it off. The seven-day life of the report's own
  * link does not apply to the client portal.
  */
+/** Released to the client portal: an active link the manager did not hide from the portal. */
 export function clientReportReleased(capability) {
-  return capability?.status === "ACTIVE";
+  return capability?.status === "ACTIVE" && storedPresentation(capability).showInPortal;
 }
 
 /** The released report of one Job, for a reader already authorized for that Job. */

@@ -206,7 +206,9 @@ describe("client report presentation", () => {
 
   it("rejects an invalid presentation", async () => {
     const { normalizeClientReportPresentation, clientReportNoteMaximum } = await import("./clientReportService.js");
-    expect(normalizeClientReportPresentation({})).toEqual({ managerNote: "", includeCleanerNotes: true });
+    expect(normalizeClientReportPresentation({})).toEqual({ managerNote: "", includeCleanerNotes: true, showInPortal: true });
+    expect(normalizeClientReportPresentation({ showInPortal: false }).showInPortal).toBe(false);
+    expect(() => normalizeClientReportPresentation({ showInPortal: "no" })).toThrow();
     expect(() => normalizeClientReportPresentation({ managerNote: "x".repeat(clientReportNoteMaximum + 1) })).toThrow();
     expect(() => normalizeClientReportPresentation({ includeCleanerNotes: "no" })).toThrow();
     expect(() => normalizeClientReportPresentation([])).toThrow();
@@ -229,9 +231,9 @@ describe("client report presentation", () => {
       organizationId: "org", jobId: "job-1", actorUid: "manager", presentation: { managerNote: "Hi", includeCleanerNotes: false },
       markSent: { channel: "WHATSAPP" },
     });
-    expect(result.capability.presentation).toEqual({ managerNote: "Hi", includeCleanerNotes: false });
+    expect(result.capability.presentation).toEqual({ managerNote: "Hi", includeCleanerNotes: false, showInPortal: true });
     expect(result.capability.lastSent.channel).toBe("WHATSAPP");
-    expect(writes[0].presentation).toEqual({ managerNote: "Hi", includeCleanerNotes: false });
+    expect(writes[0].presentation).toEqual({ managerNote: "Hi", includeCleanerNotes: false, showInPortal: true });
     expect(writes[0].lastSent.byUid).toBe("manager");
     expect(JSON.stringify(result)).not.toContain("a".repeat(64));
     await expect(updateClientReportForManager(database, { organizationId: "org", jobId: "job-1", actorUid: "manager", markSent: { channel: "SMS" } }))
@@ -239,5 +241,16 @@ describe("client report presentation", () => {
     stored.status = "REVOKED";
     await expect(updateClientReportForManager(database, { organizationId: "org", jobId: "job-1", actorUid: "manager", markSent: { channel: "EMAIL" } }))
       .rejects.toThrow("An active report link is required.");
+  });
+});
+
+describe("client portal release", () => {
+  it("shows an active report in the portal unless the manager hid it", async () => {
+    const { clientReportReleased } = await import("./clientReportService.js");
+    expect(clientReportReleased({ status: "ACTIVE" })).toBe(true);
+    expect(clientReportReleased({ status: "ACTIVE", presentation: { showInPortal: true } })).toBe(true);
+    expect(clientReportReleased({ status: "ACTIVE", presentation: { showInPortal: false } })).toBe(false);
+    expect(clientReportReleased({ status: "REVOKED", presentation: { showInPortal: true } })).toBe(false);
+    expect(clientReportReleased(undefined)).toBe(false);
   });
 });

@@ -30,7 +30,7 @@ describe("ClientReportControls", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Create client report" }));
     await waitFor(() => expect(issueReport).toHaveBeenCalledWith("job-1", {
-      replaceExisting: false, presentation: { managerNote: "", includeCleanerNotes: true },
+      replaceExisting: false, presentation: { managerNote: "", includeCleanerNotes: true, showInPortal: true },
     }));
     expect(await screen.findByRole("link", { name: "Open report" })).toHaveAttribute(
       "href", "https://cleanflow.example/client-report?t=secret",
@@ -93,7 +93,7 @@ describe("ClientReportControls", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Include the cleaner's notes/ }));
     fireEvent.click(screen.getByRole("button", { name: "Create client report" }));
     await waitFor(() => expect(issueReport).toHaveBeenCalledWith("job-1", {
-      replaceExisting: false, presentation: { managerNote: "Towels in the closet.", includeCleanerNotes: false },
+      replaceExisting: false, presentation: { managerNote: "Towels in the closet.", includeCleanerNotes: false, showInPortal: true },
     }));
     expect(await screen.findByText("Send to Dana Example")).toBeVisible();
     const whatsapp = screen.getByRole("link", { name: "Send by WhatsApp" });
@@ -121,7 +121,7 @@ describe("ClientReportControls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit message" }));
     fireEvent.change(screen.getByLabelText("Message to the client (optional)"), { target: { value: "New note" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(updateReport).toHaveBeenCalledWith("job-1", { presentation: { managerNote: "New note", includeCleanerNotes: true } }));
+    await waitFor(() => expect(updateReport).toHaveBeenCalledWith("job-1", { presentation: { managerNote: "New note", includeCleanerNotes: true, showInPortal: true } }));
     expect(await screen.findByText(/The client sees the change in the same link/)).toBeVisible();
     expect(issueReport).not.toHaveBeenCalled();
   });
