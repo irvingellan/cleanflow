@@ -108,6 +108,14 @@ Firebase or another backend provider
 
 Provider-specific behavior should remain at system boundaries. Domain rules should not depend unnecessarily on Firestore document shapes.
 
+Conventions for new code:
+
+- A component imports from its own feature, `src/components/`, `src/lib/` and `src/i18n/`. Never from `firebase/*`.
+- A service builds paths with `currentOrganizationId()`; the literal organization ID appears nowhere else. That module arrives with the organization work; until then, do not add the literal to new files.
+- A new Function is one line in `functions/src/index.js` plus a handler in `functions/src/handlers/`. `index.js` imports only `firebase-functions/*`, `./runtime/params.js`, `./runtime/lazy.js` and constant-only modules.
+- New copy goes into a part file under `src/i18n/messages/` or the feature's `*Messages.js`, never into `translations.js`.
+- New styles go into the feature's CSS file, never into `src/styles/legacy/`.
+
 ## Testing expectations
 
 For behavioral changes:

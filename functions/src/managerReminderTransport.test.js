@@ -35,7 +35,8 @@ const response = (body, status = 200) => ({
 
 describe("manager reminder transports", () => {
   it("keeps FCM scheduled deployment independent from the OneSignal REST secret", async () => {
-    const functionSource = await readFile(join(process.cwd(), "functions/src/index.js"), "utf8");
+    const functionSource = (await Promise.all(["functions/src/index.js", "functions/src/runtime/params.js"]
+      .map((file) => readFile(join(process.cwd(), file), "utf8")))).join("\n");
 
     expect(functionSource).not.toContain('defineSecret("ONESIGNAL_REST_API_KEY")');
     expect(functionSource).not.toContain("secrets: [oneSignalRestApiKey]");

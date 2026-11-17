@@ -21,6 +21,8 @@ initializeApp({ projectId: "demo-cleanflow" });
 const { FieldValue, getFirestore, Timestamp } = await import("firebase-admin/firestore");
 const { serverTimestamp } = await import("firebase/firestore");
 const functionsIndex = await import("../functions/src/index.js");
+// index.js only declares Functions; the Functions Admin app starts with the runtime module.
+await import("../functions/src/runtime/firebase.js");
 const {
   assignCleanerDirectly,
   createAutomaticJobOffers,

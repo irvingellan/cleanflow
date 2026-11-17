@@ -54,6 +54,8 @@ const {
   correctChecklistAnswer,
   rescheduleJob,
 } = await import("../functions/src/index.js");
+// index.js only declares Functions; the Functions Admin app starts with the runtime module.
+await import("../functions/src/runtime/firebase.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
 const { sendCurrentManagerTestNotification: dispatchCurrentDeviceTest } = await import("../functions/src/currentDeviceNotificationTest.js");
 const { processChecklistReviewNotification } = await import("../functions/src/checklistReviewNotifications.js");

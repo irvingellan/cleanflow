@@ -15,11 +15,6 @@ describe("Functions export surface", () => {
       .filter(([, value]) => !value?.__endpoint)
       .map(([name]) => name)
       .sort();
-    expect(helpers).toMatchInlineSnapshot(`
-      [
-        "processManagerReminderWindow",
-        "publicOfferResult",
-      ]
-    `);
+    expect(helpers).toMatchInlineSnapshot(`[]`);
   });
 });
