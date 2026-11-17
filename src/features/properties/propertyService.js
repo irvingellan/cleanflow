@@ -3,14 +3,16 @@ import {
   collection,
   deleteField,
   doc,
-  getDocs,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
+import {
+  collection as serverCollection, getDocs as getServerDocs, query as serverQuery, where as serverWhere,
+} from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
-import { getServerRecordsById } from "../../services/firebase/serverReads.js";
+import {
+  getServerCollection, getServerRecordsById, serverFirestore, withReadDeadline,
+} from "../../services/firebase/serverReads.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -28,10 +30,12 @@ function propertyDocument(propertyId) {
   return doc(db, "organizations", organizationId, "properties", propertyId);
 }
 
+// One-shot server read with a deadline: a full-SDK read on a stalled realtime
+// channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getProperties({ includeArchived = false } = {}) {
-  const snapshot = await getDocs(propertiesCollection());
+  const documents = await withReadDeadline(getServerCollection(organizationId, "properties"));
 
-  return filterArchivedRecords(snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
+  return filterArchivedRecords(documents.map((propertyDocument) => withNormalizedDataProvenance({
     ...propertyDocument.data(),
     id: propertyDocument.id,
   })), includeArchived);
@@ -47,9 +51,10 @@ export async function getPropertySummariesById(ids) {
 }
 
 export async function getPropertiesForClient(clientId, { includeArchived = false } = {}) {
-  const snapshot = await getDocs(
-    query(propertiesCollection(), where("clientId", "==", clientId)),
-  );
+  const snapshot = await withReadDeadline(getServerDocs(serverQuery(
+    serverCollection(serverFirestore(), "organizations", organizationId, "properties"),
+    serverWhere("clientId", "==", clientId),
+  )));
 
   return filterArchivedRecords(snapshot.docs.map((propertyDocument) => withNormalizedDataProvenance({
     ...propertyDocument.data(),

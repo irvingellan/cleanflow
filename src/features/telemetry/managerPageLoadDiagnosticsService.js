@@ -6,8 +6,8 @@ import {
   query,
   Timestamp,
   where,
-} from "firebase/firestore";
-import { db } from "../../services/firebase/client.js";
+} from "firebase/firestore/lite";
+import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 
 const organizationId = "cleanflow-demo";
 export const managerPageLoadDiagnosticsLimit = 500;
@@ -20,13 +20,14 @@ export const managerOperationVisitLimit = 20;
 /** Reads only the existing bounded diagnostics window; no operational collections are queried. */
 export async function getManagerPageLoadEvents({ windowDays = 7, now = Date.now() } = {}) {
   const cutoff = Timestamp.fromDate(new Date(now - windowDays * 24 * 60 * 60 * 1000));
-  const events = collection(db, "organizations", organizationId, "managerPageLoadEvents");
-  const snapshot = await getDocs(query(
+  const events = collection(serverFirestore(), "organizations", organizationId, "managerPageLoadEvents");
+  // One-shot server read with a deadline, independent of the realtime channel.
+  const snapshot = await withReadDeadline(getDocs(query(
     events,
     where("createdAt", ">=", cutoff),
     orderBy("createdAt", "desc"),
     limit(managerPageLoadDiagnosticsLimit),
-  ));
+  )));
 
   return snapshot.docs.map((document) => {
     const event = document.data();
@@ -52,13 +53,14 @@ export async function getManagerPageLoadEvents({ windowDays = 7, now = Date.now(
 /** Reads bounded timing metadata only; Job records and operation payloads are never queried. */
 export async function getManagerOperationEvents({ windowDays = 7, now = Date.now() } = {}) {
   const cutoff = Timestamp.fromDate(new Date(now - windowDays * 24 * 60 * 60 * 1000));
-  const events = collection(db, "organizations", organizationId, "managerOperationEvents");
-  const snapshot = await getDocs(query(
+  const events = collection(serverFirestore(), "organizations", organizationId, "managerOperationEvents");
+  // One-shot server read with a deadline, independent of the realtime channel.
+  const snapshot = await withReadDeadline(getDocs(query(
     events,
     where("createdAt", ">=", cutoff),
     orderBy("createdAt", "desc"),
     limit(managerOperationDiagnosticsLimit),
-  ));
+  )));
 
   return snapshot.docs.map((document) => {
     const event = document.data();

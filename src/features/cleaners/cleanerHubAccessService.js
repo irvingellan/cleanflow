@@ -1,8 +1,9 @@
-import { doc, getDocFromServer } from "firebase/firestore";
+import { doc as serverDoc, getDoc as getServerDoc } from "firebase/firestore/lite";
 import { httpsCallable } from "firebase/functions";
 import { getAuth } from "firebase/auth";
 import { setCleanerPushAlerts as writeCleanerPushAlerts } from "./cleanerService.js";
-import { db, firebaseApp, functions } from "../../services/firebase/client.js";
+import { firebaseApp, functions } from "../../services/firebase/client.js";
+import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 
 const organizationId = "cleanflow-demo";
 
@@ -12,7 +13,10 @@ function timestampIso(value) {
 
 /** Server-written link status; never contains codes, hashes or account IDs for display. */
 export async function getCleanerHubAccess(cleanerId) {
-  const snapshot = await getDocFromServer(doc(db, "organizations", organizationId, "cleanerHubAccess", cleanerId));
+  // One-shot server read with a deadline, independent of the realtime channel.
+  const snapshot = await withReadDeadline(getServerDoc(
+    serverDoc(serverFirestore(), "organizations", organizationId, "cleanerHubAccess", cleanerId),
+  ));
   if (!snapshot.exists()) return { active: false, linkedAt: null, revokedAt: null, pendingCodeExpiresAt: null };
   const data = snapshot.data();
   return {

@@ -19,7 +19,18 @@ vi.mock("firebase/firestore", () => ({
   updateDoc: vi.fn(),
   where: firestore.where,
 }));
-vi.mock("../../services/firebase/client.js", () => ({ db: {} }));
+// The contact lookup is a one-shot server read, so the same spies stand in for the lite SDK.
+vi.mock("firebase/firestore/lite", () => ({
+  collection: firestore.collection,
+  connectFirestoreEmulator: vi.fn(),
+  documentId: firestore.documentId,
+  getDocs: firestore.getDocs,
+  getFirestore: vi.fn(() => ({})),
+  query: firestore.query,
+  setLogLevel: vi.fn(),
+  where: firestore.where,
+}));
+vi.mock("../../services/firebase/client.js", () => ({ db: {}, firebaseApp: {}, useFirebaseEmulators: false, emulatorPorts: {} }));
 
 import { getCleanerContactsById, getCleanerNamesById } from "./cleanerService.js";
 

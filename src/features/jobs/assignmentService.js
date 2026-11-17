@@ -8,8 +8,10 @@ import {
   serverTimestamp,
   where,
 } from "firebase/firestore";
+import { collection as serverCollection, getDocs as getServerDocs } from "firebase/firestore/lite";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
+import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import {
   getAssignedCleanerIds,
   isAssignmentAwareJob,
@@ -166,8 +168,12 @@ export function assignmentRemovalJobUpdate(job, cleanerId, hasActionableOffers) 
   };
 }
 
+// One-shot server read with a deadline: a full-SDK read on a stalled realtime
+// channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobAssignments(jobId) {
-  const snapshot = await getDocs(assignmentsCollection(jobId));
+  const snapshot = await withReadDeadline(getServerDocs(
+    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "assignments"),
+  ));
 
   return snapshot.docs
     .map((assignmentSnapshot) => ({ ...assignmentSnapshot.data(), id: assignmentSnapshot.id }))
