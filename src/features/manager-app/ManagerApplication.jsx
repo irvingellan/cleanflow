@@ -19,16 +19,9 @@ import { getJobById } from "../jobs/jobService.js";
 import { NotificationControl } from "../notifications/NotificationControl.jsx";
 import { useOneSignalIdentity } from "../notifications/useOneSignalIdentity.js";
 import { PwaUpdatePrompt } from "../pwa/PwaUpdatePrompt.jsx";
-import { PayoutDirectory, PayoutReview } from "../payouts/PayoutViews.jsx";
 import { usePayoutsController } from "../payouts/usePayoutsController.js";
 import { WhatsNewPanel } from "../releases/WhatsNewPanel.jsx";
 import { startManagerFunctionWarmup } from "../../services/firebase/managerFunctionWarmup.js";
-import { CleanerDetail } from "../cleaners/CleanerDetail.jsx";
-import { CleanerDirectory } from "../cleaners/CleanerDirectory.jsx";
-import {
-  CleanerProfileForm,
-  CleanerProfileSuccess,
-} from "../cleaners/CleanerProfileForm.jsx";
 import { useCleanersController } from "../cleaners/useCleanersController.js";
 import { ClientDetail } from "../clients/ClientDetail.jsx";
 import { ClientDirectory } from "../clients/ClientDirectory.jsx";
@@ -59,18 +52,12 @@ import {
 import { useTranslation } from "../../i18n/translations.js";
 import { useManagerPageLoadTelemetry } from "../telemetry/useManagerPageLoadTelemetry.js";
 import { ManagerPageLoadDiagnostics } from "../telemetry/ManagerPageLoadDiagnostics.jsx";
-import { WeeklyClosePreview } from "../weekly-close/WeeklyClosePreview.jsx";
-import { CleanerAgendaView } from "../cleaner-agenda/CleanerAgendaView.jsx";
-import { CleanerAlertsView } from "../cleaner-alerts/CleanerAlertsView.jsx";
 import { DeveloperEnvironmentControls } from "../../components/EnvironmentBanner.jsx";
-import {
-  formatCreatedAt,
-  formatDate,
-  formatPrice,
-} from "../../lib/presentation.js";
 import { usePropertiesController } from "../properties/usePropertiesController.js";
 import { useManagerNavigation } from "./useManagerNavigation.js";
 import { PropertyViews } from "./views/PropertyViews.jsx";
+import { CleanerViews } from "./views/CleanerViews.jsx";
+import { PayoutViews } from "./views/PayoutViews.jsx";
 
 export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
@@ -730,7 +717,25 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
         <PwaUpdatePrompt />
         {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
           && <SandboxLifecyclePreview onBack={showDashboard} />}
-        {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
+        <PayoutViews
+          view={view}
+          showPayouts={showPayouts}
+          payoutGroups={payoutGroups}
+          recentPayouts={recentPayouts}
+          isLoadingPayouts={isLoadingPayouts}
+          hasPayoutsError={hasPayoutsError}
+          paidPayoutSummary={paidPayoutSummary}
+          refreshPayouts={refreshPayouts}
+          showWeeklyClose={showWeeklyClose}
+          openPayoutReview={openPayoutReview}
+          attachProof={attachProof}
+          getProofUrl={getProofUrl}
+          translate={translate}
+          language={language}
+          selectedPayoutGroup={selectedPayoutGroup}
+          recordPayout={recordPayout}
+          showRecordedPayout={showRecordedPayout}
+        />
         {notificationInboxEnabled() && view === "notification-inbox" && (
           <NotificationInbox inbox={inbox} language={language} onBack={showDashboard} onOpen={openInboxTarget} />
         )}
@@ -859,100 +864,31 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           />
         )}
 
-        {view === "cleaner-list" && (
-          <CleanerDirectory
-            cleaners={directoryCleaners}
-            isLoading={isLoadingDirectoryCleaners}
-            hasError={hasDirectoryCleanersError}
-            onSelect={openCleaner}
-            onCreate={showNewCleaner}
-            canManageExcluded={canManageExcludedRecords}
-            showExcluded={showExcludedRecords}
-            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-            onAgenda={showCleanerAgenda}
-            onAlerts={showCleanerAlerts}
-          />
-        )}
-
-        {view === "cleaner-agenda" && <CleanerAgendaView onBack={showCleaners} onOpenJob={openCleanerAgendaJob} />}
-        {view === "cleaner-alerts" && <CleanerAlertsView onBack={showCleaners} onOpenCleaner={openCleaner} />}
-
-        {view === "payout-list" && (
-          <PayoutDirectory
-            payoutGroups={payoutGroups}
-            recentPayouts={recentPayouts}
-            isLoading={isLoadingPayouts}
-            hasError={hasPayoutsError}
-            paidSummary={paidPayoutSummary}
-            onRefresh={refreshPayouts}
-            onWeeklyClose={showWeeklyClose}
-            onReview={openPayoutReview}
-            onUploadProof={attachProof}
-            onOpenProof={getProofUrl}
-            formatPrice={(amount) => formatPrice(amount, translate, language)}
-            formatCreatedAt={(date) => formatCreatedAt(date, language)}
-          />
-        )}
-
-        {view === "payout-review" && selectedPayoutGroup && (
-          <PayoutReview
-            cleaner={selectedPayoutGroup.cleaner}
-            jobs={selectedPayoutGroup.jobs}
-            onBack={showPayouts}
-            onRecord={recordPayout}
-            onUploadProof={attachProof}
-            onRecorded={showRecordedPayout}
-            formatDate={(date) => formatDate(date, translate, language)}
-            formatCreatedAt={(date) => formatCreatedAt(date, language)}
-            formatPrice={(amount) => formatPrice(amount, translate, language)}
-          />
-        )}
-
-        {view === "cleaner-detail" && selectedCleaner && (
-          <CleanerDetail
-            cleaner={selectedCleaner}
-            onBack={showCleaners}
-            onEdit={showEditCleaner}
-            onOpenJob={openCleanerJob}
-            onSaveDataProvenance={(dataProvenance) =>
-              saveCleanerDataProvenance(selectedCleaner, dataProvenance)
-            }
-            canRestore={canManageExcludedRecords}
-            onArchive={async () => { await archiveCleanerRecord(selectedCleaner); showCleaners(); }}
-            onRestore={() => restoreCleanerRecord(selectedCleaner)}
-          />
-        )}
-
-        {view === "cleaner-create" && (
-          <CleanerProfileForm
-            key="new-cleaner"
-            onBack={showCleaners}
-            onSave={saveCleaner}
-            onSaved={() => setView("cleaner-success")}
-          />
-        )}
-
-        {view === "cleaner-edit" && selectedCleaner && (
-          <CleanerProfileForm
-            key={selectedCleaner.id}
-            cleaner={selectedCleaner}
-            onBack={showCleanerDetail}
-            onSave={saveCleaner}
-            onSaved={() => setView("cleaner-success")}
-          />
-        )}
-
-        {view === "cleaner-success" && savedCleaner && (
-          <CleanerProfileSuccess
-            cleaner={savedCleaner}
-            onBack={savedCleaner.wasCreated ? showCleaners : showCleanerDetail}
-            backLabel={
-              savedCleaner.wasCreated
-                ? "cleaners.backToDirectory"
-                : "cleaners.backToDetail"
-            }
-          />
-        )}
+        <CleanerViews
+          view={view}
+          directoryCleaners={directoryCleaners}
+          isLoadingDirectoryCleaners={isLoadingDirectoryCleaners}
+          hasDirectoryCleanersError={hasDirectoryCleanersError}
+          openCleaner={openCleaner}
+          showNewCleaner={showNewCleaner}
+          canManageExcludedRecords={canManageExcludedRecords}
+          showExcludedRecords={showExcludedRecords}
+          setShowExcludedRecords={setShowExcludedRecords}
+          showCleanerAgenda={showCleanerAgenda}
+          showCleanerAlerts={showCleanerAlerts}
+          showCleaners={showCleaners}
+          openCleanerAgendaJob={openCleanerAgendaJob}
+          selectedCleaner={selectedCleaner}
+          showEditCleaner={showEditCleaner}
+          openCleanerJob={openCleanerJob}
+          saveCleanerDataProvenance={saveCleanerDataProvenance}
+          archiveCleanerRecord={archiveCleanerRecord}
+          restoreCleanerRecord={restoreCleanerRecord}
+          saveCleaner={saveCleaner}
+          setView={setView}
+          showCleanerDetail={showCleanerDetail}
+          savedCleaner={savedCleaner}
+        />
 
         {view === "client-list" && (
           <ClientDirectory
