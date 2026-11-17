@@ -10,21 +10,17 @@ import { JobChecklistSection } from "./JobChecklistSection.jsx";
 import { JobReminderPreview } from "./JobReminderPreview.jsx";
 import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
 import { JobOffersSection } from "./JobOffersSection.jsx";
-import { serviceTypeLabel, serviceTypeMessage } from "./serviceTypeMessages.js";
+import { JobDetailHead } from "./JobDetailHead.jsx";
+import { serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
-import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
-import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
 import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
 import { JobScheduleConfirmation } from "./JobScheduleConfirmation.jsx";
 import {
   currentScheduleConfirmations, currentScheduleRevision, scheduleConfirmationMessage,
 } from "./scheduleConfirmation.js";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
-import {
-  BackButton,
-} from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
@@ -35,7 +31,6 @@ import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { canAssignCleanerDirectly, canDirectlyFillJob } from "./assignmentService.js";
 import {
   formatCreatedAt,
-  formatDate,
   hasValue,
 } from "../../lib/presentation.js";
 import { translateInLanguage, useTranslation } from "../../i18n/translations.js";
@@ -1134,45 +1129,23 @@ export function JobDetail({
 
   return (
     <section className="panel job-detail cf-job" aria-labelledby="job-detail-title">
-      <div className="cf-job__head">
-      <BackButton onClick={onBack} />
-
-      <h2 id="job-detail-title" className="panel__title">
-        {job.propertyName || translate("properties.unnamed")}
-      </h2>
-
-      <p className="job-detail__context">
-        <span>{formatDate(job.scheduledDate, translate, language)}</span>
-        {job.scheduledStart && <span>{job.scheduledStart}</span>}
-        <span>{serviceTypeLabel(language, job.serviceType)}</span>
-        <span>{job.clientName || translate("common.notProvided")}</span>
-      </p>
-      {isCompleted && <p className="job-detail__completion">
-        {translate("jobs.completedTime")}: {completedAt || translate("common.notProvided")}
-      </p>}
-      {lifecyclePresentation.attention.length > 0 && <aside className="service-attention" aria-label={translate("dashboard.needsAttention")}>
-        {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
-          <strong>{translate(attention.key, { count: attention.count })}</strong>
-          {/* Review opens the same Run as the checklist primary; link controls and Issues are distinct targets. */}
-          {(attention.kind !== "review" || primaryIntent.intent !== "checklist") && <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
-            ? focusIntentSection(issuesSectionRef) : attention.kind === "stale-link"
-              ? focusIntentSection(checklistSectionRef) : chooseJobIntent("checklist")}>
-            {translate(attention.kind === "issues" ? "dashboard.reviewIssue"
-              : attention.kind === "review" ? "jobs.intentReview" : "lifecycle.linkControls")} →
-          </button>}
-        </div>)}
-      </aside>}
-      <ServiceLifecycleRail lifecycle={lifecyclePresentation.lifecycle} />
-
-      <div className="service-cleaner-summary">
-        <span>{translate("common.cleaner")}</span>
-        <strong>{isLoadingAssignments ? translate("offers.loadingCleaners")
-          : hasAssignmentsError ? translate("common.notProvided")
-            : summaryCleanerNames.length ? summaryCleanerNames.join(", ")
-              : job.assignedCleanerName || translate("dashboard.notAssigned")}</strong>
-      </div>
-      <ChecklistProgressSummary checklist={lifecyclePresentation.checklist} />
-      </div>
+      <JobDetailHead
+        job={job}
+        translate={translate}
+        language={language}
+        onBack={onBack}
+        isCompleted={isCompleted}
+        completedAt={completedAt}
+        lifecyclePresentation={lifecyclePresentation}
+        primaryIntent={primaryIntent}
+        focusIntentSection={focusIntentSection}
+        issuesSectionRef={issuesSectionRef}
+        checklistSectionRef={checklistSectionRef}
+        chooseJobIntent={chooseJobIntent}
+        isLoadingAssignments={isLoadingAssignments}
+        hasAssignmentsError={hasAssignmentsError}
+        summaryCleanerNames={summaryCleanerNames}
+      />
       <div className="cf-job__layout">
       <aside className="cf-job__rail" aria-label={translate("jobs.intentTitle")}>
       <JobIntentLayer
