@@ -13,9 +13,11 @@ import {
 import { correctChecklistAnswer, getChecklistEvidence, setReportPhotoVisibility } from "./checklistRunService.js";
 import { ClientReportControls } from "./ClientReportControls.jsx";
 import { ChecklistPhotoGrid } from "./ChecklistPhotoGrid.jsx";
+import { serviceTypeLabel, serviceTypeMessage } from "../jobs/serviceTypeMessages.js";
+import { checklistDefinitionText, withServiceTypeChecklistMessages } from "./serviceTypeChecklistMessages.js";
 
 function checklistLabel(item, translate) {
-  return item?.label || translate(item?.labelKey || item?.id || "checklists.itemCount");
+  return checklistDefinitionText(translate, item?.labelKey || item?.id || "checklists.itemCount", item?.label);
 }
 
 function formatRunCreatedAt(value, language) {
@@ -94,7 +96,7 @@ export function ChecklistRunDetail({
   onSubmitForReview, setPhotoVisibility = setReportPhotoVisibility, correctAnswer = correctChecklistAnswer,
 }) {
   const { language, translate: baseTranslate } = useTranslation();
-  const translate = withChecklistInventoryMessages(baseTranslate, language);
+  const translate = withServiceTypeChecklistMessages(withChecklistInventoryMessages(baseTranslate, language), language);
   const definitionVersion = checklistRun.definitionVersion;
   const createdAt = formatRunCreatedAt(checklistRun.createdAt, language);
   const requiredPhotoTypes = checklistRun.requiredPhotoTypes || [];
@@ -293,6 +295,7 @@ export function ChecklistRunDetail({
       </p>}
 
       <dl className="detail-list checklist-run__details">
+        <DetailItem label={serviceTypeMessage(language, "field")} value={serviceTypeLabel(language, checklistRun.serviceType)} />
         <DetailItem
           label={translate("common.property")}
           value={checklistRun.property?.name || job.propertyName || translate("properties.unnamed")}
@@ -414,7 +417,7 @@ export function ChecklistRunDetail({
 
       {checklistRun.sections?.map((section) => (
         <section className="checklist-run__section" aria-labelledby={`run-section-${section.id}`} key={section.id}>
-          <h3 id={`run-section-${section.id}`}>{section.title || translate(section.titleKey || section.id)}</h3>
+          <h3 id={`run-section-${section.id}`}>{checklistDefinitionText(translate, section.titleKey || section.id, section.title)}</h3>
           <ul className="checklist-run__answers">
             {section.items?.map((item) => answerRow("checklist", item))}
           </ul>

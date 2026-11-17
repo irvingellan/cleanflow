@@ -10,6 +10,7 @@ import { createJobListFilters } from "./jobListFilters.js";
 import { getAssignedCleanerIds } from "./jobCompatibility.js";
 import { assignedCleanerSummary } from "./assignmentPresentation.js";
 import { CompactServiceLifecycle } from "./CompactServiceLifecycle.jsx";
+import { serviceTypeLabel } from "./serviceTypeMessages.js";
 
 export { createJobListFilters, dashboardJobListFilters } from "./jobListFilters.js";
 
@@ -456,7 +457,7 @@ export function JobsPage({
                     job.propertyName || translate("properties.unnamed"),
                 })}
                 data-job-id={job.id}
-                aria-describedby={`jobs-lifecycle-${job.id}`}
+                aria-describedby={`jobs-type-${job.id} jobs-lifecycle-${job.id}`}
                 ref={(element) => {
                   if (element) {
                     jobCardElements.current.set(job.id, element);
@@ -485,6 +486,7 @@ export function JobsPage({
                   <span>
                     {job.clientName || translate("common.notProvided")}
                   </span>
+                  <span id={`jobs-type-${job.id}`} className="job-card__type">{serviceTypeLabel(language, job.serviceType)}</span>
                   <span>
                     {assignedCleanerSummary(
                       job,

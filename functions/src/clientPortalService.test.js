@@ -4,7 +4,7 @@ import { clientPortalAccessState, projectClientPortal, loadPublicClientPortalRep
 import { loadReleasedClientReport, downloadReleasedClientReportPhoto } from "./clientReportService.js";
 
 vi.mock("./clientReportService.js", () => ({
-  clientReportReleasedForJob: vi.fn(),
+  releasedClientReportServiceTypeForJob: vi.fn(),
   loadReleasedClientReport: vi.fn(async () => ({ report: { propertyName: "Allowed house" } })),
   downloadReleasedClientReportPhoto: vi.fn(async () => ({ bytes: "synthetic" })),
 }));
@@ -72,12 +72,12 @@ function project(overrides = {}) {
     client: { name: "  Owner Example  ", email: "owner@example.test", phone: "+15555550100", notes: "private client note" },
     properties: [property("p1", "Seaside House"), property("p2", "Archived Flat", { archivedAt: {} })],
     jobs: [
-      job("coming-late", "2026-11-20"), job("coming-soon", "2026-11-12", { scheduledStart: "14:30" }),
-      job("today-done", today, { operationalStatus: "COMPLETED" }), job("past-released", "2026-11-03", { operationalStatus: "COMPLETED" }),
+      job("coming-late", "2026-11-20"), job("coming-soon", "2026-11-12", { scheduledStart: "14:30", serviceType: "DEEP_CLEANING" }),
+      job("today-done", today, { operationalStatus: "COMPLETED" }), job("past-released", "2026-11-03", { operationalStatus: "COMPLETED", serviceType: "MOVE_IN_OUT" }),
       job("past-private", "2026-11-01", { operationalStatus: "COMPLETED" }), job("cancelled", "2026-11-15", { archivedAt: {} }),
       job("other-property", "2026-11-16", { propertyId: "p2" }), job("bad-date", "soon"),
     ],
-    releasedJobIds: new Set(["past-released", "today-done", "cancelled"]),
+    releasedServiceTypesByJobId: new Map([["past-released", "POST_CONSTRUCTION"], ["today-done", "STANDARD"], ["cancelled", "STANDARD"]]),
     today,
     ...overrides,
   });
@@ -89,10 +89,11 @@ describe("client portal projection", () => {
     expect(portal.clientName).toBe("Owner Example");
     expect(portal.properties).toEqual([{ id: "p1", name: "Seaside House" }]);
     expect(portal.coming).toEqual([
-      { propertyId: "p1", propertyName: "Seaside House", date: "2026-11-12", start: "14:30" },
-      { propertyId: "p1", propertyName: "Seaside House", date: "2026-11-20", start: "09:00" },
+      { propertyId: "p1", propertyName: "Seaside House", date: "2026-11-12", start: "14:30", serviceType: "DEEP_CLEANING" },
+      { propertyId: "p1", propertyName: "Seaside House", date: "2026-11-20", start: "09:00", serviceType: "STANDARD" },
     ]);
     expect(portal.reports.map((report) => report.jobId)).toEqual(["today-done", "past-released"]);
+    expect(portal.reports.map((report) => report.serviceType)).toEqual(["STANDARD", "POST_CONSTRUCTION"]);
   });
 
   it("never carries cleaner names, access instructions, prices, contact details or internal notes", () => {
@@ -101,11 +102,11 @@ describe("client portal projection", () => {
       "owner@example.test", "5555550100", "private client note"]) {
       expect(serialized).not.toContain(secret);
     }
-    expect(Object.keys(project().reports[0]).sort()).toEqual(["date", "jobId", "propertyId", "propertyName", "start"]);
+    expect(Object.keys(project().reports[0]).sort()).toEqual(["date", "jobId", "propertyId", "propertyName", "serviceType", "start"]);
   });
 
   it("shows nothing as released unless the manager released it", () => {
-    expect(project({ releasedJobIds: new Set() }).reports).toEqual([]);
+    expect(project({ releasedServiceTypesByJobId: new Map() }).reports).toEqual([]);
   });
 });
 

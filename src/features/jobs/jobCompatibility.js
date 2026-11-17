@@ -5,6 +5,7 @@ export const CURRENT_JOB_SCHEMA_VERSION = ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION;
 export const maximumGuestNameLength = 120;
 
 import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
+import { defaultServiceType, isServiceType, normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { getChecklistContextRevision } from "./checklistContextRevision.js";
 
 function optionalText(value) {
@@ -38,7 +39,16 @@ export function getJobGrossMargin(job) {
   return clientPrice - cleanerPayout;
 }
 
-export function buildJobDetailsUpdate({ guestName, notes }) {
+function validateServiceType(serviceType) {
+  if (!isServiceType(serviceType)) {
+    const error = new Error("Unknown Job service type.");
+    error.code = "invalid-service-type";
+    throw error;
+  }
+  return serviceType;
+}
+
+export function buildJobDetailsUpdate({ guestName, notes, serviceType }) {
   const normalizedGuestName = optionalText(guestName);
   if (normalizedGuestName.length > maximumGuestNameLength) {
     throw new Error("Guest name is too long.");
@@ -47,6 +57,7 @@ export function buildJobDetailsUpdate({ guestName, notes }) {
   return {
     guestName: normalizedGuestName || undefined,
     notes: optionalText(notes) || undefined,
+    ...(serviceType === undefined ? {} : { serviceType: validateServiceType(serviceType) }),
   };
 }
 
@@ -100,6 +111,7 @@ export function normalizeJobRecord(data = {}, id) {
     id,
     schemaVersion: getJobSchemaVersion(source),
     checklistContextRevision: getChecklistContextRevision(source),
+    serviceType: normalizeServiceType(source.serviceType),
   });
   const clientId = optionalText(source.clientId);
   const guestName = optionalText(source.guestName);
@@ -131,6 +143,7 @@ export function buildCurrentJobCreateData({
   cleanerPayout,
   notes,
   guestName,
+  serviceType = defaultServiceType,
 }) {
   const normalizedGuestName = optionalText(guestName);
   const normalizedScheduledStart = optionalText(scheduledStart);
@@ -152,6 +165,7 @@ export function buildCurrentJobCreateData({
     clientName,
     scheduledDate,
     notes,
+    serviceType: validateServiceType(serviceType),
     operationalStatus: "UNASSIGNED",
     schemaVersion: CURRENT_JOB_SCHEMA_VERSION,
     checklistContextRevision: 0,

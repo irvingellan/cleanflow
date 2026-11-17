@@ -110,6 +110,8 @@ Conceptual fields include:
 
 - identity, Organization, Client, Property, and optional Reservation reference;
 - property/client snapshots and optional `guestName`;
+- optional `serviceType` (missing means `STANDARD`), frozen in the initial
+  Checklist Run when created. See [Service types V1](SERVICE_TYPES_V1.md);
 - scheduled date/time, timezone, monotonic `scheduleRevision`, and Job-scoped
   schedule audit history;
 - `checklistContextRevision`: a monotonic cleaner-capability invalidation value;

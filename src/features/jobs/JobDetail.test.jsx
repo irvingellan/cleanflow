@@ -284,7 +284,7 @@ describe("JobDetail lifecycle actions", () => {
     }, { onUpdateSchedule });
 
     const scheduleAction = screen.getByRole("button", { name: "Choose intention: Change date / time" });
-    const detailsAction = screen.getByRole("button", { name: "Edit guest / notes" });
+    const detailsAction = screen.getByRole("button", { name: "Edit service details" });
     expect(scheduleAction.compareDocumentPosition(detailsAction) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(scheduleAction);
     expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-01");
@@ -421,7 +421,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(section.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("lets a manager edit only guest name and notes and reports the saved result", async () => {
+  it("lets a manager edit guest name and notes without rewriting the implicit service type", async () => {
     const onUpdateDetails = vi.fn().mockResolvedValue({
       guestName: "Updated guest",
       notes: "Text the cleaner at arrival.",
@@ -429,7 +429,9 @@ describe("JobDetail lifecycle actions", () => {
     renderJobDetail("UNASSIGNED", { guestName: "Original guest", notes: "Old note" }, { onUpdateDetails });
 
     expect(screen.getByText("Old note")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Edit guest / notes" }));
+    expect(screen.getByText("Standard (guest turnover)")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Edit service details" }));
+    expect(screen.getByLabelText("Service type")).toHaveValue("STANDARD");
     fireEvent.change(screen.getByLabelText("Guest name (optional)"), { target: { value: " Updated guest " } });
     fireEvent.change(screen.getByRole("textbox", { name: "Notes" }), { target: { value: " Text the cleaner at arrival. " } });
     fireEvent.click(screen.getByRole("button", { name: "Save details" }));
@@ -439,7 +441,7 @@ describe("JobDetail lifecycle actions", () => {
         guestName: "Updated guest",
         notes: "Text the cleaner at arrival.",
       });
-      expect(screen.getByRole("status")).toHaveTextContent("Guest and notes updated.");
+      expect(screen.getByRole("status")).toHaveTextContent("Service details saved.");
     });
   });
 
@@ -447,18 +449,18 @@ describe("JobDetail lifecycle actions", () => {
     const onUpdateDetails = vi.fn().mockRejectedValue(new Error("offline"));
     renderJobDetail("UNASSIGNED", {}, { onUpdateDetails });
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit guest / notes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit service details" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Notes" }), { target: { value: "New note" } });
     fireEvent.click(screen.getByRole("button", { name: "Save details" }));
 
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Unable to update guest and notes. Try again."));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Unable to update service details. Try again."));
     expect(screen.getByRole("textbox", { name: "Notes" })).toHaveValue("New note");
   });
 
   it("keeps completed or archived Job detail edits disabled to preserve history", () => {
     const { rerender } = renderJobDetail("COMPLETED");
 
-    expect(screen.getByRole("button", { name: "Edit guest / notes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit service details" })).toBeDisabled();
     expect(screen.getByText("Completed or archived service details are read-only to preserve history.")).toBeVisible();
 
     rerender(
@@ -483,7 +485,7 @@ describe("JobDetail lifecycle actions", () => {
       </TranslationProvider>,
     );
 
-    expect(screen.getByRole("button", { name: "Edit guest / notes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit service details" })).toBeDisabled();
   });
 
   it("shows derived gross margin only with both Job price snapshots and lets a manager edit only those prices", async () => {

@@ -3,6 +3,7 @@ import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   clientReportCapabilityState,
   projectClientReport,
+  releasedClientReportServiceTypeForJob,
 } from "./clientReportService.js";
 import { correctChecklistAnswerForManager } from "./checklistManagerCorrection.js";
 import { projectChecklistRunForManager } from "./checklistRunService.js";
@@ -62,6 +63,7 @@ describe("client report projection", () => {
       titleKey: "clientReport.title",
       propertyName: "Seaside House",
       serviceDate: "2026-09-23",
+      serviceType: "STANDARD",
       sections: [{
         titleKey: "checklistPreview.bathrooms",
         items: [{ labelKey: "checklistPreview.bathroomSanitize", answer: "DONE" }],
@@ -78,6 +80,28 @@ describe("client report projection", () => {
       "managerNotes", "clientPrice", "private/storage/path", "private-hash", "bathroom-sanitize"]) {
       expect(serialized).not.toContain(secret);
     }
+  });
+
+  it("publishes the frozen type from a released Run without reading unreleased Runs", async () => {
+    const root = "organizations/org/jobs/job/checklistRuns/initial";
+    const capabilityPath = `${root}/clientReportCapabilities/active`;
+    const records = new Map([[root, { status: "READY_FOR_REVIEW", jobSnapshot: { serviceType: "POST_CONSTRUCTION" } }]]);
+    const reads = [];
+    const database = { doc: (path) => ({
+      path,
+      collection: (name) => ({ doc: (id) => database.doc(`${path}/${name}/${id}`) }),
+      get: async () => { reads.push(path); return { data: () => records.get(path) }; },
+    }) };
+    const options = { organizationId: "org", jobId: "job" };
+
+    await expect(releasedClientReportServiceTypeForJob(database, options)).resolves.toBeNull();
+    expect(reads).toEqual([capabilityPath]);
+
+    records.set(capabilityPath, { status: "ACTIVE" });
+    await expect(releasedClientReportServiceTypeForJob(database, options)).resolves.toBe("POST_CONSTRUCTION");
+    expect(reads.slice(1)).toEqual([capabilityPath, root]);
+    delete records.get(root).jobSnapshot.serviceType;
+    await expect(releasedClientReportServiceTypeForJob(database, options)).resolves.toBe("STANDARD");
   });
 
   it("does not publish a report unless the saved READY_FOR_REVIEW revision matches", () => {
