@@ -1,4 +1,6 @@
-const organizationId = "cleanflow-demo";
+// Dev Center scenarios are deliberately pinned to the default organization.
+import { defaultOrganizationId as devCenterOrganizationId } from "./runtime/organization.js";
+
 // Dev Center scenarios intentionally remain singular-cleaner fixtures so v2 roster
 // behavior is exercised explicitly rather than hidden behind generated legacy data.
 const currentJobSchemaVersion = 1;
@@ -54,7 +56,7 @@ function buildManagerTrainingScenario({ batch, createdAt, now }) {
   ].map((client) => ({
     ...client,
     data: {
-      organizationId,
+      organizationId: devCenterOrganizationId,
       name: client.name,
       active: true,
       updatedAt: createdAt,
@@ -78,7 +80,7 @@ function buildManagerTrainingScenario({ batch, createdAt, now }) {
       name,
       clientId: client.id,
       data: {
-        organizationId,
+        organizationId: devCenterOrganizationId,
         clientId: client.id,
         clientName: client.name,
         name,
@@ -94,7 +96,7 @@ function buildManagerTrainingScenario({ batch, createdAt, now }) {
     id: `${batch}-cleaner-${name.toLowerCase()}`,
     name,
     data: {
-      organizationId,
+      organizationId: devCenterOrganizationId,
       name,
       active: true,
       preferredLanguage: "pt",
@@ -119,7 +121,7 @@ function buildManagerTrainingScenario({ batch, createdAt, now }) {
     const job = {
       id: `${batch}-job-${String(index + 1).padStart(2, "0")}`,
       data: {
-        organizationId,
+        organizationId: devCenterOrganizationId,
         clientId: client.id,
         clientName: client.name,
         propertyId: property.id,
@@ -206,11 +208,11 @@ function buildWeeklyCloseScenario({ batch, createdAt, now }) {
   };
   const clients = ["Alpha", "Beta", "Gamma"].map((name) => ({
     id: `${batch}-client-${name.toLowerCase()}`,
-    data: { organizationId, name: `Weekly Demo Client ${name}`, active: true, updatedAt: createdAt, ...marker },
+    data: { organizationId: devCenterOrganizationId, name: `Weekly Demo Client ${name}`, active: true, updatedAt: createdAt, ...marker },
   }));
   const cleaner = {
     id: `${batch}-cleaner`,
-    data: { organizationId, name: "Weekly Demo Cleaner", active: true, preferredLanguage: "en", updatedAt: createdAt, ...marker },
+    data: { organizationId: devCenterOrganizationId, name: "Weekly Demo Cleaner", active: true, preferredLanguage: "en", updatedAt: createdAt, ...marker },
   };
   const rows = [
     ["paid", 0, 200, 100, 0],
@@ -228,12 +230,12 @@ function buildWeeklyCloseScenario({ batch, createdAt, now }) {
   ];
   const properties = rows.map(([key, clientIndex]) => ({
     id: `${batch}-property-${key}`,
-    data: { organizationId, name: `Weekly Demo ${key}`, clientId: clients[clientIndex].id, clientName: clients[clientIndex].data.name, active: true, updatedAt: createdAt, ...marker },
+    data: { organizationId: devCenterOrganizationId, name: `Weekly Demo ${key}`, clientId: clients[clientIndex].id, clientName: clients[clientIndex].data.name, active: true, updatedAt: createdAt, ...marker },
   }));
   const jobs = rows.map(([key, clientIndex, clientPrice, cleanerPayout, offset], index) => {
     const property = properties[index];
     const data = {
-      organizationId, clientId: clients[clientIndex].id, clientName: clients[clientIndex].data.name,
+      organizationId: devCenterOrganizationId, clientId: clients[clientIndex].id, clientName: clients[clientIndex].data.name,
       propertyId: property.id, propertyName: property.data.name,
       scheduledDate: serviceDate(offset), scheduledStart: "11:00", operationalStatus: "COMPLETED",
       completedAt: createdAt, assignedCleanerId: cleaner.id, assignedCleanerName: cleaner.data.name,
@@ -268,7 +270,7 @@ function buildWeeklyCloseScenario({ batch, createdAt, now }) {
     { id: `${batch}-payout-paid`, amount: 100, jobIds: [`${batch}-job-paid`] },
     { id: `${batch}-payout-batch`, amount: 110, jobIds: [`${batch}-job-batch-a`, `${batch}-job-batch-b`] },
   ].map(({ id, ...payment }) => ({
-    id, data: { organizationId, cleanerId: cleaner.id, cleanerNameSnapshot: cleaner.data.name, status: "PAID", paymentMethod: "CASH", paidAt: createdAt, ...payment, ...marker },
+    id, data: { organizationId: devCenterOrganizationId, cleanerId: cleaner.id, cleanerNameSnapshot: cleaner.data.name, status: "PAID", paymentMethod: "CASH", paidAt: createdAt, ...payment, ...marker },
   }));
   return { client: clients[0], clients, properties, cleaners: [cleaner], jobs, payouts, offers: [], issues: [] };
 }
@@ -301,7 +303,7 @@ export function buildDemoScenario({ scenario, batch, createdAt, now = new Date()
   const client = {
     id: clientId,
     data: {
-      organizationId,
+      organizationId: devCenterOrganizationId,
       name: "Demo Operations Client",
       active: true,
       updatedAt: createdAt,
@@ -311,7 +313,7 @@ export function buildDemoScenario({ scenario, batch, createdAt, now = new Date()
   const propertyRecords = properties.map((property) => ({
     id: property.id,
     data: {
-      organizationId,
+      organizationId: devCenterOrganizationId,
       clientId,
       clientName: client.data.name,
       name: property.name,
@@ -325,7 +327,7 @@ export function buildDemoScenario({ scenario, batch, createdAt, now = new Date()
   const cleanerRecords = cleaners.map((cleaner) => ({
     id: cleaner.id,
     data: {
-      organizationId,
+      organizationId: devCenterOrganizationId,
       name: cleaner.name,
       active: true,
       preferredLanguage: "en",
@@ -345,7 +347,7 @@ export function buildDemoScenario({ scenario, batch, createdAt, now = new Date()
     const job = {
       id: `${batch}-job-${String(index + 1).padStart(2, "0")}`,
       data: {
-        organizationId,
+        organizationId: devCenterOrganizationId,
         clientId,
         clientName: client.data.name,
         propertyId: property.id,
