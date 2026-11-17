@@ -8,8 +8,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const issueCategories = [
   "ACCESS",
   "SUPPLIES",
@@ -22,7 +22,7 @@ function issuesCollection(jobId) {
   return collection(
     db,
     "organizations",
-    organizationId,
+    currentOrganizationId(),
     "jobs",
     jobId,
     "issues",
@@ -33,7 +33,7 @@ function issueDocument(jobId, issueId) {
   return doc(
     db,
     "organizations",
-    organizationId,
+    currentOrganizationId(),
     "jobs",
     jobId,
     "issues",

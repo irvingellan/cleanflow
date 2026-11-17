@@ -23,6 +23,7 @@ import {
   where as serverWhere,
 } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { serverFirestore } from "../../services/firebase/serverReads.js";
 import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
@@ -40,7 +41,6 @@ import {
   projectCleanerSelectionContext,
 } from "./cleanerSelectionContext.js";
 
-const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
 const upcomingSummaryLimit = 3;
 const activeOperationalStatuses = [
@@ -51,11 +51,11 @@ const activeOperationalStatuses = [
 ];
 
 function jobsCollection() {
-  return collection(db, "organizations", organizationId, "jobs");
+  return collection(db, "organizations", currentOrganizationId(), "jobs");
 }
 
 function jobDocument(jobId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId);
 }
 
 function jobFromSnapshot(snapshot) {
@@ -87,7 +87,7 @@ const maxServicePeriodJobs = 200;
 /** Both reads use the existing organization-scoped manager Job Rules. */
 export async function getCleanerSelectionContext(target, { signal } = {}) {
   signal?.throwIfAborted();
-  const records = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const records = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
   const { propertyId, scheduledDate } = target;
   const [schedule, history] = await Promise.all([
     scheduledDate ? getServerDocs(serverQuery(records,
@@ -107,7 +107,7 @@ export async function getCleanerSelectionContext(target, { signal } = {}) {
 
 /** Cursor includes the document ID, so jobs on the same date cannot be skipped. */
 export async function getServicePeriodJobs({ start, end }, { signal } = {}) {
-  const records = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const records = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
   const jobs = [];
   let cursor;
   for (let offset = 0; offset < maxServicePeriodJobs; offset += servicePeriodPageSize) {
@@ -613,7 +613,7 @@ export async function createJob({
   guestName,
 }) {
   const job = buildCurrentJobCreateData({
-    organizationId,
+    organizationId: currentOrganizationId(),
     propertyId,
     propertyName,
     clientId,
