@@ -9,10 +9,10 @@ import { JobDetailsSection } from "./JobDetailsSection.jsx";
 import { JobChecklistSection } from "./JobChecklistSection.jsx";
 import { JobReminderPreview } from "./JobReminderPreview.jsx";
 import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
-import { JobOfferRow } from "./JobOfferRow.jsx";
+import { JobOffersSection } from "./JobOffersSection.jsx";
 import { serviceTypeLabel, serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
-import { isJobFilled, maxCleanersPerJob, offerManagerDecisions, requiredCleanerCount, rosterCleanerIds } from "./offerSlots.js";
+import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
 import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
 import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
@@ -24,7 +24,6 @@ import {
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import {
   BackButton,
-  StateCard,
 } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
@@ -1388,147 +1387,61 @@ export function JobDetail({
         hasStartCleaningError={hasStartCleaningError}
       />
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")}>
-      <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
-        <div className="offers-section__header">
-          <h3 id="offers-title">{translate("offers.title")}</h3>
-          <div className="offers-section__actions">
-            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length === 0 && (
-              <button
-                className="button button--primary"
-                type="button"
-                onClick={onOfferToCleaners}
-              >
-                {translate("offers.offerCleaningToCleaners")}
-              </button>
-            )}
-            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length > 0 && (
-              <button className="button" type="button" onClick={onOfferToCleaners}>
-                {translate("offers.sendToMoreCleaners")}
-              </button>
-            )}
-            <button
-              className="button"
-              type="button"
-              onClick={onRefreshOffers}
-              disabled={isLoadingOffers}
-            >
-              {translate("offers.refresh")}
-            </button>
-          </div>
-        </div>
-
-        {isAssignmentAware && !automaticOfferJob && sortedOffers.length > 0 && (
-          <div className="offer-spots" data-testid="offer-spots">
-            <span>{translate(isJobFilled(job) ? "offers.spotsFilled" : "offers.spotsOpen", {
-              filled: rosterCleanerIds(job).length, total: requiredCleanerCount(job),
-            })}</span>
-            {onSetCleanerSpots && canEditRoster && (
-              <span className="offer-spots__stepper" role="group" aria-label={translate("offers.spotsLabel")}>
-                <button className="button" type="button" aria-label={translate("offers.spotsLess")}
-                  disabled={isSavingSpots || requiredCleanerCount(job) <= Math.max(1, rosterCleanerIds(job).length)}
-                  onClick={() => changeCleanerSpots(requiredCleanerCount(job) - 1)}>−</button>
-                <span className="offer-spots__count" aria-live="polite">{requiredCleanerCount(job)}</span>
-                <button className="button" type="button" aria-label={translate("offers.spotsMore")}
-                  disabled={isSavingSpots || requiredCleanerCount(job) >= maxCleanersPerJob}
-                  onClick={() => changeCleanerSpots(requiredCleanerCount(job) + 1)}>+</button>
-                <span>{translate("offers.spotsLabel")}</span>
-              </span>
-            )}
-          </div>
-        )}
-
-        {offersCreatedCount !== null && (
-          <p className="offers-section__success" role="status">
-            {translate(automaticOfferJob ? "offers.automaticCreated" : "offers.createdReadyToShare", { count: offersCreatedCount })}
-          </p>
-        )}
-
-        {isLoadingOffers && (
-          <StateCard message={translate("offers.loading")} status="status" />
-        )}
-
-        {!isLoadingOffers && hasOffersError && (
-          <StateCard
-            message={translate("offers.error")}
-            status="alert"
-            isError
-          />
-        )}
-
-        {!isLoadingOffers && !hasOffersError && sortedOffers.length === 0 && (
-          <StateCard message={translate("offers.empty")} />
-        )}
-
-        {!isLoadingOffers && !hasOffersError && sortedOffers.length > 0 && (
-          <div className="offer-status-list">
-            {sortedOffers.map((offer) => (
-              <JobOfferRow
-                key={offer.id}
-                offer={offer}
-                job={job}
-                translate={translate}
-                language={language}
-                cleanerNamesById={cleanerNamesById}
-                automaticOfferJob={automaticOfferJob}
-                isAssignmentAware={isAssignmentAware}
-                onDecideOffer={onDecideOffer}
-                canEditRoster={canEditRoster}
-                onReopenOffer={onReopenOffer}
-                editingOfferCompensationFor={editingOfferCompensationFor}
-                offerMessageFor={offerMessageFor}
-                cleanerPhonesById={cleanerPhonesById}
-                canManageOffers={canManageOffers}
-                isCreatingPublicOfferLinkFor={isCreatingPublicOfferLinkFor}
-                createOfferLink={createOfferLink}
-                openOfferLinkForm={openOfferLinkForm}
-                onRevokeAutomaticOffer={onRevokeAutomaticOffer}
-                revokingOfferId={revokingOfferId}
-                revokeOffer={revokeOffer}
-                assignedCleanerIds={assignedCleanerIds}
-                isAssigned={isAssigned}
-                assigningCleanerId={assigningCleanerId}
-                decidingOfferId={decidingOfferId}
-                assignCleaner={assignCleaner}
-                decideOffer={decideOffer}
-                addCleanerSpotAndAssign={addCleanerSpotAndAssign}
-                reopenOffer={reopenOffer}
-                offerCompensationInput={offerCompensationInput}
-                setOfferCompensationInput={setOfferCompensationInput}
-                setOfferCompensationErrorFor={setOfferCompensationErrorFor}
-                offerCompensationErrorFor={offerCompensationErrorFor}
-                setEditingOfferCompensationFor={setEditingOfferCompensationFor}
-                revokeOfferErrorId={revokeOfferErrorId}
-                publicOfferLink={publicOfferLink}
-                cleanerLanguageLabelFor={cleanerLanguageLabelFor}
-                copyOfferMessage={copyOfferMessage}
-                copiedOfferMessageId={copiedOfferMessageId}
-                offerMessageCopyErrorId={offerMessageCopyErrorId}
-                publicOfferLinkError={publicOfferLinkError}
-              />
-            ))}
-          </div>
-        )}
-
-        {!isAssignmentAware && assignmentError && (
-          <p className="form-error assignment-error" role="alert">
-            {assignmentError}
-          </p>
-        )}
-      </section>
-
-      <div className="button-row">
-        {canSimulateAssignedCleaner && (
-          <button
-            className="button"
-            type="button"
-            onClick={onSimulateAssignedCleaner}
-          >
-            {translate("offers.simulateAssignedCleaner")}
-          </button>
-        )}
-      </div>
-      </JobDetailSection>
+      <JobOffersSection
+        job={job}
+        translate={translate}
+        language={language}
+        offersSectionRef={offersSectionRef}
+        canOfferToCleaners={canOfferToCleaners}
+        isLoadingOffers={isLoadingOffers}
+        sortedOffers={sortedOffers}
+        onOfferToCleaners={onOfferToCleaners}
+        onRefreshOffers={onRefreshOffers}
+        isAssignmentAware={isAssignmentAware}
+        automaticOfferJob={automaticOfferJob}
+        onSetCleanerSpots={onSetCleanerSpots}
+        canEditRoster={canEditRoster}
+        isSavingSpots={isSavingSpots}
+        changeCleanerSpots={changeCleanerSpots}
+        offersCreatedCount={offersCreatedCount}
+        hasOffersError={hasOffersError}
+        cleanerNamesById={cleanerNamesById}
+        onDecideOffer={onDecideOffer}
+        onReopenOffer={onReopenOffer}
+        editingOfferCompensationFor={editingOfferCompensationFor}
+        offerMessageFor={offerMessageFor}
+        cleanerPhonesById={cleanerPhonesById}
+        canManageOffers={canManageOffers}
+        isCreatingPublicOfferLinkFor={isCreatingPublicOfferLinkFor}
+        createOfferLink={createOfferLink}
+        openOfferLinkForm={openOfferLinkForm}
+        onRevokeAutomaticOffer={onRevokeAutomaticOffer}
+        revokingOfferId={revokingOfferId}
+        revokeOffer={revokeOffer}
+        assignedCleanerIds={assignedCleanerIds}
+        isAssigned={isAssigned}
+        assigningCleanerId={assigningCleanerId}
+        decidingOfferId={decidingOfferId}
+        assignCleaner={assignCleaner}
+        decideOffer={decideOffer}
+        addCleanerSpotAndAssign={addCleanerSpotAndAssign}
+        reopenOffer={reopenOffer}
+        offerCompensationInput={offerCompensationInput}
+        setOfferCompensationInput={setOfferCompensationInput}
+        setOfferCompensationErrorFor={setOfferCompensationErrorFor}
+        offerCompensationErrorFor={offerCompensationErrorFor}
+        setEditingOfferCompensationFor={setEditingOfferCompensationFor}
+        revokeOfferErrorId={revokeOfferErrorId}
+        publicOfferLink={publicOfferLink}
+        cleanerLanguageLabelFor={cleanerLanguageLabelFor}
+        copyOfferMessage={copyOfferMessage}
+        copiedOfferMessageId={copiedOfferMessageId}
+        offerMessageCopyErrorId={offerMessageCopyErrorId}
+        publicOfferLinkError={publicOfferLinkError}
+        assignmentError={assignmentError}
+        canSimulateAssignedCleaner={canSimulateAssignedCleaner}
+        onSimulateAssignedCleaner={onSimulateAssignedCleaner}
+      />
 
       <JobIssuesSection
         job={job}
