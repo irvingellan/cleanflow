@@ -18,7 +18,7 @@ import {
 } from "./clientReportShare.js";
 
 const noteMaximum = 1000;
-const emptyPresentation = { managerNote: "", includeCleanerNotes: true };
+const emptyPresentation = { managerNote: "", includeCleanerNotes: true, showInPortal: true };
 
 function formatSentAt(value, language) {
   const date = value ? new Date(value) : null;
@@ -88,10 +88,12 @@ export function ClientReportControls({
   const presentation = {
     managerNote: form.managerNote.trim().slice(0, noteMaximum),
     includeCleanerNotes: form.includeCleanerNotes,
+    showInPortal: form.showInPortal !== false,
   };
   const saved = { ...emptyPresentation, ...(capability.presentation || {}) };
   const hasUnsavedChanges = presentation.managerNote !== saved.managerNote
-    || presentation.includeCleanerNotes !== saved.includeCleanerNotes;
+    || presentation.includeCleanerNotes !== saved.includeCleanerNotes
+    || presentation.showInPortal !== saved.showInPortal;
 
   async function run(kind, task) {
     setAction(kind);
@@ -177,6 +179,17 @@ export function ClientReportControls({
         <span>
           <strong>{translate("clientReport.includeCleanerNotes")}</strong>
           <span>{translate("clientReport.includeCleanerNotesHelp")}</span>
+        </span>
+      </label>
+      <label className="client-report-controls__toggle">
+        <input
+          type="checkbox"
+          checked={form.showInPortal !== false}
+          onChange={(event) => setForm((current) => ({ ...current, showInPortal: event.target.checked }))}
+        />
+        <span>
+          <strong>{translate("clientReport.showInPortal")}</strong>
+          <span>{translate("clientReport.showInPortalHelp")}</span>
         </span>
       </label>
       <p className="cf-block__subtitle">{translate("clientReport.photosHint")}</p>
@@ -284,6 +297,9 @@ export function ClientReportControls({
           ) : (
             <>
               {saved.managerNote && <p className="client-report-controls__saved-note">“{saved.managerNote}”</p>}
+              <p className="cf-block__subtitle">
+                {translate(saved.showInPortal === false ? "clientReport.hiddenFromPortal" : "clientReport.shownInPortal")}
+              </p>
               <div className="button-row">
                 <button className="button" type="button" disabled={Boolean(action)} onClick={() => setIsEditing(true)}>
                   {translate("clientReport.editMessage")}
