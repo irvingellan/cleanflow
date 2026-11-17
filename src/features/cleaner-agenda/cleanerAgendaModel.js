@@ -18,6 +18,16 @@ function eligible(job, period) {
     && !excludedProvenance.has(job.dataProvenance);
 }
 
+function clientIdFor(job, propertyById) {
+  return text(propertyById.get(job.propertyId)?.clientId) || text(job.clientId);
+}
+
+/** Optional house and client filters; an empty value keeps every service. */
+function matchesFilters(job, propertyById, { propertyId = "", clientId = "" } = {}) {
+  return (!propertyId || job.propertyId === propertyId)
+    && (!clientId || clientIdFor(job, propertyById) === clientId);
+}
+
 function row(job, propertyById) {
   const property = propertyById.get(job.propertyId);
   return {
@@ -66,11 +76,26 @@ export function cleanerPayoutFor(job) {
   return typeof amount === "number" && Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
-export function buildCleanerAgenda({ period, jobs = [], cleaners = [], properties = [] }) {
+/** House and client choices for the period, from the services it contains. */
+export function agendaFilterOptions({ period, jobs = [], properties = [], clients = [] }) {
+  const propertyById = new Map(properties.map((property) => [property.id, property]));
+  const clientById = new Map(clients.map((client) => [client.id, client]));
+  const houses = new Map();
+  const owners = new Map();
+  for (const job of jobs.filter((entry) => eligible(entry, period))) {
+    if (text(job.propertyId)) houses.set(job.propertyId, text(propertyById.get(job.propertyId)?.name) || text(job.propertyName));
+    const clientId = clientIdFor(job, propertyById);
+    if (clientId) owners.set(clientId, text(clientById.get(clientId)?.name));
+  }
+  const sorted = (map) => [...map.entries()].sort((a, b) => (a[1] || "￿").localeCompare(b[1] || "￿") || a[0].localeCompare(b[0]));
+  return { properties: sorted(houses), clients: sorted(owners) };
+}
+
+export function buildCleanerAgenda({ period, jobs = [], cleaners = [], properties = [], filters = {} }) {
   if (!period?.start || !period?.end || period.start > period.end) throw new RangeError("A valid period is required.");
   const cleanerById = new Map(cleaners.map((cleaner) => [cleaner.id, cleaner]));
   const propertyById = new Map(properties.map((property) => [property.id, property]));
-  const live = jobs.filter((job) => eligible(job, period));
+  const live = jobs.filter((job) => eligible(job, period) && matchesFilters(job, propertyById, filters));
 
   const schedule = cleanerGroups(live, cleanerById, propertyById, (job) => row(job, propertyById));
 

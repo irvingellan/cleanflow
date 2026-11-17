@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agendaMessage, buildCleanerAgenda, cleanerPayoutFor } from "./cleanerAgendaModel.js";
+import { agendaFilterOptions, agendaMessage, buildCleanerAgenda, cleanerPayoutFor } from "./cleanerAgendaModel.js";
 
 const period = { start: "2026-11-16", end: "2026-11-22" };
 const cleaners = [
@@ -94,5 +94,43 @@ describe("message for the cleaner", () => {
 
   it("rejects an invalid period", () => {
     expect(() => buildCleanerAgenda({ period: { start: "2026-11-22", end: "2026-11-16" } })).toThrow(RangeError);
+  });
+});
+
+describe("house and client filters", () => {
+  const owned = [
+    { ...properties[0], clientId: "cl-north" },
+    { ...properties[1], clientId: "cl-south" },
+  ];
+  const clients = [{ id: "cl-north", name: "North Rentals" }, { id: "cl-south", name: "South Stays" }];
+  const jobs = [
+    job("j1"),
+    job("j2", { propertyId: "p-studio" }),
+    job("j3", { propertyId: "p-studio", assignedCleanerIds: [], operationalStatus: "UNASSIGNED" }),
+    job("j4", { operationalStatus: "COMPLETED", cleanerPayout: 80 }),
+    job("j5", { propertyId: "p-studio", operationalStatus: "COMPLETED", cleanerPayout: 50 }),
+    job("j6", { propertyId: "p-other", clientId: "cl-direct" }),
+    job("j7", { operationalStatus: "CANCELLED", propertyId: "p-gone", clientId: "cl-gone" }),
+  ];
+
+  it("offers only the houses and clients that have live services in the period", () => {
+    const options = agendaFilterOptions({ period, jobs, properties: owned, clients });
+    expect(options.properties.map(([id]) => id)).toEqual(["p-studio", "p-lake", "p-other"]);
+    expect(options.clients).toEqual([["cl-north", "North Rentals"], ["cl-south", "South Stays"], ["cl-direct", ""]]);
+  });
+
+  it("limits every tab and the payment totals to the chosen house", () => {
+    const agenda = buildCleanerAgenda({ period, jobs, cleaners, properties: owned, filters: { propertyId: "p-studio" } });
+    expect(agenda.schedule[0].rows.map((entry) => entry.jobId)).toEqual(["j2", "j5"]);
+    expect(agenda.unassigned.map((entry) => entry.jobId)).toEqual(["j3"]);
+    expect(agenda.completed[0].total).toBe(50);
+  });
+
+  it("matches a client through the house, or the service when the house has none", () => {
+    const north = buildCleanerAgenda({ period, jobs, cleaners, properties: owned, filters: { clientId: "cl-north" } });
+    expect(north.schedule[0].rows.map((entry) => entry.jobId)).toEqual(["j1", "j4"]);
+    expect(north.unassigned).toEqual([]);
+    const direct = buildCleanerAgenda({ period, jobs, cleaners, properties: owned, filters: { clientId: "cl-direct" } });
+    expect(direct.schedule[0].rows.map((entry) => entry.jobId)).toEqual(["j6"]);
   });
 });
