@@ -9,8 +9,8 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db, storage } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const proofUploadTimeoutMs = 60_000;
 const proofMetadataTimeoutMs = 20_000;
 export const maximumPayoutProofSizeBytes = 10 * 1024 * 1024;
@@ -29,7 +29,7 @@ function proofError(code, message) {
 }
 
 function proofStoragePath(payoutId) {
-  return `organizations/${organizationId}/payouts/${payoutId}/proof/payment-proof`;
+  return `organizations/${currentOrganizationId()}/payouts/${payoutId}/proof/payment-proof`;
 }
 
 function logProofUpload(stage, details = {}) {
@@ -126,7 +126,7 @@ export async function uploadPayoutProof({ payoutId, file, onProgress }) {
   // upload can be retried without creating a second payout or touching linked Jobs.
   try {
     await withTimeout(
-      updateDoc(doc(db, "organizations", organizationId, "payouts", payoutId), {
+      updateDoc(doc(db, "organizations", currentOrganizationId(), "payouts", payoutId), {
         proofStoragePath: storagePath,
         proofFileName: file.name || "payment-proof",
         proofContentType: file.type,

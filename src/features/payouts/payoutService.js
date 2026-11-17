@@ -13,20 +13,20 @@ import {
   collection as serverCollection, documentId, getDocs as getServerDocs, query as serverQuery, where as serverWhere,
 } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { serverFirestore } from "../../services/firebase/serverReads.js";
 import { isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
-const organizationId = "cleanflow-demo";
 const allowedPaymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 const maximumJobsPerPayout = 100;
 const maximumPayoutNoteLength = 500;
 
 function jobsCollection() {
-  return collection(db, "organizations", organizationId, "jobs");
+  return collection(db, "organizations", currentOrganizationId(), "jobs");
 }
 
 function payoutsCollection() {
-  return collection(db, "organizations", organizationId, "payouts");
+  return collection(db, "organizations", currentOrganizationId(), "payouts");
 }
 
 function jobFromSnapshot(snapshot) {
@@ -88,7 +88,7 @@ export async function getPayoutEvidenceForJobs(jobs) {
   const jobIds = [...new Set(jobs.map(job => job.id).filter(Boolean))];
   const payoutIds = [...new Set(jobs.map(job => job.payoutId).filter(id => typeof id === "string" && id.trim()))];
   if (jobIds.length === 0 && payoutIds.length === 0) return [];
-  const payouts = serverCollection(serverFirestore(), "organizations", organizationId, "payouts");
+  const payouts = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "payouts");
   const reads = [];
   for (let index = 0; index < jobIds.length; index += 30) {
     reads.push(getServerDocs(serverQuery(payouts, serverWhere("jobIds", "array-contains-any", jobIds.slice(index, index + 30)))));
@@ -127,7 +127,7 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
 
   const payoutReference = doc(payoutsCollection());
   const jobReferences = uniqueJobIds.map((jobId) =>
-    doc(db, "organizations", organizationId, "jobs", jobId),
+    doc(db, "organizations", currentOrganizationId(), "jobs", jobId),
   );
   let recordedAmount = 0;
 
@@ -148,7 +148,7 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     const amount = jobs.reduce((total, job) => total + job.cleanerPayout, 0);
     recordedAmount = amount;
     const payout = {
-      organizationId,
+      organizationId: currentOrganizationId(),
       cleanerId: cleaner.id,
       cleanerNameSnapshot: cleaner.name || "",
       jobIds: uniqueJobIds,
