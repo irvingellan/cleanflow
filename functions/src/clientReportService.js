@@ -344,19 +344,25 @@ async function loadReportAt(database, { organizationId, jobId, runId, admit }) {
   return { report, job: job.data(), run: run.data(), evidence: evidence.exists ? evidence.data() : null, gallery };
 }
 
-async function resolvePublicClientReport(database, { organizationId, tokenHash, now = new Date() }) {
+async function resolvePublicClientReport(database, { tokenHash, now = new Date() }) {
   if (!tokenHashPattern.test(tokenHash || "")) throw new HttpsError("not-found", "Report not found.");
   const lookupSnapshot = await lookupReference(database, tokenHash).get();
   if (!lookupSnapshot.exists) throw new HttpsError("not-found", "Report not found.");
   const lookup = lookupSnapshot.data();
   if (lookup.status !== "ACTIVE") throw new HttpsError("failed-precondition", "Report is unavailable.");
-  if (lookup.organizationId !== organizationId || !validPathId(lookup.jobId) || !validPathId(lookup.runId)) {
+  // The organization is read from the lookup and used for every path below.
+  if (!validPathId(lookup.organizationId) || !validPathId(lookup.jobId) || !validPathId(lookup.runId)) {
     throw new HttpsError("not-found", "Report not found.");
   }
+  const { organizationId } = lookup;
   const lookupExpiry = lookup.expiresAt?.toMillis?.();
   const result = await loadReportAt(database, { organizationId, jobId: lookup.jobId, runId: lookup.runId,
     admit: (capability) => capability.tokenHash === tokenHash && clientReportCapabilityState(capability, now) === "ACTIVE"
       && Boolean(lookupExpiry) && lookupExpiry > now.getTime() });
+  // The Job found at that path must not belong to another organization.
+  if (result.job.organizationId != null && result.job.organizationId !== organizationId) {
+    throw new HttpsError("not-found", "Report not found.");
+  }
   return { ...result, location: lookup };
 }
 
@@ -401,9 +407,9 @@ export async function loadPublicClientReport(database, options) {
 }
 
 export async function downloadPublicClientReportPhoto(database, {
-  organizationId, tokenHash, evidenceId, variant, now = new Date(), storage,
+  tokenHash, evidenceId, variant, now = new Date(), storage,
 }) {
-  return reportPhoto(await resolvePublicClientReport(database, { organizationId, tokenHash, now }), { evidenceId, variant, storage });
+  return reportPhoto(await resolvePublicClientReport(database, { tokenHash, now }), { evidenceId, variant, storage });
 }
 
 /**

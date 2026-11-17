@@ -19,14 +19,16 @@ const supportedImageTypes = new Map([
   ["image/webp", "webp"],
 ]);
 
-function capabilityLocation(document, organizationId) {
+// A bearer link belongs to the organization its capability lives in. Only the
+// path shape is validated here; no organization is assumed.
+function capabilityLocation(document) {
   const path = document.path.split("/");
   if (
-    path.length !== 8 || path[0] !== "organizations" || path[1] !== organizationId
+    path.length !== 8 || path[0] !== "organizations" || !path[1]
     || path[2] !== "jobs" || path[4] !== "checklistRuns" || path[6] !== "checklistCapabilities"
     || path[7] !== "active"
   ) return null;
-  return { jobId: path[3], runId: path[5] };
+  return { organizationId: path[1], jobId: path[3], runId: path[5] };
 }
 
 function runReference(database, organizationId, jobId, runId) {
@@ -106,13 +108,14 @@ function evidenceStoragePath({ organizationId, jobId, runId, requirementId, cont
   return `organizations/${organizationId}/jobs/${jobId}/checklistRuns/${runId}/evidence/${requirementId}/${contentHash}.${extension}`;
 }
 
-export async function resolveActiveCapability(database, { organizationId, tokenHash, now }) {
+export async function resolveActiveCapability(database, { tokenHash, now }) {
   const matches = await database.collectionGroup("checklistCapabilities")
     .where("tokenHash", "==", tokenHash).limit(2).get();
   if (matches.size !== 1) throw photoValidationError("not-found", "Checklist capability not found.", "capability_unavailable");
   const capabilityRef = matches.docs[0].ref;
-  const location = capabilityLocation(capabilityRef, organizationId);
+  const location = capabilityLocation(capabilityRef);
   if (!location) throw photoValidationError("not-found", "Checklist capability not found.", "capability_unavailable");
+  const { organizationId } = location;
 
   const jobRef = database.doc(`organizations/${organizationId}/jobs/${location.jobId}`);
   const runRef = runReference(database, organizationId, location.jobId, location.runId);
@@ -128,7 +131,9 @@ export async function resolveActiveCapability(database, { organizationId, tokenH
   const capability = capabilitySnapshot.data();
   const job = jobSnapshot.data();
   const run = runSnapshot.data();
-  if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, job, run, now) !== "ACTIVE") {
+  // A capability that stores its organization must store the one of its own path.
+  const storedElsewhere = capability.organizationId != null && capability.organizationId !== organizationId;
+  if (capability.tokenHash !== tokenHash || storedElsewhere || checklistCapabilityState(capability, job, run, now) !== "ACTIVE") {
     throw photoValidationError("failed-precondition", "Checklist capability is no longer available.", "capability_unavailable");
   }
   return {
@@ -144,12 +149,13 @@ export async function resolveActiveCapability(database, { organizationId, tokenH
   };
 }
 
-export async function loadPublicChecklistEvidence(database, { organizationId, tokenHash, now = new Date() }) {
-  return (await loadPublicChecklistEvidenceView(database, { organizationId, tokenHash, now })).evidence;
+export async function loadPublicChecklistEvidence(database, { tokenHash, now = new Date() }) {
+  return (await loadPublicChecklistEvidenceView(database, { tokenHash, now })).evidence;
 }
 
-export async function loadPublicChecklistEvidenceView(database, { organizationId, tokenHash, now = new Date() }) {
-  const resolved = await resolveActiveCapability(database, { organizationId, tokenHash, now });
+export async function loadPublicChecklistEvidenceView(database, { tokenHash, now = new Date() }) {
+  const resolved = await resolveActiveCapability(database, { tokenHash, now });
+  const { organizationId } = resolved.location;
   if (resolved.run.evidencePolicy?.version === 2) return loadMultiPhotoEvidence(database, resolved, { organizationId, tokenHash, now, includeRevision: true });
   return { evidence: projectChecklistEvidence(resolved.evidence) };
 }
@@ -159,7 +165,6 @@ export async function loadPublicChecklistEvidenceView(database, { organizationId
  * same bytes can finalize the same evidence document without a second photo.
  */
 export async function uploadPublicChecklistEvidence(database, {
-  organizationId,
   tokenHash,
   requirementId,
   contentType,
@@ -177,10 +182,11 @@ export async function uploadPublicChecklistEvidence(database, {
 
   let initial;
   try {
-    initial = await resolveActiveCapability(database, { organizationId, tokenHash, now });
+    initial = await resolveActiveCapability(database, { tokenHash, now });
   } catch (error) {
     throw markPhotoDiagnosticStage(error, validationOrUnknownStage(error));
   }
+  const { organizationId } = initial.location;
   if (initial.run.evidencePolicy?.version === 2) {
     return uploadMultiPhotoEvidence(database, initial, { organizationId, tokenHash, requirementId, contentType, bytes, now, storage, attemptStorage }, image);
   }
@@ -329,9 +335,10 @@ export async function downloadSavedChecklistEvidence(run, evidence, { storage = 
 }
 
 export async function downloadPublicChecklistEvidence(database, {
-  organizationId, tokenHash, requirementId, evidenceId, now = new Date(), storage = getStorage(),
+  tokenHash, requirementId, evidenceId, now = new Date(), storage = getStorage(),
 }) {
-  const resolved = await resolveActiveCapability(database, { organizationId, tokenHash, now });
+  const resolved = await resolveActiveCapability(database, { tokenHash, now });
+  const { organizationId } = resolved.location;
   if (resolved.run.evidencePolicy?.version === 2) {
     // Recheck exact V2 identity and current authorization before selecting private bytes.
     await loadMultiPhotoEvidence(database, resolved, { organizationId, tokenHash, now });
