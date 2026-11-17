@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// Offer first: an unassigned service suggests offering it, and an offered one
+// points at the offers awaiting replies (docs/PILOT_FEEDBACK_UX_V1.md, FB03).
 const primaryLabels = {
-  unassigned: "Próximo passo: Atribuir cleaner",
-  offered: "Próximo passo: Atribuir cleaner",
+  unassigned: "Próximo passo: Oferecer limpeza para cleaners",
+  offered: "Próximo passo: Ver ofertas aguardando resposta",
   assigned: "Próximo passo: Preparar lembrete",
   "assigned-draft": "Próximo passo: Abrir checklist existente",
   "in-progress": "Próximo passo: Abrir checklist existente",
@@ -100,6 +102,19 @@ async function expectNoDomainCalls(page, failures, { allowRead = false } = {}) {
   expect(failures.errors).toEqual([]);
   expect(failures.externalRequests).toEqual([]);
   expect(failures.sdkRequests).toEqual([]);
+}
+
+// The cleaner picker reads each cleaner's schedule and history at this property
+// when it opens. The harness refuses that read and the picker must still work;
+// nothing except that read attempt may have reached the provider.
+const selectionContextReadNames = [
+  "setLogLevel", "getFirestore", "collection", "documentId", "limit", "orderBy", "query", "where", "getDocs",
+];
+
+async function expectOnlyRefusedSelectionContextRead(page, failures) {
+  const providerCalls = await page.evaluate(() => window.__lifecycleProviderCalls.splice(0));
+  expect(providerCalls.filter(({ name }) => !selectionContextReadNames.includes(name))).toEqual([]);
+  await expectNoDomainCalls(page, failures);
 }
 
 async function expectRailState(page, scenario) {
@@ -257,8 +272,7 @@ for (const width of [1440, 390]) {
     await page.keyboard.press("Space");
     await expect(service).not.toHaveAttribute("open", "");
     await expect(page.getByRole("button", { name: "Salvar horário" })).not.toBeVisible();
-    await more.click();
-    await page.locator(".job-intents__next button").click();
+    await page.getByRole("button", { name: "Escolher intenção: Atribuir / trocar cleaner" }).click();
     await expect(page.locator(".assignment-roster")).toBeFocused();
     await expect(page.getByRole("radio", { name: "Demo Cleaner Alpha" })).toBeVisible();
     await expect(page.locator(".job-detail-section[open]")).toHaveCount(1);
@@ -266,7 +280,7 @@ for (const width of [1440, 390]) {
       expect((await summary.boundingBox()).height).toBeGreaterThanOrEqual(44);
     }
     await expectMobileFit(page);
-    await expectNoDomainCalls(page, failures);
+    await expectOnlyRefusedSelectionContextRead(page, failures);
     await page.screenshot({ path: `artifacts/visual-smoke/job-detail-v1-${width}-assignment-open.png`, fullPage: true,
       style: ".lifecycle-fixture-toolbar { display: none; }" });
   });
@@ -275,9 +289,13 @@ for (const width of [1440, 390]) {
 test("existing primary intentions still open their existing safe paths", async ({ page }) => {
   const failures = await openFixture(page, "unassigned", 1440);
   await page.locator(".job-intents__next button").click();
+  await expect(page.locator(".offers-section")).toBeFocused();
+  await expectNoDomainCalls(page, failures);
+  await page.getByText("Mais ações", { exact: true }).click();
+  await page.getByRole("button", { name: "Escolher intenção: Atribuir / trocar cleaner" }).click();
   await expect(page.getByRole("radio", { name: "Demo Cleaner Alpha" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Confirmar atribuição" })).toBeDisabled();
-  await expectNoDomainCalls(page, failures);
+  await expectOnlyRefusedSelectionContextRead(page, failures);
 
   const selector = page.getByLabel("Local synthetic scenario");
   await selector.selectOption("assigned");

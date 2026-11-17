@@ -8,15 +8,6 @@ function forbiddenCall(name) {
   };
 }
 
-export const addDoc = forbiddenCall("addDoc");
-export const collection = forbiddenCall("collection");
-export const doc = forbiddenCall("doc");
-export const documentId = forbiddenCall("documentId");
-export const getDoc = forbiddenCall("getDoc");
-export const getDocs = forbiddenCall("getDocs");
-export const query = forbiddenCall("query");
-export const runTransaction = forbiddenCall("runTransaction");
-export const serverTimestamp = forbiddenCall("serverTimestamp");
-export const updateDoc = forbiddenCall("updateDoc");
-export const where = forbiddenCall("where");
+// The page's build step (vite.config.js) adds one refused export for every other
+// name the app imports from the provider SDK.
 export const httpsCallable = (_functions, name) => forbiddenCall(`httpsCallable:${name}`);
