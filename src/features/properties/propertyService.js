@@ -13,6 +13,7 @@ import { db } from "../../services/firebase/client.js";
 import {
   getServerCollection, getServerRecordsById, serverFirestore, withReadDeadline,
 } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -20,20 +21,18 @@ import {
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import { normalizePropertyChecklistSettings } from "../checklists/checklistRunDefinition.js";
 
-const organizationId = "cleanflow-demo";
-
 function propertiesCollection() {
-  return collection(db, "organizations", organizationId, "properties");
+  return collection(db, "organizations", currentOrganizationId(), "properties");
 }
 
 function propertyDocument(propertyId) {
-  return doc(db, "organizations", organizationId, "properties", propertyId);
+  return doc(db, "organizations", currentOrganizationId(), "properties", propertyId);
 }
 
 // One-shot server read with a deadline: a full-SDK read on a stalled realtime
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getProperties({ includeArchived = false } = {}) {
-  const documents = await withReadDeadline(getServerCollection(organizationId, "properties"));
+  const documents = await withReadDeadline(getServerCollection(currentOrganizationId(), "properties"));
 
   return filterArchivedRecords(documents.map((propertyDocument) => withNormalizedDataProvenance({
     ...propertyDocument.data(),
@@ -43,7 +42,7 @@ export async function getProperties({ includeArchived = false } = {}) {
 
 /** One document-ID batch for read-only service reconciliation. */
 export async function getPropertySummariesById(ids) {
-  const records = await getServerRecordsById(organizationId, "properties", ids);
+  const records = await getServerRecordsById(currentOrganizationId(), "properties", ids);
   return records.map((row) => {
     const { name, clientId } = row.data();
     return { id: row.id, name, clientId };
@@ -52,7 +51,7 @@ export async function getPropertySummariesById(ids) {
 
 export async function getPropertiesForClient(clientId, { includeArchived = false } = {}) {
   const snapshot = await withReadDeadline(getServerDocs(serverQuery(
-    serverCollection(serverFirestore(), "organizations", organizationId, "properties"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "properties"),
     serverWhere("clientId", "==", clientId),
   )));
 
@@ -81,7 +80,7 @@ export async function createProperty({
     name,
     clientName,
     active,
-    organizationId,
+    organizationId: currentOrganizationId(),
     dataProvenance: "REAL",
   };
 

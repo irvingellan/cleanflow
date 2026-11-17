@@ -14,26 +14,25 @@ import { db } from "../../services/firebase/client.js";
 import {
   getServerCollection, getServerRecordsById, serverFirestore, withReadDeadline,
 } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
 } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 
-const organizationId = "cleanflow-demo";
-
 function clientsCollection() {
-  return collection(db, "organizations", organizationId, "clients");
+  return collection(db, "organizations", currentOrganizationId(), "clients");
 }
 
 function clientDocument(clientId) {
-  return doc(db, "organizations", organizationId, "clients", clientId);
+  return doc(db, "organizations", currentOrganizationId(), "clients", clientId);
 }
 
 // One-shot server read with a deadline: a full-SDK read on a stalled realtime
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getClients({ includeArchived = false } = {}) {
-  const documents = await withReadDeadline(getServerCollection(organizationId, "clients"));
+  const documents = await withReadDeadline(getServerCollection(currentOrganizationId(), "clients"));
 
   return filterArchivedRecords(documents.map((clientDocument) => withNormalizedDataProvenance({
     ...clientDocument.data(),
@@ -43,7 +42,7 @@ export async function getClients({ includeArchived = false } = {}) {
 
 /** One document-ID batch for read-only service reconciliation. */
 export async function getClientSummariesById(ids) {
-  const records = await getServerRecordsById(organizationId, "clients", ids);
+  const records = await getServerRecordsById(currentOrganizationId(), "clients", ids);
   return records.map((row) => {
     const { name } = row.data();
     return { id: row.id, name };
@@ -54,7 +53,7 @@ export async function getClientSummariesById(ids) {
 export async function getClientContact(clientId) {
   if (typeof clientId !== "string" || !clientId) return null;
   const snapshot = await withReadDeadline(getServerDoc(
-    serverDoc(serverFirestore(), "organizations", organizationId, "clients", clientId),
+    serverDoc(serverFirestore(), "organizations", currentOrganizationId(), "clients", clientId),
   ));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
@@ -64,7 +63,7 @@ export async function getClientContact(clientId) {
 
 export async function getActiveClients() {
   const snapshot = await withReadDeadline(getServerDocs(serverQuery(
-    serverCollection(serverFirestore(), "organizations", organizationId, "clients"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "clients"),
     serverWhere("active", "==", true),
   )));
 
@@ -84,7 +83,7 @@ export async function createClient({
   active,
 }) {
   const client = {
-    organizationId,
+    organizationId: currentOrganizationId(),
     name,
     active,
     createdAt: serverTimestamp(),
