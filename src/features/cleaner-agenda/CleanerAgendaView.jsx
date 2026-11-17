@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BackButton, StateCard } from "../../components/UiPrimitives.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { formatDate, formatPrice, formatShortWeekday } from "../../lib/presentation.js";
 import { buildWhatsAppHandoffUrl } from "../jobs/whatsappHandoff.js";
 import { previousServiceWeek, servicePeriod, shiftServiceWeek } from "../weekly-close/weeklyCloseModel.js";
-import { agendaFilterOptions, agendaMessage, buildCleanerAgenda } from "./cleanerAgendaModel.js";
+import { agendaFilterOptions, agendaMessage, agendaScheduleKey, buildCleanerAgenda } from "./cleanerAgendaModel.js";
 import { agendaStatus, agendaText, cleanerMessageCopy, supportedAgendaLanguage } from "./cleanerAgendaMessages.js";
 import { loadCleanerAgenda } from "./cleanerAgendaService.js";
 import "./cleanerAgenda.css";
@@ -23,18 +23,25 @@ function shortDate(value, language) {
     : new Intl.DateTimeFormat(localeByLanguage[language] || "en-US", { month: "short", day: "numeric" }).format(date).replace(/\.$/, "");
 }
 
-function CleanerMessageActions({ group, period, language, t }) {
+function CleanerMessageActions({ group, period, language, t, copiedSchedules }) {
   const [copyState, setCopyState] = useState(null);
   const messageLanguage = supportedAgendaLanguage(group.preferredLanguage) || language;
-  const message = agendaMessage({
-    group, period, copy: cleanerMessageCopy(messageLanguage),
+  // Both handoffs retain the prepared text until the agenda inputs change.
+  const message = useMemo(() => agendaMessage({
+    group, period, language: messageLanguage, copiedSchedules, copy: cleanerMessageCopy(messageLanguage),
     formatDate: (value) => shortDate(value, messageLanguage),
     formatWeekday: (value) => formatShortWeekday(value, messageLanguage),
-  });
+  }), [group, period, messageLanguage, copiedSchedules]);
+  useEffect(() => setCopyState(null), [message]);
   const whatsappUrl = buildWhatsAppHandoffUrl(group.phone, message);
   const copy = () => {
     Promise.resolve().then(() => navigator.clipboard.writeText(message))
-      .then(() => setCopyState("copied"), () => setCopyState("failed"));
+      .then(() => {
+        for (const entry of group.rows) {
+          copiedSchedules.set(agendaScheduleKey(group.cleanerId, entry.jobId), { date: entry.date, start: entry.start });
+        }
+        setCopyState("copied");
+      }, () => setCopyState("failed"));
   };
   return (
     <div className="cleaner-agenda__actions">
@@ -75,7 +82,9 @@ function ServiceRow({ entry, language, translate, t, onOpen, children }) {
 const countLabel = (t, count) => (count === 1 ? t("serviceOne") : t("services", { count }));
 
 /** Manager-only, read-only views of one service period. */
-export function CleanerAgendaView({ onBack, onOpenJob }) {
+export function CleanerAgendaView({ onBack, onOpenJob, copiedSchedules: sessionSchedules }) {
+  const localSchedules = useRef(new Map());
+  const copiedSchedules = sessionSchedules || localSchedules.current;
   const { language, translate } = useTranslation();
   const t = (key, replacements) => agendaText(language, key, replacements);
   const [period, setPeriod] = useState(() => remembered.period || thisWeek());
@@ -250,7 +259,7 @@ export function CleanerAgendaView({ onBack, onOpenJob }) {
                     <h3 id={`cleaner-agenda-${tab}-${group.cleanerId}`}>{group.name || t("unnamedCleaner")}</h3>
                     <small>{countLabel(t, group.rows.length)}</small>
                   </div>
-                  {tab === "schedule" && <CleanerMessageActions group={group} period={period} language={language} t={t} />}
+                  {tab === "schedule" && <CleanerMessageActions group={group} period={period} language={language} t={t} copiedSchedules={copiedSchedules} />}
                   {tab === "completed" && <div className="cleaner-agenda__total">
                     <small>{t(group.total === null ? "knownTotal" : "total")}</small>
                     <strong>{money(group.total === null ? group.knownTotal : group.total)}</strong>

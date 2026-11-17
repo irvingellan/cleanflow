@@ -19,10 +19,12 @@ const properties = [
 const writeText = vi.fn();
 let entries;
 let preferredLanguage;
+let cleanerId;
 
 beforeEach(() => {
   localStorage.setItem("cleanflow-language", "en");
   preferredLanguage = "en";
+  cleanerId = "cleaner-example";
   entries = [{ id: "job-a", propertyId: "property-a", scheduledStart: "10:00", serviceType: "POST_CONSTRUCTION", scheduleRevision: 0 }];
   writeText.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
@@ -33,9 +35,9 @@ beforeEach(() => {
         const date = new Date(`${period.start}T12:00:00Z`);
         date.setUTCDate(date.getUTCDate() + dayOffset);
         return { ...entry, scheduledDate: date.toISOString().slice(0, 10), schemaVersion: 2,
-          assignedCleanerIds: ["cleaner-example"], operationalStatus: "ASSIGNED", dataProvenance: "REAL" };
+          assignedCleanerIds: [cleanerId], operationalStatus: "ASSIGNED", dataProvenance: "REAL" };
       }),
-      cleaners: [{ id: "cleaner-example", name: "Example Cleaner", phone: "+1 555 0100", preferredLanguage }],
+      cleaners: [{ id: cleanerId, name: "Example Cleaner", phone: "+1 555 0100", preferredLanguage }],
       properties,
       clients: [],
     };
@@ -119,6 +121,26 @@ describe("cleaner agenda message revisions", () => {
     entries[0].scheduleRevision = 1;
     rerender(application());
     expect(draft(await group())).toContain("10:00 → 11:00");
+  });
+
+  it("does not reuse another cleaner's copy for the same job", async () => {
+    render(application());
+    await copyAgenda(await group());
+    cleanerId = "different-cleaner";
+    entries[0].scheduledStart = "11:00";
+    expect(draft(await refresh())).not.toContain("→");
+  });
+
+  it("discards copied schedules when the signed-in manager tree unmounts", async () => {
+    const first = render(application());
+    await copyAgenda(await group());
+    first.unmount();
+    entries[0].scheduledStart = "11:00";
+    render(application());
+    const message = draft(await group());
+    expect(message).toContain("11:00");
+    expect(message).not.toContain("10:00");
+    expect(message).not.toContain("→");
   });
 
   it("includes both dates when the copied service moves to a day without a time", async () => {
