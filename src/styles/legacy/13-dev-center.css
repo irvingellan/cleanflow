@@ -1,0 +1,231 @@
+.dev-center {
+  display: grid;
+  gap: 18px;
+  padding-bottom: 80px;
+}
+
+.dev-center__intro,
+.dev-center__cleanup,
+.dev-center__diagnostics,
+.dev-center__count,
+.dev-center__scenario {
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: 0 16px 40px var(--shadow-card);
+}
+
+.dev-center__intro,
+.dev-center__cleanup,
+.dev-center__diagnostics,
+.dev-center__count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+}
+
+.dev-center__intro h2,
+.dev-center__cleanup h3,
+.dev-center__diagnostics h3 {
+  margin-bottom: 6px;
+}
+
+.dev-center__intro p:not(.eyebrow),
+.dev-center__cleanup p,
+.dev-center__diagnostics p,
+.dev-center__scenario p {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.dev-center__environment {
+  flex: none;
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--color-warning-text);
+  background: var(--color-status-warning-bg);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.dev-center__environment--emulator {
+  color: var(--color-brand-text);
+  background: var(--color-selected-bg);
+}
+
+.dev-center__count {
+  align-items: baseline;
+}
+
+.dev-center__count span {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.dev-center__count strong {
+  font-size: 2rem;
+}
+
+.dev-center__scenarios {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dev-center__scenario {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.dev-center__scenario h3 {
+  margin: 0;
+}
+
+.dev-center__scenario .button {
+  justify-self: start;
+}
+
+.dev-center__cleanup {
+  align-items: flex-start;
+}
+
+.dev-center__diagnostics {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.dev-center__diagnostics-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dev-center__diagnostics-note {
+  font-size: 0.875rem;
+}
+
+.dev-center__diagnostics-error {
+  color: var(--color-danger-text);
+}
+
+.dev-center__diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dev-center__diagnostics-grid h4 {
+  margin-bottom: 8px;
+}
+
+.dev-center__diagnostics-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dev-center__diagnostics-list li {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.dev-center__diagnostics-list span {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.dev-center__lab-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.dev-center__lab-block h4,
+.dev-center__lab-block h5 {
+  margin: 0;
+}
+
+.dev-center__lab-target {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 420px);
+}
+
+.dev-center__lab-target select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.dev-center__confirm {
+  display: grid;
+  gap: 10px;
+  min-width: min(100%, 280px);
+}
+
+.dev-center__confirm .button-row {
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .dev-center__intro,
+.dev-center__cleanup,
+.dev-center__diagnostics-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dev-center__scenarios {
+    grid-template-columns: 1fr;
+  }
+
+  .dev-center__diagnostics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dev-center__confirm {
+    width: 100%;
+  }
+}
+
+@media (max-width: 340px) {
+  .app-shell {
+    padding:
+      max(14px, env(safe-area-inset-top))
+      max(14px, env(safe-area-inset-right))
+      max(14px, env(safe-area-inset-bottom))
+      max(14px, env(safe-area-inset-left));
+  }
+}
+.public-checklist__completion {
+  padding: 1rem;
+  margin-block: 1rem;
+  border: 1px solid var(--color-selected-border);
+  border-radius: 12px;
+}
+.public-checklist__completion h2 { margin-top: 0; }
+.public-checklist__receipt { font-weight: 600; }
+@media (max-width: 600px) {
+  .public-checklist__review-handoff {
+    padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    background: var(--color-surface);
+    border: 1px solid var(--color-selected-border);
+    border-radius: 12px;
+  }
+  .public-checklist__review-actions { flex-wrap: wrap; }
+  .public-checklist__review-handoff button { min-height: 44px; }
+}
+
