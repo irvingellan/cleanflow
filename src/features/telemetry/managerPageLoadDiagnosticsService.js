@@ -8,8 +8,8 @@ import {
   where,
 } from "firebase/firestore/lite";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 export const managerPageLoadDiagnosticsLimit = 500;
 export const managerPageLoadPages = ["dashboard", "jobs", "properties", "clients", "cleaners", "payouts"];
 export const managerOperationDiagnosticsLimit = 500;
@@ -20,7 +20,7 @@ export const managerOperationVisitLimit = 20;
 /** Reads only the existing bounded diagnostics window; no operational collections are queried. */
 export async function getManagerPageLoadEvents({ windowDays = 7, now = Date.now() } = {}) {
   const cutoff = Timestamp.fromDate(new Date(now - windowDays * 24 * 60 * 60 * 1000));
-  const events = collection(serverFirestore(), "organizations", organizationId, "managerPageLoadEvents");
+  const events = collection(serverFirestore(), "organizations", currentOrganizationId(), "managerPageLoadEvents");
   // One-shot server read with a deadline, independent of the realtime channel.
   const snapshot = await withReadDeadline(getDocs(query(
     events,
@@ -53,7 +53,7 @@ export async function getManagerPageLoadEvents({ windowDays = 7, now = Date.now(
 /** Reads bounded timing metadata only; Job records and operation payloads are never queried. */
 export async function getManagerOperationEvents({ windowDays = 7, now = Date.now() } = {}) {
   const cutoff = Timestamp.fromDate(new Date(now - windowDays * 24 * 60 * 60 * 1000));
-  const events = collection(serverFirestore(), "organizations", organizationId, "managerOperationEvents");
+  const events = collection(serverFirestore(), "organizations", currentOrganizationId(), "managerOperationEvents");
   // One-shot server read with a deadline, independent of the realtime channel.
   const snapshot = await withReadDeadline(getDocs(query(
     events,
