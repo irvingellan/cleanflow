@@ -8,6 +8,7 @@ import { JobIssuesSection } from "./JobIssuesSection.jsx";
 import { JobDetailsSection } from "./JobDetailsSection.jsx";
 import { JobChecklistSection } from "./JobChecklistSection.jsx";
 import { JobReminderPreview } from "./JobReminderPreview.jsx";
+import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
 import { serviceTypeLabel, serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import {
@@ -29,17 +30,14 @@ import {
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
-import {
-  CleanerSelectionOption, CleanerSelectionStatus, cleanerReplacementOption, sortByCleanerExperience, useCleanerSelectionContext,
-} from "./CleanerSelectionContext.jsx";
+import { sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
-import { FIRST_ACCEPT_WINS, automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
+import { automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
 import { canAssignCleanerDirectly, canDirectlyFillJob } from "./assignmentService.js";
 import {
   formatCreatedAt,
   formatDate,
-  formatOperationalStatus,
   formatPrice,
   hasValue,
 } from "../../lib/presentation.js";
@@ -1280,214 +1278,48 @@ export function JobDetail({
         </section>
       )}
 
-      {isAssignmentAware && (
-        <section ref={assignmentSectionRef} tabIndex={-1} className="assignment-roster" aria-labelledby="assigned-cleaners-title">
-          <div className="assignment-roster__header">
-            <div>
-              <h3 id="assigned-cleaners-title">{translate("jobs.assignedCleaners")}</h3>
-              <span>
-                {assignedCleanerIds.length === 1
-                  ? translate("jobs.cleanerAssignedOne", { count: assignedCleanerIds.length })
-                  : translate("jobs.cleanersAssignedMany", { count: assignedCleanerIds.length })}
-              </span>
-            </div>
-            {canDirectAssign && !isDirectAssignmentOpen && (
-              <button className="button" type="button" onClick={() => setIsDirectAssignmentOpen((open) => !open)}>
-                {translate("jobs.assignCleanerDirectly")}
-              </button>
-            )}
-          </div>
-
-          {canDirectAssign && isDirectAssignmentOpen && (
-            <form className="cleaning-form" onSubmit={assignCleanerDirectly}>
-              <p className="form-hint">{translate("jobs.directAssignmentExplanation")}</p>
-              {isLoadingCleaners && <StateCard message={translate("offers.loadingCleaners")} status="status" />}
-              {hasCleanerError && <StateCard message={translate("offers.cleanerError")} status="alert" isError />}
-              {(isLoadingCleaners || hasCleanerError) && (
-                <button className="button" type="button" disabled={isAssigningDirectly}
-                  onClick={() => { setIsDirectAssignmentOpen(false); setDirectCleanerId(""); setDirectCleanerSearch(""); }}>{translate("common.cancel")}</button>
-              )}
-              {!isLoadingCleaners && !hasCleanerError && (
-                <>
-                  <label className="cleaner-name-search">
-                    {translate("cleaners.search")}
-                    <input type="search" value={directCleanerSearch}
-                      onChange={(event) => setDirectCleanerSearch(event.target.value)} />
-                  </label>
-                  <CleanerSelectionStatus {...cleanerSelection} language={language} />
-                  <fieldset className="direct-cleaner-picker">
-                    <legend>{translate("jobs.cleanerPickerResults")}</legend>
-                      {directCleanerOptions.map((cleaner) => (
-                        <CleanerSelectionOption key={cleaner.id}
-                          className={`direct-cleaner-picker__option${directCleanerId === cleaner.id ? " direct-cleaner-picker__option--selected" : ""}`}
-                          cleanerId={cleaner.id} name={cleaner.name || translate("common.notProvided")}
-                          context={cleanerSelection.result} language={language} type="radio" inputName="direct-cleaner" value={cleaner.id}
-                          checked={directCleanerId === cleaner.id} disabled={isAssigningDirectly}
-                          onChange={() => setDirectCleanerId(cleaner.id)} />
-                      ))}
-                  </fieldset>
-                  {directCleanerId && (
-                    <div role="status">
-                      <p className="form-hint">{translate("jobs.cleanerPickerSelected", {
-                        name: availableCleaners.find((cleaner) => cleaner.id === directCleanerId)?.name || translate("common.notProvided"),
-                      })}</p>
-                      <p className="form-hint">{translate("jobs.cleanerPickerPending")}</p>
-                    </div>
-                  )}
-                  {directCleanerOptions.length === 0 && (
-                    <p className="form-hint">{translate("cleaners.searchNoResults")}</p>
-                  )}
-                  <div className="button-row">
-                    <button className="button" type="button" disabled={isAssigningDirectly}
-                      onClick={() => { setIsDirectAssignmentOpen(false); setDirectCleanerId(""); setDirectCleanerSearch(""); }}>{translate("common.cancel")}</button>
-                    <button className="button button--primary" type="submit"
-                      disabled={!directCleanerId || isAssigningDirectly || !canAssignCleanerDirectly(
-                        job, availableCleaners.find((cleaner) => cleaner.id === directCleanerId))}>
-                      {isAssigningDirectly ? translate("jobs.assigningCleanerDirectly")
-                        : translate("jobs.confirmDirectAssignment")}
-                    </button>
-                  </div>
-                </>
-              )}
-            </form>
-          )}
-
-          {isLoadingAssignments && (
-            <StateCard message={translate("jobs.rosterLoading")} status="status" />
-          )}
-          {!isLoadingAssignments && hasAssignmentsError && (
-            <StateCard message={translate("jobs.rosterError")} status="alert" isError />
-          )}
-          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length === 0
-            && !(isDirectAssignmentOpen && directCleanerId) && (
-            <StateCard message={translate("jobs.noAssignedCleaners")} />
-          )}
-          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length > 0 && (
-            <div className="assignment-roster__list">
-              {activeAssignments.map((assignment) => {
-                const assignmentCleanerName = currentCleanerName(
-                  assignment.cleanerId,
-                  assignment.cleanerNameSnapshot,
-                  cleanerNamesById,
-                  translate("common.notProvided"),
-                );
-                const isReplacing = replacementTargetId === assignment.id;
-                const automaticAssignment = assignment.assignmentMethod === FIRST_ACCEPT_WINS;
-                const acknowledgmentState = getAssignmentAcknowledgmentState(assignment, offers);
-                const methodLabel = automaticAssignment ? "offers.automaticAssignment"
-                  : automaticOfferJob ? "offers.manualAssignment" : null;
-
-                return (
-                  <article key={assignment.id} className="assignment-roster__item">
-                    <strong>{assignmentCleanerName}</strong>
-                    <span className="status-badge">
-                      {formatOperationalStatus(assignment.executionStatus, translate)}
-                    </span>
-                    {methodLabel && (
-                      <span className="status-badge">{translate(methodLabel)}</span>
-                    )}
-                    {automaticAssignment && assignment.assignedAt && (
-                      <span>{formatCreatedAt(assignment.assignedAt, language)}</span>
-                    )}
-                    {!methodLabel && acknowledgmentState && (
-                      <span className="status-badge" data-testid={`assignment-acknowledgment-${assignment.id}`}>
-                        {translate(acknowledgmentState === "ASSIGNED_DIRECTLY"
-                          ? "jobs.assignmentAssignedDirectly"
-                          : acknowledgmentState === "CONFIRMED"
-                          ? "jobs.assignmentConfirmationConfirmed"
-                          : "jobs.assignmentConfirmationAwaiting")}
-                      </span>
-                    )}
-                    {job.operationalStatus === "ASSIGNED" && (
-                      <div className="assignment-roster__message-action">
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() =>
-                            openReminderPreview(assignment.cleanerId, assignmentCleanerName, assignment.id)
-                          }
-                        >
-                          {copiedCleanerId === assignment.cleanerId
-                            ? translate("jobs.messageCopied")
-                            : translate("jobs.prepareCleanerMessage")}
-                        </button>
-                      </div>
-                    )}
-                    {canEditRoster && !isReplacing && (
-                      <div className="assignment-roster__actions">
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={removingAssignmentId !== null || replacingAssignmentId !== null}
-                          onClick={() => removeCleanerAssignment(assignment.id)}
-                        >
-                          {removingAssignmentId === assignment.id
-                            ? translate("jobs.removingCleaner")
-                            : translate("jobs.removeCleaner")}
-                        </button>
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={removingAssignmentId !== null || replacingAssignmentId !== null || eligibleReplacementOffers.length === 0}
-                          onClick={() => setReplacementTargetId(assignment.id)}
-                        >
-                          {translate("jobs.replaceCleaner")}
-                        </button>
-                      </div>
-                    )}
-                    {canEditRoster && isReplacing && (
-                      <div className="assignment-replacement">
-                        <CleanerSelectionStatus {...cleanerSelection} language={language} />
-                        <label>
-                          {translate("jobs.replacementCleaner")}
-                          <select
-                            value={replacementOfferId}
-                            onChange={(event) => setReplacementOfferId(event.target.value)}
-                          >
-                            <option value="">{translate("common.notProvided")}</option>
-                            {sortByCleanerExperience(eligibleReplacementOffers, cleanerSelection.result, (offer) => offer.cleanerId).map((offer) => (
-                              <option key={offer.id} value={offer.id}>
-                                {cleanerReplacementOption(currentCleanerName(
-                                  offer.cleanerId,
-                                  offer.cleanerName,
-                                  cleanerNamesById,
-                                  translate("common.notProvided"),
-                                ), offer.cleanerId, cleanerSelection.result, language)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className="button-row">
-                          <button className="button" type="button" disabled={replacingAssignmentId !== null} onClick={() => {
-                            setReplacementTargetId(null);
-                            setReplacementOfferId("");
-                          }}>
-                            {translate("common.cancel")}
-                          </button>
-                          <button
-                            className="button button--primary"
-                            type="button"
-                            disabled={!replacementOfferId || replacingAssignmentId !== null}
-                            onClick={() => replaceCleanerAssignment(assignment.id)}
-                          >
-                            {replacingAssignmentId === assignment.id
-                              ? translate("jobs.replacingCleaner")
-                              : translate("jobs.confirmReplacement")}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-          {hasAssignmentAcknowledgment && (
-            <p className="form-hint">{translate("jobs.assignmentConfirmationDisclaimer")}</p>
-          )}
-          {assignmentError && <p className="form-error assignment-error" role="alert">{assignmentError}</p>}
-        </section>
-      )}
+      <JobAssignmentRoster
+        job={job}
+        translate={translate}
+        language={language}
+        isAssignmentAware={isAssignmentAware}
+        assignmentSectionRef={assignmentSectionRef}
+        assignedCleanerIds={assignedCleanerIds}
+        canDirectAssign={canDirectAssign}
+        isDirectAssignmentOpen={isDirectAssignmentOpen}
+        setIsDirectAssignmentOpen={setIsDirectAssignmentOpen}
+        assignCleanerDirectly={assignCleanerDirectly}
+        isLoadingCleaners={isLoadingCleaners}
+        offers={offers}
+        hasCleanerError={hasCleanerError}
+        isAssigningDirectly={isAssigningDirectly}
+        setDirectCleanerId={setDirectCleanerId}
+        setDirectCleanerSearch={setDirectCleanerSearch}
+        directCleanerSearch={directCleanerSearch}
+        directCleanerOptions={directCleanerOptions}
+        directCleanerId={directCleanerId}
+        cleanerSelection={cleanerSelection}
+        availableCleaners={availableCleaners}
+        isLoadingAssignments={isLoadingAssignments}
+        hasAssignmentsError={hasAssignmentsError}
+        activeAssignments={activeAssignments}
+        cleanerNamesById={cleanerNamesById}
+        replacementTargetId={replacementTargetId}
+        automaticOfferJob={automaticOfferJob}
+        openReminderPreview={openReminderPreview}
+        copiedCleanerId={copiedCleanerId}
+        canEditRoster={canEditRoster}
+        removingAssignmentId={removingAssignmentId}
+        replacingAssignmentId={replacingAssignmentId}
+        removeCleanerAssignment={removeCleanerAssignment}
+        eligibleReplacementOffers={eligibleReplacementOffers}
+        setReplacementTargetId={setReplacementTargetId}
+        replacementOfferId={replacementOfferId}
+        setReplacementOfferId={setReplacementOfferId}
+        replaceCleanerAssignment={replaceCleanerAssignment}
+        hasAssignmentAcknowledgment={hasAssignmentAcknowledgment}
+        assignmentError={assignmentError}
+      />
 
       <JobReminderPreview
         job={job}
