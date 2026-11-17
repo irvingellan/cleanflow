@@ -6,6 +6,7 @@ import { JobHistorySection } from "./JobHistorySection.jsx";
 import { JobFinancialSection } from "./JobFinancialSection.jsx";
 import { JobIssuesSection } from "./JobIssuesSection.jsx";
 import { JobDetailsSection } from "./JobDetailsSection.jsx";
+import { JobChecklistSection } from "./JobChecklistSection.jsx";
 import { serviceTypeLabel, serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { cleanerReminderState } from "./cleanerReminderLog.js";
@@ -20,7 +21,6 @@ import { JobScheduleConfirmation } from "./JobScheduleConfirmation.jsx";
 import {
   currentScheduleConfirmations, currentScheduleRevision, scheduleConfirmationMessage,
 } from "./scheduleConfirmation.js";
-import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import {
   BackButton,
@@ -44,7 +44,6 @@ import {
   hasValue,
 } from "../../lib/presentation.js";
 import { translateInLanguage, useTranslation } from "../../i18n/translations.js";
-import { ChecklistCapabilityControls } from "../checklists/ChecklistCapabilityControls.jsx";
 import {
   canManageAssignmentAwareOffers,
   canEditJobDetails,
@@ -1641,162 +1640,42 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")}>
-      <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
-        <div className="issues-section__header">
-          <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
-          {!isLoadingChecklistRun && checklistRun && (
-            <button className="button" type="button" onClick={onOpenChecklistRun}>
-              {translate(
-                checklistRun.status === "DRAFT" ? "checklists.viewDraftProgress"
-                  : checklistRun.status === "ABANDONED" ? "checklists.viewAbandonedRun"
-                    : "checklists.open",
-              )}
-            </button>
-          )}
-          {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError
-            && !job.archivedAt && !isCompleted && (
-            <button
-              className="button"
-              type="button"
-              disabled={isCreatingChecklistRun}
-              onClick={onCreateChecklistRun}
-            >
-              {isCreatingChecklistRun
-                ? translate("checklists.creating")
-                : translate("checklists.create")}
-            </button>
-          )}
-        </div>
-        {isLoadingChecklistRun && (
-          <StateCard message={translate("checklists.loading")} status="status" />
-        )}
-        {!isLoadingChecklistRun && hasChecklistRunError && (
-          <>
-            <StateCard message={translate("checklists.loadError")} status="alert" isError />
-            <button className="button" type="button" onClick={onRefreshChecklistRun}>
-              {translate("common.retry")}
-            </button>
-          </>
-        )}
-        {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
-          <p className="job-checklist__summary">{translate("checklists.noRun")}</p>
-        )}
-        {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-          <p className="job-checklist__summary">{translate(
-            checklistRun.status === "DRAFT" ? "checklists.existingDraft"
-              : checklistRun.status === "READY_FOR_REVIEW" ? "checklists.existingRun"
-                : checklistRun.status === "ABANDONED" ? "checklists.existingAbandoned"
-                  : "checklists.existingRunUnknown",
-          )}</p>
-        )}
-        {hasCreateChecklistRunError && (
-          <p className="form-error" role="alert">{translate("checklists.createError")}</p>
-        )}
-        <ChecklistCapabilityControls
-          job={job}
-          checklistRun={checklistRun}
-          capability={checklistCapability}
-          isLoading={isLoadingChecklistCapability}
-          hasError={hasChecklistCapabilityError}
-          isIssuing={isIssuingChecklistCapability}
-          hasIssueError={hasIssueChecklistCapabilityError}
-          isRevoking={isRevokingChecklistCapability}
-          hasRevokeError={hasRevokeChecklistCapabilityError}
-          onRefresh={onRefreshChecklistCapability}
-          onIssue={onIssueChecklistCapability}
-          onRevoke={onRevokeChecklistCapability}
-        />
-      </section>
-
-      {canUseCompletionControls && (
-        <section ref={completionSectionRef} tabIndex={-1} className="job-execution" aria-label={translate("jobs.completeService")}>
-          {isLoadingChecklistRun && (
-            <p className="form-hint">{translate("jobs.completionCheckingChecklist")}</p>
-          )}
-          {hasChecklistRunError && !isLoadingChecklistRun && (
-            <p className="form-error" role="alert">{translate("jobs.completionChecklistUnavailable")}</p>
-          )}
-          {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-            <p className="form-hint">{translate(
-              checklistRun.status === "DRAFT" ? "jobs.completionDraftOptions"
-                : checklistRun.status === "READY_FOR_REVIEW" ? "jobs.completionRequiresChecklistReview"
-                  : "jobs.completionChecklistUnavailable",
-            )}</p>
-          )}
-          {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
-            <>
-              {!isCompletionConfirmationVisible ? (
-                <button className="button button--primary" type="button"
-                  onClick={() => setIsCompletionConfirmationVisible(true)}>
-                  {translate("jobs.completeService")}
-                </button>
-              ) : (
-                <div>
-                  <p>{translate("jobs.completeWithoutChecklistConfirm")}</p>
-                  <div className="button-row">
-                    <button className="button" type="button" disabled={isCompletingCleaning}
-                      onClick={() => setIsCompletionConfirmationVisible(false)}>
-                      {translate("common.cancel")}
-                    </button>
-                    <button className="button button--primary" type="button"
-                      disabled={isCompletingCleaning} onClick={completeCleaning}>
-                      {isCompletingCleaning ? translate("jobs.completingCleaning")
-                        : translate("jobs.completeService")}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          {hasCompleteCleaningError && (
-            <p className="form-error" role="alert">{translate("jobs.completeCleaningError")}</p>
-          )}
-        </section>
-      )}
-
-      {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
-        isInProgress ||
-        isCompleted) && (
-        <section
-          className="job-execution"
-          aria-label={translate("jobs.operationalStatus")}
-        >
-          {isInProgress && (
-            <p className="job-execution__state job-execution__state--in-progress">
-              <OperationalIcon name="clock" />
-              {translate("jobs.executionInProgress")}
-            </p>
-          )}
-          {isCompleted && (
-            <p className="job-execution__state job-execution__state--completed">
-              <OperationalIcon name="check-circle" />
-              {translate("jobs.executionCompleted")}
-            </p>
-          )}
-          {job.operationalStatus === "ASSIGNED" && (
-            <div className="button-row job-execution__actions">
-              <button
-                className="button button--primary"
-                type="button"
-                disabled={isStartingCleaning}
-                onClick={startCleaning}
-              >
-                {isStartingCleaning
-                  ? translate("jobs.startingCleaning")
-                  : translate("jobs.startCleaning")}
-              </button>
-            </div>
-          )}
-          {hasStartCleaningError && (
-            <p className="form-error" role="alert">
-              {translate("jobs.startCleaningError")}
-            </p>
-          )}
-        </section>
-      )}
-
-      </JobDetailSection>
+      <JobChecklistSection
+        job={job}
+        translate={translate}
+        checklistSectionRef={checklistSectionRef}
+        isLoadingChecklistRun={isLoadingChecklistRun}
+        checklistRun={checklistRun}
+        onOpenChecklistRun={onOpenChecklistRun}
+        hasChecklistRunError={hasChecklistRunError}
+        isCompleted={isCompleted}
+        isCreatingChecklistRun={isCreatingChecklistRun}
+        onCreateChecklistRun={onCreateChecklistRun}
+        onRefreshChecklistRun={onRefreshChecklistRun}
+        hasCreateChecklistRunError={hasCreateChecklistRunError}
+        checklistCapability={checklistCapability}
+        isLoadingChecklistCapability={isLoadingChecklistCapability}
+        hasChecklistCapabilityError={hasChecklistCapabilityError}
+        isIssuingChecklistCapability={isIssuingChecklistCapability}
+        hasIssueChecklistCapabilityError={hasIssueChecklistCapabilityError}
+        isRevokingChecklistCapability={isRevokingChecklistCapability}
+        hasRevokeChecklistCapabilityError={hasRevokeChecklistCapabilityError}
+        onRefreshChecklistCapability={onRefreshChecklistCapability}
+        onIssueChecklistCapability={onIssueChecklistCapability}
+        onRevokeChecklistCapability={onRevokeChecklistCapability}
+        canUseCompletionControls={canUseCompletionControls}
+        completionSectionRef={completionSectionRef}
+        isCompletionConfirmationVisible={isCompletionConfirmationVisible}
+        setIsCompletionConfirmationVisible={setIsCompletionConfirmationVisible}
+        isCompletingCleaning={isCompletingCleaning}
+        completeCleaning={completeCleaning}
+        hasCompleteCleaningError={hasCompleteCleaningError}
+        isAssignmentAware={isAssignmentAware}
+        isInProgress={isInProgress}
+        isStartingCleaning={isStartingCleaning}
+        startCleaning={startCleaning}
+        hasStartCleaningError={hasStartCleaningError}
+      />
 
       <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")}>
       <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
