@@ -4,6 +4,7 @@ import { TranslationProvider } from "./i18n/translations.js";
 
 // Characterization: which top-level screen each URL renders, and whether the
 // manager session is read there. Synthetic tokens only; no provider call runs.
+// Each entry is a lazy chunk, so every assertion waits for it to render.
 vi.mock("./features/auth/authService.js", () => ({
   signInWithEmail: vi.fn(),
   signOutManager: vi.fn(),
@@ -58,40 +59,40 @@ beforeEach(() => { vi.clearAllMocks(); });
 afterEach(() => { window.history.replaceState(null, "", "/"); });
 
 describe("App entry selection", () => {
-  it.each(["/agenda", "/agenda.html"])("renders the Cleaner Hub at %s", (url) => {
+  it.each(["/agenda", "/agenda.html"])("renders the Cleaner Hub at %s", async (url) => {
     renderAt(url);
-    expect(screen.getByTestId("entry-cleaner-hub")).toBeInTheDocument();
+    expect(await screen.findByTestId("entry-cleaner-hub")).toBeInTheDocument();
     expectManagerSessionEnabled(false);
   });
 
-  it("renders the public checklist at /checklist with a token", () => {
+  it("renders the public checklist at /checklist with a token", async () => {
     renderAt(`/checklist?t=${checklistToken}`);
-    expect(screen.getByTestId("entry-public-checklist")).toHaveAttribute("data-token", checklistToken);
+    expect(await screen.findByTestId("entry-public-checklist")).toHaveAttribute("data-token", checklistToken);
     expectManagerSessionEnabled(false);
   });
 
-  it("renders the client report at /client-report", () => {
+  it("renders the client report at /client-report", async () => {
     renderAt("/client-report?t=x");
-    expect(screen.getByTestId("entry-client-report")).toHaveAttribute("data-token", "x");
+    expect(await screen.findByTestId("entry-client-report")).toHaveAttribute("data-token", "x");
     expectManagerSessionEnabled(false);
   });
 
-  it("renders the client portal at /portal", () => {
+  it("renders the client portal at /portal", async () => {
     renderAt("/portal?t=x");
-    expect(screen.getByTestId("entry-client-portal")).toHaveAttribute("data-token", "x");
+    expect(await screen.findByTestId("entry-client-portal")).toHaveAttribute("data-token", "x");
     expect(screen.queryByTestId("entry-client-report")).not.toBeInTheDocument();
     expectManagerSessionEnabled(false);
   });
 
-  it("renders the checklist preview at /checklist-preview", () => {
+  it("renders the checklist preview at /checklist-preview", async () => {
     renderAt("/checklist-preview");
-    expect(screen.getByTestId("entry-checklist-preview")).toBeInTheDocument();
+    expect(await screen.findByTestId("entry-checklist-preview")).toBeInTheDocument();
     expectManagerSessionEnabled(false);
   });
 
-  it("renders the public offer page at /offer/<token>", () => {
+  it("renders the public offer page at /offer/<token>", async () => {
     renderAt("/offer/abc");
-    expect(screen.getByText("Loading offer…")).toBeInTheDocument();
+    expect(await screen.findByText("Loading offer…")).toBeInTheDocument();
     expectManagerSessionEnabled(false);
   });
 

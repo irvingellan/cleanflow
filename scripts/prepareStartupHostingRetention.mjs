@@ -4,7 +4,7 @@ import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { hostingBundleAsset, inspectHostingBuild } from "./prepareHosting.mjs";
+import { hostingBundleAsset, hostingChunkAsset, inspectHostingBuild } from "./prepareHosting.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const projectId = "clean-flow-prototipo";
@@ -37,10 +37,14 @@ function verifyEntries(dist, files) {
   const paths = new Set(files.map(({ file }) => file));
   for (const entry of ["index.html", "agenda.html"]) {
     const html = regularBytes(join(dist, entry)).toString("utf8");
-    const refs = [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)=["']\/(assets\/[\w-]+\.(?:js|css))["'][^>]*>/gi)]
-      .map(([, file]) => file);
-    check(refs.some((file) => file.endsWith(".js")) && refs.some((file) => file.endsWith(".css")) &&
-      refs.every((file) => hostingBundleAsset.test(file) && paths.has(file)), "An entry points outside its reviewed JS and CSS.");
+    const refs = [...html.matchAll(/<(script|link)\b[^>]*\b(?:src|href)=["']\/(assets\/[\w-]+\.(?:js|css))["'][^>]*>/gi)]
+      .map(([, tag, file]) => ({ file, script: tag.toLowerCase() === "script" }));
+    // The entry bundle and the stylesheet keep their reviewed names. A code-split build may list
+    // shared chunks next to them, as module scripts or preload links.
+    check(refs.some(({ file, script }) => script && file.endsWith(".js") && hostingBundleAsset.test(file)) &&
+      refs.some(({ file }) => file.endsWith(".css")) &&
+      refs.every(({ file }) => paths.has(file) && (hostingBundleAsset.test(file) || hostingChunkAsset.test(file))),
+    "An entry points outside its reviewed JS and CSS.");
   }
 }
 
@@ -73,7 +77,7 @@ function readPublishedReview(dir, listPublicFiles) {
 
 function isRetainedAsset(file) {
   // inspectHostingBuild already validated the allowlist and digest of any declared fonts.
-  return hostingBundleAsset.test(file) || /^assets\/inter-[\w-]+\.woff2$/.test(file);
+  return hostingBundleAsset.test(file) || hostingChunkAsset.test(file) || /^assets\/inter-[\w-]+\.woff2$/.test(file);
 }
 
 function collectFiles(primary, preceding) {

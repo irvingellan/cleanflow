@@ -10,11 +10,12 @@ const buildId = "a".repeat(40);
 const deploymentId = `${buildId}-cleaner-push`;
 const entryAsset = "/assets/main-fixture.js";
 const cssAsset = "/assets/main-fixture.css";
+const chunkAsset = "/assets/ManagerRoot-fixture.js";
 const blockedRequests = ["/api/fixture", "/version.json?fixture=private"];
 
-function entryHtml(manifest, preload = "") {
+function entryHtml(manifest, preload = "", entryScript = entryAsset) {
   return `<!doctype html><link rel="manifest" href="${manifest}">
-    <script type="module" src="${entryAsset}"></script>
+    <script type="module" src="${entryScript}"></script>
     <link rel="stylesheet" href="${cssAsset}">${preload}<main id="root"></main>`;
 }
 
@@ -36,7 +37,7 @@ async function withFixture(options, run) {
     }
     switch (request.url) {
       case "/":
-        return send("text/html", entryHtml("/manifest.webmanifest", options.preload));
+        return send("text/html", entryHtml("/manifest.webmanifest", options.preload, options.entryScript));
       case "/agenda":
         return send("text/html", entryHtml("/agenda.webmanifest"), {
           "Cache-Control": "no-store, private",
@@ -67,6 +68,9 @@ async function withFixture(options, run) {
         return send("text/javascript", options.emptyApp ? "export {};" : renderedEntry);
       case cssAsset:
         return send("text/css", "input,button { display: inline-block; }");
+      case chunkAsset:
+        if (options.chunk) return send("text/javascript", "export {};");
+        return response.writeHead(404).end();
       default:
         response.writeHead(404).end();
     }
@@ -124,6 +128,25 @@ test("bounds a version request whose server sent HTTP 200 headers and stopped se
     assert.equal(result.ok, false);
     assert.equal(version.status, 200);
     assert.equal(version.issue, "TIMEOUT");
+  });
+});
+
+test("checks the shared chunks listed next to the entry and still requires the reviewed entry name", async () => {
+  for (const chunkTag of [`<link rel="modulepreload" href="${chunkAsset}">`, `<script type="module" src="${chunkAsset}"></script>`]) {
+    await withFixture({ preload: chunkTag, chunk: true }, async (origin, requests) => {
+      const result = await probeHttp(origin, { expectedBuild: buildId });
+      assert.equal(result.ok, true);
+      assert.equal(requests.some(({ url, method }) => url === chunkAsset && method === "HEAD"), true);
+    });
+    await withFixture({ preload: chunkTag }, async (origin) => {
+      const result = await probeHttp(origin);
+      assert.equal(result.ok, false);
+      assert.equal(result.rows.find(({ path }) => path === chunkAsset).issue, "HTTP_STATUS");
+    });
+  }
+  await withFixture({ chunk: true, entryScript: chunkAsset }, async (origin) => {
+    const result = await probeHttp(origin);
+    assert.equal(result.rows.find(({ path }) => path === "/").issue, "UNEXPECTED_ENTRY_REFERENCE");
   });
 });
 

@@ -57,6 +57,25 @@ test("only the declared, byte-verified Inter asset may enter the manifest", t =>
   fs.writeFileSync(path.join(dir, other), "unexpected");
   assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected/);
 });
+test("code-split chunks enter the manifest only when a reviewed script names them", t => {
+  const dir = fixture(t);
+  const write = (file, body) => fs.writeFileSync(path.join(dir, "assets", file), body);
+  write("index-demo.js", 'import("./ManagerRoot-a1B2c3D4.js")');
+  write("ManagerRoot-a1B2c3D4.js", 'import "./shared-e5F6g7H8.js"');
+  write("shared-e5F6g7H8.js", "synthetic");
+  const files = inspectHostingBuild(dir, "expected", []).map(entry => entry.file);
+  assert.ok(files.includes("assets/ManagerRoot-a1B2c3D4.js") && files.includes("assets/shared-e5F6g7H8.js"));
+  write("stray-a1B2c3D4.js", "synthetic");
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected Hosting file: assets\/stray-a1B2c3D4\.js/);
+  fs.unlinkSync(path.join(dir, "assets/stray-a1B2c3D4.js"));
+  // A chunk named only by an unreviewed script stays outside the manifest too.
+  write("orphan-a1B2c3D4.js", 'import "./leaf-e5F6g7H8.js"');
+  write("leaf-e5F6g7H8.js", "synthetic");
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected Hosting file/);
+  for (const file of ["orphan-a1B2c3D4.js", "leaf-e5F6g7H8.js"]) fs.unlinkSync(path.join(dir, "assets", file));
+  write("ManagerRoot-a1B2c3D4.css", "synthetic");
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected Hosting file: assets\/ManagerRoot-a1B2c3D4\.css/);
+});
 test("wrong build SHA, missing public assets and symlinks fail closed", t => {
   const dir = fixture(t);
   assert.throws(() => inspectHostingBuild(dir, "other", []), /build ID/);

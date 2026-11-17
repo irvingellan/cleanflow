@@ -1,4 +1,4 @@
-import { StrictMode, useLayoutEffect } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 // Feature stylesheets, pinned in today's cascade order so lazy entries cannot reorder them.
 import './features/client-portal/clientPortal.css'
@@ -29,11 +29,6 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   })
 }
 
-function StartupCommit() {
-  useLayoutEffect(() => { window.__cleanflowStartup?.mounted() }, [])
-  return null
-}
-
 const startup = window.__cleanflowStartup
 createRoot(document.getElementById('root'), startup ? {
   onUncaughtError: () => startup.renderFailed(),
@@ -42,7 +37,6 @@ createRoot(document.getElementById('root'), startup ? {
     <TranslationProvider>
       <EnvironmentBanner />
       <App />
-      <StartupCommit />
     </TranslationProvider>
   </StrictMode>,
 )

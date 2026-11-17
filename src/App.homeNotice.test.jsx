@@ -63,14 +63,15 @@ beforeEach(() => {
   calls.open.mockResolvedValue(opened);
   calls.getJob.mockResolvedValue({ id: "authorized-job", propertyName: "Authorized job" });
 });
-function openNotice() {
+// The manager entry is a lazy chunk: wait for it before using the screen.
+async function openNotice() {
   render(<TranslationProvider><App /></TranslationProvider>);
-  fireEvent.click(screen.getByRole("button", { name: "Review notice", exact: true }));
+  fireEvent.click(await screen.findByRole("button", { name: "Review notice", exact: true }, { timeout: 5000 }));
 }
 
 describe("Dashboard notice navigation", () => {
   it("keeps the authorized read and opens the current notice normally", async () => {
-    openNotice();
+    await openNotice();
     expect(await screen.findByRole("heading", { name: "Authorized job" })).toBeVisible();
     expect(calls.open).toHaveBeenCalledExactlyOnceWith("notice-one");
     expect(calls.getJob).toHaveBeenCalledExactlyOnceWith("authorized-job", { serverOnly: true });
@@ -79,7 +80,7 @@ describe("Dashboard notice navigation", () => {
   it("keeps the user's new screen when inbox.open resolves after navigation", async () => {
     const receipt = deferred();
     calls.open.mockReturnValueOnce(receipt.promise);
-    openNotice();
+    await openNotice();
     fireEvent.click(screen.getByRole("button", { name: "jobs", exact: true }));
     await act(async () => receipt.resolve(opened));
     expect(screen.getByRole("heading", { name: "Services screen" })).toBeVisible();
@@ -90,7 +91,7 @@ describe("Dashboard notice navigation", () => {
   it.each(["success", "failure"])("does not replace a new form after a late Job read %s", async (outcome) => {
     const read = deferred();
     calls.getJob.mockReturnValueOnce(read.promise);
-    openNotice();
+    await openNotice();
     await act(async () => {});
     expect(calls.getJob).toHaveBeenCalledWith("authorized-job", { serverOnly: true });
     fireEvent.click(screen.getByRole("button", { name: "new service" }));
@@ -104,7 +105,7 @@ describe("Dashboard notice navigation", () => {
   it("does not revive an old request after leaving and reopening Home", async () => {
     const receipt = deferred();
     calls.open.mockReturnValueOnce(receipt.promise);
-    openNotice();
+    await openNotice();
     fireEvent.click(screen.getByRole("button", { name: "jobs", exact: true }));
     fireEvent.click(screen.getByRole("button", { name: "dashboard", exact: true }));
     await act(async () => receipt.resolve(opened));
@@ -115,7 +116,7 @@ describe("Dashboard notice navigation", () => {
   it("keeps the latest notice when two user-initiated receipts resolve backwards", async () => {
     const receipt = deferred();
     calls.open.mockReturnValueOnce(receipt.promise);
-    openNotice();
+    await openNotice();
     fireEvent.click(screen.getByRole("button", { name: "Review second notice" }));
     expect(await screen.findByRole("heading", { name: "Authorized job" })).toBeVisible();
     await act(async () => receipt.resolve({ state: "opened", destination: { kind: "JOB", jobId: "old-job" } }));
@@ -125,7 +126,7 @@ describe("Dashboard notice navigation", () => {
 
   it("retains the Inbox fallback when the current notice is unavailable", async () => {
     calls.open.mockResolvedValueOnce({ state: "unavailable" });
-    openNotice();
+    await openNotice();
     expect(await screen.findByRole("heading", { name: "Inbox screen" })).toBeVisible();
     expect(calls.getJob).not.toHaveBeenCalled();
   });
