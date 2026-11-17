@@ -12,9 +12,11 @@ import {
   completeJobWithoutChecklistForManager,
 } from "../jobCompletionService.js";
 import { correctChecklistAnswerForManager } from "../checklistManagerCorrection.js";
-import { db, isWarmupCall, organizationId } from "../runtime/firebase.js";
+import { db, isWarmupCall } from "../runtime/firebase.js";
+import { organizationIdForRequest } from "../runtime/organization.js";
 
 export async function createChecklistRun(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   const jobId = request.data?.jobId;
@@ -30,6 +32,7 @@ export async function createChecklistRun(request) {
 }
 
 export async function getChecklistRun(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   if (isWarmupCall(request)) return { warm: true };
 
@@ -44,6 +47,7 @@ export async function getChecklistRun(request) {
 }
 
 export async function submitChecklistRunForReview(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
@@ -53,6 +57,7 @@ export async function submitChecklistRunForReview(request) {
 }
 
 export async function approveChecklistRun(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   const jobId = request.data?.jobId;
@@ -64,6 +69,7 @@ export async function approveChecklistRun(request) {
 }
 
 export async function completeJobWithoutChecklist(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   const jobId = request.data?.jobId;
@@ -75,6 +81,7 @@ export async function completeJobWithoutChecklist(request) {
 }
 
 export async function abandonChecklistRunAndCompleteJob(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   const jobId = request.data?.jobId;
@@ -90,6 +97,7 @@ export async function abandonChecklistRunAndCompleteJob(request) {
 }
 
 export async function correctChecklistAnswer(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
