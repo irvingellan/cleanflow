@@ -8,11 +8,8 @@ import { Icon } from "../../components/Icon.jsx";
 import {
   ThemeToggle,
 } from "../auth/ManagerSignIn.jsx";
-import {
-  StateCard,
-} from "../../components/UiPrimitives.jsx";
 import { FeedbackPanel } from "../feedback/FeedbackPanel.jsx";
-import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
+import { NotificationInboxBadge, useNotificationInbox } from "../notifications/NotificationInbox.jsx";
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
 import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
 import { getJobById } from "../jobs/jobService.js";
@@ -23,17 +20,11 @@ import { usePayoutsController } from "../payouts/usePayoutsController.js";
 import { WhatsNewPanel } from "../releases/WhatsNewPanel.jsx";
 import { startManagerFunctionWarmup } from "../../services/firebase/managerFunctionWarmup.js";
 import { useCleanersController } from "../cleaners/useCleanersController.js";
-import { ClientDetail } from "../clients/ClientDetail.jsx";
-import { ClientDirectory } from "../clients/ClientDirectory.jsx";
-import { ClientForm } from "../clients/ClientForm.jsx";
 import { useClientsController } from "../clients/useClientsController.js";
 import { ChecklistRunDetail } from "../checklists/ChecklistRunDetail.jsx";
-import { Dashboard } from "../dashboard/Dashboard.jsx";
 import { useDashboardController } from "../dashboard/useDashboardController.js";
-import { DevCenter } from "../dev-center/DevCenter.jsx";
 import { useDevCenterController } from "../dev-center/useDevCenterController.js";
 import { JobDetail } from "../jobs/JobDetail.jsx";
-import { SandboxLifecyclePreview } from "../jobs/SandboxLifecyclePreview.jsx";
 import { canShowEnvironmentNavigation } from "../../environment.js";
 import { CreateCleaningForm } from "../jobs/JobForm.jsx";
 import { JobsPage } from "../jobs/JobsPage.jsx";
@@ -51,13 +42,15 @@ import {
 } from "../jobs/JobWorkflowViews.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { useManagerPageLoadTelemetry } from "../telemetry/useManagerPageLoadTelemetry.js";
-import { ManagerPageLoadDiagnostics } from "../telemetry/ManagerPageLoadDiagnostics.jsx";
 import { DeveloperEnvironmentControls } from "../../components/EnvironmentBanner.jsx";
 import { usePropertiesController } from "../properties/usePropertiesController.js";
 import { useManagerNavigation } from "./useManagerNavigation.js";
 import { PropertyViews } from "./views/PropertyViews.jsx";
 import { CleanerViews } from "./views/CleanerViews.jsx";
 import { PayoutViews } from "./views/PayoutViews.jsx";
+import { ClientViews } from "./views/ClientViews.jsx";
+import { HomeViews } from "./views/HomeViews.jsx";
+import { DeveloperViews } from "./views/DeveloperViews.jsx";
 
 export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, onSignOut }) {
   const { language, setLanguage, translate } = useTranslation();
@@ -715,8 +708,16 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           </p>
         )}
         <PwaUpdatePrompt />
-        {import.meta.env.MODE === "sandbox" && canPreviewLifecycle && view === "sandbox-lifecycle-preview"
-          && <SandboxLifecyclePreview onBack={showDashboard} />}
+        <DeveloperViews
+          view={view}
+          canPreviewLifecycle={canPreviewLifecycle}
+          showDashboard={showDashboard}
+          devCenterController={devCenterController}
+          authUser={authUser}
+          translate={translate}
+          setActiveSection={setActiveSection}
+          setView={setView}
+        />
         <PayoutViews
           view={view}
           showPayouts={showPayouts}
@@ -736,65 +737,23 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           recordPayout={recordPayout}
           showRecordedPayout={showRecordedPayout}
         />
-        {notificationInboxEnabled() && view === "notification-inbox" && (
-          <NotificationInbox inbox={inbox} language={language} onBack={showDashboard} onOpen={openInboxTarget} />
-        )}
-
-        {view === "dashboard" && (
-          <Dashboard
-            dashboardData={dashboardData}
-            isLoading={isLoadingDashboard}
-            hasError={hasDashboardError}
-            translate={translate}
-            onRefresh={refreshDashboard}
-            onOpenJob={openDashboardJob}
-            onShowJobs={showJobs}
-            onShowJobsWithFilter={showJobsWithFilter}
-            notices={notificationInboxEnabled() && inbox.state === "ready" ? inbox.items : []}
-            onOpenNotice={openInboxItemFromHome}
-            onShowInbox={notificationInboxEnabled() ? () => setView("notification-inbox") : null}
-          />
-        )}
-
-        {view === "dev-center" && devCenterController.access.authorized && (
-          <DevCenter
-            access={devCenterController.access}
-            isWorking={devCenterController.isWorking}
-            pendingPreviewType={devCenterController.pendingPreviewType}
-            hasError={devCenterController.hasError}
-            lastResult={devCenterController.lastResult}
-            diagnostics={devCenterController.diagnostics}
-            isLoadingDiagnostics={devCenterController.isLoadingDiagnostics}
-            hasDiagnosticsError={devCenterController.hasDiagnosticsError}
-            onGenerate={devCenterController.generate}
-            onClear={devCenterController.clear}
-            onPreviewReminder={devCenterController.previewReminder}
-            onRefreshDiagnostics={devCenterController.loadNotificationDiagnostics}
-            notificationUserId={authUser.uid}
-          />
-        )}
-
-        {view === "load-time-diagnostics" && devCenterController.access.isChecking && (
-          <StateCard message={translate("auth.managerAccessLoading")} status="status" />
-        )}
-
-        {view === "load-time-diagnostics" && !devCenterController.access.isChecking
-          && !devCenterController.access.authorized && (
-          <section className="panel">
-            <StateCard message={translate("loadDiagnostics.unauthorized")} status="alert" isError />
-            <button className="button" type="button" onClick={() => {
-              setActiveSection("dashboard");
-              setView("dashboard");
-            }}>{translate("navigation.dashboard")}</button>
-          </section>
-        )}
-
-        {view === "load-time-diagnostics" && devCenterController.access.authorized && (
-          <ManagerPageLoadDiagnostics onBack={() => {
-            setActiveSection("dev-center");
-            setView("dev-center");
-          }} />
-        )}
+        <HomeViews
+          view={view}
+          inbox={inbox}
+          language={language}
+          showDashboard={showDashboard}
+          openInboxTarget={openInboxTarget}
+          dashboardData={dashboardData}
+          isLoadingDashboard={isLoadingDashboard}
+          hasDashboardError={hasDashboardError}
+          translate={translate}
+          refreshDashboard={refreshDashboard}
+          openDashboardJob={openDashboardJob}
+          showJobs={showJobs}
+          showJobsWithFilter={showJobsWithFilter}
+          openInboxItemFromHome={openInboxItemFromHome}
+          setView={setView}
+        />
 
         <PropertyViews
           view={view}
@@ -890,59 +849,35 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           savedCleaner={savedCleaner}
         />
 
-        {view === "client-list" && (
-          <ClientDirectory
-            clients={clients}
-            isLoading={isLoadingClients}
-            hasError={hasClientsError}
-            onCreate={showNewClient}
-            onSelect={openClient}
-            canManageExcluded={canManageExcludedRecords}
-            showExcluded={showExcludedRecords}
-            onToggleExcluded={() => setShowExcludedRecords((current) => !current)}
-          />
-        )}
-
-        {view === "client-detail" && selectedClient && (
-          <ClientDetail
-            client={selectedClient}
-            properties={clientProperties}
-            isLoadingProperties={isLoadingClientProperties}
-            hasPropertiesError={hasClientPropertiesError}
-            jobHistory={clientJobHistory}
-            hasJobHistoryError={hasClientJobHistoryError}
-            onBack={showClients}
-            onOpenProperty={openClientProperty}
-            onCreateProperty={showNewPropertyForClient}
-            onEdit={showEditClient}
-            onOpenJob={openClientJob}
-            onSaveDataProvenance={(dataProvenance) =>
-              saveClientDataProvenance(selectedClient, dataProvenance)
-            }
-            canRestore={canManageExcludedRecords}
-            onArchive={async () => { await archiveClientRecord(selectedClient); showClients(); }}
-            onRestore={() => restoreClientRecord(selectedClient)}
-            onViewAllUpcoming={() => showJobsForClient(selectedClient)}
-          />
-        )}
-
-        {view === "client-edit" && selectedClient && (
-          <ClientForm
-            client={selectedClient}
-            onBack={() => setView("client-detail")}
-            onSaved={(values) => saveClientEdit(selectedClient, values)}
-          />
-        )}
-
-        {view === "client-create" && (
-          <ClientForm
-            onBack={showClients}
-            onSaved={async (values) => {
-              await saveClient(values);
-              setView("client-list");
-            }}
-          />
-        )}
+        <ClientViews
+          view={view}
+          clients={clients}
+          isLoadingClients={isLoadingClients}
+          hasClientsError={hasClientsError}
+          showNewClient={showNewClient}
+          openClient={openClient}
+          canManageExcludedRecords={canManageExcludedRecords}
+          showExcludedRecords={showExcludedRecords}
+          setShowExcludedRecords={setShowExcludedRecords}
+          selectedClient={selectedClient}
+          clientProperties={clientProperties}
+          isLoadingClientProperties={isLoadingClientProperties}
+          hasClientPropertiesError={hasClientPropertiesError}
+          clientJobHistory={clientJobHistory}
+          hasClientJobHistoryError={hasClientJobHistoryError}
+          showClients={showClients}
+          openClientProperty={openClientProperty}
+          showNewPropertyForClient={showNewPropertyForClient}
+          showEditClient={showEditClient}
+          openClientJob={openClientJob}
+          saveClientDataProvenance={saveClientDataProvenance}
+          archiveClientRecord={archiveClientRecord}
+          restoreClientRecord={restoreClientRecord}
+          showJobsForClient={showJobsForClient}
+          setView={setView}
+          saveClientEdit={saveClientEdit}
+          saveClient={saveClient}
+        />
 
         {view === "job-detail" && selectedJob && (
           <div className={`cf-split${showServicesPane ? " cf-split--with-list" : ""}`}>
