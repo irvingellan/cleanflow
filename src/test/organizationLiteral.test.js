@@ -30,6 +30,7 @@ const allowed = [
   "src/features/telemetry/managerPageLoadService.js",
   "src/features/weekly-close/weeklyCloseModel.js",
   "src/features/weekly-close/weeklyCloseService.js",
+  "src/services/organization/currentOrganization.js",
 ];
 
 function sourceFiles(directory) {
