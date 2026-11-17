@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const firestore = vi.hoisted(() => ({
   collection: vi.fn(() => "managerPageLoadEvents"),
+  connectFirestoreEmulator: vi.fn(),
   getDocs: vi.fn(),
+  getFirestore: vi.fn(() => ({})),
+  setLogLevel: vi.fn(),
   limit: vi.fn((value) => ({ limit: value })),
   orderBy: vi.fn((...args) => ({ orderBy: args })),
   query: vi.fn((...args) => ({ query: args })),
@@ -10,8 +13,9 @@ const firestore = vi.hoisted(() => ({
   where: vi.fn((...args) => ({ where: args })),
 }));
 
-vi.mock("firebase/firestore", () => firestore);
-vi.mock("../../services/firebase/client.js", () => ({ db: {} }));
+// The diagnostics windows are one-shot server reads through the lite SDK.
+vi.mock("firebase/firestore/lite", () => firestore);
+vi.mock("../../services/firebase/client.js", () => ({ db: {}, firebaseApp: {}, useFirebaseEmulators: false, emulatorPorts: {} }));
 
 describe("manager page-load diagnostics", () => {
   beforeEach(() => {

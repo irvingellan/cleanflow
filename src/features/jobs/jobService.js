@@ -5,15 +5,10 @@ import {
   doc,
   getDoc,
   getDocFromServer,
-  getDocs,
-  limit,
   onSnapshot,
-  orderBy,
-  query,
   runTransaction,
   serverTimestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import {
   collection as serverCollection, getDocs as getServerDocs, limit as serverLimit,
@@ -319,44 +314,45 @@ export async function getJobs(
   };
 }
 
+// The history summaries below are one-shot server reads with a deadline, like the Jobs list.
 export async function getPropertyJobHistory(propertyId) {
   const today = currentLocalDate();
-  const jobs = jobsCollection();
-  const [upcomingSnapshot, scheduledHistorySnapshot, completedHistorySnapshot] = await Promise.all([
-    getDocs(
-      query(
+  const jobs = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const [upcomingSnapshot, scheduledHistorySnapshot, completedHistorySnapshot] = await withReadDeadline(Promise.all([
+    getServerDocs(
+      serverQuery(
         jobs,
-        where("propertyId", "==", propertyId),
-        where("operationalStatus", "in", [
+        serverWhere("propertyId", "==", propertyId),
+        serverWhere("operationalStatus", "in", [
           "UNASSIGNED",
           "OFFERED",
           "ASSIGNED",
           "IN_PROGRESS",
         ]),
-        where("scheduledDate", ">=", today),
-        orderBy("scheduledDate", "asc"),
-        limit(upcomingSummaryLimit + 1),
+        serverWhere("scheduledDate", ">=", today),
+        serverOrderBy("scheduledDate", "asc"),
+        serverLimit(upcomingSummaryLimit + 1),
       ),
     ),
-    getDocs(
-      query(
+    getServerDocs(
+      serverQuery(
         jobs,
-        where("propertyId", "==", propertyId),
-        where("scheduledDate", "<", today),
-        orderBy("scheduledDate", "desc"),
-        limit(10),
+        serverWhere("propertyId", "==", propertyId),
+        serverWhere("scheduledDate", "<", today),
+        serverOrderBy("scheduledDate", "desc"),
+        serverLimit(10),
       ),
     ),
-    getDocs(
-      query(
+    getServerDocs(
+      serverQuery(
         jobs,
-        where("propertyId", "==", propertyId),
-        where("operationalStatus", "==", "COMPLETED"),
-        orderBy("completedAt", "desc"),
-        limit(10),
+        serverWhere("propertyId", "==", propertyId),
+        serverWhere("operationalStatus", "==", "COMPLETED"),
+        serverOrderBy("completedAt", "desc"),
+        serverLimit(10),
       ),
     ),
-  ]);
+  ]));
 
   const upcomingJobs = upcomingJobsFromSnapshots([upcomingSnapshot]);
 
@@ -373,40 +369,40 @@ export async function getPropertyJobHistory(propertyId) {
 
 export async function getCleanerJobHistory(cleanerId) {
   const today = currentLocalDate();
-  const jobs = jobsCollection();
-  const snapshots = await Promise.all([
-    where("assignedCleanerId", "==", cleanerId),
-    where("assignedCleanerIds", "array-contains", cleanerId),
+  const jobs = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const snapshots = await withReadDeadline(Promise.all([
+    serverWhere("assignedCleanerId", "==", cleanerId),
+    serverWhere("assignedCleanerIds", "array-contains", cleanerId),
   ].flatMap((cleanerConstraint) => [
-    getDocs(
-      query(
+    getServerDocs(
+      serverQuery(
         jobs,
         cleanerConstraint,
-        where("operationalStatus", "in", ["ASSIGNED", "IN_PROGRESS"]),
-        where("scheduledDate", ">=", today),
-        orderBy("scheduledDate", "asc"),
-        limit(5),
+        serverWhere("operationalStatus", "in", ["ASSIGNED", "IN_PROGRESS"]),
+        serverWhere("scheduledDate", ">=", today),
+        serverOrderBy("scheduledDate", "asc"),
+        serverLimit(5),
       ),
     ),
-    getDocs(
-      query(
+    getServerDocs(
+      serverQuery(
         jobs,
         cleanerConstraint,
-        where("scheduledDate", "<", today),
-        orderBy("scheduledDate", "desc"),
-        limit(10),
+        serverWhere("scheduledDate", "<", today),
+        serverOrderBy("scheduledDate", "desc"),
+        serverLimit(10),
       ),
     ),
-    getDocs(
-      query(
+    getServerDocs(
+      serverQuery(
         jobs,
         cleanerConstraint,
-        where("operationalStatus", "==", "COMPLETED"),
-        orderBy("completedAt", "desc"),
-        limit(10),
+        serverWhere("operationalStatus", "==", "COMPLETED"),
+        serverOrderBy("completedAt", "desc"),
+        serverLimit(10),
       ),
     ),
-  ]));
+  ])));
 
   // Keep the existing bounded summary after merging the additive legacy/roster
   // queries. Firestore orders equal scheduled dates by document ID.
@@ -430,72 +426,72 @@ export async function getCleanerJobHistory(cleanerId) {
 
 export async function getClientJobHistory(clientId, propertyIds) {
   const today = currentLocalDate();
-  const jobs = jobsCollection();
+  const jobs = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
   const activeStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
   const propertyIdGroups = propertyIdsInGroups(propertyIds);
   const upcomingQueries = [
-    query(
+    serverQuery(
       jobs,
-      where("clientId", "==", clientId),
-      where("operationalStatus", "in", activeStatuses),
-      where("scheduledDate", ">=", today),
-      orderBy("scheduledDate", "asc"),
-      limit(upcomingSummaryLimit + 1),
+      serverWhere("clientId", "==", clientId),
+      serverWhere("operationalStatus", "in", activeStatuses),
+      serverWhere("scheduledDate", ">=", today),
+      serverOrderBy("scheduledDate", "asc"),
+      serverLimit(upcomingSummaryLimit + 1),
     ),
     ...propertyIdGroups.flatMap((propertyIdGroup) =>
       activeStatuses.map((operationalStatus) =>
-        query(
+        serverQuery(
           jobs,
-          where("propertyId", "in", propertyIdGroup),
-          where("operationalStatus", "==", operationalStatus),
-          where("scheduledDate", ">=", today),
-          orderBy("scheduledDate", "asc"),
-          limit(upcomingSummaryLimit + 1),
+          serverWhere("propertyId", "in", propertyIdGroup),
+          serverWhere("operationalStatus", "==", operationalStatus),
+          serverWhere("scheduledDate", ">=", today),
+          serverOrderBy("scheduledDate", "asc"),
+          serverLimit(upcomingSummaryLimit + 1),
         ),
       ),
     ),
   ];
   const historyQueries = [
-    query(
+    serverQuery(
       jobs,
-      where("clientId", "==", clientId),
-      where("scheduledDate", "<", today),
-      orderBy("scheduledDate", "desc"),
-      limit(10),
+      serverWhere("clientId", "==", clientId),
+      serverWhere("scheduledDate", "<", today),
+      serverOrderBy("scheduledDate", "desc"),
+      serverLimit(10),
     ),
     ...propertyIdGroups.map((propertyIdGroup) =>
-      query(
+      serverQuery(
         jobs,
-        where("propertyId", "in", propertyIdGroup),
-        where("scheduledDate", "<", today),
-        orderBy("scheduledDate", "desc"),
-        limit(10),
+        serverWhere("propertyId", "in", propertyIdGroup),
+        serverWhere("scheduledDate", "<", today),
+        serverOrderBy("scheduledDate", "desc"),
+        serverLimit(10),
       ),
     ),
   ];
   const completedHistoryQueries = [
-    query(
+    serverQuery(
       jobs,
-      where("clientId", "==", clientId),
-      where("operationalStatus", "==", "COMPLETED"),
-      orderBy("completedAt", "desc"),
-      limit(10),
+      serverWhere("clientId", "==", clientId),
+      serverWhere("operationalStatus", "==", "COMPLETED"),
+      serverOrderBy("completedAt", "desc"),
+      serverLimit(10),
     ),
     ...propertyIdGroups.map((propertyIdGroup) =>
-      query(
+      serverQuery(
         jobs,
-        where("propertyId", "in", propertyIdGroup),
-        where("operationalStatus", "==", "COMPLETED"),
-        orderBy("completedAt", "desc"),
-        limit(10),
+        serverWhere("propertyId", "in", propertyIdGroup),
+        serverWhere("operationalStatus", "==", "COMPLETED"),
+        serverOrderBy("completedAt", "desc"),
+        serverLimit(10),
       ),
     ),
   ];
-  const [upcomingSnapshots, historySnapshots, completedHistorySnapshots] = await Promise.all([
-    Promise.all(upcomingQueries.map((jobQuery) => getDocs(jobQuery))),
-    Promise.all(historyQueries.map((jobQuery) => getDocs(jobQuery))),
-    Promise.all(completedHistoryQueries.map((jobQuery) => getDocs(jobQuery))),
-  ]);
+  const [upcomingSnapshots, historySnapshots, completedHistorySnapshots] = await withReadDeadline(Promise.all([
+    Promise.all(upcomingQueries.map((jobQuery) => getServerDocs(jobQuery))),
+    Promise.all(historyQueries.map((jobQuery) => getServerDocs(jobQuery))),
+    Promise.all(completedHistoryQueries.map((jobQuery) => getServerDocs(jobQuery))),
+  ]));
   const upcomingJobs = upcomingJobsFromSnapshots(upcomingSnapshots);
   const recentJobs = recentJobsFromSnapshots([
     ...historySnapshots,

@@ -3,11 +3,12 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   runTransaction,
   serverTimestamp,
 } from "firebase/firestore";
+import { collection as serverCollection, getDocs as getServerDocs } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
+import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 
 const organizationId = "cleanflow-demo";
 const issueCategories = [
@@ -48,8 +49,12 @@ function mapIssue(issueSnapshot) {
   };
 }
 
+// One-shot server read with a deadline: a full-SDK read on a stalled realtime
+// channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobIssues(jobId) {
-  const snapshot = await getDocs(issuesCollection(jobId));
+  const snapshot = await withReadDeadline(getServerDocs(
+    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "issues"),
+  ));
 
   return snapshot.docs.map(mapIssue);
 }

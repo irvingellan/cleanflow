@@ -1,16 +1,16 @@
 import {
-  collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
+import { collection as serverCollection, getDocs as getServerDocs } from "firebase/firestore/lite";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
+import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
 import { managerDecisionOf, offerManagerDecisions, rosterCleanerIds } from "./offerSlots.js";
 import {
@@ -36,17 +36,6 @@ async function hashPublicOfferToken(token) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
 
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function offersCollection(jobId) {
-  return collection(
-    db,
-    "organizations",
-    organizationId,
-    "jobs",
-    jobId,
-    "offers",
-  );
 }
 
 function offerDocument(jobId, cleanerId) {
@@ -79,8 +68,12 @@ function canCreatePublicOfferLinkForJob(job) {
     : job.operationalStatus === "OFFERED";
 }
 
+// One-shot server read with a deadline: a full-SDK read on a stalled realtime
+// channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobOffers(jobId) {
-  const snapshot = await getDocs(offersCollection(jobId));
+  const snapshot = await withReadDeadline(getServerDocs(
+    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "offers"),
+  ));
 
   return snapshot.docs.map((offerDocumentSnapshot) => ({
     ...offerDocumentSnapshot.data(),
