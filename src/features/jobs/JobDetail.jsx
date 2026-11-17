@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
 import { JobHistorySection } from "./JobHistorySection.jsx";
+import { JobFinancialSection } from "./JobFinancialSection.jsx";
 import { JobServiceTypeSelect } from "./JobServiceTypeSelect.jsx";
 import { serviceTypeLabel, serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
@@ -22,7 +23,6 @@ import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import {
   BackButton,
-  DetailItem,
   StateCard,
 } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
@@ -2407,83 +2407,22 @@ export function JobDetail({
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")}>
-      <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
-        <h3>{translate("lifecycle.financialSnapshot")}</h3>
-        <dl className="detail-list">
-          <DetailItem label={translate("jobs.clientPrice")} value={hasValue(job.clientPrice)
-            ? formatPrice(job.clientPrice, translate, language) : translate("jobs.notSet")} />
-          <DetailItem label={translate("jobs.cleanerPayout")} value={hasValue(job.cleanerPayout)
-            ? formatPrice(job.cleanerPayout, translate, language) : translate("jobs.notSet")} />
-          <DetailItem label={translate("jobs.grossMargin")} value={grossMargin === null
-            ? translate("jobs.notSet") : formatPrice(grossMargin, translate, language)} />
-        </dl>
-      </section>
-      <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
-        {!isEditingPrices && (
-          <button className="button" type="button" onClick={startPriceEdit}>
-            {translate("jobs.editPrices")}
-          </button>
-        )}
-        {hasSavedPrices && !isEditingPrices && (
-          <p className="form-success" role="status">{translate("jobs.pricesSaved")}</p>
-        )}
-        {isEditingPrices && (
-          <form className="cleaning-form" noValidate onSubmit={savePrices}>
-            <div className="form-row">
-              <label>
-                {translate("jobs.clientPrice")}
-                <input
-                  type="number"
-                  name="clientPrice"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={priceValues.clientPrice}
-                  onChange={(event) => setPriceValues((current) => ({
-                    ...current,
-                    clientPrice: event.target.value,
-                  }))}
-                />
-              </label>
-              <label>
-                {translate("jobs.cleanerPayout")}
-                <input
-                  type="number"
-                  name="cleanerPayout"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={priceValues.cleanerPayout}
-                  onChange={(event) => setPriceValues((current) => ({
-                    ...current,
-                    cleanerPayout: event.target.value,
-                  }))}
-                />
-              </label>
-            </div>
-            {priceSaveError && <p className="form-error" role="alert">{priceSaveError}</p>}
-            <div className="button-row">
-              <button
-                className="button"
-                type="button"
-                disabled={isSavingPrices}
-                onClick={() => {
-                  setIsEditingPrices(false);
-                  setPriceSaveError("");
-                }}
-              >
-                {translate("common.cancel")}
-              </button>
-              <button className="button button--primary" type="submit" disabled={isSavingPrices}>
-                {isSavingPrices ? translate("jobs.savingPrices") : translate("jobs.savePrices")}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
-
-      </JobDetailSection>
+      <JobFinancialSection
+        job={job}
+        translate={translate}
+        language={language}
+        grossMargin={grossMargin}
+        isEditingPrices={isEditingPrices}
+        startPriceEdit={startPriceEdit}
+        hasSavedPrices={hasSavedPrices}
+        savePrices={savePrices}
+        priceValues={priceValues}
+        setPriceValues={setPriceValues}
+        priceSaveError={priceSaveError}
+        isSavingPrices={isSavingPrices}
+        setIsEditingPrices={setIsEditingPrices}
+        setPriceSaveError={setPriceSaveError}
+      />
 
       <JobHistorySection
         job={job}
