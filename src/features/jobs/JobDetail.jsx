@@ -589,24 +589,38 @@ export function JobDetail({
     };
   }, [cleanerLookupKey]);
 
+  // One reset per part of the screen when another Job is shown: the shared public link, then Offers, the
+  // reminder, the checklist and the roster.
   useEffect(() => {
     setPublicOfferLink(null);
+  }, [job.id]);
+
+  useEffect(() => {
     setPublicOfferLinkError(null);
     setEditingOfferCompensationFor(null);
     setOfferCompensationErrorFor(null);
     setCopiedOfferMessageId(null);
+    setOfferMessageCopyErrorId(null);
+  }, [job.id]);
+
+  useEffect(() => {
     setReminderPreview(null);
     setIsCopyingReminder(false);
     setIsPreparingReminderChecklist(false);
     setHasReminderChecklistError(false);
+  }, [job.id]);
+
+  useEffect(() => {
     setIsCompletionConfirmationVisible(false);
     setIsCompletingCleaning(false);
     setHasCompleteCleaningError(false);
+  }, [job.id]);
+
+  useEffect(() => {
     setIsDirectAssignmentOpen(false);
     setIsAssigningDirectly(false);
     setDirectCleanerSearch("");
     setDirectCleanerId("");
-    setOfferMessageCopyErrorId(null);
   }, [job.id]);
 
   async function assignCleaner(offer, options) {
