@@ -340,8 +340,7 @@ service cloud.firestore {
       match /{collectionName}/{recordId} {
         allow read: if collectionName in ['clients', 'properties', 'cleaners', 'jobs', 'payouts']
           && activeManager(orgId);
-        allow delete: if collectionName in ['clients', 'properties', 'cleaners', 'jobs', 'payouts']
-          && activeManager(orgId) && (collectionName != 'jobs' || !isAutomaticOfferJob(resource.data));
+        // Records are archived, never deleted, from a browser.
         allow create: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
           || (collectionName == 'jobs'
@@ -370,7 +369,7 @@ service cloud.firestore {
       match /jobs/{jobId}/{collectionName}/{recordId} {
         allow read: if collectionName in ['offers', 'assignments', 'issues']
           && activeManager(orgId);
-        allow create, update, delete: if collectionName == 'issues' && activeManager(orgId);
+        allow create, update: if collectionName == 'issues' && activeManager(orgId);
       }
 
       match /jobs/{jobId}/offers/{offerId} {
@@ -387,7 +386,6 @@ service cloud.firestore {
               'offerDistributionMode', 'offeredChecklistContextRevision', 'automaticOfferBatchVersion',
               'acceptedAssignmentId', 'offerKind', 'replacementOfferId', 'replacementAssignmentId'
             ])));
-        allow delete: if activeManager(orgId) && !automaticOfferJob(orgId, jobId);
       }
 
       match /jobs/{jobId}/assignments/{assignmentId} {
@@ -396,8 +394,6 @@ service cloud.firestore {
           && !request.resource.data.keys()
             .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod',
               'removalReason', 'removalScheduleRevision', 'replacementOfferId'])
-          && assignmentParentRevisionAdvanced(orgId, jobId);
-        allow delete: if activeManager(orgId) && !automaticOfferJob(orgId, jobId)
           && assignmentParentRevisionAdvanced(orgId, jobId);
         allow update: if activeManager(orgId)
           && !request.resource.data.diff(resource.data).affectedKeys()
