@@ -87,6 +87,7 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
   const visibleClients = activeClient ? [activeClient] : model?.clients;
   const totals = activeClient || model?.overall;
   const isPartial = model?.coverage?.truncated === true;
+  const completeSelection = totals?.completedServiceCount > 0 && totals.grossOperationalMargin !== null && !isPartial;
   const money = (amount) => amount === null || amount === undefined
     ? translate("weeklyClose.unknown") : formatPrice(amount, translate, language);
   const metrics = totals ? [
@@ -177,13 +178,14 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
             {amount === null && pendingCount(totals, key) > 0 && <small>{pendingCopy(pendingCount(totals, key))}</small>}
           </div>)}
         </dl>
-        {(!isPartial || totals.attentionCount > 0) && <p className={totals.attentionCount > 0 ? "weekly-close-attention" : "weekly-close-note"} role="status">
+        {(completeSelection || totals.attentionCount > 0) && <p className={totals.attentionCount > 0 ? "weekly-close-attention" : "weekly-close-note"} role="status">
           {totals.attentionCount > 0
-            ? t("attention", { count: totals.attentionCount })
+            ? t(totals.attentionCount === 1 ? "attentionOne" : "attention", { count: totals.attentionCount })
             : translate("weeklyClose.completeData")}
-          {totals.unknownPayoutCount > 0 && ` ${translate("weeklyClose.unknownPayoutSummary", { count: totals.unknownPayoutCount })}`}
+          {totals.unknownPayoutCount === 1 && ` ${t("oneUnknownPayout")}`}
+          {totals.unknownPayoutCount > 1 && ` ${translate("weeklyClose.unknownPayoutSummary", { count: totals.unknownPayoutCount })}`}
         </p>}
-        <p className="weekly-close-note">{translate("weeklyClose.marginNote")}</p>
+        <p className="weekly-close-note">{t("marginDefinition")}</p>
         {exclusionCount > 0 && <details className="weekly-close-exclusions">
           <summary>{translate("weeklyClose.excludedSummary", { count: exclusionCount })}</summary>
           <ul>{Object.entries(model.excluded).filter(([, count]) => count > 0).map(([reason, count]) =>

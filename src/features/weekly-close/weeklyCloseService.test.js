@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadWeeklyClose } from "./weeklyCloseService.js";
-import { getServicePeriodJobs } from "../jobs/jobService.js";
+import { loadWeeklyClose, loadWeeklyCloseJob } from "./weeklyCloseService.js";
+import { getJobById, getServicePeriodJobs } from "../jobs/jobService.js";
 import { getClientSummariesById } from "../clients/clientService.js";
 import { getPropertySummariesById } from "../properties/propertyService.js";
 import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import { getPayoutEvidenceForJobs } from "../payouts/payoutService.js";
 
-vi.mock("../jobs/jobService.js", () => ({ getServicePeriodJobs: vi.fn() }));
+vi.mock("../jobs/jobService.js", () => ({ getJobById: vi.fn(), getServicePeriodJobs: vi.fn() }));
 vi.mock("../clients/clientService.js", () => ({ getClientSummariesById: vi.fn() }));
 vi.mock("../properties/propertyService.js", () => ({ getPropertySummariesById: vi.fn() }));
-vi.mock("../../services/firebase/serverReads.js", () => ({ getServerRecordsById: vi.fn() }));
+vi.mock("../../services/firebase/serverReads.js", async (importOriginal) => ({
+  ...await importOriginal(), getServerRecordsById: vi.fn(),
+}));
 vi.mock("../payouts/payoutService.js", async (importOriginal) => ({
   ...await importOriginal(), getPayoutEvidenceForJobs: vi.fn(),
 }));
@@ -131,4 +133,17 @@ describe("Weekly Close read-only service boundary", () => {
     expect(result.overall.cleanerPayoutTotal).toBeNull();
     expect(result.jobs[0].clientCharge).toBeNull();
   });
+});
+
+
+it("releases the correction action if the server job read stalls", async () => {
+  vi.useFakeTimers();
+  try {
+    getJobById.mockReturnValue(new Promise(() => {}));
+    const failed = vi.fn();
+    loadWeeklyCloseJob("fixture-service").catch(failed);
+    expect(getJobById).toHaveBeenCalledWith("fixture-service", { serverOnly: true });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(failed).toHaveBeenCalledWith(expect.objectContaining({ code: "deadline-exceeded" }));
+  } finally { vi.useRealTimers(); }
 });

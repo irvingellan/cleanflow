@@ -3,7 +3,7 @@ import { getAssignedCleanerIds } from "../jobs/jobCompatibility.js";
 import { getPayoutEvidenceForJobs, isEligibleForLegacyPayout } from "../payouts/payoutService.js";
 import { getClientSummariesById } from "../clients/clientService.js";
 import { getPropertySummariesById } from "../properties/propertyService.js";
-import { getServerRecordsById } from "../../services/firebase/serverReads.js";
+import { getServerRecordsById, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { buildWeeklyClose, servicePeriod } from "./weeklyCloseModel.js";
 
 const organizationId = "cleanflow-demo";
@@ -37,7 +37,7 @@ async function readContext(values, read, signal) {
 
 // Job Detail requires the current manager record, not the reconciliation projection.
 export function loadWeeklyCloseJob(id) {
-  return getJobById(id, { serverOnly: true });
+  return withReadDeadline(getJobById(id, { serverOnly: true }));
 }
 
 /** Read-only adapter; existing manager rules protect every source collection. */

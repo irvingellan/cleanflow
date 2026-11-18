@@ -1,6 +1,9 @@
 // Feature strings follow the active application locale.
 const messages = {
   en: {
+    attentionOne: "1 service needs attention in this selection.",
+    oneUnknownPayout: "Payment has not been verified for 1 service.",
+    marginDefinition: "Gross operational margin is the client charge minus the cleaner payout quote for the same service, before other expenses and regardless of whether the client has paid.",
     moneyIssue: "1 service with incomplete amounts",
     moneyIssues: "{count} services with incomplete amounts",
     marginPending: "The margin is unavailable until every service in this selection has both a client price and a cleaner payout quote.",
@@ -21,6 +24,9 @@ const messages = {
     loadedCount: "Completed services loaded",
   },
   pt: {
+    attentionOne: "1 serviço precisa de atenção nesta seleção.",
+    oneUnknownPayout: "O pagamento de 1 serviço ainda não foi verificado.",
+    marginDefinition: "A margem operacional bruta é o preço do cliente menos o valor previsto para a cleaner no mesmo serviço, antes das demais despesas e independentemente do recebimento.",
     moneyIssue: "1 serviço com valores incompletos",
     moneyIssues: "{count} serviços com valores incompletos",
     marginPending: "A margem fica pendente até que cada serviço desta seleção tenha o preço do cliente e o valor previsto para a cleaner.",
@@ -41,6 +47,9 @@ const messages = {
     loadedCount: "Serviços concluídos carregados",
   },
   es: {
+    attentionOne: "1 servicio necesita atención en esta selección.",
+    oneUnknownPayout: "El pago de 1 servicio aún no se ha verificado.",
+    marginDefinition: "El margen operativo bruto es el precio del cliente menos el pago previsto para la persona que limpia ese mismo servicio, antes de otros gastos y con independencia de si el cliente ha pagado.",
     moneyIssue: "1 servicio con importes incompletos",
     moneyIssues: "{count} servicios con importes incompletos",
     marginPending: "El margen queda pendiente hasta que cada servicio de esta selección tenga el precio del cliente y el pago previsto para la persona que limpia.",
