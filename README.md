@@ -17,6 +17,8 @@ reported to the client and closed out for payment. Managers work on a laptop; cl
 > All screenshots and data in this repository are fictitious. The production deployment serves a real
 > short-term-rental cleaning operation; its data never leaves its Firebase project.
 
+> 🎬 **[Watch the 45-second product video](docs/media/cleanflow-promo.mp4)** — a motion piece made with Remotion and code, also part of this portfolio.
+
 <p align="center">
   <img src="docs/screenshots/01-dashboard.png" alt="Manager operations dashboard" width="100%">
 </p>
