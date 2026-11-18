@@ -1,58 +1,47 @@
 import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
-import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
 import { JobHistorySection } from "./JobHistorySection.jsx";
-import { JobServiceTypeSelect } from "./JobServiceTypeSelect.jsx";
-import { serviceTypeLabel, serviceTypeMessage } from "./serviceTypeMessages.js";
+import { JobFinancialSection } from "./JobFinancialSection.jsx";
+import { JobIssuesSection } from "./JobIssuesSection.jsx";
+import { JobDetailsSection } from "./JobDetailsSection.jsx";
+import { JobChecklistSection } from "./JobChecklistSection.jsx";
+import { JobReminderPreview } from "./JobReminderPreview.jsx";
+import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
+import { JobOffersSection } from "./JobOffersSection.jsx";
+import { useJobPriceEdit } from "./useJobPriceEdit.js";
+import { useIssueResolution } from "./useIssueResolution.js";
+import { jobDetailFormValues, useJobDetailsEdit } from "./useJobDetailsEdit.js";
+import { useJobScheduleEdit } from "./useJobScheduleEdit.js";
+import { useJobRosterEdit } from "./useJobRosterEdit.js";
+import { useJobExecution } from "./useJobExecution.js";
+import { JobDetailHead } from "./JobDetailHead.jsx";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
-import { cleanerReminderState } from "./cleanerReminderLog.js";
-import {
-  isJobFilled, manualOfferAvailability, maxCleanersPerJob, offerManagerDecisions, requiredCleanerCount, rosterCleanerIds,
-} from "./offerSlots.js";
+import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
-import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
-import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
 import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
 import { JobScheduleConfirmation } from "./JobScheduleConfirmation.jsx";
 import {
   currentScheduleConfirmations, currentScheduleRevision, scheduleConfirmationMessage,
 } from "./scheduleConfirmation.js";
-import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
-import {
-  BackButton,
-  DetailItem,
-  StateCard,
-} from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
-import {
-  CleanerSelectionOption, CleanerSelectionStatus, cleanerReplacementOption, sortByCleanerExperience, useCleanerSelectionContext,
-} from "./CleanerSelectionContext.jsx";
+import { sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
-import { FIRST_ACCEPT_WINS, automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
+import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { canAssignCleanerDirectly, canDirectlyFillJob } from "./assignmentService.js";
-import { formatIssueCategory } from "../issues/issuePresentation.js";
 import {
   formatCreatedAt,
-  formatDate,
-  formatOperationalStatus,
-  formatPrice,
-  hasValue,
 } from "../../lib/presentation.js";
 import { translateInLanguage, useTranslation } from "../../i18n/translations.js";
-import { ChecklistCapabilityControls } from "../checklists/ChecklistCapabilityControls.jsx";
 import {
   canManageAssignmentAwareOffers,
-  canEditJobDetails,
-  maximumGuestNameLength,
   getJobGrossMargin,
   getAssignedCleanerIds,
   isAssignmentAwareJob,
-  optionalJobPrice,
 } from "./jobCompatibility.js";
 import {
   buildCleanerReminderMessage,
@@ -65,16 +54,6 @@ import {
   parseOfferCompensationInput,
 } from "./offerCompensation.js";
 import { buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
-
-function jobDetailFormValues(job) {
-  const serviceType = normalizeServiceType(job.serviceType);
-  return {
-    guestName: job.guestName || "",
-    notes: job.notes || "",
-    serviceType,
-    initialServiceType: serviceType,
-  };
-}
 
 export function JobDetail({
   job,
@@ -143,6 +122,8 @@ export function JobDetail({
   initialFocus = null,
 }) {
   const { language, translate } = useTranslation();
+  const currentJobIdRef = useRef(job.id);
+  currentJobIdRef.current = job.id;
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
   const [resolvedCleanerPhones, setResolvedCleanerPhones] = useState({});
   const [resolvedCleanerLanguages, setResolvedCleanerLanguages] = useState({});
@@ -151,18 +132,19 @@ export function JobDetail({
   const [decidingOfferId, setDecidingOfferId] = useState(null);
   const [isSavingSpots, setIsSavingSpots] = useState(false);
   const [reminderLogState, setReminderLogState] = useState(null);
-  const [isDirectAssignmentOpen, setIsDirectAssignmentOpen] = useState(false);
-  const [directCleanerSearch, setDirectCleanerSearch] = useState("");
-  const [directCleanerId, setDirectCleanerId] = useState("");
-  const [isAssigningDirectly, setIsAssigningDirectly] = useState(false);
-  const [removingAssignmentId, setRemovingAssignmentId] = useState(null);
-  const [replacementTargetId, setReplacementTargetId] = useState(null);
-  const [replacingAssignmentId, setReplacingAssignmentId] = useState(null);
-  const [replacementOfferId, setReplacementOfferId] = useState("");
-  const [resolvingIssueId, setResolvingIssueId] = useState(null);
-  const [resolutionNote, setResolutionNote] = useState("");
-  const [isResolvingIssue, setIsResolvingIssue] = useState(false);
-  const [resolutionError, setResolutionError] = useState(null);
+  const {
+    isDirectAssignmentOpen, setIsDirectAssignmentOpen, directCleanerSearch, setDirectCleanerSearch, directCleanerId,
+    setDirectCleanerId, isAssigningDirectly, removingAssignmentId, replacementTargetId, setReplacementTargetId,
+    replacingAssignmentId, replacementOfferId, setReplacementOfferId, assignCleanerDirectly, removeCleanerAssignment,
+    replaceCleanerAssignment,
+  } = useJobRosterEdit({
+    job, translate, availableCleaners, onAssignCleanerDirectly, onRemoveAssignment, onReplaceAssignment,
+    setAssignmentError, currentJobIdRef,
+  });
+  const {
+    resolvingIssueId, resolutionNote, setResolutionNote, isResolvingIssue, resolutionError,
+    openResolutionForm, closeResolutionForm, resolveSelectedIssue,
+  } = useIssueResolution({ translate, onResolveIssue });
   const [publicOfferLink, setPublicOfferLink] = useState(null);
   const [isCreatingPublicOfferLinkFor, setIsCreatingPublicOfferLinkFor] =
     useState(null);
@@ -174,11 +156,10 @@ export function JobDetail({
   const [offerCompensationErrorFor, setOfferCompensationErrorFor] = useState(null);
   const [copiedOfferMessageId, setCopiedOfferMessageId] = useState(null);
   const [offerMessageCopyErrorId, setOfferMessageCopyErrorId] = useState(null);
-  const [isStartingCleaning, setIsStartingCleaning] = useState(false);
-  const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
-  const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
-  const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
-  const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] = useState(false);
+  const {
+    isStartingCleaning, hasStartCleaningError, isCompletingCleaning, hasCompleteCleaningError,
+    isCompletionConfirmationVisible, setIsCompletionConfirmationVisible, startCleaning, completeCleaning,
+  } = useJobExecution({ job, onStartCleaning, onCompleteCleaning, currentJobIdRef });
   const [intentNotice, setIntentNotice] = useState(null);
   const scheduleSectionRef = useRef(null);
   const assignmentSectionRef = useRef(null);
@@ -189,38 +170,31 @@ export function JobDetail({
   const issuesSectionRef = useRef(null);
   const [isPreparingReminderChecklist, setIsPreparingReminderChecklist] = useState(false);
   const [hasReminderChecklistError, setHasReminderChecklistError] = useState(false);
-  const [isEditingPrices, setIsEditingPrices] = useState(false);
-  const [priceValues, setPriceValues] = useState(() => ({
-    clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
-    cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
-  }));
-  const [isSavingPrices, setIsSavingPrices] = useState(false);
-  const [priceSaveError, setPriceSaveError] = useState("");
-  const [hasSavedPrices, setHasSavedPrices] = useState(false);
-  const [isEditingJobDetails, setIsEditingJobDetails] = useState(false);
-  const [jobDetailValues, setJobDetailValues] = useState(() => jobDetailFormValues(job));
-  const [isSavingJobDetails, setIsSavingJobDetails] = useState(false);
-  const [jobDetailsSaveError, setJobDetailsSaveError] = useState("");
-  const [hasSavedJobDetails, setHasSavedJobDetails] = useState(false);
-  const [isEditingJobSchedule, setIsEditingJobSchedule] = useState(false);
-  const [jobScheduleValues, setJobScheduleValues] = useState(() => ({
-    scheduledDate: job.scheduledDate || "",
-    scheduledStart: job.scheduledStart || "",
-    expectedScheduleRevision: currentScheduleRevision(job),
-  }));
-  const [isSavingJobSchedule, setIsSavingJobSchedule] = useState(false);
-  const [jobScheduleSaveError, setJobScheduleSaveError] = useState("");
-  const [hasSavedJobSchedule, setHasSavedJobSchedule] = useState(false);
-  const [scheduleCommunicationMayBeStale, setScheduleCommunicationMayBeStale] = useState(false);
-  const [needsScheduleReload, setNeedsScheduleReload] = useState(false);
-  const [scheduleRevisionConflict, setScheduleRevisionConflict] = useState(false);
+  const {
+    isEditingPrices, setIsEditingPrices, priceValues, setPriceValues, isSavingPrices, priceSaveError, setPriceSaveError,
+    hasSavedPrices, startPriceEdit, savePrices,
+  } = useJobPriceEdit({ job, translate, onUpdatePrices });
+  const {
+    isEditingJobDetails, setIsEditingJobDetails, jobDetailValues, setJobDetailValues, isSavingJobDetails,
+    jobDetailsSaveError, setJobDetailsSaveError, hasSavedJobDetails, startJobDetailsEdit, saveJobDetails,
+  } = useJobDetailsEdit({ job, translate, language, onUpdateDetails });
+  const scheduleMessage = (key, values) => scheduleConfirmationMessage(language, key, values);
+  const scheduleBlock = jobScheduleAvailability(job, {
+    run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
+  });
+  const canReschedule = !scheduleBlock;
+  const {
+    isEditingJobSchedule, setIsEditingJobSchedule, jobScheduleValues, setJobScheduleValues, isSavingJobSchedule,
+    jobScheduleSaveError, setJobScheduleSaveError, hasSavedJobSchedule, scheduleCommunicationMayBeStale, needsScheduleReload,
+    scheduleRevisionConflict, startJobScheduleEdit, saveJobSchedule,
+  } = useJobScheduleEdit({
+    job, translate, onUpdateSchedule, canReschedule, scheduleMessage, currentJobIdRef, setIntentNotice,
+  });
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const [reminderPreview, setReminderPreview] = useState(null);
   const [isCopyingReminder, setIsCopyingReminder] = useState(false);
   const offersSectionRef = useRef(null);
-  const currentJobIdRef = useRef(job.id);
-  currentJobIdRef.current = job.id;
   const didFocusNewOffersRef = useRef(false);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
@@ -286,7 +260,6 @@ export function JobDetail({
   const cleanerLanguagesById = { ...resolvedCleanerLanguages, ...knownCleanerLanguages };
   const scheduleRevision = currentScheduleRevision(job);
   const scheduleResponses = currentScheduleConfirmations(job);
-  const scheduleMessage = (key, values) => scheduleConfirmationMessage(language, key, values);
   const replacementPointer = job.manualReplacementOffer?.scheduleRevision === scheduleRevision
     ? job.manualReplacementOffer : null;
   const knownReplacementOffer = replacementPointer && offers.find((offer) =>
@@ -451,10 +424,6 @@ export function JobDetail({
     initialFocusJobRef.current = job.id;
     focusIntentSection(pendingInterest.length ? interestSectionRef : offersSectionRef);
   });
-  const scheduleBlock = jobScheduleAvailability(job, {
-    run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
-  });
-  const canReschedule = !scheduleBlock;
 
   // Suggestions are presentation, not a second authorization/state machine.
   const primaryIntent = job.archivedAt || isCompleted
@@ -622,203 +591,26 @@ export function JobDetail({
     };
   }, [cleanerLookupKey]);
 
-  useEffect(() => {
-    setPriceValues({
-      clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
-      cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
-    });
-    setIsEditingPrices(false);
-    setIsSavingPrices(false);
-    setPriceSaveError("");
-    setHasSavedPrices(false);
-  }, [job.id]);
-
-  useEffect(() => {
-    setJobScheduleValues({
-      scheduledDate: job.scheduledDate || "",
-      scheduledStart: job.scheduledStart || "",
-      expectedScheduleRevision: currentScheduleRevision(job),
-    });
-    setIsEditingJobSchedule(false);
-    setIsSavingJobSchedule(false);
-    setJobScheduleSaveError("");
-    setHasSavedJobSchedule(false);
-    setScheduleCommunicationMayBeStale(false);
-    setNeedsScheduleReload(false);
-    setScheduleRevisionConflict(false);
-    setIntentNotice(null);
-  }, [job.id]);
-
-  useEffect(() => {
-    setJobDetailValues(jobDetailFormValues(job));
-    setIsEditingJobDetails(false);
-    setIsSavingJobDetails(false);
-    setJobDetailsSaveError("");
-    setHasSavedJobDetails(false);
-  }, [job.id]);
-
+  // One reset per part of the screen when another Job is shown: the shared public link, then Offers and the
+  // reminder. The roster resets in useJobRosterEdit and the completion controls in useJobExecution.
   useEffect(() => {
     setPublicOfferLink(null);
+  }, [job.id]);
+
+  useEffect(() => {
     setPublicOfferLinkError(null);
     setEditingOfferCompensationFor(null);
     setOfferCompensationErrorFor(null);
     setCopiedOfferMessageId(null);
+    setOfferMessageCopyErrorId(null);
+  }, [job.id]);
+
+  useEffect(() => {
     setReminderPreview(null);
     setIsCopyingReminder(false);
     setIsPreparingReminderChecklist(false);
     setHasReminderChecklistError(false);
-    setIsCompletionConfirmationVisible(false);
-    setIsCompletingCleaning(false);
-    setHasCompleteCleaningError(false);
-    setIsDirectAssignmentOpen(false);
-    setIsAssigningDirectly(false);
-    setDirectCleanerSearch("");
-    setDirectCleanerId("");
-    setOfferMessageCopyErrorId(null);
   }, [job.id]);
-
-  function startPriceEdit() {
-    setPriceValues({
-      clientPrice: hasValue(job.clientPrice) ? String(job.clientPrice) : "",
-      cleanerPayout: hasValue(job.cleanerPayout) ? String(job.cleanerPayout) : "",
-    });
-    setPriceSaveError("");
-    setHasSavedPrices(false);
-    setIsEditingPrices(true);
-  }
-
-  function startJobDetailsEdit() {
-    if (!canEditJobDetails(job)) return;
-    setJobDetailValues(jobDetailFormValues(job));
-    setJobDetailsSaveError("");
-    setHasSavedJobDetails(false);
-    setIsEditingJobDetails(true);
-  }
-
-  async function saveJobDetails(event) {
-    event.preventDefault();
-    const details = {
-      guestName: jobDetailValues.guestName.trim(),
-      notes: jobDetailValues.notes.trim(),
-      ...(jobDetailValues.serviceType !== jobDetailValues.initialServiceType
-        ? { serviceType: jobDetailValues.serviceType } : {}),
-    };
-
-    if (details.guestName.length > maximumGuestNameLength) {
-      setJobDetailsSaveError(translate("jobs.guestNameTooLong"));
-      return;
-    }
-
-    setIsSavingJobDetails(true);
-    setJobDetailsSaveError("");
-    setHasSavedJobDetails(false);
-
-    try {
-      await onUpdateDetails(details);
-      setIsEditingJobDetails(false);
-      setHasSavedJobDetails(true);
-    } catch {
-      setJobDetailsSaveError(serviceTypeMessage(language, "detailsUpdateError"));
-    } finally {
-      setIsSavingJobDetails(false);
-    }
-  }
-
-  function startJobScheduleEdit() {
-    if (!canReschedule) return;
-    setJobScheduleValues({
-      scheduledDate: job.scheduledDate || "",
-      scheduledStart: job.scheduledStart || "",
-      expectedScheduleRevision: currentScheduleRevision(job),
-    });
-    setJobScheduleSaveError("");
-    setHasSavedJobSchedule(false);
-    setScheduleCommunicationMayBeStale(false);
-    setNeedsScheduleReload(false);
-    setScheduleRevisionConflict(false);
-    setIsEditingJobSchedule(true);
-  }
-
-  async function saveJobSchedule(event) {
-    event.preventDefault();
-    if (scheduleRevisionConflict || isSavingJobSchedule) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(jobScheduleValues.scheduledDate)) {
-      setJobScheduleSaveError(translate("jobs.scheduleInvalidDate"));
-      return;
-    }
-    const [year, month, day] = jobScheduleValues.scheduledDate.split("-").map(Number);
-    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    const daysByMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysByMonth[month - 1]) {
-      setJobScheduleSaveError(translate("jobs.scheduleInvalidDate"));
-      return;
-    }
-    if (jobScheduleValues.scheduledStart
-      && !/^([01]\d|2[0-3]):[0-5]\d$/.test(jobScheduleValues.scheduledStart)) {
-      setJobScheduleSaveError(translate("jobs.scheduleInvalidTime"));
-      return;
-    }
-
-    setIsSavingJobSchedule(true);
-    setJobScheduleSaveError("");
-    setHasSavedJobSchedule(false);
-    const jobId = job.id;
-    try {
-      const result = await onUpdateSchedule(jobScheduleValues);
-      if (currentJobIdRef.current !== jobId) return;
-      setJobScheduleValues({
-        scheduledDate: result?.job?.scheduledDate || jobScheduleValues.scheduledDate,
-        scheduledStart: result?.job?.scheduledStart || "",
-        expectedScheduleRevision: currentScheduleRevision(result?.job || job),
-      });
-      setNeedsScheduleReload(result?.needsScheduleReload === true);
-      setScheduleCommunicationMayBeStale(result?.changed === true);
-      setIsEditingJobSchedule(false);
-      setHasSavedJobSchedule(true);
-    } catch (error) {
-      if (currentJobIdRef.current !== jobId) return;
-      const reason = error?.details?.reason;
-      setScheduleRevisionConflict(reason === "stale-schedule");
-      setJobScheduleSaveError(reason === "stale-schedule"
-        ? scheduleMessage("stale")
-        : reason === "checklist-run-exists"
-        ? translate("jobs.scheduleLockedByChecklist")
-        : reason === "status" || reason === "archived"
-          ? translate("jobs.scheduleReadOnlyState")
-          : reason === "invalid-date"
-            ? translate("jobs.scheduleInvalidDate")
-            : reason === "invalid-time"
-              ? translate("jobs.scheduleInvalidTime")
-              : translate("jobs.scheduleUpdateError"));
-    } finally {
-      if (currentJobIdRef.current === jobId) setIsSavingJobSchedule(false);
-    }
-  }
-
-  async function savePrices(event) {
-    event.preventDefault();
-    const clientPrice = optionalJobPrice(priceValues.clientPrice);
-    const cleanerPayout = optionalJobPrice(priceValues.cleanerPayout);
-
-    if (clientPrice === null || cleanerPayout === null) {
-      setPriceSaveError(translate("jobs.priceInvalid"));
-      return;
-    }
-
-    setIsSavingPrices(true);
-    setPriceSaveError("");
-    setHasSavedPrices(false);
-
-    try {
-      await onUpdatePrices({ clientPrice, cleanerPayout });
-      setIsEditingPrices(false);
-      setHasSavedPrices(true);
-    } catch {
-      setPriceSaveError(translate("jobs.priceUpdateError"));
-    } finally {
-      setIsSavingPrices(false);
-    }
-  }
 
   async function assignCleaner(offer, options) {
     setAssigningCleanerId(offer.cleanerId);
@@ -882,59 +674,6 @@ export function JobDetail({
       setAssignmentError(translate("offers.spotsError"));
     } finally {
       setIsSavingSpots(false);
-    }
-  }
-
-  async function assignCleanerDirectly(event) {
-    event.preventDefault();
-    const cleaner = availableCleaners.find((candidate) => candidate.id === directCleanerId);
-    if (!canAssignCleanerDirectly(job, cleaner) || isAssigningDirectly) return;
-    setIsAssigningDirectly(true);
-    setAssignmentError(null);
-    const jobId = job.id;
-    try {
-      await onAssignCleanerDirectly(cleaner.id);
-      if (currentJobIdRef.current === jobId) {
-        setIsDirectAssignmentOpen(false);
-        setDirectCleanerId("");
-        setDirectCleanerSearch("");
-      }
-    } catch {
-      if (currentJobIdRef.current === jobId) setAssignmentError(translate("jobs.directAssignmentError"));
-    } finally {
-      if (currentJobIdRef.current === jobId) setIsAssigningDirectly(false);
-    }
-  }
-
-  async function removeCleanerAssignment(assignmentId) {
-    setRemovingAssignmentId(assignmentId);
-    setAssignmentError(null);
-
-    try {
-      await onRemoveAssignment(assignmentId);
-    } catch {
-      setAssignmentError(translate("jobs.rosterUpdateError"));
-    } finally {
-      setRemovingAssignmentId(null);
-    }
-  }
-
-  async function replaceCleanerAssignment(assignmentId) {
-    if (!replacementOfferId) {
-      return;
-    }
-
-    setReplacingAssignmentId(assignmentId);
-    setAssignmentError(null);
-
-    try {
-      await onReplaceAssignment(assignmentId, replacementOfferId);
-      setReplacementOfferId("");
-      setReplacementTargetId(null);
-    } catch {
-      setAssignmentError(translate("jobs.rosterUpdateError"));
-    } finally {
-      setReplacingAssignmentId(null);
     }
   }
 
@@ -1021,34 +760,6 @@ export function JobDetail({
     }
   }
 
-  async function startCleaning() {
-    setIsStartingCleaning(true);
-    setHasStartCleaningError(false);
-
-    try {
-      await onStartCleaning();
-    } catch {
-      setHasStartCleaningError(true);
-    } finally {
-      setIsStartingCleaning(false);
-    }
-  }
-
-  async function completeCleaning() {
-    const jobId = job.id;
-    setIsCompletingCleaning(true);
-    setHasCompleteCleaningError(false);
-
-    try {
-      await onCompleteCleaning();
-      if (currentJobIdRef.current === jobId) setIsCompletionConfirmationVisible(false);
-    } catch {
-      if (currentJobIdRef.current === jobId) setHasCompleteCleaningError(true);
-    } finally {
-      if (currentJobIdRef.current === jobId) setIsCompletingCleaning(false);
-    }
-  }
-
   function openReminderPreview(cleanerId, cleanerName, assignmentId = null) {
     setCopyMessageErrorCleanerId(null);
     setHasReminderChecklistError(false);
@@ -1099,86 +810,25 @@ export function JobDetail({
     }
   }
 
-  function openResolutionForm(issue) {
-    setResolvingIssueId(issue.id);
-    setResolutionNote("");
-    setResolutionError(null);
-  }
-
-  function closeResolutionForm() {
-    setResolvingIssueId(null);
-    setResolutionNote("");
-    setResolutionError(null);
-  }
-
-  async function resolveSelectedIssue(event) {
-    event.preventDefault();
-
-    if (!resolvingIssueId) {
-      return;
-    }
-
-    setIsResolvingIssue(true);
-    setResolutionError(null);
-
-    try {
-      await onResolveIssue({
-        issueId: resolvingIssueId,
-        resolutionNote,
-      });
-      closeResolutionForm();
-    } catch (error) {
-      setResolutionError(
-        error.code === "issue-not-open"
-          ? translate("issues.alreadyResolved")
-          : translate("issues.resolveError"),
-      );
-    } finally {
-      setIsResolvingIssue(false);
-    }
-  }
-
   return (
     <section className="panel job-detail cf-job" aria-labelledby="job-detail-title">
-      <div className="cf-job__head">
-      <BackButton onClick={onBack} />
-
-      <h2 id="job-detail-title" className="panel__title">
-        {job.propertyName || translate("properties.unnamed")}
-      </h2>
-
-      <p className="job-detail__context">
-        <span>{formatDate(job.scheduledDate, translate, language)}</span>
-        {job.scheduledStart && <span>{job.scheduledStart}</span>}
-        <span>{serviceTypeLabel(language, job.serviceType)}</span>
-        <span>{job.clientName || translate("common.notProvided")}</span>
-      </p>
-      {isCompleted && <p className="job-detail__completion">
-        {translate("jobs.completedTime")}: {completedAt || translate("common.notProvided")}
-      </p>}
-      {lifecyclePresentation.attention.length > 0 && <aside className="service-attention" aria-label={translate("dashboard.needsAttention")}>
-        {lifecyclePresentation.attention.map((attention) => <div key={attention.kind}>
-          <strong>{translate(attention.key, { count: attention.count })}</strong>
-          {/* Review opens the same Run as the checklist primary; link controls and Issues are distinct targets. */}
-          {(attention.kind !== "review" || primaryIntent.intent !== "checklist") && <button className="button button--small" type="button" onClick={() => attention.kind === "issues"
-            ? focusIntentSection(issuesSectionRef) : attention.kind === "stale-link"
-              ? focusIntentSection(checklistSectionRef) : chooseJobIntent("checklist")}>
-            {translate(attention.kind === "issues" ? "dashboard.reviewIssue"
-              : attention.kind === "review" ? "jobs.intentReview" : "lifecycle.linkControls")} →
-          </button>}
-        </div>)}
-      </aside>}
-      <ServiceLifecycleRail lifecycle={lifecyclePresentation.lifecycle} />
-
-      <div className="service-cleaner-summary">
-        <span>{translate("common.cleaner")}</span>
-        <strong>{isLoadingAssignments ? translate("offers.loadingCleaners")
-          : hasAssignmentsError ? translate("common.notProvided")
-            : summaryCleanerNames.length ? summaryCleanerNames.join(", ")
-              : job.assignedCleanerName || translate("dashboard.notAssigned")}</strong>
-      </div>
-      <ChecklistProgressSummary checklist={lifecyclePresentation.checklist} />
-      </div>
+      <JobDetailHead
+        job={job}
+        translate={translate}
+        language={language}
+        onBack={onBack}
+        isCompleted={isCompleted}
+        completedAt={completedAt}
+        lifecyclePresentation={lifecyclePresentation}
+        primaryIntent={primaryIntent}
+        focusIntentSection={focusIntentSection}
+        issuesSectionRef={issuesSectionRef}
+        checklistSectionRef={checklistSectionRef}
+        chooseJobIntent={chooseJobIntent}
+        isLoadingAssignments={isLoadingAssignments}
+        hasAssignmentsError={hasAssignmentsError}
+        summaryCleanerNames={summaryCleanerNames}
+      />
       <div className="cf-job__layout">
       <aside className="cf-job__rail" aria-label={translate("jobs.intentTitle")}>
       <JobIntentLayer
@@ -1227,152 +877,37 @@ export function JobDetail({
           onAssignReplacement={onAssignCleanerDirectly}
         />
       )}
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
-      <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
-        {hasSavedJobSchedule && !isEditingJobSchedule && (
-          <p className="form-success" role="status">{translate("jobs.scheduleSaved")}</p>
-        )}
-        {hasSavedJobSchedule && scheduleCommunicationMayBeStale && !isEditingJobSchedule && (
-          <p className="form-hint">{translate("jobs.scheduleExternalMessageWarning")}</p>
-        )}
-        {needsScheduleReload && currentScheduleConfirmations(job).length === 0 && !isEditingJobSchedule && (
-          <p className="form-hint" role="status">{scheduleMessage("readbackError")}</p>
-        )}
-        {isEditingJobSchedule && (
-          <form className="cleaning-form" noValidate onSubmit={saveJobSchedule}>
-            <p className="form-hint">{translate("jobs.scheduleExternalMessageWarning")}</p>
-            <label>
-              {translate("jobs.scheduledDate")}
-              <input
-                required
-                type="date"
-                name="scheduledDate"
-                value={jobScheduleValues.scheduledDate}
-                onChange={(event) => setJobScheduleValues((current) => ({
-                  ...current,
-                  scheduledDate: event.target.value,
-                }))}
-              />
-            </label>
-            <label>
-              {translate("jobs.scheduledTime")}
-              <input
-                type="time"
-                name="scheduledStart"
-                value={jobScheduleValues.scheduledStart}
-                onChange={(event) => setJobScheduleValues((current) => ({
-                  ...current,
-                  scheduledStart: event.target.value,
-                }))}
-              />
-            </label>
-            {jobScheduleSaveError && <p className="form-error" role="alert">{jobScheduleSaveError}</p>}
-            <div className="button-row">
-              <button
-                className="button"
-                type="button"
-                disabled={isSavingJobSchedule}
-                onClick={() => {
-                  setIsEditingJobSchedule(false);
-                  setJobScheduleSaveError("");
-                  setJobScheduleValues({
-                    scheduledDate: job.scheduledDate || "",
-                    scheduledStart: job.scheduledStart || "",
-                    expectedScheduleRevision: currentScheduleRevision(job),
-                  });
-                }}
-              >
-                {translate("common.cancel")}
-              </button>
-              {scheduleRevisionConflict
-                ? <button className="button" type="button" onClick={startJobScheduleEdit}>{scheduleMessage("reviewCurrent")}</button>
-                : <button className="button button--primary" type="submit" disabled={isSavingJobSchedule}>
-                  {isSavingJobSchedule ? translate("jobs.savingSchedule") : translate("jobs.saveSchedule")}
-                </button>}
-            </div>
-          </form>
-        )}
-      </section>
-
-
-      <section className="job-details-edit" aria-label={serviceTypeMessage(language, "editDetails")}>
-        {!isEditingJobDetails && (
-          <>
-            <button
-              className="button"
-              type="button"
-              disabled={!canEditJobDetails(job)}
-              onClick={startJobDetailsEdit}
-            >
-              {serviceTypeMessage(language, "editDetails")}
-            </button>
-            {!canEditJobDetails(job) && (
-              <p className="form-hint">{translate("jobs.detailsReadOnlyHistorical")}</p>
-            )}
-          </>
-        )}
-        {hasSavedJobDetails && !isEditingJobDetails && (
-          <p className="form-success" role="status">{serviceTypeMessage(language, "detailsSaved")}</p>
-        )}
-        {isEditingJobDetails && (
-          <form className="cleaning-form" noValidate onSubmit={saveJobDetails}>
-            <JobServiceTypeSelect value={jobDetailValues.serviceType} disabled={isSavingJobDetails}
-              onChange={(event) => setJobDetailValues((current) => ({ ...current, serviceType: event.target.value }))} />
-            <label>
-              {translate("jobs.guestName")}
-              <input
-                type="text"
-                name="guestName"
-                maxLength={maximumGuestNameLength}
-                value={jobDetailValues.guestName}
-                onChange={(event) => setJobDetailValues((current) => ({
-                  ...current,
-                  guestName: event.target.value,
-                }))}
-              />
-            </label>
-            <label>
-              {translate("common.notes")}
-              <textarea
-                name="notes"
-                rows="4"
-                value={jobDetailValues.notes}
-                onChange={(event) => setJobDetailValues((current) => ({
-                  ...current,
-                  notes: event.target.value,
-                }))}
-              />
-            </label>
-            {jobDetailsSaveError && <p className="form-error" role="alert">{jobDetailsSaveError}</p>}
-            <div className="button-row">
-              <button
-                className="button"
-                type="button"
-                disabled={isSavingJobDetails}
-                onClick={() => {
-                  setIsEditingJobDetails(false);
-                  setJobDetailsSaveError("");
-                  setJobDetailValues(jobDetailFormValues(job));
-                }}
-              >
-                {translate("common.cancel")}
-              </button>
-              <button className="button button--primary" type="submit" disabled={isSavingJobDetails}>
-                {isSavingJobDetails ? translate("jobs.savingDetails") : translate("jobs.saveDetails")}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
-
-      {job.notes && (
-        <section className="notes-section" aria-label={translate("common.notes")}>
-          <h3>{translate("common.notes")}</h3>
-          <p>{job.notes}</p>
-        </section>
-      )}
-
-      </JobDetailSection>
+      <JobDetailsSection
+        job={job}
+        translate={translate}
+        language={language}
+        scheduleSectionRef={scheduleSectionRef}
+        hasSavedJobSchedule={hasSavedJobSchedule}
+        isEditingJobSchedule={isEditingJobSchedule}
+        scheduleCommunicationMayBeStale={scheduleCommunicationMayBeStale}
+        needsScheduleReload={needsScheduleReload}
+        scheduleMessage={scheduleMessage}
+        saveJobSchedule={saveJobSchedule}
+        jobScheduleValues={jobScheduleValues}
+        setJobScheduleValues={setJobScheduleValues}
+        jobScheduleSaveError={jobScheduleSaveError}
+        isSavingJobSchedule={isSavingJobSchedule}
+        setIsEditingJobSchedule={setIsEditingJobSchedule}
+        setJobScheduleSaveError={setJobScheduleSaveError}
+        scheduleRevisionConflict={scheduleRevisionConflict}
+        startJobScheduleEdit={startJobScheduleEdit}
+        isEditingJobDetails={isEditingJobDetails}
+        startJobDetailsEdit={startJobDetailsEdit}
+        hasSavedJobDetails={hasSavedJobDetails}
+        saveJobDetails={saveJobDetails}
+        jobDetailValues={jobDetailValues}
+        isSavingJobDetails={isSavingJobDetails}
+        setJobDetailValues={setJobDetailValues}
+        jobDetailsSaveError={jobDetailsSaveError}
+        setIsEditingJobDetails={setIsEditingJobDetails}
+        setJobDetailsSaveError={setJobDetailsSaveError}
+        jobDetailFormValues={jobDetailFormValues}
+      />
 
       <JobDetailSection jobId={job.id} title={translate("jobs.section.cleaner")}>
       {!isAssignmentAware &&
@@ -1396,1094 +931,209 @@ export function JobDetail({
         </section>
       )}
 
-      {isAssignmentAware && (
-        <section ref={assignmentSectionRef} tabIndex={-1} className="assignment-roster" aria-labelledby="assigned-cleaners-title">
-          <div className="assignment-roster__header">
-            <div>
-              <h3 id="assigned-cleaners-title">{translate("jobs.assignedCleaners")}</h3>
-              <span>
-                {assignedCleanerIds.length === 1
-                  ? translate("jobs.cleanerAssignedOne", { count: assignedCleanerIds.length })
-                  : translate("jobs.cleanersAssignedMany", { count: assignedCleanerIds.length })}
-              </span>
-            </div>
-            {canDirectAssign && !isDirectAssignmentOpen && (
-              <button className="button" type="button" onClick={() => setIsDirectAssignmentOpen((open) => !open)}>
-                {translate("jobs.assignCleanerDirectly")}
-              </button>
-            )}
-          </div>
+      <JobAssignmentRoster
+        job={job}
+        translate={translate}
+        language={language}
+        isAssignmentAware={isAssignmentAware}
+        assignmentSectionRef={assignmentSectionRef}
+        assignedCleanerIds={assignedCleanerIds}
+        canDirectAssign={canDirectAssign}
+        isDirectAssignmentOpen={isDirectAssignmentOpen}
+        setIsDirectAssignmentOpen={setIsDirectAssignmentOpen}
+        assignCleanerDirectly={assignCleanerDirectly}
+        isLoadingCleaners={isLoadingCleaners}
+        offers={offers}
+        hasCleanerError={hasCleanerError}
+        isAssigningDirectly={isAssigningDirectly}
+        setDirectCleanerId={setDirectCleanerId}
+        setDirectCleanerSearch={setDirectCleanerSearch}
+        directCleanerSearch={directCleanerSearch}
+        directCleanerOptions={directCleanerOptions}
+        directCleanerId={directCleanerId}
+        cleanerSelection={cleanerSelection}
+        availableCleaners={availableCleaners}
+        isLoadingAssignments={isLoadingAssignments}
+        hasAssignmentsError={hasAssignmentsError}
+        activeAssignments={activeAssignments}
+        cleanerNamesById={cleanerNamesById}
+        replacementTargetId={replacementTargetId}
+        automaticOfferJob={automaticOfferJob}
+        openReminderPreview={openReminderPreview}
+        copiedCleanerId={copiedCleanerId}
+        canEditRoster={canEditRoster}
+        removingAssignmentId={removingAssignmentId}
+        replacingAssignmentId={replacingAssignmentId}
+        removeCleanerAssignment={removeCleanerAssignment}
+        eligibleReplacementOffers={eligibleReplacementOffers}
+        setReplacementTargetId={setReplacementTargetId}
+        replacementOfferId={replacementOfferId}
+        setReplacementOfferId={setReplacementOfferId}
+        replaceCleanerAssignment={replaceCleanerAssignment}
+        hasAssignmentAcknowledgment={hasAssignmentAcknowledgment}
+        assignmentError={assignmentError}
+      />
 
-          {canDirectAssign && isDirectAssignmentOpen && (
-            <form className="cleaning-form" onSubmit={assignCleanerDirectly}>
-              <p className="form-hint">{translate("jobs.directAssignmentExplanation")}</p>
-              {isLoadingCleaners && <StateCard message={translate("offers.loadingCleaners")} status="status" />}
-              {hasCleanerError && <StateCard message={translate("offers.cleanerError")} status="alert" isError />}
-              {(isLoadingCleaners || hasCleanerError) && (
-                <button className="button" type="button" disabled={isAssigningDirectly}
-                  onClick={() => { setIsDirectAssignmentOpen(false); setDirectCleanerId(""); setDirectCleanerSearch(""); }}>{translate("common.cancel")}</button>
-              )}
-              {!isLoadingCleaners && !hasCleanerError && (
-                <>
-                  <label className="cleaner-name-search">
-                    {translate("cleaners.search")}
-                    <input type="search" value={directCleanerSearch}
-                      onChange={(event) => setDirectCleanerSearch(event.target.value)} />
-                  </label>
-                  <CleanerSelectionStatus {...cleanerSelection} language={language} />
-                  <fieldset className="direct-cleaner-picker">
-                    <legend>{translate("jobs.cleanerPickerResults")}</legend>
-                      {directCleanerOptions.map((cleaner) => (
-                        <CleanerSelectionOption key={cleaner.id}
-                          className={`direct-cleaner-picker__option${directCleanerId === cleaner.id ? " direct-cleaner-picker__option--selected" : ""}`}
-                          cleanerId={cleaner.id} name={cleaner.name || translate("common.notProvided")}
-                          context={cleanerSelection.result} language={language} type="radio" inputName="direct-cleaner" value={cleaner.id}
-                          checked={directCleanerId === cleaner.id} disabled={isAssigningDirectly}
-                          onChange={() => setDirectCleanerId(cleaner.id)} />
-                      ))}
-                  </fieldset>
-                  {directCleanerId && (
-                    <div role="status">
-                      <p className="form-hint">{translate("jobs.cleanerPickerSelected", {
-                        name: availableCleaners.find((cleaner) => cleaner.id === directCleanerId)?.name || translate("common.notProvided"),
-                      })}</p>
-                      <p className="form-hint">{translate("jobs.cleanerPickerPending")}</p>
-                    </div>
-                  )}
-                  {directCleanerOptions.length === 0 && (
-                    <p className="form-hint">{translate("cleaners.searchNoResults")}</p>
-                  )}
-                  <div className="button-row">
-                    <button className="button" type="button" disabled={isAssigningDirectly}
-                      onClick={() => { setIsDirectAssignmentOpen(false); setDirectCleanerId(""); setDirectCleanerSearch(""); }}>{translate("common.cancel")}</button>
-                    <button className="button button--primary" type="submit"
-                      disabled={!directCleanerId || isAssigningDirectly || !canAssignCleanerDirectly(
-                        job, availableCleaners.find((cleaner) => cleaner.id === directCleanerId))}>
-                      {isAssigningDirectly ? translate("jobs.assigningCleanerDirectly")
-                        : translate("jobs.confirmDirectAssignment")}
-                    </button>
-                  </div>
-                </>
-              )}
-            </form>
-          )}
-
-          {isLoadingAssignments && (
-            <StateCard message={translate("jobs.rosterLoading")} status="status" />
-          )}
-          {!isLoadingAssignments && hasAssignmentsError && (
-            <StateCard message={translate("jobs.rosterError")} status="alert" isError />
-          )}
-          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length === 0
-            && !(isDirectAssignmentOpen && directCleanerId) && (
-            <StateCard message={translate("jobs.noAssignedCleaners")} />
-          )}
-          {!isLoadingAssignments && !hasAssignmentsError && activeAssignments.length > 0 && (
-            <div className="assignment-roster__list">
-              {activeAssignments.map((assignment) => {
-                const assignmentCleanerName = currentCleanerName(
-                  assignment.cleanerId,
-                  assignment.cleanerNameSnapshot,
-                  cleanerNamesById,
-                  translate("common.notProvided"),
-                );
-                const isReplacing = replacementTargetId === assignment.id;
-                const automaticAssignment = assignment.assignmentMethod === FIRST_ACCEPT_WINS;
-                const acknowledgmentState = getAssignmentAcknowledgmentState(assignment, offers);
-                const methodLabel = automaticAssignment ? "offers.automaticAssignment"
-                  : automaticOfferJob ? "offers.manualAssignment" : null;
-
-                return (
-                  <article key={assignment.id} className="assignment-roster__item">
-                    <strong>{assignmentCleanerName}</strong>
-                    <span className="status-badge">
-                      {formatOperationalStatus(assignment.executionStatus, translate)}
-                    </span>
-                    {methodLabel && (
-                      <span className="status-badge">{translate(methodLabel)}</span>
-                    )}
-                    {automaticAssignment && assignment.assignedAt && (
-                      <span>{formatCreatedAt(assignment.assignedAt, language)}</span>
-                    )}
-                    {!methodLabel && acknowledgmentState && (
-                      <span className="status-badge" data-testid={`assignment-acknowledgment-${assignment.id}`}>
-                        {translate(acknowledgmentState === "ASSIGNED_DIRECTLY"
-                          ? "jobs.assignmentAssignedDirectly"
-                          : acknowledgmentState === "CONFIRMED"
-                          ? "jobs.assignmentConfirmationConfirmed"
-                          : "jobs.assignmentConfirmationAwaiting")}
-                      </span>
-                    )}
-                    {job.operationalStatus === "ASSIGNED" && (
-                      <div className="assignment-roster__message-action">
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() =>
-                            openReminderPreview(assignment.cleanerId, assignmentCleanerName, assignment.id)
-                          }
-                        >
-                          {copiedCleanerId === assignment.cleanerId
-                            ? translate("jobs.messageCopied")
-                            : translate("jobs.prepareCleanerMessage")}
-                        </button>
-                      </div>
-                    )}
-                    {canEditRoster && !isReplacing && (
-                      <div className="assignment-roster__actions">
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={removingAssignmentId !== null || replacingAssignmentId !== null}
-                          onClick={() => removeCleanerAssignment(assignment.id)}
-                        >
-                          {removingAssignmentId === assignment.id
-                            ? translate("jobs.removingCleaner")
-                            : translate("jobs.removeCleaner")}
-                        </button>
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={removingAssignmentId !== null || replacingAssignmentId !== null || eligibleReplacementOffers.length === 0}
-                          onClick={() => setReplacementTargetId(assignment.id)}
-                        >
-                          {translate("jobs.replaceCleaner")}
-                        </button>
-                      </div>
-                    )}
-                    {canEditRoster && isReplacing && (
-                      <div className="assignment-replacement">
-                        <CleanerSelectionStatus {...cleanerSelection} language={language} />
-                        <label>
-                          {translate("jobs.replacementCleaner")}
-                          <select
-                            value={replacementOfferId}
-                            onChange={(event) => setReplacementOfferId(event.target.value)}
-                          >
-                            <option value="">{translate("common.notProvided")}</option>
-                            {sortByCleanerExperience(eligibleReplacementOffers, cleanerSelection.result, (offer) => offer.cleanerId).map((offer) => (
-                              <option key={offer.id} value={offer.id}>
-                                {cleanerReplacementOption(currentCleanerName(
-                                  offer.cleanerId,
-                                  offer.cleanerName,
-                                  cleanerNamesById,
-                                  translate("common.notProvided"),
-                                ), offer.cleanerId, cleanerSelection.result, language)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className="button-row">
-                          <button className="button" type="button" disabled={replacingAssignmentId !== null} onClick={() => {
-                            setReplacementTargetId(null);
-                            setReplacementOfferId("");
-                          }}>
-                            {translate("common.cancel")}
-                          </button>
-                          <button
-                            className="button button--primary"
-                            type="button"
-                            disabled={!replacementOfferId || replacingAssignmentId !== null}
-                            onClick={() => replaceCleanerAssignment(assignment.id)}
-                          >
-                            {replacingAssignmentId === assignment.id
-                              ? translate("jobs.replacingCleaner")
-                              : translate("jobs.confirmReplacement")}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-          {hasAssignmentAcknowledgment && (
-            <p className="form-hint">{translate("jobs.assignmentConfirmationDisclaimer")}</p>
-          )}
-          {assignmentError && <p className="form-error assignment-error" role="alert">{assignmentError}</p>}
-        </section>
-      )}
-
-      {reminderPreview && (
-        <section ref={reminderSectionRef} tabIndex={-1} className="job-reminder-preview" aria-labelledby="job-reminder-preview-title">
-          <div className="job-reminder-preview__header">
-            <h3 id="job-reminder-preview-title">
-              {translate("jobs.reminderPreviewTitle", { cleaner: reminderPreview.cleanerName })}
-            </h3>
-            <button
-              className="button"
-              type="button"
-              disabled={isCopyingReminder}
-              onClick={() => setReminderPreview(null)}
-            >
-              {translate("common.cancel")}
-            </button>
-          </div>
-
-          {sensitivePropertyDetails.length > 0 && (
-            <div className="job-reminder-preview__sensitive">
-              <strong>{translate("jobs.reminderSensitiveAccessTitle")}</strong>
-              <p>{translate("jobs.reminderSensitiveAccessWarning")}</p>
-              <ul>
-                {sensitivePropertyDetails.map(([key, value]) => (
-                  <li key={key}>{translate(key, { details: value.trim() })}</li>
-                ))}
-              </ul>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={reminderPreview.includeSensitiveAccess}
-                  onChange={(event) => setReminderPreview((current) => ({
-                    ...current,
-                    includeSensitiveAccess: event.target.checked,
-                  }))}
-                />
-                {translate("jobs.reminderIncludeSensitiveAccess")}
-              </label>
-            </div>
-          )}
-
-          {reminderCleanerStillAssigned && (
-            <div className="job-reminder-preview__sensitive">
-              <label>
-                <input type="checkbox" checked={reminderPreview.includeChecklist}
-                  onChange={(event) => {
-                    setHasReminderChecklistError(false);
-                    setReminderPreview((current) => ({
-                      ...current, includeChecklist: event.target.checked,
-                      checklistUrl: null, checklistIssuedAt: null,
-                    }));
-                  }} />
-                {translate("jobs.reminderIncludeChecklist")}
-              </label>
-              {reminderPreview.includeChecklist && (
-                <>
-                  <p className="form-hint">{translate("jobs.reminderChecklistPreparationHint")}</p>
-                  {checklistCapability?.state === "ACTIVE" && !reminderChecklistCapabilityCurrent && (
-                    <p className="form-hint">{translate("jobs.reminderExistingChecklistLinkWarning")}</p>
-                  )}
-                  {canPrepareChecklistForReminder && !reminderChecklistCapabilityCurrent && (
-                    <button className="button" type="button"
-                      disabled={isPreparingReminderChecklist || isIssuingChecklistCapability || isCreatingChecklistRun}
-                      onClick={prepareReminderChecklist}>
-                      {isPreparingReminderChecklist ? translate("jobs.reminderPreparingChecklist")
-                        : translate("jobs.reminderPrepareChecklist")}
-                    </button>
-                  )}
-                  {!canPrepareChecklistForReminder && (
-                    <p className="form-error" role="alert">{translate("jobs.reminderChecklistUnavailable")}</p>
-                  )}
-                  {reminderChecklistCapabilityCurrent && (
-                    <p className="form-success" role="status">{translate("jobs.reminderChecklistReady")}</p>
-                  )}
-                  {hasReminderChecklistError && (
-                    <p className="form-error" role="alert">{translate("jobs.reminderChecklistError")}</p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          <div className="job-reminder-preview__message">
-            <strong>{translate("jobs.reminderPreviewMessage")}</strong>
-            <p className="form-hint">
-              {translate("jobs.messageForCleanerLanguage", {
-                cleaner: reminderPreview.cleanerName,
-                language: cleanerLanguageLabelFor(reminderPreview.cleanerId),
-              })}
-            </p>
-            <pre>{reminderPreviewMessage}</pre>
-          </div>
-          <p className="form-hint">{translate("whatsapp.manualSendNote")}</p>
-
-          {!reminderCleanerStillAssigned && (
-            <p className="form-error" role="alert">
-              {translate("jobs.reminderCleanerNoLongerAssigned")}
-            </p>
-          )}
-          {copyMessageErrorCleanerId === reminderPreview.cleanerId && (
-            <p className="form-error" role="alert">{translate("jobs.copyMessageError")}</p>
-          )}
-
-          <div className="job-reminder-preview__actions">
-            {reminderWhatsAppUrl && reminderReadyToSend && (
-              <a
-                className="button button--primary"
-                href={reminderWhatsAppUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {translate("whatsapp.openInWhatsApp")}
-              </a>
-            )}
-            <button
-              className="button"
-              type="button"
-              disabled={!reminderReadyToSend || isCopyingReminder}
-              onClick={copyReminderMessage}
-            >
-              {isCopyingReminder
-                ? translate("jobs.reminderCopying")
-                : translate("jobs.reminderCopyNow")}
-            </button>
-          </div>
-          {onMarkReminderSent && reminderCleanerStillAssigned && reminderPreview.cleanerId !== "legacy-assigned-cleaner" && (() => {
-            const logged = cleanerReminderState(job, reminderPreview.cleanerId);
-            const sentAt = logged.state === "sent" ? formatCreatedAt(logged.sentAt, language) : null;
-            return <div className="job-reminder-preview__log" data-testid="reminder-log">
-              <p className={logged.state === "sent" ? "form-success" : "form-hint"} role="status">
-                {logged.state === "sent"
-                  ? translate(sentAt ? "jobs.reminderLoggedAt" : "jobs.reminderLogged", { time: sentAt })
-                  : translate(logged.stale ? "jobs.reminderStale" : "jobs.reminderNotLogged")}
-              </p>
-              <button className="button" type="button" disabled={reminderLogState === "saving"} onClick={async () => {
-                setReminderLogState("saving");
-                try { await onMarkReminderSent(reminderPreview.cleanerId); setReminderLogState(null); }
-                catch { setReminderLogState("error"); }
-              }}>
-                {translate(reminderLogState === "saving" ? "jobs.reminderLogging"
-                  : logged.state === "sent" ? "jobs.reminderLogAgain" : "jobs.reminderMarkSent")}
-              </button>
-              {reminderLogState === "error" && <p className="form-error" role="alert">{translate("jobs.reminderLogError")}</p>}
-            </div>;
-          })()}
-          {reminderReadyToSend && !reminderWhatsAppUrl && (
-            <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
-          )}
-        </section>
-      )}
+      <JobReminderPreview
+        job={job}
+        translate={translate}
+        language={language}
+        reminderPreview={reminderPreview}
+        reminderSectionRef={reminderSectionRef}
+        isCopyingReminder={isCopyingReminder}
+        setReminderPreview={setReminderPreview}
+        sensitivePropertyDetails={sensitivePropertyDetails}
+        reminderCleanerStillAssigned={reminderCleanerStillAssigned}
+        setHasReminderChecklistError={setHasReminderChecklistError}
+        checklistCapability={checklistCapability}
+        reminderChecklistCapabilityCurrent={reminderChecklistCapabilityCurrent}
+        canPrepareChecklistForReminder={canPrepareChecklistForReminder}
+        isPreparingReminderChecklist={isPreparingReminderChecklist}
+        isIssuingChecklistCapability={isIssuingChecklistCapability}
+        isCreatingChecklistRun={isCreatingChecklistRun}
+        prepareReminderChecklist={prepareReminderChecklist}
+        hasReminderChecklistError={hasReminderChecklistError}
+        cleanerLanguageLabelFor={cleanerLanguageLabelFor}
+        reminderPreviewMessage={reminderPreviewMessage}
+        copyMessageErrorCleanerId={copyMessageErrorCleanerId}
+        reminderWhatsAppUrl={reminderWhatsAppUrl}
+        reminderReadyToSend={reminderReadyToSend}
+        copyReminderMessage={copyReminderMessage}
+        onMarkReminderSent={onMarkReminderSent}
+        reminderLogState={reminderLogState}
+        setReminderLogState={setReminderLogState}
+      />
 
       </JobDetailSection>
 
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")}>
-      <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
-        <div className="issues-section__header">
-          <h3 id="job-checklist-title">{translate("checklists.title")}</h3>
-          {!isLoadingChecklistRun && checklistRun && (
-            <button className="button" type="button" onClick={onOpenChecklistRun}>
-              {translate(
-                checklistRun.status === "DRAFT" ? "checklists.viewDraftProgress"
-                  : checklistRun.status === "ABANDONED" ? "checklists.viewAbandonedRun"
-                    : "checklists.open",
-              )}
-            </button>
-          )}
-          {!isLoadingChecklistRun && !checklistRun && !hasChecklistRunError
-            && !job.archivedAt && !isCompleted && (
-            <button
-              className="button"
-              type="button"
-              disabled={isCreatingChecklistRun}
-              onClick={onCreateChecklistRun}
-            >
-              {isCreatingChecklistRun
-                ? translate("checklists.creating")
-                : translate("checklists.create")}
-            </button>
-          )}
-        </div>
-        {isLoadingChecklistRun && (
-          <StateCard message={translate("checklists.loading")} status="status" />
-        )}
-        {!isLoadingChecklistRun && hasChecklistRunError && (
-          <>
-            <StateCard message={translate("checklists.loadError")} status="alert" isError />
-            <button className="button" type="button" onClick={onRefreshChecklistRun}>
-              {translate("common.retry")}
-            </button>
-          </>
-        )}
-        {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
-          <p className="job-checklist__summary">{translate("checklists.noRun")}</p>
-        )}
-        {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-          <p className="job-checklist__summary">{translate(
-            checklistRun.status === "DRAFT" ? "checklists.existingDraft"
-              : checklistRun.status === "READY_FOR_REVIEW" ? "checklists.existingRun"
-                : checklistRun.status === "ABANDONED" ? "checklists.existingAbandoned"
-                  : "checklists.existingRunUnknown",
-          )}</p>
-        )}
-        {hasCreateChecklistRunError && (
-          <p className="form-error" role="alert">{translate("checklists.createError")}</p>
-        )}
-        <ChecklistCapabilityControls
-          job={job}
-          checklistRun={checklistRun}
-          capability={checklistCapability}
-          isLoading={isLoadingChecklistCapability}
-          hasError={hasChecklistCapabilityError}
-          isIssuing={isIssuingChecklistCapability}
-          hasIssueError={hasIssueChecklistCapabilityError}
-          isRevoking={isRevokingChecklistCapability}
-          hasRevokeError={hasRevokeChecklistCapabilityError}
-          onRefresh={onRefreshChecklistCapability}
-          onIssue={onIssueChecklistCapability}
-          onRevoke={onRevokeChecklistCapability}
-        />
-      </section>
+      <JobChecklistSection
+        job={job}
+        translate={translate}
+        checklistSectionRef={checklistSectionRef}
+        isLoadingChecklistRun={isLoadingChecklistRun}
+        checklistRun={checklistRun}
+        onOpenChecklistRun={onOpenChecklistRun}
+        hasChecklistRunError={hasChecklistRunError}
+        isCompleted={isCompleted}
+        isCreatingChecklistRun={isCreatingChecklistRun}
+        onCreateChecklistRun={onCreateChecklistRun}
+        onRefreshChecklistRun={onRefreshChecklistRun}
+        hasCreateChecklistRunError={hasCreateChecklistRunError}
+        checklistCapability={checklistCapability}
+        isLoadingChecklistCapability={isLoadingChecklistCapability}
+        hasChecklistCapabilityError={hasChecklistCapabilityError}
+        isIssuingChecklistCapability={isIssuingChecklistCapability}
+        hasIssueChecklistCapabilityError={hasIssueChecklistCapabilityError}
+        isRevokingChecklistCapability={isRevokingChecklistCapability}
+        hasRevokeChecklistCapabilityError={hasRevokeChecklistCapabilityError}
+        onRefreshChecklistCapability={onRefreshChecklistCapability}
+        onIssueChecklistCapability={onIssueChecklistCapability}
+        onRevokeChecklistCapability={onRevokeChecklistCapability}
+        canUseCompletionControls={canUseCompletionControls}
+        completionSectionRef={completionSectionRef}
+        isCompletionConfirmationVisible={isCompletionConfirmationVisible}
+        setIsCompletionConfirmationVisible={setIsCompletionConfirmationVisible}
+        isCompletingCleaning={isCompletingCleaning}
+        completeCleaning={completeCleaning}
+        hasCompleteCleaningError={hasCompleteCleaningError}
+        isAssignmentAware={isAssignmentAware}
+        isInProgress={isInProgress}
+        isStartingCleaning={isStartingCleaning}
+        startCleaning={startCleaning}
+        hasStartCleaningError={hasStartCleaningError}
+      />
 
-      {canUseCompletionControls && (
-        <section ref={completionSectionRef} tabIndex={-1} className="job-execution" aria-label={translate("jobs.completeService")}>
-          {isLoadingChecklistRun && (
-            <p className="form-hint">{translate("jobs.completionCheckingChecklist")}</p>
-          )}
-          {hasChecklistRunError && !isLoadingChecklistRun && (
-            <p className="form-error" role="alert">{translate("jobs.completionChecklistUnavailable")}</p>
-          )}
-          {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
-            <p className="form-hint">{translate(
-              checklistRun.status === "DRAFT" ? "jobs.completionDraftOptions"
-                : checklistRun.status === "READY_FOR_REVIEW" ? "jobs.completionRequiresChecklistReview"
-                  : "jobs.completionChecklistUnavailable",
-            )}</p>
-          )}
-          {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
-            <>
-              {!isCompletionConfirmationVisible ? (
-                <button className="button button--primary" type="button"
-                  onClick={() => setIsCompletionConfirmationVisible(true)}>
-                  {translate("jobs.completeService")}
-                </button>
-              ) : (
-                <div>
-                  <p>{translate("jobs.completeWithoutChecklistConfirm")}</p>
-                  <div className="button-row">
-                    <button className="button" type="button" disabled={isCompletingCleaning}
-                      onClick={() => setIsCompletionConfirmationVisible(false)}>
-                      {translate("common.cancel")}
-                    </button>
-                    <button className="button button--primary" type="button"
-                      disabled={isCompletingCleaning} onClick={completeCleaning}>
-                      {isCompletingCleaning ? translate("jobs.completingCleaning")
-                        : translate("jobs.completeService")}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          {hasCompleteCleaningError && (
-            <p className="form-error" role="alert">{translate("jobs.completeCleaningError")}</p>
-          )}
-        </section>
-      )}
+      <JobOffersSection
+        job={job}
+        translate={translate}
+        language={language}
+        offersSectionRef={offersSectionRef}
+        canOfferToCleaners={canOfferToCleaners}
+        isLoadingOffers={isLoadingOffers}
+        sortedOffers={sortedOffers}
+        onOfferToCleaners={onOfferToCleaners}
+        onRefreshOffers={onRefreshOffers}
+        isAssignmentAware={isAssignmentAware}
+        automaticOfferJob={automaticOfferJob}
+        onSetCleanerSpots={onSetCleanerSpots}
+        canEditRoster={canEditRoster}
+        isSavingSpots={isSavingSpots}
+        changeCleanerSpots={changeCleanerSpots}
+        offersCreatedCount={offersCreatedCount}
+        hasOffersError={hasOffersError}
+        cleanerNamesById={cleanerNamesById}
+        onDecideOffer={onDecideOffer}
+        onReopenOffer={onReopenOffer}
+        editingOfferCompensationFor={editingOfferCompensationFor}
+        offerMessageFor={offerMessageFor}
+        cleanerPhonesById={cleanerPhonesById}
+        canManageOffers={canManageOffers}
+        isCreatingPublicOfferLinkFor={isCreatingPublicOfferLinkFor}
+        createOfferLink={createOfferLink}
+        openOfferLinkForm={openOfferLinkForm}
+        onRevokeAutomaticOffer={onRevokeAutomaticOffer}
+        revokingOfferId={revokingOfferId}
+        revokeOffer={revokeOffer}
+        assignedCleanerIds={assignedCleanerIds}
+        isAssigned={isAssigned}
+        assigningCleanerId={assigningCleanerId}
+        decidingOfferId={decidingOfferId}
+        assignCleaner={assignCleaner}
+        decideOffer={decideOffer}
+        addCleanerSpotAndAssign={addCleanerSpotAndAssign}
+        reopenOffer={reopenOffer}
+        offerCompensationInput={offerCompensationInput}
+        setOfferCompensationInput={setOfferCompensationInput}
+        setOfferCompensationErrorFor={setOfferCompensationErrorFor}
+        offerCompensationErrorFor={offerCompensationErrorFor}
+        setEditingOfferCompensationFor={setEditingOfferCompensationFor}
+        revokeOfferErrorId={revokeOfferErrorId}
+        publicOfferLink={publicOfferLink}
+        cleanerLanguageLabelFor={cleanerLanguageLabelFor}
+        copyOfferMessage={copyOfferMessage}
+        copiedOfferMessageId={copiedOfferMessageId}
+        offerMessageCopyErrorId={offerMessageCopyErrorId}
+        publicOfferLinkError={publicOfferLinkError}
+        assignmentError={assignmentError}
+        canSimulateAssignedCleaner={canSimulateAssignedCleaner}
+        onSimulateAssignedCleaner={onSimulateAssignedCleaner}
+      />
 
-      {!isAssignmentAware && (job.operationalStatus === "ASSIGNED" ||
-        isInProgress ||
-        isCompleted) && (
-        <section
-          className="job-execution"
-          aria-label={translate("jobs.operationalStatus")}
-        >
-          {isInProgress && (
-            <p className="job-execution__state job-execution__state--in-progress">
-              <OperationalIcon name="clock" />
-              {translate("jobs.executionInProgress")}
-            </p>
-          )}
-          {isCompleted && (
-            <p className="job-execution__state job-execution__state--completed">
-              <OperationalIcon name="check-circle" />
-              {translate("jobs.executionCompleted")}
-            </p>
-          )}
-          {job.operationalStatus === "ASSIGNED" && (
-            <div className="button-row job-execution__actions">
-              <button
-                className="button button--primary"
-                type="button"
-                disabled={isStartingCleaning}
-                onClick={startCleaning}
-              >
-                {isStartingCleaning
-                  ? translate("jobs.startingCleaning")
-                  : translate("jobs.startCleaning")}
-              </button>
-            </div>
-          )}
-          {hasStartCleaningError && (
-            <p className="form-error" role="alert">
-              {translate("jobs.startCleaningError")}
-            </p>
-          )}
-        </section>
-      )}
+      <JobIssuesSection
+        job={job}
+        translate={translate}
+        language={language}
+        issuesSectionRef={issuesSectionRef}
+        onRefreshIssues={onRefreshIssues}
+        isLoadingIssues={isLoadingIssues}
+        hasIssuesError={hasIssuesError}
+        sortedIssues={sortedIssues}
+        resolvingIssueId={resolvingIssueId}
+        openResolutionForm={openResolutionForm}
+        resolveSelectedIssue={resolveSelectedIssue}
+        resolutionNote={resolutionNote}
+        setResolutionNote={setResolutionNote}
+        resolutionError={resolutionError}
+        isResolvingIssue={isResolvingIssue}
+        closeResolutionForm={closeResolutionForm}
+      />
 
-      </JobDetailSection>
-
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.offers")}>
-      <section className="offers-section" aria-labelledby="offers-title" ref={offersSectionRef} tabIndex={-1}>
-        <div className="offers-section__header">
-          <h3 id="offers-title">{translate("offers.title")}</h3>
-          <div className="offers-section__actions">
-            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length === 0 && (
-              <button
-                className="button button--primary"
-                type="button"
-                onClick={onOfferToCleaners}
-              >
-                {translate("offers.offerCleaningToCleaners")}
-              </button>
-            )}
-            {canOfferToCleaners && !isLoadingOffers && sortedOffers.length > 0 && (
-              <button className="button" type="button" onClick={onOfferToCleaners}>
-                {translate("offers.sendToMoreCleaners")}
-              </button>
-            )}
-            <button
-              className="button"
-              type="button"
-              onClick={onRefreshOffers}
-              disabled={isLoadingOffers}
-            >
-              {translate("offers.refresh")}
-            </button>
-          </div>
-        </div>
-
-        {isAssignmentAware && !automaticOfferJob && sortedOffers.length > 0 && (
-          <div className="offer-spots" data-testid="offer-spots">
-            <span>{translate(isJobFilled(job) ? "offers.spotsFilled" : "offers.spotsOpen", {
-              filled: rosterCleanerIds(job).length, total: requiredCleanerCount(job),
-            })}</span>
-            {onSetCleanerSpots && canEditRoster && (
-              <span className="offer-spots__stepper" role="group" aria-label={translate("offers.spotsLabel")}>
-                <button className="button" type="button" aria-label={translate("offers.spotsLess")}
-                  disabled={isSavingSpots || requiredCleanerCount(job) <= Math.max(1, rosterCleanerIds(job).length)}
-                  onClick={() => changeCleanerSpots(requiredCleanerCount(job) - 1)}>−</button>
-                <span className="offer-spots__count" aria-live="polite">{requiredCleanerCount(job)}</span>
-                <button className="button" type="button" aria-label={translate("offers.spotsMore")}
-                  disabled={isSavingSpots || requiredCleanerCount(job) >= maxCleanersPerJob}
-                  onClick={() => changeCleanerSpots(requiredCleanerCount(job) + 1)}>+</button>
-                <span>{translate("offers.spotsLabel")}</span>
-              </span>
-            )}
-          </div>
-        )}
-
-        {offersCreatedCount !== null && (
-          <p className="offers-section__success" role="status">
-            {translate(automaticOfferJob ? "offers.automaticCreated" : "offers.createdReadyToShare", { count: offersCreatedCount })}
-          </p>
-        )}
-
-        {isLoadingOffers && (
-          <StateCard message={translate("offers.loading")} status="status" />
-        )}
-
-        {!isLoadingOffers && hasOffersError && (
-          <StateCard
-            message={translate("offers.error")}
-            status="alert"
-            isError
-          />
-        )}
-
-        {!isLoadingOffers && !hasOffersError && sortedOffers.length === 0 && (
-          <StateCard message={translate("offers.empty")} />
-        )}
-
-        {!isLoadingOffers && !hasOffersError && sortedOffers.length > 0 && (
-          <div className="offer-status-list">
-            {sortedOffers.map((offer) => {
-              const respondedAt = formatCreatedAt(offer.respondedAt, language);
-              const offerCleanerName = currentCleanerName(
-                offer.cleanerId,
-                offer.cleanerName,
-                cleanerNamesById,
-                translate("common.notProvided"),
-              );
-              const automaticStatus = automaticOfferDisplayStatus(job, offer);
-              // FB08/FB09: derived availability of a manual invitation.
-              const availability = automaticOfferJob ? null : manualOfferAvailability(job, offer);
-              const isOpenOffer = availability === "open";
-              const manualStatus = availability === "closed"
-                ? offer.managerDecision
-                : availability === "filled" && ["PENDING", "INTERESTED"].includes(offer.status) ? "FILLED" : null;
-              const canCreatePublicLink = automaticOfferJob
-                ? automaticStatus === "AWAITING_ACCEPTANCE"
-                : isOpenOffer && offer.status === "PENDING" &&
-                (!isAssignmentAware
-                  ? job.operationalStatus === "OFFERED"
-                  : ["OFFERED", "ASSIGNED"].includes(job.operationalStatus));
-              const canDecideOffer = Boolean(onDecideOffer) && isAssignmentAware && canEditRoster && isOpenOffer;
-              const canReopenOffer = Boolean(onReopenOffer) && isAssignmentAware && canEditRoster
-                && availability === "closed" && !isJobFilled(job);
-              const compensationSuggestion = getOfferCompensationSuggestion(job, offer);
-              const isEditingOfferCompensation = editingOfferCompensationFor === offer.id;
-              const offerMessage = offerMessageFor(offer, offerCleanerName);
-              const offerWhatsAppUrl = buildWhatsAppHandoffUrl(
-                cleanerPhonesById[offer.cleanerId],
-                offerMessage,
-              );
-
-              return (
-                <article key={offer.id} className="offer-status-item">
-                  <div>
-                    <strong>{offerCleanerName}</strong>
-                    {respondedAt && (
-                      <span>
-                        {translate("offers.responded")} {respondedAt}
-                      </span>
-                    )}
-                  </div>
-                  <span className={`status-badge${manualStatus ? " is-closed" : ""}`}>
-                    {translate(
-                      {
-                        FILLED: "offers.spotFilled",
-                        NOT_SELECTED: "offers.notSelected",
-                        WITHDRAWN: "offers.withdrawn",
-                        PENDING: "status.pending",
-                        INTERESTED: "status.interested",
-                        DECLINED: "status.declined",
-                        ACCEPTED: "offers.accepted",
-                        AWAITING_ACCEPTANCE: "offers.waitingForAcceptance",
-                        UNAVAILABLE: "offers.unavailable",
-                        EXPIRED: "offers.expired",
-                      }[automaticStatus ?? manualStatus ?? offer.status] || "common.notProvided",
-                    )}
-                  </span>
-                  {canManageOffers && (
-                    <div className="offer-status-actions">
-                      {canCreatePublicLink && !isEditingOfferCompensation && (
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={isCreatingPublicOfferLinkFor !== null}
-                          onClick={() => automaticOfferJob ? createOfferLink(null, offer) : openOfferLinkForm(offer)}
-                        >
-                          {translate("offers.createPublicLink")}
-                        </button>
-                      )}
-                      {automaticStatus === "AWAITING_ACCEPTANCE" && onRevokeAutomaticOffer && (
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={revokingOfferId !== null}
-                          onClick={() => revokeOffer(offer.id)}
-                        >
-                          {translate("offers.revoke")}
-                        </button>
-                      )}
-                      {!automaticOfferJob && offer.status === "INTERESTED" && isOpenOffer &&
-                        (isAssignmentAware
-                          ? canEditRoster && !assignedCleanerIds.includes(offer.cleanerId)
-                          : !isAssigned) && (
-                        <button
-                          className="button button--primary"
-                          type="button"
-                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
-                          onClick={() => assignCleaner(offer)}
-                        >
-                          {assigningCleanerId === offer.cleanerId
-                            ? translate("offers.assigning")
-                            : translate("offers.assign")}
-                        </button>
-                      )}
-                      {canDecideOffer && offer.status === "INTERESTED" && (
-                        <button className="button button--text" type="button"
-                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
-                          onClick={() => decideOffer(offer, offerManagerDecisions.notSelected)}>
-                          {decidingOfferId === offer.id ? translate("offers.deciding") : translate("offers.notSelect")}
-                        </button>
-                      )}
-                      {canDecideOffer && offer.status === "PENDING" && (
-                        <button className="button button--text" type="button"
-                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
-                          onClick={() => decideOffer(offer, offerManagerDecisions.withdrawn)}>
-                          {decidingOfferId === offer.id ? translate("offers.deciding") : translate("offers.withdraw")}
-                        </button>
-                      )}
-                      {manualStatus === "FILLED" && offer.status === "INTERESTED" && isAssignmentAware && canEditRoster
-                        && rosterCleanerIds(job).length < maxCleanersPerJob && (
-                        <button className="button button--text" type="button"
-                          disabled={assigningCleanerId !== null || decidingOfferId !== null}
-                          onClick={() => addCleanerSpotAndAssign(offer)}>
-                          {translate("offers.addSpotAndAssign")}
-                        </button>
-                      )}
-                      {canReopenOffer && (
-                        <button className="button button--text" type="button"
-                          disabled={decidingOfferId !== null}
-                          onClick={() => reopenOffer(offer)}>
-                          {decidingOfferId === offer.id ? translate("offers.deciding") : translate("offers.reopen")}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {canManageOffers && canCreatePublicLink && isEditingOfferCompensation && (
-                    <form
-                      className="offer-compensation-form"
-                      onSubmit={(event) => createOfferLink(event, offer)}
-                    >
-                      <label>
-                        {translate("offers.offeredCompensation")}
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          inputMode="decimal"
-                          value={offerCompensationInput}
-                          onChange={(event) => {
-                            setOfferCompensationInput(event.target.value);
-                            setOfferCompensationErrorFor(null);
-                          }}
-                        />
-                      </label>
-                      <p className="offer-compensation-form__help">
-                        {compensationSuggestion.source === "job"
-                          ? translate("offers.jobAmountSuggestion")
-                          : translate("offers.amountHelper")}
-                      </p>
-                      {!offerCompensationInput.trim() && (
-                        <p className="offer-compensation-warning" role="status">
-                          {translate("offers.amountNotSetWarning")}
-                        </p>
-                      )}
-                      {offerCompensationErrorFor === offer.id && (
-                        <p className="form-error" role="alert">
-                          {translate("offers.amountInvalid")}
-                        </p>
-                      )}
-                      <div className="offer-compensation-form__actions">
-                        <button
-                          className="button button--primary"
-                          type="submit"
-                          disabled={isCreatingPublicOfferLinkFor !== null}
-                        >
-                          {isCreatingPublicOfferLinkFor === offer.id
-                            ? translate("offers.creatingPublicLink")
-                            : translate("offers.createPublicLink")}
-                        </button>
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={isCreatingPublicOfferLinkFor === offer.id}
-                          onClick={() => setEditingOfferCompensationFor(null)}
-                        >
-                          {translate("offers.cancel")}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                  {revokeOfferErrorId === offer.id && (
-                    <p className="form-error" role="alert">{translate("offers.revokeError")}</p>
-                  )}
-                  {publicOfferLink?.offerId === offer.id && !isEditingOfferCompensation &&
-                    (!automaticOfferJob || canCreatePublicLink) && (
-                    <div className="public-offer-link-actions">
-                      <a
-                        className="public-offer-link"
-                        href={publicOfferLink.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {translate("offers.openPublicLink")}
-                      </a>
-                      <p className="offer-compensation-summary">
-                        <strong>{translate("offers.offeredCompensation")}:</strong>{" "}
-                        {hasValue(publicOfferLink.offeredCompensation)
-                          ? formatPrice(publicOfferLink.offeredCompensation, translate, language)
-                          : translate("publicOffer.amountNotSet")}
-                      </p>
-                      <p className="form-hint">
-                        {translate("jobs.messageForCleanerLanguage", {
-                          cleaner: offerCleanerName,
-                          language: cleanerLanguageLabelFor(offer.cleanerId),
-                        })}
-                      </p>
-                      <div className="offer-message-actions">
-                        {offerWhatsAppUrl && (
-                          <a
-                            className="button button--primary"
-                            href={offerWhatsAppUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {translate("whatsapp.openInWhatsApp")}
-                          </a>
-                        )}
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() => copyOfferMessage(offer, offerCleanerName)}
-                        >
-                          {copiedOfferMessageId === offer.id
-                            ? translate("offers.offerMessageCopied")
-                            : translate("offers.copyOfferMessage")}
-                        </button>
-                      </div>
-                      {!offerWhatsAppUrl && (
-                        <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
-                      )}
-                      <p className="form-hint">{translate("whatsapp.manualSendNote")}</p>
-                      {!hasValue(publicOfferLink.offeredCompensation) && (
-                        <p className="offer-compensation-warning" role="status">
-                          {translate("offers.amountNotSetWarning")}
-                        </p>
-                      )}
-                      {offerMessageCopyErrorId === offer.id && (
-                        <p className="form-error" role="alert">
-                          {translate("offers.offerMessageCopyError")}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {publicOfferLinkError === offer.id && (
-                    <p className="form-error" role="alert">
-                      {translate("offers.publicLinkError")}
-                    </p>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-
-        {!isAssignmentAware && assignmentError && (
-          <p className="form-error assignment-error" role="alert">
-            {assignmentError}
-          </p>
-        )}
-      </section>
-
-      <div className="button-row">
-        {canSimulateAssignedCleaner && (
-          <button
-            className="button"
-            type="button"
-            onClick={onSimulateAssignedCleaner}
-          >
-            {translate("offers.simulateAssignedCleaner")}
-          </button>
-        )}
-      </div>
-      </JobDetailSection>
-
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.issues")}>
-      <section ref={issuesSectionRef} tabIndex={-1} className="issues-section" aria-labelledby="issues-title">
-        <div className="issues-section__header">
-          <h3 id="issues-title">{translate("issues.title")}</h3>
-          <button
-            className="button"
-            type="button"
-            onClick={onRefreshIssues}
-            disabled={isLoadingIssues}
-          >
-            {translate("issues.refresh")}
-          </button>
-        </div>
-
-        {isLoadingIssues && (
-          <StateCard message={translate("issues.loading")} status="status" />
-        )}
-
-        {!isLoadingIssues && hasIssuesError && (
-          <StateCard
-            message={translate("issues.error")}
-            status="alert"
-            isError
-          />
-        )}
-
-        {!isLoadingIssues && !hasIssuesError && sortedIssues.length === 0 && (
-          <StateCard message={translate("issues.empty")} />
-        )}
-
-        {!isLoadingIssues && !hasIssuesError && sortedIssues.length > 0 && (
-          <div className="issue-list">
-            {sortedIssues.map((issue) => {
-              const issueCreatedAt = formatCreatedAt(issue.createdAt, language);
-              const resolvedAt = formatCreatedAt(issue.resolvedAt, language);
-              const isOpen = issue.status === "OPEN";
-              const isResolutionFormVisible = resolvingIssueId === issue.id;
-
-              return (
-                <article key={issue.id} className="issue-card">
-                  <div className="issue-card__header">
-                    <strong>
-                      {formatIssueCategory(issue.category, translate)}
-                    </strong>
-                    <span className="status-badge">
-                      {issue.status === "RESOLVED"
-                        ? translate("status.resolved")
-                        : translate("status.open")}
-                    </span>
-                  </div>
-                  <p>{issue.description || translate("common.notProvided")}</p>
-                  <span>
-                    {translate("issues.reportedBy", {
-                      cleaner:
-                        issue.cleanerName || translate("common.notProvided"),
-                    })}
-                  </span>
-                  {issueCreatedAt && (
-                    <span>
-                      {translate("issues.reported")} {issueCreatedAt}
-                    </span>
-                  )}
-                  {resolvedAt && (
-                    <span>
-                      {translate("issues.resolved")} {resolvedAt}
-                    </span>
-                  )}
-                  {issue.status === "RESOLVED" &&
-                    hasValue(issue.resolutionNote) && (
-                      <p className="issue-card__resolution-note">
-                        {translate("issues.resolution")}: {issue.resolutionNote}
-                      </p>
-                    )}
-
-                  {isOpen && !isResolutionFormVisible && (
-                    <div>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => openResolutionForm(issue)}
-                      >
-                        {translate("issues.resolve")}
-                      </button>
-                    </div>
-                  )}
-
-                  {isOpen && isResolutionFormVisible && (
-                    <form
-                      className="issue-resolution-form"
-                      onSubmit={resolveSelectedIssue}
-                    >
-                      <p className="issue-resolution-form__summary">
-                        <strong>
-                          {formatIssueCategory(issue.category, translate)}
-                        </strong>
-                        <span>
-                          {issue.description || translate("common.notProvided")}
-                        </span>
-                      </p>
-                      <label>
-                        {translate("issues.resolutionNote")}
-                        <textarea
-                          name="resolutionNote"
-                          value={resolutionNote}
-                          onChange={(event) =>
-                            setResolutionNote(event.target.value)
-                          }
-                          rows="3"
-                        />
-                      </label>
-                      {resolutionError && (
-                        <p className="form-error" role="alert">
-                          {resolutionError}
-                        </p>
-                      )}
-                      <div className="button-row">
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={isResolvingIssue}
-                          onClick={closeResolutionForm}
-                        >
-                          {translate("common.cancel")}
-                        </button>
-                        <button
-                          className="button button--primary"
-                          type="submit"
-                          disabled={isResolvingIssue}
-                        >
-                          {isResolvingIssue
-                            ? translate("issues.resolving")
-                            : translate("issues.resolve")}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      </JobDetailSection>
-
-      <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")}>
-      <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
-        <h3>{translate("lifecycle.financialSnapshot")}</h3>
-        <dl className="detail-list">
-          <DetailItem label={translate("jobs.clientPrice")} value={hasValue(job.clientPrice)
-            ? formatPrice(job.clientPrice, translate, language) : translate("jobs.notSet")} />
-          <DetailItem label={translate("jobs.cleanerPayout")} value={hasValue(job.cleanerPayout)
-            ? formatPrice(job.cleanerPayout, translate, language) : translate("jobs.notSet")} />
-          <DetailItem label={translate("jobs.grossMargin")} value={grossMargin === null
-            ? translate("jobs.notSet") : formatPrice(grossMargin, translate, language)} />
-        </dl>
-      </section>
-      <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
-        {!isEditingPrices && (
-          <button className="button" type="button" onClick={startPriceEdit}>
-            {translate("jobs.editPrices")}
-          </button>
-        )}
-        {hasSavedPrices && !isEditingPrices && (
-          <p className="form-success" role="status">{translate("jobs.pricesSaved")}</p>
-        )}
-        {isEditingPrices && (
-          <form className="cleaning-form" noValidate onSubmit={savePrices}>
-            <div className="form-row">
-              <label>
-                {translate("jobs.clientPrice")}
-                <input
-                  type="number"
-                  name="clientPrice"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={priceValues.clientPrice}
-                  onChange={(event) => setPriceValues((current) => ({
-                    ...current,
-                    clientPrice: event.target.value,
-                  }))}
-                />
-              </label>
-              <label>
-                {translate("jobs.cleanerPayout")}
-                <input
-                  type="number"
-                  name="cleanerPayout"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={priceValues.cleanerPayout}
-                  onChange={(event) => setPriceValues((current) => ({
-                    ...current,
-                    cleanerPayout: event.target.value,
-                  }))}
-                />
-              </label>
-            </div>
-            {priceSaveError && <p className="form-error" role="alert">{priceSaveError}</p>}
-            <div className="button-row">
-              <button
-                className="button"
-                type="button"
-                disabled={isSavingPrices}
-                onClick={() => {
-                  setIsEditingPrices(false);
-                  setPriceSaveError("");
-                }}
-              >
-                {translate("common.cancel")}
-              </button>
-              <button className="button button--primary" type="submit" disabled={isSavingPrices}>
-                {isSavingPrices ? translate("jobs.savingPrices") : translate("jobs.savePrices")}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
-
-      </JobDetailSection>
+      <JobFinancialSection
+        job={job}
+        translate={translate}
+        language={language}
+        grossMargin={grossMargin}
+        isEditingPrices={isEditingPrices}
+        startPriceEdit={startPriceEdit}
+        hasSavedPrices={hasSavedPrices}
+        savePrices={savePrices}
+        priceValues={priceValues}
+        setPriceValues={setPriceValues}
+        priceSaveError={priceSaveError}
+        isSavingPrices={isSavingPrices}
+        setIsEditingPrices={setIsEditingPrices}
+        setPriceSaveError={setPriceSaveError}
+      />
 
       <JobHistorySection
         job={job}
