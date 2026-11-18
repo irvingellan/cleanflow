@@ -13,6 +13,7 @@ import { useJobPriceEdit } from "./useJobPriceEdit.js";
 import { useIssueResolution } from "./useIssueResolution.js";
 import { jobDetailFormValues, useJobDetailsEdit } from "./useJobDetailsEdit.js";
 import { useJobScheduleEdit } from "./useJobScheduleEdit.js";
+import { useJobRosterEdit } from "./useJobRosterEdit.js";
 import { JobDetailHead } from "./JobDetailHead.jsx";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
@@ -130,14 +131,15 @@ export function JobDetail({
   const [decidingOfferId, setDecidingOfferId] = useState(null);
   const [isSavingSpots, setIsSavingSpots] = useState(false);
   const [reminderLogState, setReminderLogState] = useState(null);
-  const [isDirectAssignmentOpen, setIsDirectAssignmentOpen] = useState(false);
-  const [directCleanerSearch, setDirectCleanerSearch] = useState("");
-  const [directCleanerId, setDirectCleanerId] = useState("");
-  const [isAssigningDirectly, setIsAssigningDirectly] = useState(false);
-  const [removingAssignmentId, setRemovingAssignmentId] = useState(null);
-  const [replacementTargetId, setReplacementTargetId] = useState(null);
-  const [replacingAssignmentId, setReplacingAssignmentId] = useState(null);
-  const [replacementOfferId, setReplacementOfferId] = useState("");
+  const {
+    isDirectAssignmentOpen, setIsDirectAssignmentOpen, directCleanerSearch, setDirectCleanerSearch, directCleanerId,
+    setDirectCleanerId, isAssigningDirectly, removingAssignmentId, replacementTargetId, setReplacementTargetId,
+    replacingAssignmentId, replacementOfferId, setReplacementOfferId, assignCleanerDirectly, removeCleanerAssignment,
+    replaceCleanerAssignment,
+  } = useJobRosterEdit({
+    job, translate, availableCleaners, onAssignCleanerDirectly, onRemoveAssignment, onReplaceAssignment,
+    setAssignmentError, currentJobIdRef,
+  });
   const {
     resolvingIssueId, resolutionNote, setResolutionNote, isResolvingIssue, resolutionError,
     openResolutionForm, closeResolutionForm, resolveSelectedIssue,
@@ -590,7 +592,7 @@ export function JobDetail({
   }, [cleanerLookupKey]);
 
   // One reset per part of the screen when another Job is shown: the shared public link, then Offers, the
-  // reminder, the checklist and the roster.
+  // reminder and the checklist. The roster resets in useJobRosterEdit.
   useEffect(() => {
     setPublicOfferLink(null);
   }, [job.id]);
@@ -614,13 +616,6 @@ export function JobDetail({
     setIsCompletionConfirmationVisible(false);
     setIsCompletingCleaning(false);
     setHasCompleteCleaningError(false);
-  }, [job.id]);
-
-  useEffect(() => {
-    setIsDirectAssignmentOpen(false);
-    setIsAssigningDirectly(false);
-    setDirectCleanerSearch("");
-    setDirectCleanerId("");
   }, [job.id]);
 
   async function assignCleaner(offer, options) {
@@ -685,59 +680,6 @@ export function JobDetail({
       setAssignmentError(translate("offers.spotsError"));
     } finally {
       setIsSavingSpots(false);
-    }
-  }
-
-  async function assignCleanerDirectly(event) {
-    event.preventDefault();
-    const cleaner = availableCleaners.find((candidate) => candidate.id === directCleanerId);
-    if (!canAssignCleanerDirectly(job, cleaner) || isAssigningDirectly) return;
-    setIsAssigningDirectly(true);
-    setAssignmentError(null);
-    const jobId = job.id;
-    try {
-      await onAssignCleanerDirectly(cleaner.id);
-      if (currentJobIdRef.current === jobId) {
-        setIsDirectAssignmentOpen(false);
-        setDirectCleanerId("");
-        setDirectCleanerSearch("");
-      }
-    } catch {
-      if (currentJobIdRef.current === jobId) setAssignmentError(translate("jobs.directAssignmentError"));
-    } finally {
-      if (currentJobIdRef.current === jobId) setIsAssigningDirectly(false);
-    }
-  }
-
-  async function removeCleanerAssignment(assignmentId) {
-    setRemovingAssignmentId(assignmentId);
-    setAssignmentError(null);
-
-    try {
-      await onRemoveAssignment(assignmentId);
-    } catch {
-      setAssignmentError(translate("jobs.rosterUpdateError"));
-    } finally {
-      setRemovingAssignmentId(null);
-    }
-  }
-
-  async function replaceCleanerAssignment(assignmentId) {
-    if (!replacementOfferId) {
-      return;
-    }
-
-    setReplacingAssignmentId(assignmentId);
-    setAssignmentError(null);
-
-    try {
-      await onReplaceAssignment(assignmentId, replacementOfferId);
-      setReplacementOfferId("");
-      setReplacementTargetId(null);
-    } catch {
-      setAssignmentError(translate("jobs.rosterUpdateError"));
-    } finally {
-      setReplacingAssignmentId(null);
     }
   }
 
