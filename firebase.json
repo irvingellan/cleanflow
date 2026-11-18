@@ -14,6 +14,13 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**", ".DS_Store", "**/.DS_Store"],
     "headers": [
       {
+        "source": "**",
+        "headers": [
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "X-Content-Type-Options", "value": "nosniff" }
+        ]
+      },
+      {
         "source": "/",
         "headers": [
           {
@@ -99,6 +106,13 @@
         "source": "/agenda.webmanifest",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache" }
+        ]
+      },
+      {
+        "source": "/offer/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, private" },
+          { "key": "Referrer-Policy", "value": "no-referrer" }
         ]
       },
       {
