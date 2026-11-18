@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import App from "../../App.jsx";
+import App, { preloadCurrentEntry } from "../../App.jsx";
 import { publicOfferLoadDeadlineMs } from "./publicOfferService.js";
 import { TranslationProvider } from "../../i18n/translations.js";
 
@@ -22,8 +22,9 @@ const automaticOffer = {
   preferredLanguage: "pt",
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   window.history.replaceState({}, "", "/offer/example-public-link");
+  await preloadCurrentEntry();
 });
 
 afterEach(() => {
@@ -62,7 +63,8 @@ describe("Public automatic offer", () => {
         json: () => new Promise(() => {}),
       }).mockResolvedValueOnce(Response.json({ offer: automaticOffer }));
       vi.stubGlobal("fetch", load);
-      render(<TranslationProvider><App /></TranslationProvider>);
+      await act(async () => { render(<TranslationProvider><App /></TranslationProvider>); });
+      expect(load).toHaveBeenCalledTimes(1);
       await act(async () => vi.advanceTimersByTimeAsync(publicOfferLoadDeadlineMs));
       expect(screen.getByRole("alert")).toBeVisible();
       expect(load.mock.calls[0][1].signal.aborted).toBe(true);

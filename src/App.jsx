@@ -46,8 +46,10 @@ function currentEntry() {
   return { name: "manager" };
 }
 
-// Start the download of this page's entry before React renders; lazy() reuses the same promise.
-downloadEntry(currentEntry().name);
+// Start the actual browser entry before the first render; lazy() reuses its promise.
+export function preloadCurrentEntry() {
+  return downloadEntry(currentEntry().name);
+}
 
 function StartupCommit() {
   useLayoutEffect(() => { window.__cleanflowStartup?.mounted() }, []);

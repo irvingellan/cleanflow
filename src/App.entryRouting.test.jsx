@@ -1,10 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { guardEntryLoad } from "./app/entryLoadRecovery.js";
 import { TranslationProvider } from "./i18n/translations.js";
 
 // Characterization: which top-level screen each URL renders, and whether the
 // manager session is read there. Synthetic tokens only; no provider call runs.
 // Each entry is a lazy chunk, so every assertion waits for it to render.
+vi.mock("./app/entryLoadRecovery.js", { spy: true });
 vi.mock("./features/auth/authService.js", () => ({
   signInWithEmail: vi.fn(),
   signOutManager: vi.fn(),
@@ -35,9 +37,10 @@ vi.mock("./features/checklist-preview/CleaningChecklistPreview.jsx", () => ({
   CleaningChecklistPreview: () => <div data-testid="entry-checklist-preview" />,
 }));
 
-import App from "./App.jsx";
+import App, { preloadCurrentEntry } from "./App.jsx";
 import { useInitialManagerSession } from "./features/auth/useInitialManagerSession.js";
 
+const loadsDuringModuleImport = guardEntryLoad.mock.calls.length;
 const checklistToken = "t".repeat(43);
 
 function renderAt(url) {
@@ -59,6 +62,14 @@ beforeEach(() => { vi.clearAllMocks(); });
 afterEach(() => { window.history.replaceState(null, "", "/"); });
 
 describe("App entry selection", () => {
+  it("preloads the startup URL explicitly and reuses its download", async () => {
+    expect(loadsDuringModuleImport).toBe(0);
+    window.history.replaceState(null, "", "/offer/example");
+    const download = preloadCurrentEntry();
+    expect(preloadCurrentEntry()).toBe(download);
+    expect((await download).default).toBe((await import("./features/public-offers/PublicOfferPage.jsx")).PublicOfferPage);
+  });
+
   it.each(["/agenda", "/agenda.html"])("renders the Cleaner Hub at %s", async (url) => {
     renderAt(url);
     expect(await screen.findByTestId("entry-cleaner-hub")).toBeInTheDocument();

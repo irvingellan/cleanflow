@@ -1100,7 +1100,10 @@ describe("PublicChecklistPage", () => {
     await screen.findByText("Everything is filled in now. Tap “Send checklist for review” at the end.");
 
     fireEvent.change(screen.getByLabelText("Other notes"), { target: { value: "Reviewed again" } });
-    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: "Save now" }));
+    expect(savePublicChecklistDraft).toHaveBeenCalledOnce();
+    await act(async () => { await savePublicChecklistDraft.mock.results[0].value; });
+    expect(screen.getByText("Saved")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
 
