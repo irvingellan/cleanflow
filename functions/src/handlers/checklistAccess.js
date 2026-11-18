@@ -10,10 +10,12 @@ import {
 } from "../checklistCapabilityService.js";
 import { downloadManagerChecklistEvidence } from "../checklistEvidenceService.js";
 import { pilotChecklistPhotoRequirementId } from "../checklistEvidenceDefinition.js";
-import { db, isWarmupCall, organizationId } from "../runtime/firebase.js";
+import { db, isWarmupCall } from "../runtime/firebase.js";
+import { organizationIdForRequest } from "../runtime/organization.js";
 import { hashToken, newChecklistCapabilityToken } from "../runtime/publicHttp.js";
 
 export async function getChecklistCapability(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   if (isWarmupCall(request)) return { warm: true };
   const jobId = request.data?.jobId;
@@ -30,6 +32,7 @@ export async function getChecklistCapability(request) {
 }
 
 export async function issueChecklistCapability(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   const cleanerId = request.data?.cleanerId;
@@ -49,6 +52,7 @@ export async function issueChecklistCapability(request) {
 }
 
 export async function revokeChecklistCapability(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   if (!validChecklistRunJobId(jobId)) {
@@ -66,6 +70,7 @@ export async function revokeChecklistCapability(request) {
 
 // Services list: how many checklist photos each Job has (counts only).
 export async function getJobPhotoCounts(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   if (isWarmupCall(request)) return { warm: true };
   const jobIds = request.data?.jobIds;
@@ -74,6 +79,7 @@ export async function getJobPhotoCounts(request) {
 }
 
 export async function getChecklistEvidence(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   if (isWarmupCall(request)) return { warm: true };
   const jobId = request.data?.jobId;

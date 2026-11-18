@@ -13,10 +13,12 @@ import {
 } from "../cleanerHubAccess.js";
 import { initialChecklistRunId } from "../checklistRunService.js";
 import { respondToRescheduleForCleaner } from "../jobScheduleResponseService.js";
-import { db, isWarmupCall, organizationId } from "../runtime/firebase.js";
+import { db, isWarmupCall } from "../runtime/firebase.js";
+import { organizationIdForRequest } from "../runtime/organization.js";
 import { hashToken, newChecklistCapabilityToken } from "../runtime/publicHttp.js";
 
 export async function issueCleanerAccessCode(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   if (request.data?.additionalDevice !== undefined && typeof request.data.additionalDevice !== "boolean") {
     throw new HttpsError("invalid-argument", "The additional device option must be a boolean.");
@@ -28,6 +30,7 @@ export async function issueCleanerAccessCode(request) {
 }
 
 export async function revokeCleanerHubAccess(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   return revokeCleanerHubAccessForManager(db, {
     organizationId, cleanerId: request.data?.cleanerId, actorUid: request.auth.uid,
@@ -40,6 +43,7 @@ export async function redeemCleanerAccessCode(request) {
 }
 
 export async function openMyChecklist(request) {
+  const organizationId = organizationIdForRequest(request);
   const { uid, cleanerId, sessionId } = await requireActiveCleaner(db, request, organizationId);
   if (isWarmupCall(request)) return { warm: true };
   return openChecklistForCleaner(db, {
@@ -50,12 +54,14 @@ export async function openMyChecklist(request) {
 
 /** FB01: access details the manager shared, for the cleaner on the Job only. */
 export async function getMyJobAccess(request) {
+  const organizationId = organizationIdForRequest(request);
   const { cleanerId } = await requireActiveCleaner(db, request, organizationId);
   if (isWarmupCall(request)) return { warm: true };
   return loadCleanerJobAccess(db, { organizationId, cleanerId, jobId: request.data?.jobId });
 }
 
 export async function respondToMyOffer(request) {
+  const organizationId = organizationIdForRequest(request);
   const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
   const result = await respondToOfferForCleaner(db, {
     organizationId, cleanerId, uid, sessionId, jobId: request.data?.jobId, status: request.data?.status,
@@ -65,6 +71,7 @@ export async function respondToMyOffer(request) {
 }
 
 export async function respondToMyReschedule(request) {
+  const organizationId = organizationIdForRequest(request);
   const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
   return respondToRescheduleForCleaner(db, {
     organizationId, cleanerId, uid, sessionId, eventId: request.data?.eventId,

@@ -1,0 +1,33 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import { expect, it } from "vitest";
+
+// The hardcoded organization ID may only live in the files listed here.
+// A step that removes the literal from a file deletes its entry in the same change.
+const literal = "cleanflow-demo";
+// Vitest runs from the repository root.
+const repositoryRoot = process.cwd();
+
+const allowed = [
+  "functions/src/runtime/organization.js",
+  "src/services/organization/currentOrganization.js",
+];
+
+function sourceFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === "node_modules") return [];
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return entry.isFile() && !entry.name.includes(".test.") ? [path] : [];
+  });
+}
+
+it("keeps the hardcoded organization ID in the allowed files only", () => {
+  const found = ["src", "functions/src"]
+    .flatMap((directory) => sourceFiles(join(repositoryRoot, directory)))
+    .filter((path) => readFileSync(path, "utf8").includes(literal))
+    .map((path) => relative(repositoryRoot, path).split(sep).join("/"))
+    .sort();
+
+  expect(found).toEqual(allowed);
+});

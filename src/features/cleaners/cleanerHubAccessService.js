@@ -4,8 +4,7 @@ import { getAuth } from "firebase/auth";
 import { setCleanerPushAlerts as writeCleanerPushAlerts } from "./cleanerService.js";
 import { firebaseApp, functions } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
-
-const organizationId = "cleanflow-demo";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
 function timestampIso(value) {
   return value?.toDate?.()?.toISOString?.() || null;
@@ -15,7 +14,7 @@ function timestampIso(value) {
 export async function getCleanerHubAccess(cleanerId) {
   // One-shot server read with a deadline, independent of the realtime channel.
   const snapshot = await withReadDeadline(getServerDoc(
-    serverDoc(serverFirestore(), "organizations", organizationId, "cleanerHubAccess", cleanerId),
+    serverDoc(serverFirestore(), "organizations", currentOrganizationId(), "cleanerHubAccess", cleanerId),
   ));
   if (!snapshot.exists()) return { active: false, linkedAt: null, revokedAt: null, pendingCodeExpiresAt: null };
   const data = snapshot.data();

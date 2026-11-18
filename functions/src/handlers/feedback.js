@@ -1,7 +1,8 @@
 import { logger } from "firebase-functions";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireOrganizationManager } from "../managerAuthorization.js";
-import { db, organizationId } from "../runtime/firebase.js";
+import { db } from "../runtime/firebase.js";
+import { organizationIdForRequest } from "../runtime/organization.js";
 import { githubFeedbackToken } from "../runtime/params.js";
 
 const githubFeedbackRepository = "irvingellan/cleanflow";
@@ -51,6 +52,7 @@ function feedbackIssueBody({ type, message, appVersion, screen, viewport, report
 }
 
 export async function submitFeedback(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   const type = request.data?.type;

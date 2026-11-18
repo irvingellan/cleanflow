@@ -12,6 +12,7 @@ import { collection as serverCollection, getDocs as getServerDocs } from "fireba
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import {
   getAssignedCleanerIds,
   isAssignmentAwareJob,
@@ -21,29 +22,28 @@ import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { buildAssignmentChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
 import { isJobFilled, managerDecisionOf, maxCleanersPerJob, requiredCleanerCount } from "./offerSlots.js";
 
-const organizationId = "cleanflow-demo";
 const assignmentSchemaVersion = 1;
 const assignCleanerDirectlyCall = httpsCallable(functions, "assignCleanerDirectly");
 const removeAutomaticCleanerAssignmentCall = httpsCallable(functions, "removeAutomaticCleanerAssignment");
 
 function jobDocument(jobId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId);
 }
 
 function offersCollection(jobId) {
-  return collection(db, "organizations", organizationId, "jobs", jobId, "offers");
+  return collection(db, "organizations", currentOrganizationId(), "jobs", jobId, "offers");
 }
 
 function offerDocument(jobId, offerId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId, "offers", offerId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId, "offers", offerId);
 }
 
 function assignmentsCollection(jobId) {
-  return collection(db, "organizations", organizationId, "jobs", jobId, "assignments");
+  return collection(db, "organizations", currentOrganizationId(), "jobs", jobId, "assignments");
 }
 
 function assignmentDocument(jobId, assignmentId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId, "assignments", assignmentId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId, "assignments", assignmentId);
 }
 
 function jobFromSnapshot(snapshot) {
@@ -129,7 +129,7 @@ function assertRosterEditable(snapshot) {
 export function buildAssignmentCreateData(job, offer) {
   const assignment = {
     schemaVersion: assignmentSchemaVersion,
-    organizationId,
+    organizationId: currentOrganizationId(),
     jobId: job.id,
     cleanerId: offer.cleanerId,
     cleanerNameSnapshot: offer.cleanerName || "",
@@ -172,7 +172,7 @@ export function assignmentRemovalJobUpdate(job, cleanerId, hasActionableOffers) 
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobAssignments(jobId) {
   const snapshot = await withReadDeadline(getServerDocs(
-    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "assignments"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs", jobId, "assignments"),
   ));
 
   return snapshot.docs
