@@ -1,6 +1,5 @@
 import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
-import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
 import { JobHistorySection } from "./JobHistorySection.jsx";
 import { JobFinancialSection } from "./JobFinancialSection.jsx";
@@ -12,8 +11,8 @@ import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
 import { JobOffersSection } from "./JobOffersSection.jsx";
 import { useJobPriceEdit } from "./useJobPriceEdit.js";
 import { useIssueResolution } from "./useIssueResolution.js";
+import { jobDetailFormValues, useJobDetailsEdit } from "./useJobDetailsEdit.js";
 import { JobDetailHead } from "./JobDetailHead.jsx";
-import { serviceTypeMessage } from "./serviceTypeMessages.js";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
@@ -37,8 +36,6 @@ import {
 import { translateInLanguage, useTranslation } from "../../i18n/translations.js";
 import {
   canManageAssignmentAwareOffers,
-  canEditJobDetails,
-  maximumGuestNameLength,
   getJobGrossMargin,
   getAssignedCleanerIds,
   isAssignmentAwareJob,
@@ -54,16 +51,6 @@ import {
   parseOfferCompensationInput,
 } from "./offerCompensation.js";
 import { buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
-
-function jobDetailFormValues(job) {
-  const serviceType = normalizeServiceType(job.serviceType);
-  return {
-    guestName: job.guestName || "",
-    notes: job.notes || "",
-    serviceType,
-    initialServiceType: serviceType,
-  };
-}
 
 export function JobDetail({
   job,
@@ -182,11 +169,10 @@ export function JobDetail({
     isEditingPrices, setIsEditingPrices, priceValues, setPriceValues, isSavingPrices, priceSaveError, setPriceSaveError,
     hasSavedPrices, startPriceEdit, savePrices,
   } = useJobPriceEdit({ job, translate, onUpdatePrices });
-  const [isEditingJobDetails, setIsEditingJobDetails] = useState(false);
-  const [jobDetailValues, setJobDetailValues] = useState(() => jobDetailFormValues(job));
-  const [isSavingJobDetails, setIsSavingJobDetails] = useState(false);
-  const [jobDetailsSaveError, setJobDetailsSaveError] = useState("");
-  const [hasSavedJobDetails, setHasSavedJobDetails] = useState(false);
+  const {
+    isEditingJobDetails, setIsEditingJobDetails, jobDetailValues, setJobDetailValues, isSavingJobDetails,
+    jobDetailsSaveError, setJobDetailsSaveError, hasSavedJobDetails, startJobDetailsEdit, saveJobDetails,
+  } = useJobDetailsEdit({ job, translate, language, onUpdateDetails });
   const [isEditingJobSchedule, setIsEditingJobSchedule] = useState(false);
   const [jobScheduleValues, setJobScheduleValues] = useState(() => ({
     scheduledDate: job.scheduledDate || "",
@@ -624,14 +610,6 @@ export function JobDetail({
   }, [job.id]);
 
   useEffect(() => {
-    setJobDetailValues(jobDetailFormValues(job));
-    setIsEditingJobDetails(false);
-    setIsSavingJobDetails(false);
-    setJobDetailsSaveError("");
-    setHasSavedJobDetails(false);
-  }, [job.id]);
-
-  useEffect(() => {
     setPublicOfferLink(null);
     setPublicOfferLinkError(null);
     setEditingOfferCompensationFor(null);
@@ -650,43 +628,6 @@ export function JobDetail({
     setDirectCleanerId("");
     setOfferMessageCopyErrorId(null);
   }, [job.id]);
-
-  function startJobDetailsEdit() {
-    if (!canEditJobDetails(job)) return;
-    setJobDetailValues(jobDetailFormValues(job));
-    setJobDetailsSaveError("");
-    setHasSavedJobDetails(false);
-    setIsEditingJobDetails(true);
-  }
-
-  async function saveJobDetails(event) {
-    event.preventDefault();
-    const details = {
-      guestName: jobDetailValues.guestName.trim(),
-      notes: jobDetailValues.notes.trim(),
-      ...(jobDetailValues.serviceType !== jobDetailValues.initialServiceType
-        ? { serviceType: jobDetailValues.serviceType } : {}),
-    };
-
-    if (details.guestName.length > maximumGuestNameLength) {
-      setJobDetailsSaveError(translate("jobs.guestNameTooLong"));
-      return;
-    }
-
-    setIsSavingJobDetails(true);
-    setJobDetailsSaveError("");
-    setHasSavedJobDetails(false);
-
-    try {
-      await onUpdateDetails(details);
-      setIsEditingJobDetails(false);
-      setHasSavedJobDetails(true);
-    } catch {
-      setJobDetailsSaveError(serviceTypeMessage(language, "detailsUpdateError"));
-    } finally {
-      setIsSavingJobDetails(false);
-    }
-  }
 
   function startJobScheduleEdit() {
     if (!canReschedule) return;
