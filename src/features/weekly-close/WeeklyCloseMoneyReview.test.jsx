@@ -50,3 +50,56 @@ it("identifies both incomplete services, the affected field and the canonical jo
   await vi.waitFor(() => expect(onOpenJob).toHaveBeenCalledWith(source, expect.any(Object)));
   expect(loadWeeklyCloseJob).toHaveBeenCalledWith("payout-only");
 });
+
+it.each([
+  ["en", "1 service with incomplete amounts", "Client price is not set.", "Open service"],
+  ["pt", "1 serviço com valores incompletos", "Valor do cliente não definido.", "Abrir serviço"],
+  ["es", "1 servicio con importes incompletos", "Importe del cliente no establecido.", "Abrir servicio"],
+])("names the field and the direct action in %s", async (language, title, reason, open) => {
+  window.localStorage.setItem("cleanflow-language", language);
+  mount([jobs[1]]);
+  const panel = await screen.findByRole("region", { name: title });
+  expect(panel).toHaveTextContent(reason);
+  expect(within(panel).getByRole("button").getAttribute("aria-label")).toContain(open);
+});
+
+it("lets the manager retry a failed service lookup without losing the review", async () => {
+  const onOpenJob = vi.fn();
+  loadWeeklyCloseJob.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce({ id: jobs[0].id });
+  mount(jobs, onOpenJob);
+  const panel = await screen.findByRole("region", { name: "2 services with incomplete amounts" });
+  const button = within(panel).getByRole("button", { name: /open service.*Example North/i });
+  fireEvent.click(button);
+  expect(await within(panel).findByRole("alert")).toHaveTextContent("Could not open this service");
+  expect(onOpenJob).not.toHaveBeenCalled();
+  fireEvent.click(button);
+  await vi.waitFor(() => expect(onOpenJob).toHaveBeenCalledTimes(1));
+  expect(loadWeeklyCloseJob.mock.calls).toEqual([["charge-only"], ["charge-only"]]);
+});
+
+it("ignores a service response after the manager chooses another client", async () => {
+  let resolveJob;
+  const onOpenJob = vi.fn();
+  loadWeeklyCloseJob.mockReturnValue(new Promise((resolve) => { resolveJob = resolve; }));
+  mount([jobs[0], { ...jobs[1], clientId: "other-client", clientName: "Other client" }], onOpenJob);
+  const panel = await screen.findByRole("region", { name: "2 services with incomplete amounts" });
+  fireEvent.click(within(panel).getByRole("button", { name: /open service.*Example North/i }));
+  fireEvent.change(screen.getByLabelText("Client"), { target: { value: "id:other-client" } });
+  resolveJob({ id: jobs[0].id });
+  const filtered = await screen.findByRole("region", { name: "1 service with incomplete amounts" });
+  expect(filtered).toHaveTextContent("Example South");
+  expect(onOpenJob).not.toHaveBeenCalled();
+});
+
+it("does not call an unreconciled selection complete when a conflicting service was excluded", async () => {
+  mount([jobs[0], { ...jobs[0], clientPrice: 300 }, { ...jobs[1], clientPrice: 120 }]);
+  await screen.findByText("Example client", { selector: "strong" });
+  expect(screen.getByText(/records? excluded from this summary/)).toBeInTheDocument();
+  expect(screen.queryByText(/All included services have complete reconciliation data/)).not.toBeInTheDocument();
+});
+
+it("does not describe a partial margin that this screen deliberately withholds", async () => {
+  mount();
+  await screen.findByRole("region", { name: "2 services with incomplete amounts" });
+  expect(screen.queryByText(/margin subtotals include only services with both prices/i)).not.toBeInTheDocument();
+});
