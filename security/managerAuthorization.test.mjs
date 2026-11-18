@@ -118,7 +118,7 @@ beforeEach(async () => {
   });
 });
 
-test("active manager can read/query/create/update/delete only supported operational documents", async () => {
+test("active manager can read/query/create/update only supported operational documents", async () => {
   const db = account("manager").firestore();
   for (const path of paths) {
     await assertSucceeds(db.doc(`${root}/${path}`).get());
@@ -127,8 +127,32 @@ test("active manager can read/query/create/update/delete only supported operatio
     await assertSucceeds(collection.get());
     const added = collection.doc("new-record");
     await assertSucceeds(added.set({ organizationId: org }));
-    await assertSucceeds(added.delete());
   }
+});
+
+test("a manager browser archives and updates operational documents but cannot delete them", async () => {
+  const db = account("manager").firestore();
+  for (const path of [...paths, assignmentPath]) {
+    const reference = db.doc(`${root}/${path}`);
+    await assertFails(reference.delete());
+    assert.equal((await admin.doc(`${root}/${path}`).get()).exists, true);
+  }
+  const batch = db.batch();
+  batch.update(db.doc(`${root}/jobs/job`), { updated: true });
+  batch.delete(db.doc(`${root}/${assignmentPath}`));
+  await assertFails(batch.commit());
+  for (const path of ["clients/client", "properties/property", "cleaners/cleaner"]) {
+    const reference = db.doc(`${root}/${path}`);
+    await assertSucceeds(reference.update({ archivedAt: serverTimestamp() }));
+    await assertSucceeds(reference.update({ archivedAt: deleteField() }));
+  }
+  // Archiving a Job changes its checklist context, so each step advances the revision.
+  const job = db.doc(`${root}/jobs/job`);
+  await assertSucceeds(job.update({ archivedAt: serverTimestamp(), checklistContextRevision: 1 }));
+  await assertSucceeds(job.update({ archivedAt: deleteField(), checklistContextRevision: 2 }));
+  await assertSucceeds(db.doc(`${root}/payouts/payout`).update({ status: "VOID" }));
+  await assertSucceeds(db.doc(`${root}/jobs/job/issues/issue`).update({ status: "RESOLVED" }));
+  await assertSucceeds(db.doc(`${root}/jobs/job/offers/offer`).update({ status: "CANCELLED" }));
 });
 
 test("only an active manager can update Job price snapshots without changing checklist context", async () => {
