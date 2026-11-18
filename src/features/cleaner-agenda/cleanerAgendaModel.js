@@ -1,4 +1,7 @@
 import { openSpots, requiredCleanerCount, rosterCleanerIds } from "../jobs/offerSlots.js";
+import { currentScheduleRevision } from "../jobs/scheduleConfirmation.js";
+import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
+import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 
 // Cleaner Agenda: the manager's compact views of one service period —
 // each cleaner's schedule, services still missing a cleaner, and completed
@@ -34,6 +37,8 @@ function row(job, propertyById) {
     jobId: job.id,
     date: job.scheduledDate,
     start: /^\d{2}:\d{2}$/.test(text(job.scheduledStart)) ? text(job.scheduledStart) : "",
+    serviceType: normalizeServiceType(job.serviceType),
+    scheduleRevision: currentScheduleRevision(job),
     propertyName: text(property?.name) || text(job.propertyName),
     address: text(property?.address),
     status: job.operationalStatus,
@@ -127,15 +132,33 @@ export function buildCleanerAgenda({ period, jobs = [], cleaners = [], propertie
   return { period: { start: period.start, end: period.end }, schedule, unassigned, completed };
 }
 
+export function agendaScheduleKey(cleanerId, jobId) {
+  return JSON.stringify([cleanerId, jobId]);
+}
+
 /**
- * A short, ready-to-send schedule for one cleaner: date, time, house and
- * address. Never includes door, gate, lockbox or other access details.
+ * A short schedule with the cleaner's service types and verified changes.
+ * Previous schedules come only from successful copies in this manager session.
  */
-export function agendaMessage({ group, period, copy, formatDate, formatWeekday }) {
+export function agendaMessage({ group, period, copy, formatDate, formatWeekday,
+  language = group.preferredLanguage, copiedSchedules = new Map() }) {
+  const when = (entry) => [`${formatWeekday(entry.date)} ${formatDate(entry.date)}`, entry.start || copy.noTime]
+    .filter(Boolean).join(" · ");
   const lines = group.rows.map((entry) => {
-    const when = [`${formatWeekday(entry.date)} ${formatDate(entry.date)}`, entry.start].filter(Boolean).join(" · ");
+    const previous = copiedSchedules.get(agendaScheduleKey(group.cleanerId, entry.jobId));
+    const changed = previous && (previous.date !== entry.date || previous.start !== entry.start);
+    let change = "";
+    if (changed) {
+      const sameDay = previous.date === entry.date;
+      const from = sameDay ? previous.start || copy.noTime : when(previous);
+      const to = sameDay ? entry.start || copy.noTime : when(entry);
+      change = `${copy.rescheduled}: ${from} → ${to}`;
+    } else if (!previous && entry.scheduleRevision > 0) {
+      change = `${copy.rescheduled}: ${when(entry)}`;
+    }
     const where = [entry.propertyName, entry.address].filter(Boolean).join(" — ");
-    return `• ${when} · ${where || copy.unnamedProperty}`;
+    return `• ${when(entry)} · ${serviceTypeLabel(language, entry.serviceType)} · ${where || copy.unnamedProperty}`
+      + (change ? `\n  ${change}` : "");
   });
   return [
     copy.greeting.replace("{name}", group.name || "").replace(/\s+!/, "!"),

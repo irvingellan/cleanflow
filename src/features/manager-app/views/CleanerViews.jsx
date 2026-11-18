@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { CleanerDetail } from "../../cleaners/CleanerDetail.jsx";
 import { CleanerDirectory } from "../../cleaners/CleanerDirectory.jsx";
 import { CleanerProfileForm, CleanerProfileSuccess } from "../../cleaners/CleanerProfileForm.jsx";
@@ -30,6 +31,8 @@ export function CleanerViews({
   showCleanerDetail,
   savedCleaner,
 }) {
+  // The uid-keyed manager access boundary discards this memory on sign-out or account change.
+  const copiedSchedules = useRef(new Map());
   return (
     <>
       {view === "cleaner-list" && (
@@ -47,7 +50,7 @@ export function CleanerViews({
         />
       )}
 
-      {view === "cleaner-agenda" && <CleanerAgendaView onBack={showCleaners} onOpenJob={openCleanerAgendaJob} />}
+      {view === "cleaner-agenda" && <CleanerAgendaView onBack={showCleaners} onOpenJob={openCleanerAgendaJob} copiedSchedules={copiedSchedules.current} />}
 
       {view === "cleaner-alerts" && <CleanerAlertsView onBack={showCleaners} onOpenCleaner={openCleaner} />}
 

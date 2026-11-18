@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FIRST_ACCEPT_WINS } from "../jobs/automaticOffers.js";
 import { serviceTypeLabel, serviceTypeMessage } from "../jobs/serviceTypeMessages.js";
 import { HubIcon } from "./HubIcon.jsx";
@@ -208,11 +208,15 @@ function DayGroups({ t, entries, today, onOpen }) {
  * the months that have work. The count is the loaded list, so when the
  * schedule is not confirmed right now the summary says it may be incomplete.
  */
-function Scheduled({ t, entries, today, live, onOpen }) {
+function Scheduled({ t, entries, today, live, onOpen, navigation, setNavigation }) {
   const months = agendaMonths(entries);
-  const [mode, setMode] = useState("all");
-  const [month, setMonth] = useState(months[0] ?? "");
+  const { mode, month } = navigation;
+  const setMode = (mode) => setNavigation((current) => ({ ...current, mode }));
+  const setMonth = (month) => setNavigation((current) => ({ ...current, month }));
   const current = months.includes(month) ? month : months[0] ?? "";
+  useEffect(() => {
+    if (month !== current) setNavigation((previous) => ({ ...previous, month: current }));
+  }, [current, month, setNavigation]);
   const position = months.indexOf(current);
   const summary = (
     <p className="hb-sched-sum" data-testid="scheduled-summary">
@@ -261,7 +265,7 @@ function Scheduled({ t, entries, today, live, onOpen }) {
 
 /* ---------- screens ---------- */
 
-function Agenda({ t, hub, name, segment, setSegment, go, today }) {
+function Agenda({ t, hub, name, segment, setSegment, go, today, scheduledNavigation, setScheduledNavigation }) {
   const { schedule, freshness } = hub;
   const list = segment === "today" ? schedule.today : segment === "upcoming" ? schedule.upcoming : schedule.completed;
   const pendingOffers = schedule.offers.filter((entry) => entry.offerStatus === "PENDING").length;
@@ -318,7 +322,7 @@ function Agenda({ t, hub, name, segment, setSegment, go, today }) {
         ))}
       </div>
       {segment === "upcoming"
-        ? <Scheduled t={t} entries={list} today={today} live={freshness.state === "live"} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} />
+        ? <Scheduled t={t} entries={list} today={today} live={freshness.state === "live"} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} navigation={scheduledNavigation} setNavigation={setScheduledNavigation} />
         : list.length
           ? <DayGroups t={t} entries={list} today={today} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} />
           : (
@@ -739,11 +743,17 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     tab: "agenda",
   }));
   const [segment, setSegment] = useState("today");
+  const [scheduledNavigation, setScheduledNavigation] = useState({ mode: "all", month: "" });
+  const agendaReturn = useRef(null);
   const [signingOut, setSigningOut] = useState(false);
   const [onboarded, setOnboarded] = useState(() => readStorage(onboardingStorageKey));
   const main = useRef(null);
   const { session } = hub;
   const sessionScope = [session.uid, session.organizationId, session.cleanerId, session.sessionId].join(":");
+  useEffect(() => {
+    setScheduledNavigation({ mode: "all", month: "" });
+    agendaReturn.current = null;
+  }, [sessionScope]);
   const active = session.status === "signed-in" && hub.membership.state === "active" && !hub.revoked;
   const inbox = useNotificationInbox({
     role: "CLEANER", sessionKey: active ? session.sessionId : null, service: hubOptions?.inboxService,
@@ -756,7 +766,17 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     return () => { document.title = previousTitle; };
   }, [browserTitle]);
   const today = localDateKey(new Date());
-  const go = (next) => setView((current) => ({ ...next, tab: next.tab || current.tab }));
+  const go = (next, back = false) => {
+    if (view.type === "tab" && view.tab === "agenda" && next.type === "job") {
+      const scroller = document.getElementById("hb-main");
+      const card = [...main.current.querySelectorAll("[data-job-id]")].find((element) => element.dataset.jobId === next.jobId);
+      agendaReturn.current = {
+        scope: sessionScope, jobId: next.jobId, scrollTop: scroller.scrollTop,
+        offset: card ? card.getBoundingClientRect().top - scroller.getBoundingClientRect().top : null,
+      };
+    } else if (!back || view.type !== "job") agendaReturn.current = null;
+    setView((current) => ({ ...next, tab: next.tab || current.tab, returnToAgenda: back && view.type === "job" }));
+  };
   useEffect(() => {
     const worker = notificationInboxEnabled() ? navigator.serviceWorker : null;
     const openInbox = (event) => {
@@ -768,7 +788,16 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
     worker?.addEventListener?.("message", openInbox);
     return () => worker?.removeEventListener?.("message", openInbox);
   }, []);
-  useEffect(() => { document.getElementById("hb-main")?.scrollTo?.(0, 0); }, [view.type, view.tab, view.jobId]);
+  useLayoutEffect(() => {
+    const scroller = document.getElementById("hb-main");
+    if (!scroller) return;
+    const saved = agendaReturn.current;
+    const returning = view.returnToAgenda && view.type === "tab" && view.tab === "agenda" && saved?.scope === sessionScope;
+    const card = returning && [...main.current.querySelectorAll("[data-job-id]")].find((element) => element.dataset.jobId === saved.jobId);
+    scroller.scrollTo?.(0, card && saved.offset !== null ? saved.scrollTop : 0);
+    if (card && saved.offset !== null) scroller.scrollTop += card.getBoundingClientRect().top - scroller.getBoundingClientRect().top - saved.offset;
+    if (returning) (card || main.current.querySelector('.hb-seg button[aria-pressed="true"]'))?.focus({ preventScroll: true });
+  }, [view.type, view.tab, view.jobId, view.returnToAgenda, sessionScope]);
 
   // First visit defaults to Upcoming when nothing is scheduled today.
   const firstSnapshot = useRef(true);
@@ -836,7 +865,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   else if (view.type === "install") body = <div className="hb-screen"><InstallGuide t={t} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onSkip={() => go({ type: "tab" })} /></div>;
   else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} today={today} />;
   else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} push={push} installed={displayMode === "standalone"} />;
-  else body = <Agenda t={t} hub={hub} name={name} segment={segment} setSegment={setSegment} go={go} today={today} />;
+  else body = <Agenda t={t} hub={hub} name={name} segment={segment} setSegment={setSegment} go={go} today={today} scheduledNavigation={scheduledNavigation} setScheduledNavigation={setScheduledNavigation} />;
 
   const freshChip = hub.freshness.state === "live" ? "live" : hub.freshness.state === "loading" ? "loading" : "stale";
   return (
@@ -845,7 +874,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
       theme={theme}
       bar={<>
         {sub && onboardingDone
-          ? <button type="button" className="mw-linkbtn" onClick={() => go({ type: "tab" })}><HubIcon name="arrowL" size={16} />{t("hb.back")}</button>
+          ? <button type="button" className="mw-linkbtn" onClick={() => go({ type: "tab" }, true)}><HubIcon name="arrowL" size={16} />{t("hb.back")}</button>
           : <Brand t={t} />}
         {notificationInboxEnabled() && onboardingDone && view.type !== "inbox" && (
           <button type="button" className="mw-linkbtn hb-inbox-trigger" onClick={() => go({ type: "inbox" })}>

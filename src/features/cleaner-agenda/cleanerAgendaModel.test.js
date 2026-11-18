@@ -39,6 +39,13 @@ describe("cleaner schedule", () => {
     expect(agenda.schedule[0].rows[0]).toMatchObject({ propertyName: "Lake House", address: "100 Example St", start: "09:00" });
     expect(JSON.stringify(agenda)).not.toContain("never-show-1234");
   });
+
+  it("projects only a known service type from a malformed legacy value", () => {
+    const result = buildCleanerAgenda({ period, cleaners, properties,
+      jobs: [job("malformed", { serviceType: { internalNote: "never-copy-private-field" } })] });
+    expect(result.schedule[0].rows[0].serviceType).toBe("STANDARD");
+    expect(JSON.stringify(result)).not.toContain("never-copy-private-field");
+  });
 });
 
 describe("services without a cleaner", () => {
@@ -86,8 +93,8 @@ describe("message for the cleaner", () => {
     });
     expect(message).toBe([
       "Olá, Ana!", "Sua agenda de 11-16 a 11-22:", "",
-      "• seg 11-17 · 11:00 · Lake House — 100 Example St",
-      "• seg 11-18 · Lake House — 100 Example St",
+      "• seg 11-17 · 11:00 · Padrão (troca de hóspedes) · Lake House — 100 Example St",
+      "• seg 11-18 · Padrão (troca de hóspedes) · Lake House — 100 Example St",
       "", "Qualquer dúvida, me chame.",
     ].join("\n"));
   });

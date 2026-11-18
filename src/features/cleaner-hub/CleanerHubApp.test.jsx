@@ -502,3 +502,129 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();
   });
 });
+
+// jsdom has no layout. Model a 550px scroller with 110px service rows so
+// restoration must preserve the opened row's offset, not just call scrollTo.
+describe("CleanerHubApp agenda return", () => {
+  const futureJobs = [1, 2, 3].flatMap((monthOffset) => Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(`${today}T12:00:00`);
+    date.setDate(1);
+    date.setMonth(date.getMonth() + monthOffset);
+    date.setDate(index + 2);
+    return {
+      ...entries[0], id: `example-${monthOffset}-${index}`, jobId: `future-${monthOffset}-${index}`,
+      propertyName: `Example House ${monthOffset}-${index}`, scheduledDate: localDateKey(date),
+    };
+  }));
+  const card = (jobId) => document.querySelector(`[data-job-id="${jobId}"]`);
+  const main = () => document.getElementById("hb-main");
+  const back = () => userEvent.click(screen.getByRole("button", { name: "Voltar", exact: true }));
+
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+      const index = Number(this.dataset.jobId?.split("-").at(-1));
+      const top = this.id === "hb-main" ? 60 : this.dataset.jobId
+        ? 60 + 240 + index * 110 - main().scrollTop : 0;
+      return { top, bottom: top + 110, left: 0, right: 375, width: 375, height: this.id === "hb-main" ? 550 : 110 };
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: function (_x, y) { this.scrollTop = Math.max(0, y); },
+    });
+  });
+  afterEach(() => {
+    delete HTMLElement.prototype.scrollTo;
+    vi.unstubAllGlobals();
+  });
+
+  async function openAgenda(options = {}) {
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service, ...options }} />);
+    act(() => handlers.agenda({ entries: futureJobs, fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
+    return handlers;
+  }
+
+  async function chooseSecondMonth() {
+    await userEvent.click(screen.getByRole("button", { name: "Por mês", exact: true }));
+    await userEvent.click(screen.getByRole("button", { name: "Próximo mês com serviços" }));
+    return screen.getByTestId("month-nav").textContent;
+  }
+
+  it.each(["all", "month"])("returns to the %s list with the opened card's scroll offset and focus", async (mode) => {
+    await openAgenda();
+    const month = mode === "month" ? await chooseSecondMonth() : null;
+    const jobId = mode === "month" ? "future-2-7" : "future-1-7";
+    main().scrollTop = 715;
+    const offset = card(jobId).getBoundingClientRect().top - main().getBoundingClientRect().top;
+    await userEvent.click(card(jobId));
+    expect(main().scrollTop).toBe(0);
+    await back();
+    expect.soft(document.querySelector(`[data-sched-mode="${mode}"]`)).toHaveAttribute("aria-pressed", "true");
+    if (month) expect.soft(screen.queryByTestId("month-nav")?.textContent).toBe(month);
+    expect.soft(main().scrollTop).toBe(715);
+    expect.soft(card(jobId)?.getBoundingClientRect().top - main().getBoundingClientRect().top).toBe(offset);
+    expect.soft(card(jobId)).toHaveFocus();
+  });
+
+  it("falls back safely when the opened service and its month disappear", async () => {
+    const handlers = await openAgenda();
+    await chooseSecondMonth();
+    main().scrollTop = 715;
+    await userEvent.click(card("future-2-7"));
+    const remaining = futureJobs.filter((job) => !job.jobId.startsWith("future-2-"));
+    act(() => handlers.agenda({ entries: remaining, fromCache: false }));
+    await back();
+    expect.soft(document.querySelector('[data-sched-mode="month"]')).toHaveAttribute("aria-pressed", "true");
+    expect.soft(card("future-1-0")).toBeInTheDocument();
+    expect.soft(main().scrollTop).toBe(0);
+    expect.soft(screen.getByRole("button", { name: /^Agendadas/ })).toHaveFocus();
+    act(() => handlers.agenda({ entries: futureJobs, fromCache: false }));
+    expect.soft(card("future-1-0")).toBeInTheDocument();
+    expect.soft(card("future-2-0")).toBeNull();
+  });
+
+  it("does not restore a previous session's month or scroll after Back", async () => {
+    const handlers = await openAgenda();
+    await chooseSecondMonth();
+    main().scrollTop = 715;
+    await userEvent.click(card("future-2-7"));
+    act(() => handlers.session({ status: "signed-in", uid: "u1", organizationId: "org", cleanerId: "ana", sessionId: "session-next" }));
+    act(() => handlers.agenda({ entries: futureJobs, fromCache: false }));
+    await back();
+    expect(document.querySelector('[data-sched-mode="all"]')).toHaveAttribute("aria-pressed", "true");
+    expect(main().scrollTop).toBe(0);
+    expect(card("future-2-7")).not.toHaveFocus();
+  });
+
+  it("returns to Offers after opening an offer without restoring an agenda position", async () => {
+    const handlers = await openAgenda();
+    await chooseSecondMonth();
+    main().scrollTop = 715;
+    await userEvent.click(card("future-2-7"));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    act(() => handlers.agenda({ entries: [...futureJobs, entries[1]], fromCache: false }));
+    await userEvent.click(card("j2"));
+    await back();
+    expect(screen.getByRole("heading", { name: "Ofertas", exact: true })).toBeVisible();
+    expect(main().scrollTop).toBe(0);
+    expect(card("future-2-7")).toBeNull();
+  });
+
+  it("does not reuse an agenda anchor when a different service is opened through the Inbox", async () => {
+    const inboxService = {
+      list: vi.fn().mockResolvedValue({ items: [{ id: "notice", type: "JOB_ASSIGNED", read: false, openable: true, serviceLabel: "Example House 1-0" }], unreadCount: 1 }),
+      open: vi.fn().mockResolvedValue({ state: "opened", destination: { kind: "JOB", jobId: "future-1-0" } }),
+    };
+    await openAgenda({ inboxService });
+    await chooseSecondMonth();
+    main().scrollTop = 715;
+    await userEvent.click(card("future-2-7"));
+    await userEvent.click(screen.getByRole("button", { name: /Caixa de entrada/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir", exact: true }));
+    expect(screen.getByRole("heading", { name: "Example House 1-0" })).toBeVisible();
+    await back();
+    expect(main().scrollTop).toBe(0);
+    expect(card("future-2-7")).not.toHaveFocus();
+  });
+});

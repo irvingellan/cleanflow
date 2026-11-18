@@ -23,7 +23,7 @@ const messages = {
     whatsapp: "Send on WhatsApp", noPhone: "Add a phone with country code (+1…) to send on WhatsApp.",
     payout: "Payout", payoutUnknown: "Not recorded", shared: "Shared service: split not recorded",
     total: "Total", knownTotal: "Known total", totalIncomplete: "{count} without amount: check before paying",
-    privacy: "Messages include date, time, house and address only. Door, gate and lockbox codes are never included.",
+    privacy: "Messages include the schedule, service type, house and address. Door, gate and lockbox codes are never included.",
     status: { UNASSIGNED: "No cleaner", OFFERED: "Offered", ASSIGNED: "Assigned", IN_PROGRESS: "In progress", COMPLETED: "Completed" },
   },
   pt: {
@@ -48,7 +48,7 @@ const messages = {
     whatsapp: "Enviar no WhatsApp", noPhone: "Cadastre o telefone com código do país (+1…) para enviar no WhatsApp.",
     payout: "Pagamento", payoutUnknown: "Sem valor", shared: "Serviço dividido: valor por cleaner não registrado",
     total: "Total", knownTotal: "Total conhecido", totalIncomplete: "{count} sem valor: confira antes de pagar",
-    privacy: "As mensagens têm só data, horário, casa e endereço. Códigos de porta, portão e cofre nunca entram.",
+    privacy: "As mensagens têm programação, tipo de serviço, casa e endereço. Códigos de porta, portão e cofre nunca entram.",
     status: { UNASSIGNED: "Sem cleaner", OFFERED: "Oferecido", ASSIGNED: "Atribuído", IN_PROGRESS: "Em andamento", COMPLETED: "Concluído" },
   },
   es: {
@@ -73,15 +73,15 @@ const messages = {
     whatsapp: "Enviar por WhatsApp", noPhone: "Registra el teléfono con código de país (+1…) para enviar por WhatsApp.",
     payout: "Pago", payoutUnknown: "Sin monto", shared: "Servicio compartido: monto por cleaner no registrado",
     total: "Total", knownTotal: "Total conocido", totalIncomplete: "{count} sin monto: revisa antes de pagar",
-    privacy: "Los mensajes incluyen solo fecha, hora, casa y dirección. Nunca incluyen códigos de puerta, portón o caja.",
+    privacy: "Los mensajes incluyen la programación, el tipo de servicio, la casa y la dirección. Nunca incluyen códigos de puerta, portón o caja.",
     status: { UNASSIGNED: "Sin cleaner", OFFERED: "Ofrecido", ASSIGNED: "Asignado", IN_PROGRESS: "En curso", COMPLETED: "Completado" },
   },
 };
 
 const cleanerMessages = {
-  en: { greeting: "Hi {name}!", intro: "Your CleanFlow schedule from {start} to {end}:", closing: "Any questions, just message me." },
-  pt: { greeting: "Olá, {name}!", intro: "Sua agenda CleanFlow de {start} a {end}:", closing: "Qualquer dúvida, me chame." },
-  es: { greeting: "¡Hola, {name}!", intro: "Tu agenda CleanFlow del {start} al {end}:", closing: "Cualquier duda, escríbeme." },
+  en: { greeting: "Hi {name}!", intro: "Your CleanFlow schedule from {start} to {end}:", closing: "Any questions, just message me.", rescheduled: "Rescheduled" },
+  pt: { greeting: "Olá, {name}!", intro: "Sua agenda CleanFlow de {start} a {end}:", closing: "Qualquer dúvida, me chame.", rescheduled: "Reagendado" },
+  es: { greeting: "¡Hola, {name}!", intro: "Tu agenda CleanFlow del {start} al {end}:", closing: "Cualquier duda, escríbeme.", rescheduled: "Reprogramado" },
 };
 
 export function agendaText(language, key, replacements = {}) {
@@ -96,7 +96,8 @@ export function agendaStatus(language, status) {
 }
 
 export function cleanerMessageCopy(language) {
-  return { ...(cleanerMessages[language] || cleanerMessages.en), unnamedProperty: agendaText(language, "unnamedProperty") };
+  return { ...(cleanerMessages[language] || cleanerMessages.en),
+    unnamedProperty: agendaText(language, "unnamedProperty"), noTime: agendaText(language, "noTime") };
 }
 
 export const supportedAgendaLanguage = (value) => (Object.hasOwn(messages, value) ? value : null);
