@@ -9,7 +9,7 @@ import './features/jobs/serviceLifecycle.css'
 import './features/jobs/CleanerSelectionContext.css'
 import './features/cleaner-agenda/cleanerAgenda.css'
 import './features/cleaner-alerts/cleanerAlerts.css'
-import App from './App.jsx'
+import App, { preloadCurrentEntry } from './App.jsx'
 import '@fontsource-variable/inter/wght.css'
 import './index.css'
 import './styles/system.css'
@@ -21,6 +21,8 @@ import './styles/directories.css'
 import './styles/devcenter.css'
 import { TranslationProvider } from './i18n/translations.js'
 import { EnvironmentBanner } from './components/EnvironmentBanner.jsx'
+
+preloadCurrentEntry()
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
