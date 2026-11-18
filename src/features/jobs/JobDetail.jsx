@@ -12,6 +12,7 @@ import { JobOffersSection } from "./JobOffersSection.jsx";
 import { useJobPriceEdit } from "./useJobPriceEdit.js";
 import { useIssueResolution } from "./useIssueResolution.js";
 import { jobDetailFormValues, useJobDetailsEdit } from "./useJobDetailsEdit.js";
+import { useJobScheduleEdit } from "./useJobScheduleEdit.js";
 import { JobDetailHead } from "./JobDetailHead.jsx";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
@@ -119,6 +120,8 @@ export function JobDetail({
   initialFocus = null,
 }) {
   const { language, translate } = useTranslation();
+  const currentJobIdRef = useRef(job.id);
+  currentJobIdRef.current = job.id;
   const [resolvedCleanerNames, setResolvedCleanerNames] = useState({});
   const [resolvedCleanerPhones, setResolvedCleanerPhones] = useState({});
   const [resolvedCleanerLanguages, setResolvedCleanerLanguages] = useState({});
@@ -173,25 +176,23 @@ export function JobDetail({
     isEditingJobDetails, setIsEditingJobDetails, jobDetailValues, setJobDetailValues, isSavingJobDetails,
     jobDetailsSaveError, setJobDetailsSaveError, hasSavedJobDetails, startJobDetailsEdit, saveJobDetails,
   } = useJobDetailsEdit({ job, translate, language, onUpdateDetails });
-  const [isEditingJobSchedule, setIsEditingJobSchedule] = useState(false);
-  const [jobScheduleValues, setJobScheduleValues] = useState(() => ({
-    scheduledDate: job.scheduledDate || "",
-    scheduledStart: job.scheduledStart || "",
-    expectedScheduleRevision: currentScheduleRevision(job),
-  }));
-  const [isSavingJobSchedule, setIsSavingJobSchedule] = useState(false);
-  const [jobScheduleSaveError, setJobScheduleSaveError] = useState("");
-  const [hasSavedJobSchedule, setHasSavedJobSchedule] = useState(false);
-  const [scheduleCommunicationMayBeStale, setScheduleCommunicationMayBeStale] = useState(false);
-  const [needsScheduleReload, setNeedsScheduleReload] = useState(false);
-  const [scheduleRevisionConflict, setScheduleRevisionConflict] = useState(false);
+  const scheduleMessage = (key, values) => scheduleConfirmationMessage(language, key, values);
+  const scheduleBlock = jobScheduleAvailability(job, {
+    run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
+  });
+  const canReschedule = !scheduleBlock;
+  const {
+    isEditingJobSchedule, setIsEditingJobSchedule, jobScheduleValues, setJobScheduleValues, isSavingJobSchedule,
+    jobScheduleSaveError, setJobScheduleSaveError, hasSavedJobSchedule, scheduleCommunicationMayBeStale, needsScheduleReload,
+    scheduleRevisionConflict, startJobScheduleEdit, saveJobSchedule,
+  } = useJobScheduleEdit({
+    job, translate, onUpdateSchedule, canReschedule, scheduleMessage, currentJobIdRef, setIntentNotice,
+  });
   const [copiedCleanerId, setCopiedCleanerId] = useState(null);
   const [copyMessageErrorCleanerId, setCopyMessageErrorCleanerId] = useState(null);
   const [reminderPreview, setReminderPreview] = useState(null);
   const [isCopyingReminder, setIsCopyingReminder] = useState(false);
   const offersSectionRef = useRef(null);
-  const currentJobIdRef = useRef(job.id);
-  currentJobIdRef.current = job.id;
   const didFocusNewOffersRef = useRef(false);
   const createdAt = formatCreatedAt(job.createdAt, language);
   const assignedAt = formatCreatedAt(job.assignedAt, language);
@@ -257,7 +258,6 @@ export function JobDetail({
   const cleanerLanguagesById = { ...resolvedCleanerLanguages, ...knownCleanerLanguages };
   const scheduleRevision = currentScheduleRevision(job);
   const scheduleResponses = currentScheduleConfirmations(job);
-  const scheduleMessage = (key, values) => scheduleConfirmationMessage(language, key, values);
   const replacementPointer = job.manualReplacementOffer?.scheduleRevision === scheduleRevision
     ? job.manualReplacementOffer : null;
   const knownReplacementOffer = replacementPointer && offers.find((offer) =>
@@ -422,10 +422,6 @@ export function JobDetail({
     initialFocusJobRef.current = job.id;
     focusIntentSection(pendingInterest.length ? interestSectionRef : offersSectionRef);
   });
-  const scheduleBlock = jobScheduleAvailability(job, {
-    run: checklistRun, loading: isLoadingChecklistRun, error: hasChecklistRunError,
-  });
-  const canReschedule = !scheduleBlock;
 
   // Suggestions are presentation, not a second authorization/state machine.
   const primaryIntent = job.archivedAt || isCompleted
@@ -594,22 +590,6 @@ export function JobDetail({
   }, [cleanerLookupKey]);
 
   useEffect(() => {
-    setJobScheduleValues({
-      scheduledDate: job.scheduledDate || "",
-      scheduledStart: job.scheduledStart || "",
-      expectedScheduleRevision: currentScheduleRevision(job),
-    });
-    setIsEditingJobSchedule(false);
-    setIsSavingJobSchedule(false);
-    setJobScheduleSaveError("");
-    setHasSavedJobSchedule(false);
-    setScheduleCommunicationMayBeStale(false);
-    setNeedsScheduleReload(false);
-    setScheduleRevisionConflict(false);
-    setIntentNotice(null);
-  }, [job.id]);
-
-  useEffect(() => {
     setPublicOfferLink(null);
     setPublicOfferLinkError(null);
     setEditingOfferCompensationFor(null);
@@ -628,77 +608,6 @@ export function JobDetail({
     setDirectCleanerId("");
     setOfferMessageCopyErrorId(null);
   }, [job.id]);
-
-  function startJobScheduleEdit() {
-    if (!canReschedule) return;
-    setJobScheduleValues({
-      scheduledDate: job.scheduledDate || "",
-      scheduledStart: job.scheduledStart || "",
-      expectedScheduleRevision: currentScheduleRevision(job),
-    });
-    setJobScheduleSaveError("");
-    setHasSavedJobSchedule(false);
-    setScheduleCommunicationMayBeStale(false);
-    setNeedsScheduleReload(false);
-    setScheduleRevisionConflict(false);
-    setIsEditingJobSchedule(true);
-  }
-
-  async function saveJobSchedule(event) {
-    event.preventDefault();
-    if (scheduleRevisionConflict || isSavingJobSchedule) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(jobScheduleValues.scheduledDate)) {
-      setJobScheduleSaveError(translate("jobs.scheduleInvalidDate"));
-      return;
-    }
-    const [year, month, day] = jobScheduleValues.scheduledDate.split("-").map(Number);
-    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    const daysByMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysByMonth[month - 1]) {
-      setJobScheduleSaveError(translate("jobs.scheduleInvalidDate"));
-      return;
-    }
-    if (jobScheduleValues.scheduledStart
-      && !/^([01]\d|2[0-3]):[0-5]\d$/.test(jobScheduleValues.scheduledStart)) {
-      setJobScheduleSaveError(translate("jobs.scheduleInvalidTime"));
-      return;
-    }
-
-    setIsSavingJobSchedule(true);
-    setJobScheduleSaveError("");
-    setHasSavedJobSchedule(false);
-    const jobId = job.id;
-    try {
-      const result = await onUpdateSchedule(jobScheduleValues);
-      if (currentJobIdRef.current !== jobId) return;
-      setJobScheduleValues({
-        scheduledDate: result?.job?.scheduledDate || jobScheduleValues.scheduledDate,
-        scheduledStart: result?.job?.scheduledStart || "",
-        expectedScheduleRevision: currentScheduleRevision(result?.job || job),
-      });
-      setNeedsScheduleReload(result?.needsScheduleReload === true);
-      setScheduleCommunicationMayBeStale(result?.changed === true);
-      setIsEditingJobSchedule(false);
-      setHasSavedJobSchedule(true);
-    } catch (error) {
-      if (currentJobIdRef.current !== jobId) return;
-      const reason = error?.details?.reason;
-      setScheduleRevisionConflict(reason === "stale-schedule");
-      setJobScheduleSaveError(reason === "stale-schedule"
-        ? scheduleMessage("stale")
-        : reason === "checklist-run-exists"
-        ? translate("jobs.scheduleLockedByChecklist")
-        : reason === "status" || reason === "archived"
-          ? translate("jobs.scheduleReadOnlyState")
-          : reason === "invalid-date"
-            ? translate("jobs.scheduleInvalidDate")
-            : reason === "invalid-time"
-              ? translate("jobs.scheduleInvalidTime")
-              : translate("jobs.scheduleUpdateError"));
-    } finally {
-      if (currentJobIdRef.current === jobId) setIsSavingJobSchedule(false);
-    }
-  }
 
   async function assignCleaner(offer, options) {
     setAssigningCleanerId(offer.cleanerId);
