@@ -8,6 +8,8 @@
 ![Tests](https://img.shields.io/badge/tests-2%2C000%2B%20unit%20%2B%20e2e-2d5a46)
 ![PWA](https://img.shields.io/badge/PWA-mobile%20first-5a0fc8)
 
+Built by **Irving Ellan** · [LinkedIn](https://www.linkedin.com/in/irvingellan) · [Website](https://irvingellan.com)
+
 CleanFlow replaces the WhatsApp threads, spreadsheets and memory that small cleaning teams run on with one
 structured workflow: a service is scheduled, offered to cleaners, assigned, executed with a photo checklist,
 reported to the client and closed out for payment. Managers work on a laptop; cleaners work from their phones.
@@ -127,4 +129,5 @@ npm run scenario -- weekly-close --watch    # replay a fictional end-to-end scen
 **Irving Ellan** — software developer. I built CleanFlow end to end: product discovery with a real operator,
 architecture, implementation, testing and production operations.
 
-Open to software engineering roles — reach me through [GitHub](https://github.com/irvingellan).
+**Open to software engineering roles.**
+[LinkedIn](https://www.linkedin.com/in/irvingellan) · [Website](https://irvingellan.com) · [GitHub](https://github.com/irvingellan)
