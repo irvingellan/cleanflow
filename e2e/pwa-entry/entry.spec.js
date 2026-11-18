@@ -37,6 +37,27 @@ test("Hosting exposes the correct installation metadata before JavaScript runs",
   } finally { await context.close(); }
 });
 
+test("Hosting sends privacy headers on public link pages and frame and content-type headers everywhere", async ({ request }) => {
+  for (const route of ["/offer/synthetic-link", "/checklist", "/client-report", "/portal"]) {
+    const response = await request.get(route);
+    expect(response.status(), route).toBe(200);
+    expect(response.headers()["cache-control"], route).toBe("no-store, private");
+    expect(response.headers()["referrer-policy"], route).toBe("no-referrer");
+  }
+  for (const route of [
+    "/", "/agenda", "/offer/synthetic-link", "/checklist", "/client-report", "/portal",
+    "/sw.js", "/cleaner-messaging-sw.js", "/manifest.webmanifest", "/version.json",
+  ]) {
+    const response = await request.get(route);
+    expect(response.status(), route).toBe(200);
+    expect(response.headers()["x-frame-options"], route).toBe("DENY");
+    expect(response.headers()["x-content-type-options"], route).toBe("nosniff");
+  }
+  // The broad rule must not replace the caching rules of the entry files.
+  expect((await request.get("/sw.js")).headers()["cache-control"]).toContain("no-store");
+  expect((await request.get("/cleaner-messaging-sw.js")).headers()["service-worker-allowed"]).toBe("/cleaner-messaging-push/");
+});
+
 test("manifests keep distinct start identities and independently available icons", async ({ request, baseURL }) => {
   const managerResponse = await request.get("/manifest.webmanifest");
   const cleanerResponse = await request.get("/agenda.webmanifest");
