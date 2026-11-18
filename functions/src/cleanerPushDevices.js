@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
-import { assertSessionForMutation, cleanerAccountUid } from "./cleanerHubAccess.js";
+import { assertSessionForMutation, cleanerAccountUid, eligibleCleaner, isActiveCleanerSession } from "./cleanerHubAccess.js";
 import { approvedCleanerPushPilotDevice } from "./cleanerPushPilot.js";
 
 const deviceIdPattern = /^[A-Za-z0-9-]{16,80}$/;
@@ -91,6 +91,39 @@ function assertRegistrationOwner(snapshot, identity) {
   }
 }
 
+/**
+ * A claim is live while its owner still has an active session, an eligible
+ * cleaner record and the device registration the claim was written for. A
+ * claim left behind by a revoked, signed-out or replaced registration is stale.
+ */
+async function liveCleanerClaim(transaction, database, claim) {
+  const owner = {
+    organizationId: claim.organizationId, uid: claim.userId, cleanerId: claim.cleanerId, sessionId: claim.sessionId,
+  };
+  if (![owner.organizationId, owner.uid, owner.cleanerId].every(validSegment)
+    || !sessionIdPattern.test(owner.sessionId || "")) return false;
+  const root = `organizations/${owner.organizationId}`;
+  const [member, cleaner, device] = await Promise.all([
+    transaction.get(database.doc(`${root}/members/${owner.uid}`)),
+    transaction.get(database.doc(`${root}/cleaners/${owner.cleanerId}`)),
+    transaction.get(cleanerDeviceReference(database, owner)),
+  ]);
+  return isActiveCleanerSession(member.data(), owner) && eligibleCleaner(cleaner.data())
+    && eligibleCleanerRegistration(device.data(), owner) && cleanerClaimMatches(claim, device.data());
+}
+
+/** One installation serves one organization at a time; only a stale claim may move. */
+async function assertClaimsNotHeldElsewhere(transaction, database, identity, claims) {
+  for (const claim of claims) {
+    if (claim?.active === true && claim.organizationId !== identity.organizationId
+      && await liveCleanerClaim(transaction, database, claim)) {
+      throw new HttpsError("failed-precondition", "This installation is registered with another organization.", {
+        reason: "cleaner-push-other-organization",
+      });
+    }
+  }
+}
+
 export async function registerCleanerDevice(database, identity, data, mode) {
   if (mode !== "pilot" && mode !== "enabled") {
     throw new HttpsError("failed-precondition", "Cleaner push is not enabled.");
@@ -115,6 +148,7 @@ export async function registerCleanerDevice(database, identity, data, mode) {
       });
     }
     assertRegistrationOwner(snapshot, identity);
+    await assertClaimsNotHeldElsewhere(transaction, database, identity, [tokenClaim.data(), installationClaim.data()]);
     const current = snapshot.data();
     const claim = tokenClaim.data();
     if (claim?.invalidatedAt != null || (current?.token === data.token && current.tokenState === "invalidated")) {

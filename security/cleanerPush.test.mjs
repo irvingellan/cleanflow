@@ -26,6 +26,8 @@ const {
 await import("../functions/src/runtime/firebase.js");
 const { processCleanerNotification } = await import("../functions/src/cleanerPushDelivery.js");
 const { cleanerPushPilotApprovalReference } = await import("../functions/src/cleanerPushPilot.js");
+const { deactivateCleanerDevice, registerCleanerDevice } = await import("../functions/src/cleanerPushDevices.js");
+const { cleanerAccountUid } = await import("../functions/src/cleanerHubAccess.js");
 const { recordCleanerJobInboxEvents, recordCleanerOfferInboxEvent } = await import("../functions/src/cleanerNotificationEvents.js");
 const { getFirestore, Timestamp } = createRequire(new URL("../functions/src/index.js", import.meta.url))("firebase-admin/firestore");
 const functionDatabase = getFirestore();
@@ -549,4 +551,61 @@ test("pilot approval gates enrollment and delivery to one exact installation and
     if (previousRelease === undefined) delete process.env.CLEANER_PUSH_PILOT_RELEASE;
     else process.env.CLEANER_PUSH_PILOT_RELEASE = previousRelease;
   }
+});
+
+test("an installation stays with its organization while its registration is live, and a stale claim can move", async () => {
+  const otherOrganization = "synthetic-second-organization";
+  const otherCleaner = "synthetic-other-organization-cleaner";
+  const other = {
+    organizationId: otherOrganization, cleanerId: otherCleaner,
+    uid: cleanerAccountUid(otherOrganization, otherCleaner), sessionId: "synthetic-other-organization-session",
+  };
+  await Promise.all([
+    functionDatabase.doc(`organizations/${otherOrganization}/members/${other.uid}`).set({
+      role: "CLEANER", active: true, organizationId: otherOrganization, cleanerId: otherCleaner, sessionIds: [other.sessionId],
+    }),
+    functionDatabase.doc(`organizations/${otherOrganization}/cleaners/${otherCleaner}`).set({
+      active: true, name: "Synthetic other", organizationId: otherOrganization,
+    }),
+  ]);
+  const registerOther = (data) => registerCleanerDevice(functionDatabase, other, data, "enabled");
+  const claimOwner = async (collection, value) => {
+    const { organizationId: owner, cleanerId } = (await functionDatabase.doc(claimPath(collection, value)).get()).data();
+    return [owner, cleanerId];
+  };
+  const heldElsewhere = { code: "failed-precondition", details: { reason: "cleaner-push-other-organization" } };
+
+  const firstAuth = await link(cleanerA);
+  const first = await register(firstAuth, installationA);
+  // Neither the installation ID nor the FCM token can be claimed from another organization.
+  await assert.rejects(registerOther({ ...installationA, token: `${installationA.token}-other-organization` }), heldElsewhere);
+  await assert.rejects(registerOther({ ...installationA, deviceId: "synthetic-other-organization-install" }), heldElsewhere);
+  assert.deepEqual(await claimOwner("cleanerPushInstallationClaims", installationA.deviceId), [organizationId, cleanerA]);
+  assert.deepEqual(await claimOwner("cleanerPushTokenClaims", installationA.token), [organizationId, cleanerA]);
+  assert.deepEqual(await status(firstAuth, installationA), { state: "active", registrationRevision: first.registrationRevision });
+  assert.equal((await functionDatabase.collection(`organizations/${otherOrganization}/cleanerPushAccounts`).get()).size, 0);
+
+  // Inside one organization, repeating a registration and switching account still work.
+  assert.deepEqual(await register(firstAuth, installationA), first);
+  const colleagueAuth = await link(cleanerB);
+  await register(colleagueAuth, installationA);
+  assert.deepEqual(await status(firstAuth, installationA), { state: "superseded", registrationRevision: first.registrationRevision });
+  assert.deepEqual(await claimOwner("cleanerPushInstallationClaims", installationA.deviceId), [organizationId, cleanerB]);
+  await assert.rejects(registerOther(installationA), heldElsewhere);
+
+  // Once the owner loses access, the claim is stale and the installation can move.
+  await revokeCleanerHubAccess.run(manager({ cleanerId: cleanerB }));
+  const moved = await registerOther(installationA);
+  assert.equal(moved.registered, true);
+  assert.deepEqual(await claimOwner("cleanerPushInstallationClaims", installationA.deviceId), [otherOrganization, otherCleaner]);
+  assert.deepEqual(await claimOwner("cleanerPushTokenClaims", installationA.token), [otherOrganization, otherCleaner]);
+  await assert.rejects(register(firstAuth, installationA), heldElsewhere);
+
+  // Signing out releases it again.
+  assert.deepEqual(await deactivateCleanerDevice(functionDatabase, other, {
+    deviceId: installationA.deviceId, token: installationA.token,
+    registrationRevision: moved.registrationRevision, reason: "SIGNED_OUT",
+  }), { deactivated: true });
+  await register(firstAuth, installationA);
+  assert.deepEqual(await claimOwner("cleanerPushInstallationClaims", installationA.deviceId), [organizationId, cleanerA]);
 });
