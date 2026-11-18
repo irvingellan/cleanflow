@@ -5,17 +5,18 @@ import { useTranslation } from "../../i18n/translations.js";
 import { formatDate, formatPrice } from "../../lib/presentation.js";
 import { previousServiceWeek, servicePeriod, shiftServiceWeek } from "./weeklyCloseModel.js";
 import { loadWeeklyClose } from "./weeklyCloseService.js";
+import { WeeklyCloseMoneyReview } from "./WeeklyCloseMoneyReview.jsx";
 import { periodMessage } from "./weeklyClosePeriodMessages.js";
 
 const loadDeadlineMs = 15_000;
 
 /** Manager-only reconciliation; no invoice, payment or record-editing controls. */
-export function WeeklyClosePreview({ onBack }) {
+export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
   const { language, translate } = useTranslation();
-  const [period, setPeriod] = useState(previousServiceWeek);
+  const [period, setPeriod] = useState(() => initialSelection?.period || previousServiceWeek());
   const [dates, setDates] = useState(period);
   const [invalidDates, setInvalidDates] = useState(false);
-  const [selectedClient, setSelectedClient] = useState("");
+  const [selectedClient, setSelectedClient] = useState(initialSelection?.selectedClient || "");
   const [refreshKey, setRefreshKey] = useState(0);
   const [model, setModel] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,6 +87,7 @@ export function WeeklyClosePreview({ onBack }) {
   const visibleClients = activeClient ? [activeClient] : model?.clients;
   const totals = activeClient || model?.overall;
   const isPartial = model?.coverage?.truncated === true;
+  const completeSelection = totals?.completedServiceCount > 0 && totals.grossOperationalMargin !== null && !isPartial;
   const money = (amount) => amount === null || amount === undefined
     ? translate("weeklyClose.unknown") : formatPrice(amount, translate, language);
   const metrics = totals ? [
@@ -97,6 +99,9 @@ export function WeeklyClosePreview({ onBack }) {
   ] : [];
   const aggregateMoney = (amount) => amount === null
     ? translate("weeklyClose.incomplete") : money(amount);
+  // Charge, quote and margin subtotals are comparable only when the loaded services have both amounts.
+  const canShowSubtotal = (group, key) => group.completedServiceCount > 0
+    && (key === "cleanerPaidTotal" || key === "cleanerOutstandingTotal" || group.missingGrossMarginCount === 0);
   const pendingCount = (totals, key) => key === "clientCharges" ? totals.missingClientPriceCount
     : key === "cleanerPayoutTotal" ? totals.missingCleanerPayoutCount
     : key === "grossOperationalMargin" ? totals.missingGrossMarginCount : totals.unknownPayoutCount;
@@ -162,21 +167,25 @@ export function WeeklyClosePreview({ onBack }) {
           </div>
           <small id="weekly-close-client-scope">{t("clientScope")}</small>
         </div>}
+        <WeeklyCloseMoneyReview key={selectedClient} jobs={activeClient ? activeClient.jobs : model.jobs}
+          t={t} translate={translate} language={language}
+          onOpenJob={(job) => onOpenJob(job, { period, selectedClient })} />
         <dl className="weekly-close-metrics">
           <div><dt>{isPartial ? t("loadedCount") : translate("weeklyClose.completedServiceCount")}</dt><dd>{totals.completedServiceCount}</dd></div>
           {metrics.map(([key, amount, known]) => <div key={key}>
             <dt>{translate(`weeklyClose.${key}`)}</dt><dd>{aggregateMoney(amount)}</dd>
-            {amount === null && <small>{translate("weeklyClose.knownSubtotal", { amount: money(known) })}</small>}
+            {amount === null && canShowSubtotal(totals, key) && <small>{translate("weeklyClose.knownSubtotal", { amount: money(known) })}</small>}
             {amount === null && pendingCount(totals, key) > 0 && <small>{pendingCopy(pendingCount(totals, key))}</small>}
           </div>)}
         </dl>
-        {(!isPartial || totals.attentionCount > 0) && <p className={totals.attentionCount > 0 ? "weekly-close-attention" : "weekly-close-note"} role="status">
+        {(completeSelection || totals.attentionCount > 0) && <p className={totals.attentionCount > 0 ? "weekly-close-attention" : "weekly-close-note"} role="status">
           {totals.attentionCount > 0
-            ? t("attention", { count: totals.attentionCount })
+            ? t(totals.attentionCount === 1 ? "attentionOne" : "attention", { count: totals.attentionCount })
             : translate("weeklyClose.completeData")}
-          {totals.unknownPayoutCount > 0 && ` ${translate("weeklyClose.unknownPayoutSummary", { count: totals.unknownPayoutCount })}`}
+          {totals.unknownPayoutCount === 1 && ` ${t("oneUnknownPayout")}`}
+          {totals.unknownPayoutCount > 1 && ` ${translate("weeklyClose.unknownPayoutSummary", { count: totals.unknownPayoutCount })}`}
         </p>}
-        <p className="weekly-close-note">{translate("weeklyClose.marginNote")}</p>
+        <p className="weekly-close-note">{t("marginDefinition")}</p>
         {exclusionCount > 0 && <details className="weekly-close-exclusions">
           <summary>{translate("weeklyClose.excludedSummary", { count: exclusionCount })}</summary>
           <ul>{Object.entries(model.excluded).filter(([, count]) => count > 0).map(([reason, count]) =>
@@ -193,7 +202,7 @@ export function WeeklyClosePreview({ onBack }) {
               {[["clientCharges", "knownClientCharges"], ["cleanerPayoutTotal", "knownCleanerPayoutTotal"],
                 ["grossOperationalMargin", "knownGrossOperationalMargin"]].map(([key, knownKey]) => <span key={key}>
                 <small>{translate(`weeklyClose.${key}`)}</small><strong>{aggregateMoney(client[key])}</strong>
-                {client[key] === null && <small>{translate("weeklyClose.knownSubtotal", { amount: money(client[knownKey]) })}</small>}
+                {client[key] === null && canShowSubtotal(client, key) && <small>{translate("weeklyClose.knownSubtotal", { amount: money(client[knownKey]) })}</small>}
                 {client[key] === null && pendingCount(client, key) > 0 && <small>{pendingCopy(pendingCount(client, key))}</small>}
               </span>)}
             </summary>

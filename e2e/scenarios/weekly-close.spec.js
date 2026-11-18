@@ -55,15 +55,21 @@ async function verifyFinancialRows(root, language) {
     await expect(row.locator(".weekly-close-status")).toHaveText(translate(`weeklyClose.status.${status}`));
   }
   await expect(metric(root, translate, "completedServiceCount").locator("dd")).toHaveText("6");
-  // Incomplete financial totals are labelled incomplete; only explicitly labelled known
-  // subtotals reconcile with the available rows, never fabricated zero values.
+  // Unpaired amounts remain on their own service. Comparing these partial aggregates would mix scopes.
   await expect(metric(root, translate, "clientCharges").locator("dd")).toHaveText(translate("weeklyClose.incomplete"));
   await expect(metric(root, translate, "clientCharges")).toContainText(translate("weeklyClose.pendingService", { count: 1 }));
   await expect(root.locator(".weekly-close-attention")).toContainText(periodMessage(language, "attention", { count: 4 }));
-  await expect(metric(root, translate, "clientCharges")).toContainText(currency(870));
+  await expect(metric(root, translate, "clientCharges")).not.toContainText(currency(870));
   await expect(metric(root, translate, "grossOperationalMargin")).toContainText(translate("weeklyClose.pendingServices", { count: 2 }));
   await expect(metric(root, translate, "grossOperationalMargin")).not.toContainText(translate("weeklyClose.pendingServices", { count: 4 }));
-  await expect(metric(root, translate, "cleanerPayoutTotal")).toContainText(currency(460));
+  await expect(metric(root, translate, "cleanerPayoutTotal")).not.toContainText(currency(460));
+  const review = root.getByRole("region", { name: periodMessage(language, "moneyIssues", { count: 2 }) });
+  await expect(review.getByRole("listitem")).toHaveCount(2);
+  for (const [property, field] of [["Weekly missing charge service", "missing_client_price"], ["Weekly missing payout service", "missing_cleaner_payout"]]) {
+    const item = review.getByRole("listitem").filter({ hasText: property });
+    await expect(item).toContainText(translate(`weeklyClose.reason.${field}`));
+    await expect(item.getByRole("button")).toBeVisible();
+  }
   await expect(metric(root, translate, "cleanerPaidTotal")).toContainText(currency(100));
   await expect(metric(root, translate, "cleanerOutstandingTotal")).toContainText(currency(170));
   await expect(root).toContainText(translate("weeklyClose.externalPayments"));
