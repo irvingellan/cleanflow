@@ -14,6 +14,7 @@ import { useIssueResolution } from "./useIssueResolution.js";
 import { jobDetailFormValues, useJobDetailsEdit } from "./useJobDetailsEdit.js";
 import { useJobScheduleEdit } from "./useJobScheduleEdit.js";
 import { useJobRosterEdit } from "./useJobRosterEdit.js";
+import { useJobExecution } from "./useJobExecution.js";
 import { JobDetailHead } from "./JobDetailHead.jsx";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
 import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
@@ -155,11 +156,10 @@ export function JobDetail({
   const [offerCompensationErrorFor, setOfferCompensationErrorFor] = useState(null);
   const [copiedOfferMessageId, setCopiedOfferMessageId] = useState(null);
   const [offerMessageCopyErrorId, setOfferMessageCopyErrorId] = useState(null);
-  const [isStartingCleaning, setIsStartingCleaning] = useState(false);
-  const [hasStartCleaningError, setHasStartCleaningError] = useState(false);
-  const [isCompletingCleaning, setIsCompletingCleaning] = useState(false);
-  const [hasCompleteCleaningError, setHasCompleteCleaningError] = useState(false);
-  const [isCompletionConfirmationVisible, setIsCompletionConfirmationVisible] = useState(false);
+  const {
+    isStartingCleaning, hasStartCleaningError, isCompletingCleaning, hasCompleteCleaningError,
+    isCompletionConfirmationVisible, setIsCompletionConfirmationVisible, startCleaning, completeCleaning,
+  } = useJobExecution({ job, onStartCleaning, onCompleteCleaning, currentJobIdRef });
   const [intentNotice, setIntentNotice] = useState(null);
   const scheduleSectionRef = useRef(null);
   const assignmentSectionRef = useRef(null);
@@ -591,8 +591,8 @@ export function JobDetail({
     };
   }, [cleanerLookupKey]);
 
-  // One reset per part of the screen when another Job is shown: the shared public link, then Offers, the
-  // reminder and the checklist. The roster resets in useJobRosterEdit.
+  // One reset per part of the screen when another Job is shown: the shared public link, then Offers and the
+  // reminder. The roster resets in useJobRosterEdit and the completion controls in useJobExecution.
   useEffect(() => {
     setPublicOfferLink(null);
   }, [job.id]);
@@ -610,12 +610,6 @@ export function JobDetail({
     setIsCopyingReminder(false);
     setIsPreparingReminderChecklist(false);
     setHasReminderChecklistError(false);
-  }, [job.id]);
-
-  useEffect(() => {
-    setIsCompletionConfirmationVisible(false);
-    setIsCompletingCleaning(false);
-    setHasCompleteCleaningError(false);
   }, [job.id]);
 
   async function assignCleaner(offer, options) {
@@ -763,34 +757,6 @@ export function JobDetail({
       setCopiedOfferMessageId(offer.id);
     } catch {
       setOfferMessageCopyErrorId(offer.id);
-    }
-  }
-
-  async function startCleaning() {
-    setIsStartingCleaning(true);
-    setHasStartCleaningError(false);
-
-    try {
-      await onStartCleaning();
-    } catch {
-      setHasStartCleaningError(true);
-    } finally {
-      setIsStartingCleaning(false);
-    }
-  }
-
-  async function completeCleaning() {
-    const jobId = job.id;
-    setIsCompletingCleaning(true);
-    setHasCompleteCleaningError(false);
-
-    try {
-      await onCompleteCleaning();
-      if (currentJobIdRef.current === jobId) setIsCompletionConfirmationVisible(false);
-    } catch {
-      if (currentJobIdRef.current === jobId) setHasCompleteCleaningError(true);
-    } finally {
-      if (currentJobIdRef.current === jobId) setIsCompletingCleaning(false);
     }
   }
 
