@@ -69,6 +69,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
     showEditClient,
   } = useManagerNavigation();
   const [showExcludedRecords, setShowExcludedRecords] = useState(false);
+  const [weeklyCloseSelection, setWeeklyCloseSelection] = useState(null);
   const devCenterController = useDevCenterController({ view });
   const canManageExcludedRecords = devCenterController.access.authorized;
   const includeArchived = canManageExcludedRecords && showExcludedRecords;
@@ -380,8 +381,24 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
   }
 
   function showWeeklyClose() {
+    setWeeklyCloseSelection(null);
     showPayouts();
     window.history.pushState(window.history.state, "", "/weekly-close-preview");
+    setView("weekly-close-preview");
+  }
+
+  function openWeeklyCloseJob(job, selection) {
+    setWeeklyCloseSelection(selection);
+    setJobDetailInitialFocus(null);
+    setActiveSection("payouts");
+    setJobDetailOrigin("weekly-close");
+    openJobDetail(job);
+    setView("job-detail");
+  }
+
+  function returnToWeeklyClose() {
+    closeJobDetail();
+    window.history.replaceState(window.history.state, "", "/weekly-close-preview");
     setView("weekly-close-preview");
   }
 
@@ -719,6 +736,8 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           paidPayoutSummary={paidPayoutSummary}
           refreshPayouts={refreshPayouts}
           showWeeklyClose={showWeeklyClose}
+          weeklyCloseSelection={weeklyCloseSelection}
+          openWeeklyCloseJob={openWeeklyCloseJob}
           openPayoutReview={openPayoutReview}
           attachProof={attachProof}
           getProofUrl={getProofUrl}
@@ -838,6 +857,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           returnToClientDetail={returnToClientDetail}
           returnToCleanerDetail={returnToCleanerDetail}
           returnToCleanerAgenda={returnToCleanerAgenda}
+          returnToWeeklyClose={returnToWeeklyClose}
           showOfferCleaners={showOfferCleaners}
           refreshJobOffers={refreshJobOffers}
           refreshJobIssues={refreshJobIssues}

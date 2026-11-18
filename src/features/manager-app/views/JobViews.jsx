@@ -66,6 +66,7 @@ export function JobViews({
   returnToClientDetail,
   returnToCleanerDetail,
   returnToCleanerAgenda,
+  returnToWeeklyClose,
   showOfferCleaners,
   refreshJobOffers,
   refreshJobIssues,
@@ -202,19 +203,14 @@ export function JobViews({
           hasIssueChecklistCapabilityError={hasIssueChecklistCapabilityError}
           isRevokingChecklistCapability={isRevokingChecklistCapability}
           hasRevokeChecklistCapabilityError={hasRevokeChecklistCapabilityError}
-          onBack={
-            jobDetailOrigin === "dashboard"
-              ? showDashboard
-              : jobDetailOrigin === "property"
-                ? returnToPropertyDetail
-                : jobDetailOrigin === "client"
-                  ? returnToClientDetail
-                  : jobDetailOrigin === "cleaner"
-                    ? returnToCleanerDetail
-                  : jobDetailOrigin === "cleaner-agenda"
-                    ? returnToCleanerAgenda
-                  : returnToJobs
-          }
+          onBack={{
+            dashboard: showDashboard,
+            property: returnToPropertyDetail,
+            client: returnToClientDetail,
+            cleaner: returnToCleanerDetail,
+            "cleaner-agenda": returnToCleanerAgenda,
+            "weekly-close": returnToWeeklyClose,
+          }[jobDetailOrigin] ?? returnToJobs}
           onOfferToCleaners={showOfferCleaners}
           onRefreshOffers={refreshJobOffers}
           onRefreshIssues={refreshJobIssues}

@@ -13,6 +13,8 @@ export function PayoutViews({
   paidPayoutSummary,
   refreshPayouts,
   showWeeklyClose,
+  weeklyCloseSelection,
+  openWeeklyCloseJob,
   openPayoutReview,
   attachProof,
   getProofUrl,
@@ -24,7 +26,9 @@ export function PayoutViews({
 }) {
   return (
     <>
-      {view === "weekly-close-preview" && <WeeklyClosePreview onBack={showPayouts} />}
+      {view === "weekly-close-preview" && (
+        <WeeklyClosePreview onBack={showPayouts} initialSelection={weeklyCloseSelection} onOpenJob={openWeeklyCloseJob} />
+      )}
 
       {view === "payout-list" && (
         <PayoutDirectory

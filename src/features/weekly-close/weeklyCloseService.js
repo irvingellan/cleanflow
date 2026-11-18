@@ -1,4 +1,4 @@
-import { getServicePeriodJobs } from "../jobs/jobService.js";
+import { getJobById, getServicePeriodJobs } from "../jobs/jobService.js";
 import { getAssignedCleanerIds } from "../jobs/jobCompatibility.js";
 import { getPayoutEvidenceForJobs, isEligibleForLegacyPayout } from "../payouts/payoutService.js";
 import { getClientSummariesById } from "../clients/clientService.js";
@@ -33,6 +33,11 @@ async function readContext(values, read, signal) {
     rows.push(...await readWeeklySource(() => read(batch), signal));
   }
   return rows;
+}
+
+// Job Detail requires the current manager record, not the reconciliation projection.
+export function loadWeeklyCloseJob(id) {
+  return getJobById(id, { serverOnly: true });
 }
 
 /** Read-only adapter; existing manager rules protect every source collection. */

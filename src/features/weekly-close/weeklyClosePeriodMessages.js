@@ -1,6 +1,12 @@
 // Feature strings follow the active application locale.
 const messages = {
   en: {
+    moneyIssue: "1 service with incomplete amounts",
+    moneyIssues: "{count} services with incomplete amounts",
+    marginPending: "The margin is unavailable until every service in this selection has both a client price and a cleaner payout quote.",
+    openService: "Open service",
+    openingService: "Opening…",
+    openServiceError: "Could not open this service. Try again.",
     start: "Service date from", end: "Service date through", apply: "Apply dates",
     invalidPeriod: "Choose a valid start and end date, up to 31 days inclusive.",
     dateRule: "Includes completed, non-archived REAL services by scheduled date. Both dates are included. Week shortcuts follow Pacific time.",
@@ -15,6 +21,12 @@ const messages = {
     loadedCount: "Completed services loaded",
   },
   pt: {
+    moneyIssue: "1 serviço com valores incompletos",
+    moneyIssues: "{count} serviços com valores incompletos",
+    marginPending: "A margem fica pendente até que cada serviço desta seleção tenha o preço do cliente e o valor previsto para a cleaner.",
+    openService: "Abrir serviço",
+    openingService: "Abrindo…",
+    openServiceError: "Não foi possível abrir este serviço. Tente novamente.",
     start: "Data inicial do serviço", end: "Data final do serviço", apply: "Aplicar datas",
     invalidPeriod: "Escolha datas válidas de início e fim, com até 31 dias no total.",
     dateRule: "Inclui serviços REAIS concluídos e não arquivados pela data agendada. O período inclui as duas datas. Os atalhos seguem o horário do Pacífico.",
@@ -29,6 +41,12 @@ const messages = {
     loadedCount: "Serviços concluídos carregados",
   },
   es: {
+    moneyIssue: "1 servicio con importes incompletos",
+    moneyIssues: "{count} servicios con importes incompletos",
+    marginPending: "El margen queda pendiente hasta que cada servicio de esta selección tenga el precio del cliente y el pago previsto para la persona que limpia.",
+    openService: "Abrir servicio",
+    openingService: "Abriendo…",
+    openServiceError: "No se pudo abrir este servicio. Inténtalo de nuevo.",
     start: "Fecha inicial del servicio", end: "Fecha final del servicio", apply: "Aplicar fechas",
     invalidPeriod: "Elige fechas válidas de inicio y fin, con un máximo de 31 días en total.",
     dateRule: "Incluye servicios REALES completados y sin archivar por fecha programada. El período incluye ambas fechas. Los atajos siguen el horario del Pacífico.",

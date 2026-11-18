@@ -1,0 +1,27 @@
+.weekly-money-review {
+  margin-block: 18px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-warning-text);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.weekly-money-review h3 { margin: 0; }
+.weekly-money-review p { margin: 6px 0; }
+.weekly-money-review > p, .weekly-money-review small { color: var(--color-text-secondary); }
+.weekly-money-review ul { list-style: none; margin: 12px 0 0; padding: 0; }
+.weekly-money-review li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding-block: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.weekly-money-review li:last-child { padding-bottom: 0; }
+.weekly-money-review li > div { flex: 1 1 220px; min-width: 0; }
+.weekly-money-review small { display: block; }
+.weekly-money-missing { color: var(--color-warning-text); font-weight: 600; }
+.weekly-money-review button { min-height: 44px; }
+.weekly-money-review [role="alert"] { flex-basis: 100%; }
