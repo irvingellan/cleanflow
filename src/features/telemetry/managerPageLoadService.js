@@ -1,8 +1,8 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { appVersion } from "../../appVersion.js";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const sessionStorageKey = "cleanflow.manager-page-load.session-id";
 const deviceStorageKey = "cleanflow.manager-page-load.device-id";
 const allowedPages = new Set(["dashboard", "jobs", "properties", "clients", "cleaners", "payouts"]);
@@ -98,7 +98,7 @@ export function recordManagerPageLoad(input) {
   if (!event) return Promise.resolve();
 
   try {
-    return addDoc(collection(db, "organizations", organizationId, "managerPageLoadEvents"), {
+    return addDoc(collection(db, "organizations", currentOrganizationId(), "managerPageLoadEvents"), {
       ...event,
       createdAt: serverTimestamp(),
     }).catch(() => undefined);

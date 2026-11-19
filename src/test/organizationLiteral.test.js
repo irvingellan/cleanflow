@@ -11,10 +11,6 @@ const repositoryRoot = process.cwd();
 const allowed = [
   "functions/src/devCenterData.js",
   "functions/src/runtime/firebase.js",
-  "src/features/auth/managerAccessService.js",
-  "src/features/telemetry/managerOperationTelemetryService.js",
-  "src/features/telemetry/managerPageLoadDiagnosticsService.js",
-  "src/features/telemetry/managerPageLoadService.js",
   "src/services/organization/currentOrganization.js",
 ];
 
