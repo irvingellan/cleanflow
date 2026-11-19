@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanerMessagingWorkerPath, cleanerPushReceiptEvent } from "./cleanerPushBinding.js";
 import { Icon } from "../../components/Icon.jsx";
-import { formatDate } from "../../lib/presentation.js";
+import { formatDate, removedServiceLabel } from "../../lib/presentation.js";
 import { inboxMessage } from "./notificationInboxMessages.js";
 import { notificationInboxEnabled } from "./notificationInboxMode.js";
 import { notificationInboxService } from "./notificationInboxService.js";
@@ -256,6 +256,7 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
         <ul className="cf-inbox__list">
           {items.map((item) => {
             const look = noticeLook(item.type);
+            const removedLabel = ["UNASSIGNED", "CANCELLED"].includes(item.type) && removedServiceLabel(item.removedService, language);
             const automatic = item.openable ? item.automaticOffer : null;
             const schedule = automatic?.scheduledDate
               ? [formatDate(automatic.scheduledDate, null, language), automatic.scheduledStart].filter(Boolean).join(" · ")
@@ -274,13 +275,14 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
                     {Number.isFinite(item.createdAtMs) && <time dateTime={new Date(item.createdAtMs).toISOString()}>{time.format(item.createdAtMs)}</time>}
                   </div>
                   <h3>{t(`inbox.event.${item.type}`)}</h3>
+                  {removedLabel && <p className="cf-notice__service">{removedLabel}</p>}
                   {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
                   {automatic?.cleanerLabel && <p>{t("inbox.automatic.assignee", { cleaner: automatic.cleanerLabel })}</p>}
                   {schedule && <p className="cf-notice__service">{schedule}</p>}
                   {proposedSchedule && <p>{t("inbox.reschedule.prompt", { schedule: proposedSchedule })}</p>}
                   {["CONFIRMED", "DECLINED"].includes(decision)
                     && <p role="status">{t(decision === "CONFIRMED" ? "inbox.reschedule.confirmed" : "inbox.reschedule.declined")}</p>}
-                  {!item.openable && decision !== "DECLINED" && <p className="cf-notice__unavailable">{t(item.type === "PUSH_TEST" ? "inbox.testNotice" : "inbox.targetUnavailable")}</p>}
+                  {!item.openable && !removedLabel && decision !== "DECLINED" && <p className="cf-notice__unavailable">{t(item.type === "PUSH_TEST" ? "inbox.testNotice" : "inbox.targetUnavailable")}</p>}
                 </div>
                 <div className="cf-notice__actions">
                   {item.openable && <button type="button" className={`button${item.read ? "" : " button--primary"}`} disabled={busyId !== null} onClick={() => act("open", item.id)}>

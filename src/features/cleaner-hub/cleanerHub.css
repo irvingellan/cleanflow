@@ -309,29 +309,45 @@
 .hb-coverage.is-verified strong { color: var(--v2-color-success-text); }
 .hb-coverage.is-partial, .hb-coverage.is-pending { background: var(--v2-color-attention-bg); border: 1px solid var(--v2-color-attention-border); color: var(--v2-color-attention-text); }
 .hb-coverage.is-unknown { background: var(--v2-color-warning-bg); border: 1px solid var(--v2-color-warning-border); color: var(--v2-color-warning-text); }
-.hb-changes ul { display: grid; gap: 6px; margin-top: 6px; }
-.hb-change { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); font-size: 13.5px; }
-.hb-change.is-removed { border-left-color: var(--v2-color-risk-text); }
-.hb-change > .mw-grow { display: grid; gap: 2px; }
 .hb-seg { width: 100%; }
 .hb-seg button { flex: 1; }
 .hb-day { display: grid; gap: 6px; }
 .hb-jobs { display: grid; gap: 8px; }
-.hb-job { display: flex; gap: 12px; align-items: center; width: 100%; min-height: 72px; padding: 12px; border-radius: 16px; border: 1px solid var(--v2-color-border); background: var(--v2-color-surface); text-align: left; color: var(--v2-color-text-primary); transition: border-color 120ms ease, transform 120ms ease; }
+.hb-job {
+  --card-secondary: var(--v2-color-text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px 16px;
+  border: 1px solid var(--v2-color-border);
+  border-radius: 14px;
+  color: var(--v2-color-text-primary);
+  background: var(--v2-color-surface-elevated);
+  text-align: left;
+}
 .hb-job:hover { border-color: var(--v2-color-brand); }
-.hb-job:active { transform: scale(0.99); }
-.hb-job.is-offer { border-style: dashed; background: var(--v2-color-surface-internal); }
-.hb-job-time { display: grid; justify-items: center; min-width: 56px; padding: 6px 4px; border-radius: 12px; background: var(--v2-color-surface-sunken); font-size: 11.5px; color: var(--v2-color-text-secondary); }
-.hb-job-time strong { font-size: 16px; color: var(--v2-color-text-primary); }
-.hb-job-main { display: grid; gap: 3px; min-width: 0; }
-.hb-job-main > strong { font-size: 16px; }
+.hb-root[data-theme="dark"] .hb-job {
+  --card-secondary: var(--v2-color-border-strong);
+  color: var(--v2-color-canvas);
+  background: var(--v2-color-text-secondary);
+}
+.hb-job-main { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.hb-job-main > strong { font-size: 17px; line-height: 1.25; }
+.hb-job-line { display: flex; align-items: baseline; gap: 6px; font-size: 14px; }
+.hb-job-line .mw-icon { align-self: flex-start; margin-top: 2px; }
+.hb-job-property, .hb-job-meta { color: var(--card-secondary); font-size: 13px; }
+.hb-job-meta { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 3px; }
+.hb-job-meta > * + *::before { content: "·"; padding-right: 8px; }
+.hb-job .mw-icon { flex-shrink: 0; }
+.hb-instructions { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--v2-color-border); border-radius: 12px; background: var(--v2-color-surface); }
+.hb-instructions h3 { font-size: 16px; }
+.hb-instructions p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .hb-status { justify-self: start; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--v2-color-success-bg); color: var(--v2-color-success-text); }
 .hb-status.is-progress { background: var(--v2-color-info-bg); color: var(--v2-color-info-text); }
-.hb-status.is-submitted { background: var(--v2-color-attention-bg); color: var(--v2-color-attention-text); }
 .hb-status.is-done { background: var(--v2-color-surface-sunken); color: var(--v2-color-text-secondary); }
-.hb-status.is-offer, .hb-status.is-waiting { background: var(--v2-color-attention-bg); color: var(--v2-color-attention-text); }
-.hb-status.is-interested { background: var(--v2-color-info-bg); color: var(--v2-color-info-text); }
-.hb-status.is-declined { background: var(--v2-color-surface-sunken); color: var(--v2-color-text-secondary); }
 .hb-empty { display: grid; justify-items: center; gap: 8px; padding: 24px 16px; text-align: center; border-radius: 16px; background: var(--v2-color-surface); border: 1px solid var(--v2-color-border); color: var(--v2-color-text-secondary); }
 .hb-empty.is-uncertain { background: var(--v2-color-warning-bg); border-color: var(--v2-color-warning-border); color: var(--v2-color-warning-text); }
 .hb-offerlink { display: flex; align-items: center; gap: 8px; justify-content: center; min-height: 44px; border: 1px dashed var(--v2-color-border-input); border-radius: 12px; background: transparent; font-weight: 700; color: var(--v2-color-brand-text); }
@@ -411,7 +427,6 @@
 .hb-root .hb-fresh.is-live { background: var(--v2-color-success-bg); color: var(--v2-color-success-text); border-color: var(--v2-color-success-border); }
 .hb-root .hb-fresh.is-stale { background: var(--v2-color-attention-bg); color: var(--v2-color-attention-text); border-color: var(--v2-color-attention-border); }
 .hb-root .hb-fresh.is-loading { background: var(--v2-color-surface-sunken); color: var(--v2-color-text-secondary); border-color: var(--v2-color-border); }
-.hb-root .hb-change.is-added { border-left-color: var(--v2-color-success-text); }
 .hb-root .hb-error { color: var(--v2-color-risk-text); font-weight: 600; }
 .hb-root .hb-offer-actions { display: grid; gap: 8px; }
 .hb-root .hb-code input { font-size: 20px !important; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -572,36 +587,6 @@
     clip: rect(0 0 0 0);
     white-space: nowrap;
   }
-}
-
-/* Schedule changes: an icon tile carries the kind, not a coloured side stripe */
-.hb-root .hb-change,
-.hb-root .hb-change.is-removed,
-.hb-root .hb-change.is-added {
-  align-items: center;
-  border-left: 1px solid var(--v2-color-border);
-  border-left-color: var(--v2-color-border);
-}
-
-.hb-change__icon {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  color: var(--v2-color-warning-text);
-  background: var(--v2-color-warning-bg);
-}
-
-.hb-change.is-added .hb-change__icon {
-  color: var(--v2-color-success-text);
-  background: var(--v2-color-success-bg);
-}
-
-.hb-change.is-removed .hb-change__icon {
-  color: var(--v2-color-risk-text);
-  background: var(--v2-color-risk-bg);
 }
 
 /* Inbox inside the Hub uses the shared notice cards */

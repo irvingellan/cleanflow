@@ -15,17 +15,22 @@ existing assignment screens.
 
 ## What a cleaner gets (`/agenda`)
 
+The Nov 19 candidate updates the cards, job details, removal messages and
+theme preference described below. The pilot release above predates these changes.
+
 - One-time sign-in with a manager-issued access code; afterwards the session stays
   on that phone (Firebase Auth, IndexedDB persistence of a separate named app).
 - **Hoje / Próximas / Concluídas** from real Assignments; **Ofertas** in its own
   tab. An `INTERESTED` Offer is never shown as confirmed work.
-- Card and detail: property display name, date, time, assignment status, her own
-  acknowledgment. Offers also show her own offered amount (same rule as the public
-  Offer link). No client prices, Job payouts, notes, guest names, access codes,
-  addresses or other cleaners.
-- Live updates (Firestore listener): assigned, rescheduled, removed, replaced,
-  cancelled (archived) and completed Jobs change on screen without a message.
-  "Mudanças recentes" keeps honest notices; removed/cancelled notices carry no Job ID.
+- Cards lead with service type, address, date and time. The property name
+  identifies services that have no address. The cleaner sees her own offered
+  amount on invitations and after assignment. The detail shows the Job notes
+  to the assigned cleaner or current invitee.
+- A service leaving an open detail or appearing as a removal in the Inbox is
+  identified by its previously known property name, date and time. A generic
+  message covers older entries with no identifying information.
+- The agenda home focuses on scheduled work. Change notifications remain in
+  the Inbox. Account settings offer light (default), dark and system themes.
 - Answering an Offer (`Tenho interesse` / `Não posso`) through the existing public
   Offer service, including the manager notification it already creates.
 - **Abrir checklist** opens the existing public checklist for an assigned Job, using
@@ -34,7 +39,7 @@ existing assignment screens.
   offline/cached/failed reads keep the last confirmed list labelled as not confirmed.
 - Install guide (iPhone/Android) and visual structure reuse the approved Cleaner Hub
   V1 visual (`feature/cleaner-hub-v1-visual` @ `08390b6`, `hub/*`), scoped under
-  `.hb-root`. Notifications are out of scope: the schedule works without push.
+  `.hb-root`. The schedule also works independently of push.
 
 ## What the manager gets
 
@@ -65,8 +70,8 @@ Firestore source of truth ──triggers──► syncCleanerAgendaForJob (one t
 ```
 
 - `functions/src/cleanerAgenda.js` — pure projection (`computeAgendaEntries`,
-  `planAgendaChanges`) plus `syncCleanerAgendaForJob` (re-reads Job, Offers and
-  active Assignments inside one transaction, so out-of-order triggers converge) and
+  `planAgendaChanges`) plus `syncCleanerAgendaForJob` (reads Job, Offers, active
+  Assignments and the linked Property in one transaction) and
   `rebuildCleanerAgenda` (backfill when a cleaner links).
 - Roster rule = checklist capability rule: `assignedCleanerIds` for schema ≥ 2,
   legacy `assignedCleanerId` while ASSIGNED/IN_PROGRESS/COMPLETED. Archived = cancelled.
@@ -193,10 +198,14 @@ legitimate operational actions.
 
 ## Known limits
 
-- Cleaners do not get push notifications in V1; the app must be opened.
-- Change notices and completed entries accumulate in `cleanerAgenda`; the screen shows
-  7/30 days. A Firestore TTL policy (Production config) is a later clean-up.
+- Completed entries appear in the recent 30-day window. Older change notices
+  remain in the projection after removal of the recent changes section.
+- Existing agenda entries receive new fields at the next projection or
+  link-time rebuild. Editing only the Property refreshes the address at the
+  next Job, Offer, Assignment or checklist projection.
 - The redemption callable has no App Check or rate limit; the 59-bit single-use,
   72 h code is the control.
-- Property address and access instructions are deliberately not shown.
+- Property access details use the separate protected `getMyJobAccess` callable.
+  Job notes and Property access details stay out of lock-screen notifications,
+  public links and logs.
 - Copy is PT/EN/ES from the approved visual; not reviewed by cleaners yet.

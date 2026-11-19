@@ -1,5 +1,6 @@
 export default {
   en: {
+  "jobs.cleanerNotesHint": "The cleaner can see these notes",
   "jobs.editDetails": "Edit guest / notes",
   "jobs.saveDetails": "Save details",
   "jobs.savingDetails": "Saving details…",
@@ -45,6 +46,7 @@ export default {
   "offers.searchNoCleaners": "No cleaners match this search.",
   },
   pt: {
+  "jobs.cleanerNotesHint": "A cleaner vê estas notas",
   "jobs.editDetails": "Editar hóspede / observações",
   "jobs.saveDetails": "Salvar detalhes",
   "jobs.savingDetails": "Salvando detalhes…",
@@ -90,6 +92,7 @@ export default {
   "offers.searchNoCleaners": "Nenhuma cleaner corresponde a esta busca.",
   },
   es: {
+  "jobs.cleanerNotesHint": "La persona de limpieza ve estas notas",
   "jobs.editDetails": "Editar huésped / notas",
   "jobs.saveDetails": "Guardar detalles",
   "jobs.savingDetails": "Guardando detalles…",

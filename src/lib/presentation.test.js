@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translateInLanguage } from "../i18n/translations.js";
-import { formatOperationalStatus, formatStatus } from "./presentation.js";
+import { formatOperationalStatus, formatStatus, removedServiceLabel } from "./presentation.js";
 
 const knownStatuses = {
   UNASSIGNED: "status.unassigned",
@@ -48,5 +48,20 @@ describe("formatStatus localized missing value", () => {
       "Unassigned", "Offered", "Assigned", "In progress", "Completed",
       "Pending", "Interested", "Not available", "Open", "Resolved",
     ]);
+  });
+});
+
+describe("removed service description", () => {
+  it("formats the prior service day and time in the cleaner's language", () => {
+    const service = { propertyName: "Synthetic Studio", scheduledDate: "2027-02-15", scheduledStart: "14:45" };
+    expect(removedServiceLabel(service, "pt")).toMatch(/Synthetic Studio.*15.*(?:02|fev).*14:45/i);
+    expect(removedServiceLabel(service, "en")).toMatch(/Synthetic Studio.*(?:2|Feb).*15.*2:45\s*PM/i);
+  });
+
+  it("uses available fields alone and ignores private details", () => {
+    expect(removedServiceLabel({ propertyName: "Synthetic Loft" }, "pt")).toBe("Synthetic Loft");
+    expect(removedServiceLabel({ scheduledStart: "14:45" }, "pt")).toBe("14:45");
+    expect(removedServiceLabel({ address: "Synthetic lane", notes: "Synthetic task", offeredCompensation: 123 }, "pt")).toBeFalsy();
+    expect(removedServiceLabel(null, "pt")).toBeFalsy();
   });
 });

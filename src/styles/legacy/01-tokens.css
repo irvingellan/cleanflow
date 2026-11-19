@@ -1,7 +1,8 @@
 /* CleanFlow Design System — definitive tokens (V2 roles, light-first, dark designed).
  * Components use the --cf-* roles. The --color-* names below are aliases kept so
  * every existing screen inherits the same palette without a per-screen rewrite. */
-:root {
+:root,
+.hb-root[data-theme="light"] {
   color-scheme: light;
   /* Surfaces */
   --cf-canvas: #f3f6f4;

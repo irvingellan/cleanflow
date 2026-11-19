@@ -13,7 +13,7 @@ const now = new Date(2026, 10, 3, 9, 0);
 const assigned = (id, date, status = "ASSIGNED", start = "10:00") => ({ id, kind: "ASSIGNED", jobId: id, scheduledDate: date, scheduledStart: start, jobStatus: status });
 
 describe("cleaner agenda buckets", () => {
-  it("splits today, upcoming and completed; offers and changes stay separate", () => {
+  it("splits active, completed and offered services while excluding change history", () => {
     const entries = [
       assigned("later", "2026-11-05", "ASSIGNED", "08:00"),
       assigned("today-b", "2026-11-03", "IN_PROGRESS", "13:00"),
@@ -33,7 +33,6 @@ describe("cleaner agenda buckets", () => {
     expect(agenda.upcoming.map((entry) => entry.id)).toEqual(["later", "no-date"]);
     expect(agenda.completed.map((entry) => entry.id)).toEqual(["done"]);
     expect(agenda.offers.map((entry) => entry.id)).toEqual(["o1"]);
-    expect(agenda.changes.map((entry) => entry.id)).toEqual(["c1"]);
     expect(agenda.openCount).toBe(5);
   });
 
