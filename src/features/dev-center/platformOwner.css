@@ -1,0 +1,18 @@
+.platform-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+.platform-actions time, .platform-event-list time, .platform-event-list small { color: var(--cf-text-secondary); font-size: var(--cf-text-sm); }
+.platform-actions time { margin-inline-end: auto; }
+.platform-owner { padding: 16px 18px; }
+.platform-owner :is(h3, h4, p) { margin: 0; }
+.platform-owner > p { margin-top: 10px; }
+.platform-event-list, .platform-release-lists ul { padding: 0; list-style: none; margin: 8px 0 0; }
+.platform-event-list li { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 12px; padding-block: 8px; border-top: 1px solid var(--cf-divider); }
+.platform-event-list li small { grid-column: 1 / -1; }
+.platform-releases { margin-top: 16px; }
+.platform-releases summary { cursor: pointer; font-weight: 650; }
+.platform-release-lists { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(245px,100%),1fr)); gap: 20px; padding-top: 14px; }
+.platform-release-lists li { padding: 4px 0; overflow-wrap: anywhere; }
+.platform-release-lists a { color: var(--cf-brand-text); }
+
+.platform-actions > p { flex: 1 0 100%; margin: 0; color: var(--cf-text-secondary); font-size: var(--cf-text-sm); }
+.platform-actions button[aria-disabled="true"] { cursor: progress; opacity: .75; }
+.platform-actions button:focus-visible, .platform-releases summary:focus-visible { outline: 2px solid var(--cf-focus); outline-offset: 2px; }

@@ -250,4 +250,72 @@ describe("PlatformConsole", () => {
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 
+  it("refreshes the selected company's overview and drill-down in place and keeps keyboard focus", async () => {
+    const oldStamp = "2026-01-01T10:00:00.000Z";
+    const newStamp = "2026-01-01T11:30:00.000Z";
+    const overview = deferred(), team = deferred();
+    getPlatformOverview.mockImplementation((id, options) => {
+      if (options?.refresh) return id ? team.promise : overview.promise;
+      return Promise.resolve(id ? { updatedAt: oldStamp, people: [], recentFailures: [] }
+        : { updatedAt: oldStamp, organizations: [first] });
+    });
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "North Demo" }));
+    await screen.findByText("No recorded errors.");
+    const refresh = screen.getByRole("button", { name: "Refresh" });
+    refresh.focus();
+    fireEvent.click(refresh);
+    await waitFor(() => {
+      expect(getPlatformOverview).toHaveBeenCalledWith(undefined, { refresh: true });
+      expect(getPlatformOverview).toHaveBeenCalledWith(first.id, { refresh: true });
+    });
+    expect(refresh).toHaveFocus();
+    expect(refresh).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("heading", { name: "North Demo" })).toBeVisible();
+    await act(async () => overview.resolve({ updatedAt: newStamp, organizations: [{ ...first, displayName: "New North" }] }));
+    expect(screen.getByRole("heading", { name: "New North" })).toBeVisible();
+    expect(screen.getByText(/Updated at/)).toHaveAttribute("datetime", oldStamp);
+    await act(async () => team.resolve({ updatedAt: newStamp, people: [], recentFailures: [
+      { kind: "page", page: "jobs", at: newStamp, deviceClass: "mobile" },
+    ] }));
+    expect(screen.getByText(/Updated at/)).toHaveAttribute("datetime", newStamp);
+    expect(screen.getByText("Mobile")).toBeVisible();
+    expect(screen.queryByText("No recorded errors.")).not.toBeInTheDocument();
+    expect(refresh).toHaveFocus();
+  });
+
+  it("discards late drill-down refreshes after changing the selected company", async () => {
+    const late = deferred();
+    getPlatformOverview.mockImplementation((id, options) => {
+      if (id === first.id && options?.refresh) return late.promise;
+      return Promise.resolve(id ? { people: [], recentFailures: [] } : { organizations: [first, second] });
+    });
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "North Demo" }));
+    await screen.findByText("No recorded errors.");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(getPlatformOverview).toHaveBeenCalledWith(first.id, { refresh: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "ID example-south" }));
+    await screen.findByText("No managers or cleaners found.");
+    await act(async () => late.resolve({ people: [{ displayName: "Obsolete staff", role: "CLEANER" }], recentFailures: [] }));
+    expect(screen.getByRole("heading", { name: "ID example-south" })).toBeVisible();
+    expect(screen.queryByText("Obsolete staff")).not.toBeInTheDocument();
+  });
+
+  it("retains the old stamp for a failed refresh and removes the snapshot when access is revoked", async () => {
+    const updatedAt = "2026-01-01T10:00:00.000Z";
+    getPlatformOverview.mockResolvedValueOnce({ organizations: [first], updatedAt })
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockRejectedValueOnce({ code: "functions/permission-denied" });
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText(/Could not refresh/)).toBeVisible();
+    expect(screen.getByText(/Updated at/)).toHaveAttribute("datetime", updatedAt);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Developer access is required");
+    expect(screen.queryByText("Releases")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export CSV" })).not.toBeInTheDocument();
+  });
+
 });

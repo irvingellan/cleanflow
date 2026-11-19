@@ -259,3 +259,84 @@ test("the developer sees per-organization counts and only that organization's pe
   assert.deepEqual(other.usage.notifications.deliveries7d, { sent: 1, failed: 0, partial: 0, noDevice: 0 });
   assert.deepEqual(await databaseVersions(), before);
 });
+
+test("cached owner snapshots preserve authorization and isolate the latest 20 safe failures", async () => {
+  const companies = db.collection("organizations");
+  const north = companies.doc(`owner-north-${fixtureSlug}`);
+  const south = companies.doc(`owner-south-${fixtureSlug}`);
+  const northKey = { organizationId: north.id };
+  const southKey = { organizationId: south.id };
+  const stamp = (n) => Timestamp.fromMillis(now - 60_000 + n * 1000);
+  const eventRef = (org, i) => org.collection(i % 2 ? "managerOperationEvents" : "managerPageLoadEvents").doc(`event-${i}`);
+  const read = async (data) => {
+    const response = await call(data, developer);
+    assertPrivateFieldsAbsent(response);
+    assert.equal(new Date(response.updatedAt).toISOString(), response.updatedAt);
+    return response;
+  };
+  const batch = db.batch();
+  for (const [org, name] of [[north, "Test North"], [south, "Test South"]]) {
+    batch.create(org, { displayName: name });
+  }
+  for (let i = 0; i < 24; i++) {
+    batch.create(eventRef(north, i), {
+      result: "error", createdAt: stamp(i), page: i % 2 ? "job-detail" : "jobs",
+      ...(i % 2 ? { operation: "offers" } : {}), deviceClass: "mobile", appVersion: "v1.2.3",
+      ...(i === 23 ? { page: privateMarker, operation: privateMarker, deviceClass: privateMarker, appVersion: privateMarker } : {}),
+      errorCode: privateMarker, message: privateMarker,
+    });
+  }
+  // A recorded success becomes a failure below to distinguish a real refresh
+  // from merely changing the timestamp on the existing snapshot.
+  const later = eventRef(north, 24);
+  batch.create(later, { createdAt: stamp(24), result: "success", page: "dashboard" });
+  batch.create(eventRef(south, 0), { createdAt: stamp(30), result: "error", page: "clients" });
+
+  try {
+    await batch.commit();
+    const before = await databaseVersions();
+    const overview = await read({ refresh: true });
+    const cold = await read(northKey);
+    const other = await read(southKey);
+    assert.equal(overview.organizations.find(row => row.id === north.id).health.failedPageLoads, 12);
+    assert.deepEqual(cold.recentFailures.map(row => row.at),
+      Array.from({ length: 20 }, (_, i) => stamp(23 - i).toDate().toISOString()));
+    assert.deepEqual(cold.recentFailures[0], {
+      kind: "operation", at: stamp(23).toDate().toISOString(), page: null,
+      operation: null, appVersion: null, deviceClass: null,
+    });
+    assert.deepEqual(cold.recentFailures[1], {
+      kind: "page", at: stamp(22).toDate().toISOString(), page: "jobs",
+      operation: null, appVersion: "v1.2.3", deviceClass: "mobile",
+    });
+    assert.equal(cold.recentFailures[2].operation, "offers");
+    assert.equal(other.recentFailures.length, 1);
+    assert.equal(other.recentFailures[0].page, "clients");
+    for (const uid of [undefined, manager, cleaner]) {
+      const code = uid ? "permission-denied" : "unauthenticated";
+      for (const data of [{}, northKey, { ...southKey, refresh: true }]) {
+        await assert.rejects(call(data, uid), { code });
+      }
+    }
+    assert.deepEqual(await databaseVersions(), before);
+
+    // Prime both keys immediately before the intentional fixture change.
+    const primed = await read({ ...northKey, refresh: true });
+    const primedOverview = await read({ refresh: true });
+    const { writeTime } = await later.update({ result: "error" });
+    assert.deepEqual(await read(northKey), primed);
+    assert.deepEqual(await read({}), primedOverview);
+    const fresh = await read({ ...northKey, refresh: true });
+    const freshOverview = await read({ refresh: true });
+    assert.equal(fresh.recentFailures.length, 20);
+    assert.equal(fresh.recentFailures[0].at, stamp(24).toDate().toISOString());
+    assert.ok(fresh.updatedAt >= primed.updatedAt);
+    assert.equal(freshOverview.organizations.find(row => row.id === north.id).health.failedPageLoads, 13);
+    assert.deepEqual(await read(northKey), fresh);
+    assert.deepEqual((await read(southKey)).recentFailures, other.recentFailures);
+    const expected = before.map(row => row[0] === later.path ? [later.path, writeTime.seconds, writeTime.nanoseconds] : row);
+    assert.deepEqual(await databaseVersions(), expected);
+  } finally {
+    await Promise.all([db.recursiveDelete(north), db.recursiveDelete(south)]);
+  }
+});
