@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
+import { PlatformConsole } from "./PlatformConsole.jsx";
 import { NotificationDiagnostics } from "./NotificationDiagnostics.jsx";
 import { SystemStatusPanel } from "./SystemStatusPanel.jsx";
 import { NotificationChannelDiagnostics } from "../notifications/NotificationChannelDiagnostics.jsx";
@@ -30,6 +31,8 @@ export function DevCenter({
   notificationUserId,
 }) {
   const { translate } = useTranslation();
+  const [section, setSection] = useState("tools");
+  const platformVisible = access.authorized && section === "platform";
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [isResettingBaseline, setIsResettingBaseline] = useState(false);
   const [advancedNotificationCheck, setAdvancedNotificationCheck] = useState(0);
@@ -72,8 +75,8 @@ export function DevCenter({
     <section className="dev-center" aria-labelledby="dev-center-title">
       <header className="cf-page-header">
         <div className="cf-page-header__text">
-          <h2 id="dev-center-title" className="list-title">{translate("devCenter.title")}</h2>
-          <p className="cf-page-context">{translate("devCenter.intro")}</p>
+          <h2 id="dev-center-title" className="list-title">{platformVisible ? translate("platform.tab") : translate("devCenter.title")}</h2>
+          <p className="cf-page-context">{platformVisible ? translate("platform.intro") : translate("devCenter.intro")}</p>
         </div>
         <div className="cf-page-header__actions">
           <span className={`dev-center__environment dev-center__environment--${access.environment || "unknown"}`}>
@@ -82,6 +85,17 @@ export function DevCenter({
         </div>
       </header>
 
+      {access.authorized && (
+        <div className="cf-segmented platform-switch" role="group" aria-label={translate("devCenter.title")}>
+          <button type="button" aria-pressed={!platformVisible} onClick={() => setSection("tools")}>
+            {translate("platform.tools")}
+          </button>
+          <button type="button" aria-pressed={platformVisible} onClick={() => setSection("platform")}>
+            {translate("platform.tab")}
+          </button>
+        </div>
+      )}
+      {platformVisible ? <PlatformConsole><SystemStatusPanel /></PlatformConsole> : <>
       <div className="dev-center__results">{results}</div>
       <SystemStatusPanel />
       {/* Demo data only works in the emulator or Sandbox; Production hides it. */}
@@ -188,6 +202,7 @@ export function DevCenter({
           <NotificationChannelDiagnostics key={advancedNotificationCheck} userId={notificationUserId} />
         )}
       </section>
+      </>}
       <ScrollToTopButton threshold={600} />
     </section>
   );

@@ -10,6 +10,7 @@ import { lazyHandler } from "./runtime/lazy.js";
 setGlobalOptions({ preserveExternalChanges: true, maxInstances: 20 });
 
 // Handler modules load on first use, so a cold instance loads only what its own Function needs.
+const platformOverview = () => import("./handlers/platformOverview.js");
 const devCenter = () => import("./handlers/devCenter.js");
 const feedback = () => import("./handlers/feedback.js");
 const managerDevices = () => import("./handlers/managerDevices.js");
@@ -29,6 +30,11 @@ const cleanerAgendaTriggers = () => import("./handlers/cleanerAgendaTriggers.js"
 export const getDevCenterAccess = onCall(
   { region: "us-central1", secrets: [devCenterDeveloperUids] },
   lazyHandler(devCenter, "getDevCenterAccess"),
+);
+
+export const getPlatformOverview = onCall(
+  { region: "us-central1", secrets: [devCenterDeveloperUids] },
+  lazyHandler(platformOverview, "getPlatformOverview"),
 );
 
 export const getManagerNotificationDiagnostics = onCall(

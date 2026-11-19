@@ -1,0 +1,34 @@
+.platform-page {
+  box-sizing: border-box;
+  width: min(100%, 1400px);
+  margin-inline: auto;
+  padding: 0 clamp(12px, 3vw, 44px) 36px;
+}
+.platform-page__bar,
+.platform-page__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.platform-page__bar {
+  justify-content: space-between;
+  padding-block: 16px;
+  border-bottom: 1px solid var(--cf-border);
+  margin-bottom: 24px;
+}
+.platform-page > .cf-page-context {
+  margin-bottom: 18px;
+}
+.platform-page > .system-status {
+  margin-top: 20px;
+}
+.platform-page > .system-status > :not(.cf-block__header) {
+  margin-inline: 18px;
+}
+.platform-page > .system-status .system-status__links {
+  padding-bottom: 14px;
+}
+.platform-page > .system-status a {
+  color: var(--cf-brand-text);
+}

@@ -6,6 +6,7 @@ import { useInitialManagerSession } from "../auth/useInitialManagerSession.js";
 import { abortManagerPushSignOut, prepareManagerPushSignOut } from "../notifications/notificationService.js";
 import { clearOneSignalUser } from "../notifications/oneSignalService.js";
 import { ThemeProvider } from "../../theme/theme.js";
+import { PlatformPage } from "../dev-center/PlatformPage.jsx";
 import { ManagerApplication } from "./ManagerApplication.jsx";
 
 /** The manager entry: session restore, sign-in, and the signed-in application. */
@@ -37,6 +38,16 @@ export function ManagerRoot() {
 
   if (!authUser) {
     return <ThemeProvider><ManagerLogin /></ThemeProvider>;
+  }
+
+  // Platform access belongs to the developer account, independently of membership.
+  if (["/platform", "/platform/"].includes(window.location.pathname)) {
+    return (
+      <ThemeProvider>
+        <PlatformPage key={authUser.uid} onSignOut={handleSignOut}
+          isSigningOut={isSigningOut} hasSignOutError={hasSignOutError} />
+      </ThemeProvider>
+    );
   }
 
   return (

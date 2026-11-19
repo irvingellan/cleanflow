@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../services/firebase/client.js";
 
+const platformOverviewCall = httpsCallable(functions, "getPlatformOverview");
 const accessCall = httpsCallable(functions, "getDevCenterAccess");
 const generateScenarioCall = httpsCallable(functions, "generateDevCenterScenario");
 const clearDataCall = httpsCallable(functions, "clearDevCenterData");
@@ -35,5 +36,10 @@ export async function getManagerNotificationDiagnostics() {
 
 export async function sendDeveloperTestNotification(targetRegistrationId) {
   const result = await developerTestNotificationCall({ targetRegistrationId, confirm: true });
+  return result.data;
+}
+
+export async function getPlatformOverview(organizationId) {
+  const result = await platformOverviewCall(organizationId ? { organizationId } : {});
   return result.data;
 }
