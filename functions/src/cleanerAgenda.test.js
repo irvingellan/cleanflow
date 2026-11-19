@@ -23,7 +23,7 @@ function job(extra = {}) {
     scheduleRevision: 2,
     clientPrice: 250,
     cleanerPayout: 150,
-    notes: "private",
+    notes: "  Synthetic task A\nSynthetic task B  ",
     guestName: "private",
     ...extra,
   };
@@ -36,6 +36,7 @@ describe("cleaner agenda projection", () => {
     expect(entries.get("ana")).toEqual({
       organizationId: "org", cleanerId: "ana", jobId: "j1", jobStatus: "ASSIGNED",
       scheduledDate: "2026-11-06", scheduledStart: "10:30", propertyName: "Maple Example House",
+      address: null, notes: "Synthetic task A\nSynthetic task B",
       scheduleRevision: 2, kind: "ASSIGNED", serviceType: "STANDARD", acknowledged: true, offerStatus: null, offeredCompensation: null,
       checklist: { status: "NONE", started: false }, checklistStatus: "NONE", checklistStarted: false,
     });
@@ -79,17 +80,27 @@ describe("cleaner agenda projection", () => {
     expect(sameEntry(entries.get("bia"), { ...entries.get("bia"), offerExpiresAtMs: future.toMillis() + 1 })).toBe(false);
   });
 
-  it("updates the type on assigned agenda entries without publishing it on offers", () => {
+  it("refreshes type, address and job instructions for current offer and assignment holders", () => {
     const input = {
       organizationId: "o", jobId: "j", now,
       offers: [{ cleanerId: "bia", status: "PENDING", publicOfferExpiresAt: future }],
     };
-    const before = computeAgendaEntries({ ...input, job: job() });
-    const after = computeAgendaEntries({ ...input, job: job({ serviceType: "POST_CONSTRUCTION" }) });
-    expect(after.get("ana").serviceType).toBe("POST_CONSTRUCTION");
-    expect(sameEntry(before.get("ana"), after.get("ana"))).toBe(false);
-    expect(after.get("bia")).not.toHaveProperty("serviceType");
-    expect(sameEntry(before.get("bia"), after.get("bia"))).toBe(true);
+    const openJob = job({ requiredCleanerCount: 2 });
+    const before = computeAgendaEntries({ ...input, job: openJob });
+    const after = computeAgendaEntries({ ...input, address: "Synthetic site A", job: {
+      ...openJob, serviceType: "POST_CONSTRUCTION", notes: "Revised synthetic task",
+    } });
+    for (const id of ["ana", "bia"]) {
+      const entry = after.get(id);
+      expect(entry).toMatchObject({ serviceType: "POST_CONSTRUCTION", address: "Synthetic site A", notes: "Revised synthetic task" });
+      expect(sameEntry(before.get(id), entry)).toBe(false);
+      for (const field of ["serviceType", "address", "notes"]) {
+        expect(sameEntry(entry, { ...entry, [field]: null })).toBe(false);
+      }
+    }
+    expect(after.has("unrelated")).toBe(false);
+    const closed = computeAgendaEntries({ ...input, job: job() }).get("bia");
+    for (const key of ["serviceType", "address", "notes"]) expect(closed).not.toHaveProperty(key);
   });
 
 
@@ -116,7 +127,50 @@ describe("cleaner agenda projection", () => {
       jobStatus: "OFFERED", propertyName: "Original Property", scheduledDate: "2026-11-05",
       scheduledStart: "09:00", scheduleRevision: 0,
     });
-    expect(JSON.stringify(entries.get("bia"))).not.toMatch(/ana|250|150|private|Maple|10:30/);
+    expect(JSON.stringify(entries.get("bia"))).not.toMatch(/ana|250|150|private|Maple|10:30|Synthetic task/);
+  });
+
+  it.each(["ACCEPTED", "INTERESTED", "SELECTED"])("uses the active assignment's own %s offer, including zero", status => {
+    const offers = [
+      { offerReferenceId: "older", cleanerId: "holder", status, offeredCompensation: 120 },
+      { offerReferenceId: "current", cleanerId: "holder", status, offeredCompensation: 0 },
+      { offerReferenceId: "another", cleanerId: "other", status, offeredCompensation: 180 },
+    ];
+    const project = (assignment, records = offers) => computeAgendaEntries({
+      organizationId: "o", jobId: "j", now, job: job({ assignedCleanerIds: ["holder"] }),
+      assignments: [{ cleanerId: "holder", isActive: true, ...assignment }], offers: records,
+    }).get("holder").offeredCompensation;
+    expect(project({ sourceOfferId: "current" })).toBe(0);
+    expect(project({ sourceOfferId: "older" })).toBe(120);
+    expect(project({ sourceOfferId: "another" })).toBeNull();
+    expect(project({ sourceOfferId: "current", isActive: false })).toBeNull();
+    expect(project({ sourceOfferId: "current", organizationId: "other-org" })).toBeNull();
+    expect(project({})).toBeNull();
+    expect(project({ sourceOfferId: "current" }, [{ ...offers[1], organizationId: "other-org" }])).toBeNull();
+  });
+
+  it("uses the legacy holder's interested offer before the single-cleaner payout", () => {
+    const legacy = { operationalStatus: "ASSIGNED", assignedCleanerId: "holder", cleanerPayout: 90 };
+    const own = { offerReferenceId: "holder", cleanerId: "holder", status: "INTERESTED", offeredCompensation: 45 };
+    const amount = (offers) => computeAgendaEntries({ organizationId: "o", jobId: "j", now, job: legacy, offers })
+      .get("holder").offeredCompensation;
+    expect(amount([own])).toBe(45);
+    expect(amount([{ ...own, offeredCompensation: null }])).toBeNull();
+    expect(amount([{ ...own, status: "DECLINED" }])).toBe(90);
+    expect(amount([{ ...own, cleanerId: "other" }])).toBe(90);
+    expect(amount([])).toBe(90);
+  });
+
+  it("never gives a closed legacy invitation the current job payout", () => {
+    const input = {
+      organizationId: "o", jobId: "j", now,
+      job: { operationalStatus: "OFFERED", assignedCleanerId: "selected", cleanerPayout: 210 },
+    };
+    const offer = { cleanerId: "previous-invitee", status: "INTERESTED", publicOfferExpiresAt: future };
+    const entry = (snapshot) => computeAgendaEntries({ ...input, offers: [{ ...offer, ...snapshot }] })
+      .get("previous-invitee");
+    expect(entry({})).toMatchObject({ offerStatus: "ALREADY_TAKEN", offeredCompensation: null });
+    expect(entry({ offeredCompensation: 0 }).offeredCompensation).toBe(0);
   });
 
   it("never treats a v2 Job-level payout as one cleaner's offered amount", () => {

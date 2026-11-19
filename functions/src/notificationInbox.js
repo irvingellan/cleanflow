@@ -6,7 +6,8 @@ import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
 import {
   automaticOfferNotice, cleanerInbox, cleanerInboxTypes as cleanerTypes, inboxEventVersion, inboxReceipt, isInboxId,
-  managerInboxCollection, managerInboxTypes as managerTypes, offerInboxGeneration, validInboxSegment,
+  managerInboxCollection, managerInboxTypes as managerTypes, offerInboxGeneration, removedServiceNotice,
+  safeServiceLabel, validInboxSegment,
 } from "./notificationInboxEvents.js";
 import { publicOfferState } from "./publicOfferResponseService.js";
 import { currentScheduleConfirmation } from "./rescheduleConfirmations.js";
@@ -57,12 +58,6 @@ function validInboxEvent(event, id, identity) {
     && event.eventVersion === inboxEventVersion && event.processingState === "STORED"
     && (cleaner ? cleanerEventTypes.has(event.type) && event.cleanerId === identity.cleanerId
       : managerEventTypes.has(event.type));
-}
-
-function safeServiceLabel(job) {
-  return typeof job?.propertyName === "string"
-    ? job.propertyName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120) || null
-    : null;
 }
 
 function targetJobReference(organization, event, forPush) {
@@ -247,6 +242,7 @@ export async function listNotificationInboxForRequest(database, { organizationId
       const target = projectAuthorizedTarget(organization, event, identity, jobs[index],
         offers.get(offerRefs[index]?.path), { now });
       const notice = target && identity.role === managerRole ? automaticOfferNotice(event.type, event.automaticOffer) : null;
+      const removedService = identity.role === cleanerRole ? removedServiceNotice(event.type, event.removedService) : null;
       const job = jobs[index];
       const decision = confirmations[index];
       const assignment = assignments.get(assignmentRefs[index]?.path);
@@ -270,6 +266,7 @@ export async function listNotificationInboxForRequest(database, { organizationId
         serviceLabel: target?.serviceLabel ?? null,
         ...(notice ? { automaticOffer: notice } : {}),
         ...(reschedule ? { reschedule } : {}),
+        ...(removedService ? { removedService } : {}),
       };
     });
     return { items, unreadCount: items.filter((item) => !item.read).length, hasOlder, nextCursor };

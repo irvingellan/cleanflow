@@ -318,7 +318,7 @@ A manager-issued manual replacement is recorded separately from the old batch.
 
 ## Cleaner account and agenda projection
 
-**LOCAL CANDIDATE (Cleaner Hub V1, not deployed):** a Cleaner may be linked to one
+A Cleaner may be linked to one
 Firebase Auth account through a server-written `members/{uid}` document with
 `role: "CLEANER"`, `cleanerId` and `active`. Linking uses a manager-issued,
 single-use access code stored only as a hash (`cleanerAccessCodes/{hash}`);
@@ -326,13 +326,21 @@ revocation sets `active: false`. Server-only `cleanerHubAccess/{cleanerId}` hold
 the manager-visible link status.
 
 `cleanerAgenda/{cleanerId}__{jobId}` is a derived read model, never a source of
-truth. Functions recompute it from the Job, its active Assignments and its Offers
-after every write: `kind` ASSIGNED or OFFER, Job status, date, time, property
-display name, schedule revision, acknowledgment and (Offers only) the cleaner's own
-offered amount. `kind: "CHANGE"` notices record assigned/rescheduled/removed/
-cancelled transitions; removed and cancelled notices omit the Job ID. A cleaner
-reads only entries whose `cleanerId` matches her membership. See
-[CLEANER_HUB_V1.md](CLEANER_HUB_V1.md).
+truth. Functions derive each entry from the Job, its active Assignments, its Offers
+and the linked Property in the same organization. Access requires a current
+cleaner membership in that organization for the projected `cleanerId`.
+
+For an active Offer or rostered Assignment, the Nov 19 candidate includes
+service type, Property address, Job notes and the recipient's offered amount.
+An Assignment uses the active Assignment's source Offer. A legacy singular Job
+uses the assigned cleaner's interested Offer and may fall back to
+`cleanerPayout` if the snapshot is missing. A closed invitation retains only
+its own amount snapshot. Job notes stay in the authenticated agenda.
+
+`kind: "CHANGE"` notices record assignments, schedule changes and removals.
+Removed and cancelled agenda notices omit the Job ID. The cleaner's Inbox can
+identify a removed service by its previous property display name, date and
+start time. See [CLEANER_HUB_V1.md](CLEANER_HUB_V1.md).
 
 ## Cleaner availability and preferences
 

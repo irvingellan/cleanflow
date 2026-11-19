@@ -17,6 +17,24 @@ function Example({ sessionKey = "session-a", service, onOpen }) {
 }
 
 describe("Notification Inbox", () => {
+  it.each([
+    ["UNASSIGNED", "Serviço retirado da sua agenda"],
+    ["CANCELLED", "Serviço cancelado"],
+  ])("identifies the closed %s service from its notice without offering to open it", async (type, title) => {
+    const removedService = { propertyName: "Synthetic Studio", scheduledDate: "2027-02-15", scheduledStart: "14:45" };
+    const service = { list: vi.fn().mockResolvedValue({
+      items: [{ id: "removed", type, read: false, openable: false, removedService }], unreadCount: 1,
+    }) };
+    render(<Example service={service} onOpen={vi.fn()} />);
+    expect(await screen.findByRole("heading", { name: title })).toBeVisible();
+    const notice = screen.getByRole("listitem");
+    expect(notice).toHaveTextContent("Synthetic Studio");
+    expect(notice).toHaveTextContent(/15.*(?:02|fev)/i);
+    expect(notice).toHaveTextContent("14:45");
+    expect(notice).not.toHaveTextContent("Este item não está mais disponível.");
+    expect(within(notice).queryByRole("button", { name: "Abrir" })).not.toBeInTheDocument();
+  });
+
   it("filters reads and refreshes its counter only after marking through the server", async () => {
     const service = {
       list: vi.fn().mockResolvedValueOnce({ items, unreadCount: 1, hasOlder: true })

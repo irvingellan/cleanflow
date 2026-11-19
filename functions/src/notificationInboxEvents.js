@@ -65,19 +65,43 @@ export function inboxEventRecord({ eventId, organizationId, type, jobId, created
   };
 }
 
+export function safeServiceLabel(job) {
+  return typeof job?.propertyName === "string"
+    ? job.propertyName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120) || null
+    : null;
+}
+
+function noticeSchedule(value) {
+  const scheduledDate = typeof value?.scheduledDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.scheduledDate)
+    && new Date(value.scheduledDate).toJSON()?.slice(0, 10) === value.scheduledDate ? value.scheduledDate : "";
+  const scheduledStart = typeof value?.scheduledStart === "string"
+    && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value.scheduledStart) ? value.scheduledStart : "";
+  return { scheduledDate, scheduledStart };
+}
+
+// Only the cleaner’s previous service identity belongs in a historical removal.
+export function removedServiceNotice(type, value) {
+  if (!value || (type !== cleanerInboxTypes.unassigned && type !== cleanerInboxTypes.cancelled)) return null;
+  const propertyName = safeServiceLabel(value);
+  const { scheduledDate, scheduledStart } = noticeSchedule(value);
+  if (!propertyName && !scheduledDate && !scheduledStart) return null;
+  return {
+    ...(propertyName ? { propertyName } : {}),
+    ...(scheduledDate ? { scheduledDate } : {}),
+    ...(scheduledStart ? { scheduledStart } : {}),
+  };
+}
+
 export function automaticOfferNotice(type, value) {
   if (![managerInboxTypes.automatic, managerInboxTypes.automaticBatchFilled, managerInboxTypes.rescheduleDeclined].includes(type)) return null;
   const cleanerLabel = type !== managerInboxTypes.automaticBatchFilled && typeof value?.cleanerLabel === "string"
     ? value.cleanerLabel.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120) : "";
-  const scheduledDate = typeof value?.scheduledDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.scheduledDate)
-    && new Date(value.scheduledDate).toJSON()?.slice(0, 10) === value.scheduledDate ? value.scheduledDate : "";
-  const scheduledStart = scheduledDate && typeof value?.scheduledStart === "string"
-    && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value.scheduledStart) ? value.scheduledStart : "";
+  const { scheduledDate, scheduledStart } = noticeSchedule(value);
   if (!cleanerLabel && !scheduledDate) return null;
   return {
     ...(cleanerLabel ? { cleanerLabel } : {}),
     ...(scheduledDate ? { scheduledDate } : {}),
-    ...(scheduledStart ? { scheduledStart } : {}),
+    ...(scheduledDate && scheduledStart ? { scheduledStart } : {}),
   };
 }
 

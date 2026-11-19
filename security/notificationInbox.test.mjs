@@ -306,7 +306,8 @@ test("reschedule push rejects the superseded revision and cancellation never reo
   assert.equal(moves.length, 2);
   assert.ok(moves.every(({ reschedule }) => reschedule == null));
 
-  await job("changes").update({ archivedAt: Timestamp.now(), checklistContextRevision: 4 });
+  await job("changes").update({ archivedAt: Timestamp.now(), checklistContextRevision: 4,
+    propertyName: "Updated after removal", scheduledStart: "13:00" });
   const archived = await job("changes").get();
   assert.equal(await jobTransition("changes", "archive", rescheduledAgain, archived), 1);
   const cancelled = (await inbox.where("type", "==", "CANCELLED").get()).docs[0].data();
@@ -314,6 +315,12 @@ test("reschedule push rejects the superseded revision and cancellation never reo
   const listed = await listNotificationInbox.run(cleaner("ana"));
   assert.equal(listed.items.length, 4);
   assert.ok(listed.items.every((item) => !item.openable && item.serviceLabel === null));
+  const historical = { propertyName: "Synthetic House", scheduledDate: "2026-11-04", scheduledStart: "11:30" };
+  assert.deepEqual(cancelled.removedService, historical);
+  assert.deepEqual(listed.items.find((item) => item.type === "CANCELLED").removedService, historical);
+  assert.ok(listed.items.filter((item) => item.type !== "CANCELLED").every((item) => !item.removedService));
+  assert.ok(listed.items.every((item) => !("jobId" in item)));
+  assert.equal((await listNotificationInbox.run(cleaner("bia"))).items.length, 0);
   for (const { id } of listed.items) {
     assert.deepEqual(await openNotificationInboxItem.run(cleaner("ana", { id })), { state: "unavailable", destination: null });
   }

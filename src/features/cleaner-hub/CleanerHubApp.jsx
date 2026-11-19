@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { formatDate, formatServiceTime, removedServiceLabel } from "../../lib/presentation.js";
 import { FIRST_ACCEPT_WINS } from "../jobs/automaticOffers.js";
 import { serviceTypeLabel, serviceTypeMessage } from "../jobs/serviceTypeMessages.js";
 import { HubIcon } from "./HubIcon.jsx";
@@ -30,6 +31,8 @@ import "./cleanerHub.css";
 const TABS = [["agenda", "calendar"], ["offers", "send"], ["account", "user"]];
 const languageNames = { pt: "Português", en: "English", es: "Español" };
 const languageStorageKey = "cleanflow.cleanerHub.language";
+const themeStorageKey = "cleanflow.cleanerHub.theme";
+const themeChoices = ["light", "dark", "auto"];
 const onboardingStorageKey = "cleanflow.cleanerHub.onboarded";
 
 function readStorage(key) {
@@ -63,11 +66,7 @@ function useTranslator(preferred) {
     const translate = (key, params) => hubTranslate(lang, key, params);
     translate.lang = lang;
     translate.locale = { pt: "pt-BR", en: "en-US", es: "es-US" }[lang];
-    translate.time = (hhmm) => {
-      if (!hhmm) return null;
-      const [hours, minutes] = hhmm.split(":").map(Number);
-      return new Intl.DateTimeFormat(translate.locale, { hour: "numeric", minute: "2-digit" }).format(new Date(2000, 0, 1, hours, minutes));
-    };
+    translate.time = (value) => formatServiceTime(value, lang);
     translate.clock = (date) => date ? new Intl.DateTimeFormat(translate.locale, { hour: "numeric", minute: "2-digit" }).format(date) : hubTranslate(lang, "hb.fresh.never");
     return translate;
   }, [lang]);
@@ -75,16 +74,27 @@ function useTranslator(preferred) {
   return [t, choose];
 }
 
-function useSystemTheme() {
-  const query = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-  const [dark, setDark] = useState(Boolean(query?.matches));
+export function normalizeHubTheme(value) {
+  return themeChoices.includes(value) ? value : "light";
+}
+
+function useHubTheme() {
+  const [preference, setPreference] = useState(() => normalizeHubTheme(readStorage(themeStorageKey)));
+  const [media] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)"));
+  const [systemDark, setSystemDark] = useState(() => Boolean(media?.matches));
   useEffect(() => {
-    if (!query?.addEventListener) return undefined;
-    const update = (event) => setDark(event.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, [query]);
-  return dark ? "dark" : "light";
+    if (!media) return undefined;
+    const update = (event) => setSystemDark(event.matches);
+    media.addEventListener?.("change", update);
+    update(media);
+    return () => media.removeEventListener?.("change", update);
+  }, [media]);
+  const choose = (value) => {
+    writeStorage(themeStorageKey, value);
+    setPreference(value);
+  };
+  const theme = preference === "auto" ? (systemDark ? "dark" : "light") : preference;
+  return { theme, preference, choose };
 }
 
 function useInstallPrompt() {
@@ -104,11 +114,6 @@ function dayLabel(t, dateKey, today) {
   if (dateKey === addDaysToKey(today, -1)) return t("hb.day.yesterday");
   const [year, month, day] = dateKey.split("-").map(Number);
   return new Intl.DateTimeFormat(t.locale, { weekday: "long", day: "numeric", month: "long" }).format(new Date(year, month - 1, day, 12));
-}
-
-function whenText(t, point, today) {
-  if (!point) return "";
-  return [dayLabel(t, point.date, today), t.time(point.start)].filter(Boolean).join(" ");
 }
 
 /* ---------- small pieces ---------- */
@@ -160,31 +165,35 @@ function monthLabel(t, month) {
 
 const checklistChipStates = ["available", "started", "submitted"];
 
-function JobCard({ t, entry, today, onOpen, showDate = false }) {
+function JobCard({ t, entry, onOpen }) {
   const offer = entry.kind === "OFFER";
-  const status = assignedStatusKey(entry);
+  const taken = offer && entry.offerStatus === "ALREADY_TAKEN";
   const checklist = offer ? null : checklistSituation(entry);
+  const service = !taken && (!offer || entry.serviceType) ? serviceTypeLabel(t.lang, entry.serviceType) : null;
+  const address = !taken && entry.address;
+  const place = address || entry.propertyName;
+  const amount = !taken && hubMoney(entry.offeredCompensation, t.lang);
   return (
     <li>
-      <button type="button" className={`hb-job is-${offer ? "offer" : "assigned"}`} onClick={() => onOpen(entry)} data-job-id={entry.jobId}>
-        <span className="hb-job-time">
-          <strong className="tnum">{t.time(entry.scheduledStart) || "—"}</strong>
-          <span>{offer || showDate ? dayLabel(t, entry.scheduledDate, today) : ""}</span>
+      <button type="button" className="hb-job" onClick={() => onOpen(entry)} data-job-id={entry.jobId}>
+        <span className="hb-job-main">
+          <strong>{service || place || t("hb.st.offer")}</strong>
+          {service && place && <span className="hb-job-line"><HubIcon name="pin" size={15} />{place}</span>}
+          <span className="hb-job-line tnum">
+            <HubIcon name="calendar" size={15} />
+            {entry.scheduledDate ? formatDate(entry.scheduledDate, null, t.lang) : t("hb.dateNotSet")}
+            {" · "}{t.time(entry.scheduledStart) || t("hb.timeNotSet")}
+          </span>
+          {address && entry.propertyName && address !== entry.propertyName && <span className="hb-job-property">{entry.propertyName}</span>}
+          <span className="hb-job-meta">
+            {amount && <strong>{amount}</strong>}
+            <span>{t(offer ? offerStatusKey(entry) : `hb.st.${assignedStatusKey(entry)}`)}</span>
+            {checklist && entry.jobStatus !== "COMPLETED" && checklistChipStates.includes(checklist.state) && (
+              <span data-checklist-state={checklist.state}>{t(`hb.clst.${checklist.state}.chip`)}</span>
+            )}
+          </span>
         </span>
-        <span className="mw-grow hb-job-main">
-          <strong>{entry.propertyName || "—"}</strong>
-          {!offer && <span className="mw-sec">{serviceTypeLabel(t.lang, entry.serviceType)}</span>}
-          {!entry.scheduledStart && <span className="mw-sec">{t("hb.timeNotSet")}</span>}
-          {offer
-            ? <span className={`hb-status is-${entry.offerStatus === "INTERESTED" ? "interested" : "waiting"}`}>{t(offerStatusKey(entry))}</span>
-            : <span className={`hb-status is-${status}`}>{t(`hb.st.${status}`)}</span>}
-          {checklist && entry.jobStatus !== "COMPLETED" && checklistChipStates.includes(checklist.state) && (
-            <span className={`hb-clchip is-${checklist.state}`} data-checklist-state={checklist.state}>
-              <HubIcon name="clipCheck" size={13} />{t(`hb.clst.${checklist.state}.chip`)}
-            </span>
-          )}
-        </span>
-        <HubIcon name="arrowR" size={18} />
+        <HubIcon name="arrowR" size={16} />
       </button>
     </li>
   );
@@ -196,7 +205,7 @@ function DayGroups({ t, entries, today, onOpen }) {
     <section key={day || "none"} className="hb-day" aria-label={dayLabel(t, day, today)}>
       <h3 className="mw-micro">{dayLabel(t, day, today)}</h3>
       <ul className="hb-jobs">
-        {entries.filter((entry) => (entry.scheduledDate || "") === day).map((entry) => <JobCard key={entry.id} t={t} entry={entry} today={today} onOpen={onOpen} />)}
+        {entries.filter((entry) => (entry.scheduledDate || "") === day).map((entry) => <JobCard key={entry.id} t={t} entry={entry} onOpen={onOpen} />)}
       </ul>
     </section>
   ));
@@ -277,26 +286,6 @@ function Agenda({ t, hub, name, segment, setSegment, go, today, scheduledNavigat
         <p className="mw-sec">{t("hb.helloSub", { count: schedule.openCount })}</p>
       </header>
       <FreshnessBanner t={t} freshness={freshness} onRetry={hub.retryStartup} online={hub.online} />
-      {schedule.changes.length > 0 && (
-        <section className="hb-changes" aria-label={t("hb.changes")}>
-          <h3 className="mw-micro">{t("hb.changes")}</h3>
-          <ul>
-            {schedule.changes.slice(0, 4).map((change) => (
-              <li key={change.id} className={`hb-change is-${change.change === "RESCHEDULED" ? "moved" : change.change === "ASSIGNED" ? "added" : "removed"}`}>
-                <span className="hb-change__icon" aria-hidden="true"><HubIcon name={change.change === "RESCHEDULED" ? "clock" : change.change === "ASSIGNED" ? "calendar" : "userX"} size={16} /></span>
-                <span className="mw-grow">
-                  <strong>{change.propertyName || "—"}</strong>
-                  <span>{t(`hb.ch.${change.change}`, {
-                    from: whenText(t, change.from, today),
-                    to: whenText(t, change.to, today),
-                    when: whenText(t, change.to || change.from, today),
-                  })}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
       {pendingChecklists.length > 0 && (
         <section className="hb-clnotice" aria-label={t("hb.clpending.title", { count: pendingChecklists.length })} data-testid="checklist-pending">
           <HubIcon name="clipCheck" size={18} />
@@ -406,8 +395,48 @@ export function AccessSection({ t, hub, entry }) {
 
 const checklistActionStates = { available: "hb.clst.available.action", started: "hb.clst.started.action", unknown: "hb.job.openChecklist" };
 
-function JobView({ t, hub, jobId, today }) {
-  const entry = findAgendaEntry(hub.entries, jobId);
+function JobInstructions({ t, notes }) {
+  if (!notes) return null;
+  return (
+    <section className="hb-instructions" aria-labelledby="hb-instructions-title">
+      <h3 id="hb-instructions-title">{t("hb.job.instructions")}</h3>
+      <p>{notes}</p>
+    </section>
+  );
+}
+
+function RemovedService({ t, label, message }) {
+  return (
+    <div className="hb-screen">
+      <div className="hb-empty is-uncertain" role="status">
+        <HubIcon name="userX" size={22} />
+        <p>{message || (label ? inboxMessage(t.lang, "inbox.event.UNASSIGNED") : t("hb.job.notYours"))}</p>
+        {label && <strong>{label}</strong>}
+      </div>
+    </div>
+  );
+}
+
+function AgendaDetail({ t, hub, view, today }) {
+  const entry = findAgendaEntry(hub.entries, view.jobId);
+  const { kind, propertyName, scheduledDate, scheduledStart } = entry || {};
+  // This view is keyed by Job and authenticated session. Keep only the identity
+  // already shown so a live removal cannot retain notes, pay or access details.
+  const [lastSeen, setLastSeen] = useState(null);
+  useLayoutEffect(() => {
+    if (kind && (view.type !== "job" || kind === "ASSIGNED")) {
+      setLastSeen({ kind, propertyName, scheduledDate, scheduledStart });
+    }
+  }, [view.type, kind, propertyName, scheduledDate, scheduledStart]);
+  const removedLabel = !entry || (view.type === "job" && kind !== "ASSIGNED")
+    ? removedServiceLabel(lastSeen, t.lang) : "";
+  if (view.type === "job" || kind === "ASSIGNED" || (!entry && (lastSeen?.kind === "ASSIGNED" || !view.wasAutomatic))) {
+    return <JobView t={t} hub={hub} entry={entry} jobId={view.jobId} today={today} removedLabel={removedLabel} />;
+  }
+  return <OfferView t={t} hub={hub} entry={entry} today={today} removedLabel={removedLabel} />;
+}
+
+function JobView({ t, hub, entry, jobId, today, removedLabel }) {
   const [checklist, setChecklist] = useState({ state: "idle" });
   const checklistAttempt = useRef(0);
   const canTryChecklist = entry?.kind === "ASSIGNED" && ["ASSIGNED", "IN_PROGRESS"].includes(entry.jobStatus);
@@ -416,7 +445,7 @@ function JobView({ t, hub, jobId, today }) {
     return () => { checklistAttempt.current += 1; };
   }, [jobId, canTryChecklist]);
   if (!entry || entry.kind !== "ASSIGNED") {
-    return <div className="hb-screen"><div className="hb-empty is-uncertain"><HubIcon name="userX" size={22} /><p>{t("hb.job.notYours")}</p></div></div>;
+    return <RemovedService t={t} label={removedLabel} />;
   }
   const status = assignedStatusKey(entry);
   const situation = checklistSituation(entry);
@@ -447,9 +476,11 @@ function JobView({ t, hub, jobId, today }) {
       </div>
       <dl className="hb-facts">
         <div><dt><HubIcon name="calendar" size={15} />{t("hb.job.when")}</dt><dd>{`${dayLabel(t, entry.scheduledDate, today)} · ${t.time(entry.scheduledStart) || t("hb.timeNotSet")}`}</dd></div>
-        <div><dt><HubIcon name="pin" size={15} />{t("hb.job.where")}</dt><dd>{entry.propertyName || "—"}</dd></div>
+        <div><dt><HubIcon name="pin" size={15} />{t(entry.address ? "hb.job.address" : "hb.job.where")}</dt><dd>{entry.address || entry.propertyName || "—"}</dd></div>
         <div><dt><HubIcon name="clipboard" size={15} />{serviceTypeMessage(t.lang, "field")}</dt><dd>{serviceTypeLabel(t.lang, entry.serviceType)}</dd></div>
+        <div><dt><HubIcon name="dollar" size={15} />{t("hb.job.agreedPay")}</dt><dd>{hubMoney(entry.offeredCompensation, t.lang) || t("hb.job.payNotSet")}</dd></div>
       </dl>
+      <JobInstructions t={t} notes={entry.notes} />
       <section className={`hb-checkcard is-${situation.state}`} data-checklist-state={situation.state} aria-labelledby="hb-checklist-title">
         <div className="hb-checkhead">
           <h3 id="hb-checklist-title">{t("hb.job.checklist")}</h3>
@@ -481,19 +512,16 @@ function JobView({ t, hub, jobId, today }) {
   );
 }
 
-function OfferView({ t, hub, jobId, today, wasAutomatic }) {
-  const entry = findAgendaEntry(hub.entries, jobId);
+function OfferView({ t, hub, entry, today, removedLabel }) {
   const [reply, setReply] = useState("idle");
   const observedSchedule = entry?.scheduleRevision;
   useEffect(() => {
     setReply(previous => previous === "staleSchedule" ? "idle" : previous);
   }, [observedSchedule]);
 
-  if (entry?.kind === "ASSIGNED" || (!entry && !wasAutomatic)) {
-    return <JobView key={jobId} t={t} hub={hub} jobId={jobId} today={today} />;
-  }
-  if (!entry) {
-    return <div className="hb-screen"><div className="hb-empty is-uncertain"><HubIcon name="userX" size={22} /><p role="status">{t(reply === "alreadyTaken" ? "hb.offer.ALREADY_TAKEN" : "hb.offer.unavailable")}</p></div></div>;
+  if (reply === "declined" || reply === "unavailable" || !entry) {
+    const message = reply === "alreadyTaken" ? "hb.offer.ALREADY_TAKEN" : reply === "declined" ? "hb.offer.DECLINED" : "hb.offer.unavailable";
+    return <RemovedService t={t} label={removedLabel || removedServiceLabel(entry, t.lang)} message={t(message)} />;
   }
 
   const automatic = entry.offerDistributionMode === FIRST_ACCEPT_WINS;
@@ -517,8 +545,10 @@ function OfferView({ t, hub, jobId, today, wasAutomatic }) {
         setReply("alreadyTaken");
       } else if (result?.state === "stale-schedule") {
         setReply("staleSchedule");
+      } else if (result?.state === "answered") {
+        setReply(status === "DECLINED" ? "declined" : "sent");
       } else {
-        setReply(result?.state === "answered" ? "sent" : "unavailable");
+        setReply("unavailable");
       }
     } catch {
       setReply("error");
@@ -534,17 +564,20 @@ function OfferView({ t, hub, jobId, today, wasAutomatic }) {
         <h2>{entry.propertyName || "—"}</h2>
       </div>
       <dl className="hb-facts">
+        {!taken && entry.serviceType && <div><dt><HubIcon name="clipboard" size={15} />{serviceTypeMessage(t.lang, "field")}</dt><dd>{serviceTypeLabel(t.lang, entry.serviceType)}</dd></div>}
+        {!taken && entry.address && <div><dt><HubIcon name="pin" size={15} />{t("hb.job.address")}</dt><dd>{entry.address}</dd></div>}
         <div><dt><HubIcon name="calendar" size={15} />{t("hb.job.when")}</dt><dd>{`${dayLabel(t, entry.scheduledDate, today)} · ${t.time(entry.scheduledStart) || t("hb.timeNotSet")}`}</dd></div>
-        <div><dt><HubIcon name="dollar" size={15} />{t("hb.job.pay")}</dt><dd>{amount || t("hb.job.payNotSet")}</dd></div>
+        {!taken && <div><dt><HubIcon name="dollar" size={15} />{t("hb.job.pay")}</dt><dd>{amount || t("hb.job.payNotSet")}</dd></div>}
         <div><dt><HubIcon name="clipboard" size={15} />{t("hb.job.status")}</dt><dd role={taken || reply === "assigned" ? "status" : undefined}>{t(statusKey)}</dd></div>
       </dl>
+      {!taken && <JobInstructions t={t} notes={entry.notes} />}
       {canRespond && !taken && (
         <div className="hb-offer-actions">
           <button type="button" className="cfv2-button cfv2-button-primary mw-btn mw-btn-block" disabled={reply === "sending" || waitingForNetwork} onClick={() => answer(automatic ? "ACCEPTED" : "INTERESTED")}>{t(reply === "sending" ? "hb.offer.sending" : automatic ? "hb.offer.accept" : "hb.offer.interested")}</button>
           <button type="button" className="cfv2-button cfv2-button-secondary mw-btn mw-btn-block" disabled={reply === "sending" || waitingForNetwork} onClick={() => answer("DECLINED")}>{t("hb.offer.decline")}</button>
         </div>
       )}
-      {!taken && ["sent", "unavailable", "error"].includes(reply) && <p className="mw-hint" role="status">{t(`hb.offer.${reply}`)}</p>}
+      {!taken && ["sent", "error"].includes(reply) && <p className="mw-hint" role="status">{t(`hb.offer.${reply}`)}</p>}
       {!taken && reply === "staleSchedule" && <p className="mw-hint" role="status">{inboxMessage(t.lang, "inbox.reschedule.stale")}</p>}
       {waitingForNetwork && <p className="mw-hint" role="status">{t("hb.offer.onlineRequired")}</p>}
       {!taken && reply !== "assigned" && <p className="mw-hint">{t(automatic ? "hb.offers.autoNote" : "hb.offers.note")}</p>}
@@ -552,14 +585,14 @@ function OfferView({ t, hub, jobId, today, wasAutomatic }) {
   );
 }
 
-function Offers({ t, hub, go, today }) {
+function Offers({ t, hub, go }) {
   const { offers } = hub.schedule;
   return (
     <div className="hb-screen">
       <header className="hb-hello"><h2>{t("hb.offers.title")}</h2><p className="mw-sec">{t("hb.offers.sub")}</p></header>
       {!offers.length && <div className={`hb-empty${hub.freshness.state === "live" ? "" : " is-uncertain"}`}><HubIcon name="send" size={22} /><p>{t("hb.offers.empty")}</p></div>}
       <ul className="hb-jobs">
-        {offers.map((entry) => <JobCard key={entry.id} t={t} entry={entry} today={today} onOpen={() => go({ type: "offer", jobId: entry.jobId, wasAutomatic: entry.offerDistributionMode === FIRST_ACCEPT_WINS })} />)}
+        {offers.map((entry) => <JobCard key={entry.id} t={t} entry={entry} onOpen={() => go({ type: "offer", jobId: entry.jobId, wasAutomatic: entry.offerDistributionMode === FIRST_ACCEPT_WINS })} />)}
       </ul>
       {offers.some((entry) => entry.offerDistributionMode !== FIRST_ACCEPT_WINS) && <p className="mw-hint">{t("hb.offers.note")}</p>}
     </div>
@@ -593,7 +626,7 @@ export function CleanerPushSettings({ t, push, go }) {
   );
 }
 
-function Account({ t, name, setLang, go, onSignOut, signingOut, push, installed }) {
+function Account({ t, name, setLang, appearance, go, onSignOut, signingOut, push, installed }) {
   return (
     <div className="hb-screen">
       <header className="hb-profile"><span className="mw-avatar is-large">{(name || "CF").slice(0, 2).toUpperCase()}</span><div><h2>{name || t("hb.helloNoName")}</h2><p className="mw-sec">{t("hb.acc.role")}</p></div></header>
@@ -605,6 +638,16 @@ function Account({ t, name, setLang, go, onSignOut, signingOut, push, installed 
         <h4>{t("hb.acc.language")}</h4>
         <div className="cfv2-segmented mw-seg-control" role="group" aria-label={t("hb.acc.language")}>
           {hubLanguages.map((id) => <button key={id} type="button" aria-pressed={t.lang === id} onClick={() => setLang(id)}>{languageNames[id]}</button>)}
+        </div>
+      </div>
+      <div className="mw-setgroup">
+        <h4>{t("hb.acc.appearance")}</h4>
+        <div className="cfv2-segmented mw-seg-control" role="group" aria-label={t("hb.acc.appearance")}>
+          {themeChoices.map((value) => (
+            <button key={value} type="button" aria-pressed={appearance.preference === value} onClick={() => appearance.choose(value)}>
+              {t(`hb.theme.${value}`)}
+            </button>
+          ))}
         </div>
       </div>
       <button type="button" className="cfv2-button cfv2-button-danger mw-btn mw-btn-block" onClick={onSignOut} disabled={signingOut}>{t(signingOut ? "hb.acc.signingOut" : "hb.acc.signOut")}</button>
@@ -681,7 +724,7 @@ function AccessCode({ t, onRedeem, platform, displayMode, installPrompt, initial
   );
 }
 
-function FirstRun({ t, hub, platform, displayMode, installPrompt, today, onDone }) {
+function FirstRun({ t, hub, platform, displayMode, installPrompt, onDone }) {
   const steps = displayMode === "standalone" ? ["schedule", "reopen"] : ["schedule", "install", "reopen"];
   const [step, setStep] = useState(0);
   const id = steps[step];
@@ -699,7 +742,7 @@ function FirstRun({ t, hub, platform, displayMode, installPrompt, today, onDone 
             <h2 ref={heading} tabIndex={-1}>{t(`hb.onb.${id}.title`)}</h2>
             <p className="hb-onb-body">{t(`hb.onb.${id}.body`)}</p>
             {id === "schedule" && (preview.length
-              ? <ul className="hb-jobs hb-onb-jobs">{preview.map((entry) => <JobCard key={entry.id} t={t} entry={entry} today={today} onOpen={() => {}} />)}</ul>
+              ? <ul className="hb-jobs hb-onb-jobs">{preview.map((entry) => <JobCard key={entry.id} t={t} entry={entry} onOpen={() => {}} />)}</ul>
               : <div className="hb-onb-note tone-info"><HubIcon name="calendar" size={18} /><p>{t("hb.onb.schedule.empty")}</p></div>)}
             {id === "reopen" && <div className="hb-onb-note tone-info"><span className="ig-art-icon">CF</span><p>{t("hb.onb.reopen.body")}</p></div>}
             <div className="hb-onb-actions">
@@ -734,7 +777,8 @@ function Brand({ t }) {
 export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   const hub = useCleanerHub(hubOptions);
   const [t, setLang] = useTranslator(hub.membership.preferredLanguage);
-  const theme = useSystemTheme();
+  const appearance = useHubTheme();
+  const { theme } = appearance;
   const installPrompt = useInstallPrompt();
   const [platform] = useState(detectPlatform);
   const [displayMode] = useState(detectDisplayMode);
@@ -858,13 +902,13 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   if (!onboardingDone && !hub.freshness.lastVerifiedAt) {
     body = <div className="hb-screen"><FreshnessBanner t={t} freshness={hub.freshness} onRetry={hub.retryStartup} online={hub.online} /></div>;
   } else if (!onboardingDone) {
-    body = <FirstRun t={t} hub={hub} platform={platform} displayMode={displayMode} installPrompt={installPrompt} today={today} onDone={() => { writeStorage(onboardingStorageKey, session.uid); setOnboarded(session.uid); }} />;
-  } else if (view.type === "job") body = <JobView key={`${sessionScope}:${view.jobId}`} t={t} hub={hub} jobId={view.jobId} today={today} />;
-  else if (view.type === "offer") body = <OfferView key={`${sessionScope}:${view.jobId}`} t={t} hub={hub} jobId={view.jobId} today={today} wasAutomatic={view.wasAutomatic} />;
-  else if (notificationInboxEnabled() && view.type === "inbox") body = <div className="hb-screen"><NotificationInbox inbox={inbox} language={t.lang} onOpen={openInboxTarget} /></div>;
+    body = <FirstRun t={t} hub={hub} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onDone={() => { writeStorage(onboardingStorageKey, session.uid); setOnboarded(session.uid); }} />;
+  } else if (view.type === "job" || view.type === "offer") {
+    body = <AgendaDetail key={`${sessionScope}:${view.jobId}`} t={t} hub={hub} view={view} today={today} />;
+  } else if (notificationInboxEnabled() && view.type === "inbox") body = <div className="hb-screen"><NotificationInbox inbox={inbox} language={t.lang} onOpen={openInboxTarget} /></div>;
   else if (view.type === "install") body = <div className="hb-screen"><InstallGuide t={t} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onSkip={() => go({ type: "tab" })} /></div>;
-  else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} today={today} />;
-  else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} go={go} onSignOut={signOut} signingOut={signingOut} push={push} installed={displayMode === "standalone"} />;
+  else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} />;
+  else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} appearance={appearance} go={go} onSignOut={signOut} signingOut={signingOut} push={push} installed={displayMode === "standalone"} />;
   else body = <Agenda t={t} hub={hub} name={name} segment={segment} setSegment={setSegment} go={go} today={today} scheduledNavigation={scheduledNavigation} setScheduledNavigation={setScheduledNavigation} />;
 
   const freshChip = hub.freshness.state === "live" ? "live" : hub.freshness.state === "loading" ? "loading" : "stale";

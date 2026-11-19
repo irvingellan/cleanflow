@@ -10,9 +10,9 @@ import { normalizeServiceType } from "./serviceTypes.js";
  * Jobs, Offers and Assignments stay the source of truth. This module derives a
  * minimal, cleaner-safe read model at organizations/{org}/cleanerAgenda that a
  * signed-in cleaner may read for herself only (see firestore.rules). It never
- * copies client prices, Job-level payouts, notes, guest names, access codes or
- * other cleaners' identities. Every sync re-reads the current Job state inside
- * one transaction, so out-of-order triggers converge on the same result.
+ * copies client prices, guest names, other cleaners' offers or Property access
+ * details. Job instructions are for the current offer or assignment holder.
+ * Each sync reads current state in one transaction so triggers can be replayed.
  */
 
 export const cleanerAgendaCollection = "cleanerAgenda";
@@ -102,29 +102,50 @@ export function checklistAgendaSummary({ run = null, draft = null, evidenceState
   return { status: run.status, started: run.status === "DRAFT" && (savedAnswers || savedPhotos) };
 }
 
-export function computeAgendaEntries({ organizationId, jobId, job, offers = [], assignments = [], now = new Date(), checklist = null }) {
+function belongsToJob(record, organizationId, jobId) {
+  return record && (record.organizationId == null || record.organizationId === organizationId)
+    && (record.jobId == null || record.jobId === jobId);
+}
+
+function acceptedOfferFor(cleanerId, assignment, job, offers) {
+  // Legacy assignment records only the cleaner ID. Its canonical interested
+  // Offer is keyed by that ID. Modern direct assignments have no source Offer.
+  const sourceId = isAssignmentAwareJobData(job) ? assignment?.sourceOfferId : cleanerId;
+  if (!validId(sourceId)) return null;
+  return offers.find(offer => offer.offerReferenceId === sourceId && offer.cleanerId === cleanerId
+    && ["ACCEPTED", "INTERESTED", "SELECTED"].includes(offer.status));
+}
+
+export function computeAgendaEntries({ organizationId, jobId, job, address = null, offers = [], assignments = [], now = new Date(), checklist = null }) {
   const checklistSummary = checklist || { status: "NONE", started: false };
   const entries = new Map();
-  if (!job || job.archivedAt) return entries;
+  if (!job || job.archivedAt || (job.organizationId != null && job.organizationId !== organizationId)) return entries;
+  const jobOffers = offers.filter(offer => belongsToJob(offer, organizationId, jobId));
+  const holderDetails = {
+    serviceType: normalizeServiceType(job.serviceType),
+    address: text(address, 240),
+    notes: typeof job.notes === "string" ? job.notes.trim() || null : null,
+  };
   const roster = rosterCleanerIds(job);
   for (const cleanerId of roster) {
-    const assignment = assignments.find((item) => item?.cleanerId === cleanerId && item?.isActive === true);
+    const assignment = assignments.find(item => item?.cleanerId === cleanerId && item.isActive === true
+      && belongsToJob(item, organizationId, jobId));
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, job),
       kind: agendaKinds.assigned,
-      serviceType: normalizeServiceType(job.serviceType),
+      ...holderDetails,
       acknowledged: Boolean(assignment?.cleanerAcknowledgedAt),
       offerStatus: null,
-      offeredCompensation: null,
+      offeredCompensation: offeredCompensationFor(acceptedOfferFor(cleanerId, assignment, job, jobOffers), job),
       checklist: { ...checklistSummary },
       checklistStatus: checklistSummary.status,
       checklistStarted: checklistSummary.started,
     });
   }
   const activeReplacement = job.manualReplacementOffer?.offerId;
-  const replacement = activeReplacement && offers.find(offer => offer.offerReferenceId === activeReplacement && offer.jobId === jobId
+  const replacement = activeReplacement && jobOffers.find(offer => offer.offerReferenceId === activeReplacement && offer.jobId === jobId
     && currentManualReplacementOffer(job, offer, activeReplacement, now));
-  const visibleOffers = replacement ? [replacement, ...offers.filter(offer => offer !== replacement)] : offers;
+  const visibleOffers = replacement ? [replacement, ...jobOffers.filter(offer => offer !== replacement)] : jobOffers;
   for (const offer of visibleOffers) {
     const cleanerId = offer?.cleanerId;
     if (!validId(cleanerId) || entries.has(cleanerId)) continue;
@@ -150,11 +171,13 @@ export function computeAgendaEntries({ organizationId, jobId, job, offers = [], 
       ? { ...job, operationalStatus: "OFFERED" } : job;
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, details),
+      ...(!closed && holderDetails),
       kind: agendaKinds.offer,
       acknowledged: false,
       offerStatus: closed ? "ALREADY_TAKEN" : offer.status,
       offerExpiresAtMs,
-      offeredCompensation: offeredCompensationFor(offer, job),
+      // Closed invitations keep only the amount saved on the recipient's own Offer.
+      offeredCompensation: offeredCompensationFor(offer, closed ? null : job),
       ...(automatic ? { offerDistributionMode: FIRST_ACCEPT_WINS } : {}),
       ...(offer === replacement ? { replacementOfferId: activeReplacement } : {}),
     });
@@ -169,7 +192,7 @@ export function agendaEntryId(cleanerId, jobId) {
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offerExpiresAtMs",
-  "offerDistributionMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType",
+  "offerDistributionMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType", "address", "notes",
 ];
 
 export function sameEntry(previous, next) {
@@ -246,11 +269,17 @@ export async function syncCleanerAgendaForJob(database, {
       transaction.get(runRef.collection("evidenceState").doc("current")),
     ]);
     const job = jobSnapshot.exists ? jobSnapshot.data() : null;
+    const propertySnapshot = job && !job.archivedAt && validId(job.propertyId)
+      ? await transaction.get(organization.collection("properties").doc(job.propertyId)) : null;
+    const property = propertySnapshot?.data();
+    const address = property && (property.organizationId == null || property.organizationId === organizationId)
+      ? property.address : null;
     const current = typeof now === "function" ? now() : now;
     const next = computeAgendaEntries({
       organizationId,
       jobId,
       job,
+      address,
       offers: offersSnapshot.docs.map((snapshot) => ({ ...snapshot.data(), offerReferenceId: snapshot.id })),
       assignments: assignmentsSnapshot.docs.map((snapshot) => snapshot.data()),
       now: current,
