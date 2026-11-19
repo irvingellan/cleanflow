@@ -17,10 +17,6 @@ const allowedPaymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 const maximumJobsPerPayout = 100;
 const maximumPayoutNoteLength = 500;
 
-function payoutsCollection() {
-  return collection(db, "organizations", currentOrganizationId(), "payouts");
-}
-
 function jobFromSnapshot(snapshot) {
   return {
     ...snapshot.data(),
@@ -122,9 +118,10 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     throw payoutError("note-too-long", "Keep the payout note short.");
   }
 
-  const payoutReference = doc(payoutsCollection());
+  const organizationId = currentOrganizationId();
+  const payoutReference = doc(collection(db, "organizations", organizationId, "payouts"));
   const jobReferences = uniqueJobIds.map((jobId) =>
-    doc(db, "organizations", currentOrganizationId(), "jobs", jobId),
+    doc(db, "organizations", organizationId, "jobs", jobId),
   );
   let recordedAmount = 0;
 
@@ -145,7 +142,7 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     const amount = jobs.reduce((total, job) => total + job.cleanerPayout, 0);
     recordedAmount = amount;
     const payout = {
-      organizationId: currentOrganizationId(),
+      organizationId,
       cleanerId: cleaner.id,
       cleanerNameSnapshot: cleaner.name || "",
       jobIds: uniqueJobIds,

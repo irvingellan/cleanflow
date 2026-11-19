@@ -109,6 +109,7 @@ export async function createJobOffers({ jobId, cleaners, automatic = false }) {
     return jobFromSnapshot(await getDoc(reference));
   }
 
+  const invitations = cleaners.map(cleaner => ({ cleaner, reference: offerDocument(jobId, cleaner.id) }));
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(reference);
 
@@ -125,9 +126,9 @@ export async function createJobOffers({ jobId, cleaners, automatic = false }) {
       throw error;
     }
 
-    for (const cleaner of cleaners) {
+    for (const { cleaner, reference: invitation } of invitations) {
       transaction.set(
-        offerDocument(jobId, cleaner.id),
+        invitation,
         {
           jobId,
           cleanerId: cleaner.id,
@@ -162,11 +163,16 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
     throw error;
   }
 
-  const token = createPublicOfferToken();
-  const tokenHash = await hashPublicOfferToken(token);
-  const legacyExpiresAtMs = Date.now() + publicOfferTokenLifetimeMilliseconds;
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, cleanerId);
+  const token = createPublicOfferToken();
+  const tokenHash = await hashPublicOfferToken(token);
+  const assertOriginalCompany = () => {
+    if (currentOrganizationId() !== organizationId) throw offerDecisionError("organization-changed", "The active company changed.");
+  };
+  assertOriginalCompany();
+  const legacyExpiresAtMs = Date.now() + publicOfferTokenLifetimeMilliseconds;
 
   const result = await runTransaction(db, async (transaction) => {
     const [jobSnapshot, offerSnapshot] = await Promise.all([
@@ -192,6 +198,7 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
       throw error;
     }
 
+    assertOriginalCompany();
     const expiresAtMs = automatic ? offer.publicOfferExpiresAt.toMillis() : legacyExpiresAtMs;
     transaction.update(offerReference, {
       publicOfferTokenHash: tokenHash,
@@ -203,6 +210,7 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
     return { expiresAtMs, offeredCompensation: automatic ? offer.offeredCompensation ?? null : offeredCompensation };
   });
 
+  assertOriginalCompany();
   return {
     url: new URL(`/offer/${token}`, window.location.origin).toString(),
     ...result,

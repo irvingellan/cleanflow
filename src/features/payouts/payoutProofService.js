@@ -28,10 +28,6 @@ function proofError(code, message) {
   return error;
 }
 
-function proofStoragePath(payoutId) {
-  return `organizations/${currentOrganizationId()}/payouts/${payoutId}/proof/payment-proof`;
-}
-
 function logProofUpload(stage, details = {}) {
   console.info(`[CleanFlow] Payout proof ${stage}.`, details);
 }
@@ -80,7 +76,8 @@ export async function uploadPayoutProof({ payoutId, file, onProgress }) {
     throw validationError;
   }
 
-  const storagePath = proofStoragePath(payoutId);
+  const organizationId = currentOrganizationId();
+  const storagePath = `organizations/${organizationId}/payouts/${payoutId}/proof/payment-proof`;
   const uploadTask = uploadBytesResumable(ref(storage, storagePath), file, {
     contentType: file.type,
   });
@@ -126,7 +123,7 @@ export async function uploadPayoutProof({ payoutId, file, onProgress }) {
   // upload can be retried without creating a second payout or touching linked Jobs.
   try {
     await withTimeout(
-      updateDoc(doc(db, "organizations", currentOrganizationId(), "payouts", payoutId), {
+      updateDoc(doc(db, "organizations", organizationId, "payouts", payoutId), {
         proofStoragePath: storagePath,
         proofFileName: file.name || "payment-proof",
         proofContentType: file.type,

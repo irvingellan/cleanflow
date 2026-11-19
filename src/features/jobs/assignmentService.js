@@ -126,10 +126,10 @@ function assertRosterEditable(snapshot) {
   return job;
 }
 
-export function buildAssignmentCreateData(job, offer) {
+export function buildAssignmentCreateData(job, offer, organizationId = currentOrganizationId()) {
   const assignment = {
     schemaVersion: assignmentSchemaVersion,
-    organizationId: currentOrganizationId(),
+    organizationId,
     jobId: job.id,
     cleanerId: offer.cleanerId,
     cleanerNameSnapshot: offer.cleanerName || "",
@@ -186,6 +186,7 @@ export async function getJobAssignments(jobId) {
  * or a double click cannot put an extra cleaner on a single-cleaner Job.
  */
 export async function assignInterestedCleaner(jobId, offerId, { addSpot = false } = {}) {
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, offerId);
   const newAssignmentReference = doc(assignmentsCollection(jobId));
@@ -213,7 +214,7 @@ export async function assignInterestedCleaner(jobId, offerId, { addSpot = false 
       throw assignmentError("too-many-cleaners", "This Job already has the maximum number of cleaners.", job);
     }
 
-    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, offer));
+    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, offer, organizationId));
     const jobUpdate = {
       assignedCleanerIds: [...assignedCleanerIds, offer.cleanerId],
       operationalStatus: "ASSIGNED",
@@ -230,8 +231,9 @@ export async function assignInterestedCleaner(jobId, offerId, { addSpot = false 
 }
 
 export async function assignCleanerDirectly(jobId, cleanerId, replacementOfferId) {
+  const jobReference = jobDocument(jobId);
   await assignCleanerDirectlyCall({ jobId, cleanerId, ...(replacementOfferId ? { replacementOfferId } : {}) });
-  return jobFromSnapshot(await getDoc(jobDocument(jobId)));
+  return jobFromSnapshot(await getDoc(jobReference));
 }
 
 async function hasActionableOffers(jobId) {
@@ -243,8 +245,13 @@ async function hasActionableOffers(jobId) {
 }
 
 export async function removeAssignment(jobId, assignmentId, actorUid) {
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const job = assertRosterEditable(await getDoc(jobReference));
+  // The callable derives its company from the current session, not from the Job reference.
+  if (currentOrganizationId() !== organizationId) {
+    throw assignmentError("organization-changed", "The active company changed.");
+  }
   if (isAutomaticOfferJob(job) && job.automaticOfferBatch?.version === 2) {
     await removeAutomaticCleanerAssignmentCall({ jobId, assignmentId });
     return jobFromSnapshot(await getDoc(jobReference));
@@ -288,6 +295,7 @@ export async function removeAssignment(jobId, assignmentId, actorUid) {
 }
 
 export async function replaceAssignment(jobId, assignmentId, replacementOfferId, actorUid) {
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const assignmentReference = assignmentDocument(jobId, assignmentId);
   const offerReference = offerDocument(jobId, replacementOfferId);
@@ -329,7 +337,7 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
     }
 
     transaction.update(assignmentReference, removal);
-    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, replacementOffer));
+    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, replacementOffer, organizationId));
     const jobUpdate = {
       assignedCleanerIds: replacementCleanerIds(
         job,
