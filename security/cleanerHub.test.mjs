@@ -998,7 +998,7 @@ test("three simultaneous acceptances fill exactly two versioned slots and retrie
   for (const [winnerId, winnerUid] of winners) {
     const assigned = (await agendaFor(winnerId)).filter(({ jobId, kind }) => jobId === job.id && kind === "ASSIGNED");
     assert.equal(assigned.length, 1);
-    assert.deepEqual([assigned[0].acknowledged, assigned[0].offeredCompensation], [true, null]);
+    assert.deepEqual([assigned[0].acknowledged, assigned[0].offeredCompensation], [true, 150]);
     assert.ok(!JSON.stringify(loserAgenda.docs[0].data()).includes(winnerId));
     await assertFails(cleanerDb(loserUid).doc(`${root}/cleanerAgenda/${winnerId}__${job.id}`).get());
     await assertFails(cleanerDb(loserUid).doc(`${job.path}/offers/${winnerId}`).get());
