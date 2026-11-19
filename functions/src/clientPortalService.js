@@ -124,22 +124,26 @@ export async function revokeClientPortalForManager(database, { organizationId, c
 }
 
 /** The client a portal link belongs to, or an error that reveals nothing about why. */
-async function resolveClientPortal(database, { organizationId, tokenHash, now = new Date() }) {
+async function resolveClientPortal(database, { tokenHash, now = new Date() }) {
   if (!tokenHashPattern.test(tokenHash || "")) throw new HttpsError("not-found", "Portal not found.");
   const lookup = (await lookupReference(database, tokenHash).get()).data();
-  if (!lookup || lookup.organizationId !== organizationId || !validPathId(lookup.clientId)) {
+  // The organization is read from the lookup and used for every path below.
+  if (!lookup || !validPathId(lookup.organizationId) || !validPathId(lookup.clientId)) {
     throw new HttpsError("not-found", "Portal not found.");
   }
+  const { organizationId } = lookup;
   const [client, access] = await Promise.all([
     clientReference(database, organizationId, lookup.clientId).get(),
     accessReference(database, organizationId, lookup.clientId).get(),
   ]);
   const lookupExpiry = lookup.expiresAt?.toMillis?.();
   if (lookup.status !== "ACTIVE" || !lookupExpiry || lookupExpiry <= now.getTime() || !client.exists || client.data().archivedAt
-    || access.data()?.tokenHash !== tokenHash || clientPortalAccessState(access.data(), now) !== "ACTIVE") {
+    || access.data()?.tokenHash !== tokenHash || clientPortalAccessState(access.data(), now) !== "ACTIVE"
+    // The client found at that path must not belong to another organization.
+    || (client.data().organizationId != null && client.data().organizationId !== organizationId)) {
     throw new HttpsError("failed-precondition", "Portal is unavailable.");
   }
-  return { clientId: lookup.clientId, client: client.data() };
+  return { organizationId, clientId: lookup.clientId, client: client.data() };
 }
 
 function shiftDate(date, days) {
@@ -187,8 +191,8 @@ async function clientJobs(database, { organizationId, clientId, today }) {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
-export async function loadPublicClientPortal(database, { organizationId, tokenHash, now = new Date() }) {
-  const { clientId, client } = await resolveClientPortal(database, { organizationId, tokenHash, now });
+export async function loadPublicClientPortal(database, { tokenHash, now = new Date() }) {
+  const { organizationId, clientId, client } = await resolveClientPortal(database, { tokenHash, now });
   const today = operatingDate(now.getTime());
   const [propertySnapshot, jobs] = await Promise.all([
     organization(database, organizationId).collection("properties").where("clientId", "==", clientId).get(),
@@ -209,8 +213,8 @@ export async function loadPublicClientPortal(database, { organizationId, tokenHa
 }
 
 /** Direct report/photo requests obey the same current ownership and date scope as the list. */
-async function authorizeClientPortalJob(database, { organizationId, tokenHash, jobId, now }) {
-  const { clientId } = await resolveClientPortal(database, { organizationId, tokenHash, now });
+async function authorizeClientPortalJob(database, { tokenHash, jobId, now }) {
+  const { organizationId, clientId } = await resolveClientPortal(database, { tokenHash, now });
   if (!validPathId(jobId)) throw new HttpsError("not-found", "Report not found.");
   const job = (await organization(database, organizationId).collection("jobs").doc(jobId).get()).data();
   if (!job || job.archivedAt || job.clientId !== clientId || !validPathId(job.propertyId)
@@ -221,16 +225,17 @@ async function authorizeClientPortalJob(database, { organizationId, tokenHash, j
   if (!property || property.archivedAt || property.clientId !== clientId) {
     throw new HttpsError("not-found", "Report not found.");
   }
+  return { organizationId };
 }
 
-export async function loadPublicClientPortalReport(database, { organizationId, tokenHash, jobId, now = new Date() }) {
-  await authorizeClientPortalJob(database, { organizationId, tokenHash, jobId, now });
+export async function loadPublicClientPortalReport(database, { tokenHash, jobId, now = new Date() }) {
+  const { organizationId } = await authorizeClientPortalJob(database, { tokenHash, jobId, now });
   return (await loadReleasedClientReport(database, { organizationId, jobId })).report;
 }
 
 export async function downloadPublicClientPortalPhoto(database, {
-  organizationId, tokenHash, jobId, evidenceId, variant, now = new Date(), storage,
+  tokenHash, jobId, evidenceId, variant, now = new Date(), storage,
 }) {
-  await authorizeClientPortalJob(database, { organizationId, tokenHash, jobId, now });
+  const { organizationId } = await authorizeClientPortalJob(database, { tokenHash, jobId, now });
   return downloadReleasedClientReportPhoto(database, { organizationId, jobId, evidenceId, variant, storage });
 }

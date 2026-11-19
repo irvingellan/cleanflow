@@ -223,7 +223,8 @@ export async function removeMultiPhotoEvidence(database, initial, options) {
 export async function removePublicChecklistEvidence(database, options) {
   const { resolveActiveCapability } = await import("./checklistEvidenceService.js");
   const initial = await resolveActiveCapability(database, { ...options, now: options.now || new Date() });
-  return removeMultiPhotoEvidence(database, initial, options);
+  // The organization is the one the resolved capability lives in, never a caller's.
+  return removeMultiPhotoEvidence(database, initial, { ...options, organizationId: initial.location.organizationId });
 }
 
 export function selectMultiPhotoEvidence(state, { evidenceId, requirementId = pilotChecklistPhotoRequirementId } = {}) {

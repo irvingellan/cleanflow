@@ -3,7 +3,7 @@ import { downloadPublicClientReportPhoto, loadPublicClientReport } from "../clie
 import {
   downloadPublicClientPortalPhoto, loadPublicClientPortal, loadPublicClientPortalReport,
 } from "../clientPortalService.js";
-import { db, organizationId } from "../runtime/firebase.js";
+import { db } from "../runtime/firebase.js";
 import { configureResponse, hashToken, sendPublicError, validToken } from "../runtime/publicHttp.js";
 
 /** Public client reports are read-only bearer links scoped by their hashed lookup. */
@@ -21,7 +21,7 @@ export async function publicClientReport(request, response) {
     const tokenHash = hashToken(token);
     if (request.query.photo === "1") {
       const photo = await downloadPublicClientReportPhoto(db, {
-        organizationId, tokenHash, evidenceId: request.query.evidenceId,
+        tokenHash, evidenceId: request.query.evidenceId,
         variant: request.query.thumb === "1" ? "thumbnail" : undefined,
       });
       configureResponse(response);
@@ -30,7 +30,7 @@ export async function publicClientReport(request, response) {
       response.status(200).send(photo.bytes);
       return;
     }
-    const report = await loadPublicClientReport(db, { organizationId, tokenHash });
+    const report = await loadPublicClientReport(db, { tokenHash });
     configureResponse(response);
     response.status(200).json({ report });
   } catch (error) {
@@ -54,7 +54,7 @@ export async function publicClientPortal(request, response) {
     const jobId = request.query.job;
     if (request.query.photo === "1") {
       const photo = await downloadPublicClientPortalPhoto(db, {
-        organizationId, tokenHash, jobId, evidenceId: request.query.evidenceId,
+        tokenHash, jobId, evidenceId: request.query.evidenceId,
         variant: request.query.thumb === "1" ? "thumbnail" : undefined,
       });
       configureResponse(response);
@@ -64,8 +64,8 @@ export async function publicClientPortal(request, response) {
       return;
     }
     const body = jobId === undefined
-      ? { portal: await loadPublicClientPortal(db, { organizationId, tokenHash }) }
-      : { report: await loadPublicClientPortalReport(db, { organizationId, tokenHash, jobId }) };
+      ? { portal: await loadPublicClientPortal(db, { tokenHash }) }
+      : { report: await loadPublicClientPortalReport(db, { tokenHash, jobId }) };
     configureResponse(response);
     response.status(200).json(body);
   } catch (error) {
