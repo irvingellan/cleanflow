@@ -1,8 +1,9 @@
-import { useOrganizationScope } from "../auth/useOrganizationScope.js";
 import { useState } from "react";
 import { ManagerAccessBoundary } from "../auth/ManagerAccessBoundary.jsx";
 import { AuthenticationLoading, ManagerLogin } from "../auth/ManagerSignIn.jsx";
 import { signOutManager } from "../auth/authService.js";
+import { useOrganizationScope } from "../auth/useOrganizationScope.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { useInitialManagerSession } from "../auth/useInitialManagerSession.js";
 import { abortManagerPushSignOut, prepareManagerPushSignOut } from "../notifications/notificationService.js";
 import { clearOneSignalUser } from "../notifications/oneSignalService.js";
@@ -53,12 +54,14 @@ export function ManagerRoot() {
     );
   }
 
-  if (!organization.ready) return <ThemeProvider><AuthenticationLoading /></ThemeProvider>;
+  if (!organization.ready) {
+    return <ThemeProvider><AuthenticationLoading status={organization.status || "loading"} onRetry={organization.retry} /></ThemeProvider>;
+  }
 
   return (
     <ThemeProvider>
       <ManagerAccessBoundary
-        key={authUser.uid}
+        key={`${authUser.uid}:${currentOrganizationId()}`}
         user={authUser}
         onSignOut={handleSignOut}
         isSigningOut={isSigningOut}

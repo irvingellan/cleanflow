@@ -19,6 +19,7 @@ vi.mock("./useInitialManagerSession.js", () => ({
 vi.mock("./authService.js", () => ({ signInWithEmail: vi.fn(), signOutManager: vi.fn(), subscribeToAuthState: vi.fn() }));
 vi.mock("../notifications/notificationService.js", () => ({ prepareManagerPushSignOut: vi.fn(), abortManagerPushSignOut: vi.fn() }));
 vi.mock("../notifications/oneSignalService.js", () => ({ clearOneSignalUser: vi.fn() }));
+vi.mock("../dev-center/PlatformPage.jsx", () => ({ PlatformPage: () => <h1>Owner console</h1> }));
 vi.mock("../manager-app/ManagerApplication.jsx", () => ({ ManagerApplication: () => null }));
 vi.mock("./ManagerAccessBoundary.jsx", async () => {
   const { useState } = await import("react");
@@ -111,14 +112,14 @@ describe("useOrganizationScope", () => {
     expect(currentOrganizationId()).toBe(defaultOrganizationId);
   });
 
-  it("stops waiting for a stalled token at the deadline, then corrects itself when the token arrives", async () => {
+  it("offers recovery at the deadline and uses the late token before mounting company data", async () => {
     vi.useFakeTimers();
     const stalled = deferredAccount("manager-b");
     const { result } = renderHook(() => useOrganizationScope(stalled.user));
     await act(async () => { await vi.advanceTimersByTimeAsync(organizationScopeDeadlineMs - 1); });
     expect(result.current.ready).toBe(false);
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-    expect(result.current.ready).toBe(true);
+    expect(result.current).toMatchObject({ ready: false, status: "error" });
     expect(currentOrganizationId()).toBe(defaultOrganizationId);
     expect(recordManagerAccessDiagnostic).toHaveBeenCalledExactlyOnceWith("auth_restore_error", expect.objectContaining({ reason: "timeout" }));
 
@@ -126,6 +127,21 @@ describe("useOrganizationScope", () => {
     expect(result.current.ready).toBe(true);
     expect(currentOrganizationId()).toBe("second-company");
     expect(recordManagerAccessDiagnostic).toHaveBeenCalledOnce();
+  });
+
+  it("ignores a superseded token read after the user retries", async () => {
+    vi.useFakeTimers();
+    const initial = deferredAccount("manager-a");
+    const retried = deferredAccount("manager-a");
+    const getIdTokenResult = vi.fn().mockImplementationOnce(initial.user.getIdTokenResult)
+      .mockImplementationOnce(retried.user.getIdTokenResult);
+    const { result } = renderHook(() => useOrganizationScope({ uid: initial.user.uid, getIdTokenResult }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(organizationScopeDeadlineMs); });
+    act(() => result.current.retry());
+    await act(async () => { retried.resolve({ organizationId: "second-company" }); });
+    await act(async () => { initial.resolve({ organizationId: "former-company" }); });
+    expect(result.current.ready).toBe(true);
+    expect(currentOrganizationId()).toBe("second-company");
   });
 
   it("resets to the default and clears session caches on sign-out", async () => {
@@ -201,17 +217,32 @@ describe("ManagerRoot waits for the organization", () => {
     expect(session.boundaryMounts).toEqual([`manager-a:${defaultOrganizationId}`]);
   });
 
-  it("remounts the boundary when a late token selects another organization", async () => {
+  it("never mounts the default company while the token is still pending", async () => {
     vi.useFakeTimers();
     const stalled = deferredAccount("manager-b");
     session.authUser = stalled.user;
     renderRoot();
     await act(async () => { await vi.advanceTimersByTimeAsync(organizationScopeDeadlineMs); });
-    expect(screen.getByTestId("access-boundary")).toHaveTextContent(defaultOrganizationId);
+    expect(screen.queryByTestId("access-boundary")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
 
     await act(async () => { stalled.resolve({ organizationId: "second-company" }); });
     expect(screen.getByTestId("access-boundary")).toHaveTextContent("second-company");
-    expect(session.boundaryMounts).toEqual([`manager-b:${defaultOrganizationId}`, "manager-b:second-company"]);
+    expect(session.boundaryMounts).toEqual(["manager-b:second-company"]);
+  });
+
+  it("opens the developer console without asking for tenant claims", () => {
+    const pending = deferredAccount("platform-owner");
+    session.authUser = pending.user;
+    window.history.replaceState(null, "", "/platform");
+    try {
+      renderRoot();
+      expect(screen.getByRole("heading", { name: "Owner console" })).toBeInTheDocument();
+      expect(session.boundaryMounts).toEqual([]);
+      expect(pending.user.getIdTokenResult).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("shows the sign-in form, on the default organization, when nobody is signed in", () => {
