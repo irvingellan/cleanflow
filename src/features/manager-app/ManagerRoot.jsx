@@ -1,3 +1,4 @@
+import { useOrganizationScope } from "../auth/useOrganizationScope.js";
 import { useState } from "react";
 import { ManagerAccessBoundary } from "../auth/ManagerAccessBoundary.jsx";
 import { AuthenticationLoading, ManagerLogin } from "../auth/ManagerSignIn.jsx";
@@ -12,6 +13,8 @@ import { ManagerApplication } from "./ManagerApplication.jsx";
 /** The manager entry: session restore, sign-in, and the signed-in application. */
 export function ManagerRoot() {
   const { authUser, status: authStatus, retry: retryAuth } = useInitialManagerSession(true);
+  const platformRoute = ["/platform", "/platform/"].includes(window.location.pathname);
+  const organization = useOrganizationScope(platformRoute ? null : authUser);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
@@ -41,7 +44,7 @@ export function ManagerRoot() {
   }
 
   // Platform access belongs to the developer account, independently of membership.
-  if (["/platform", "/platform/"].includes(window.location.pathname)) {
+  if (platformRoute) {
     return (
       <ThemeProvider>
         <PlatformPage key={authUser.uid} onSignOut={handleSignOut}
@@ -49,6 +52,8 @@ export function ManagerRoot() {
       </ThemeProvider>
     );
   }
+
+  if (!organization.ready) return <ThemeProvider><AuthenticationLoading /></ThemeProvider>;
 
   return (
     <ThemeProvider>
