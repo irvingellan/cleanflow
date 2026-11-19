@@ -153,6 +153,7 @@ export function JobDetailsSection({
               }))}
             />
           </label>
+          <small className="form-hint">{translate("jobs.cleanerNotesHint")}</small>
           {jobDetailsSaveError && <p className="form-error" role="alert">{jobDetailsSaveError}</p>}
           <div className="button-row">
             <button

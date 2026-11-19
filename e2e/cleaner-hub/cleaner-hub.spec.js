@@ -85,6 +85,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
   const cleanerB = await cleanerContext("en-US");
   const pageA = await cleanerA.newPage();
   const pageB = await cleanerB.newPage();
+  await pageA.emulateMedia({ colorScheme: "dark" });
   page.on("dialog", (dialog) => dialog.accept());
   if (process.env.CLEANER_HUB_DEBUG) for (const [label, target] of [["A", pageA], ["B", pageB]]) target.on("console", (message) => console.log(`[${label}] ${message.type()} ${message.text()}`));
 
@@ -111,6 +112,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     const card = pageA.locator(`[data-job-id="${mapleRef.id}"]`);
     await expect(card).toContainText(fixture.mapleName);
     await expect(card).toContainText("10:30");
+    await expect(pageA.locator(".hb-root")).toHaveCSS("color-scheme", "light");
     await expect(card).toContainText("Vaga atribuída a você");
     await expect(pageA.locator(".hb-fresh")).toContainText("Atualizada");
     await evidence(pageA, "01-agenda-upcoming");
@@ -142,7 +144,7 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await expect(page.getByText("Schedule updated.")).toBeVisible();
     const card = pageA.locator(`[data-job-id="${mapleRef.id}"]`);
     await expect(card).toContainText("13:00");
-    await expect(pageA.locator(".hb-change.is-moved")).toContainText("Mudou de");
+    await expect(pageA.getByRole("heading", { name: "Mudanças recentes" })).toHaveCount(0);
     await evidence(pageA, "02-rescheduled-live");
 
     const service = page.getByRole("heading", { name: "New date confirmation" });
@@ -190,7 +192,9 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await pageA.getByRole("button", { name: /^Ofertas/ }).click();
     const offer = pageA.locator(`[data-job-id="${birchRef.id}"]`);
     await expect(offer).toContainText("Esperando sua resposta");
+    await expect(offer).toContainText("Padrão (troca de hóspedes)");
     await offer.click();
+    await expect(pageA.getByText(`private-note-marker ${fixture.run}`)).toBeVisible();
     await pageA.getByRole("button", { name: "Tenho interesse" }).click();
     await expect(pageA.getByText("Resposta enviada para a gerente.")).toBeVisible();
     await expect(pageA.locator(".hb-facts")).toContainText("Você tem interesse · a gerente decide");
@@ -275,10 +279,11 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await page.locator(".assignment-roster__item").filter({ hasText: fixture.cleanerAName }).getByRole("button", { name: "Remove" }).click();
     await expect(page.getByText("No cleaners assigned yet.")).toBeVisible();
     await expect.poll(async () => (await agendaFor(fixture.cleanerAId)).some((entry) => entry.jobId === mapleRef.id), { timeout: 20000 }).toBe(false);
-    await expect(pageA.getByText("Este serviço não está mais na sua agenda.")).toBeVisible();
-    await pageA.getByRole("button", { name: "Voltar" }).click();
-    await expect(pageA.locator(".hb-change.is-removed")).toContainText("Saiu da sua agenda");
+    const removed = pageA.getByRole("status").filter({ hasText: fixture.mapleName });
+    await expect(removed).toContainText("13:00");
+    await expect(pageA.getByText(`private-note-marker ${fixture.run}`)).toHaveCount(0);
     await evidence(pageA, "04-assignment-removed");
+    await pageA.getByRole("button", { name: "Voltar" }).click();
     await expect(pageA.locator(`[data-job-id="${mapleRef.id}"]`)).toHaveCount(0);
     const entries = await agendaFor(fixture.cleanerAId);
     expect(entries.some((entry) => entry.jobId === mapleRef.id)).toBe(false);

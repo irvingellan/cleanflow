@@ -10,6 +10,7 @@ const messages = {
     DEEP_CLEANING: "Deep cleaning",
     MOVE_IN_OUT: "Move-out / move-in",
     POST_CONSTRUCTION: "Post-construction",
+    AIRBNB_TOUCH_UP: "Airbnb touch-up",
   },
   pt: {
     field: "Tipo de serviço",
@@ -20,6 +21,7 @@ const messages = {
     DEEP_CLEANING: "Limpeza pesada",
     MOVE_IN_OUT: "Mudança (move-out / move-in)",
     POST_CONSTRUCTION: "Pós-obra",
+    AIRBNB_TOUCH_UP: "Airbnb touch-up (retoque)",
   },
   es: {
     field: "Tipo de servicio",
@@ -30,6 +32,7 @@ const messages = {
     DEEP_CLEANING: "Limpieza profunda",
     MOVE_IN_OUT: "Mudanza (entrada / salida)",
     POST_CONSTRUCTION: "Limpieza posobra",
+    AIRBNB_TOUCH_UP: "Airbnb touch-up (retoque)",
   },
 };
 

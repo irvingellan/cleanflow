@@ -1,7 +1,7 @@
 import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CleanerHubApp } from "./CleanerHubApp.jsx";
+import { CleanerHubApp, normalizeHubTheme } from "./CleanerHubApp.jsx";
 import { localDateKey, addDaysToKey } from "./cleanerAgendaModel.js";
 import { cleanerStartupTimeoutMs, serverVerifyIntervalMs, useCleanerHub } from "./useCleanerHub.js";
 
@@ -37,15 +37,69 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("CleanerHubApp (live data boundary)", () => {
-  it("shows the service type on the assigned card and its details", async () => {
+  it.each([
+    ["Agendadas", entries[0]],
+    ["Ofertas", entries[1]],
+  ])("shows service, address, schedule and pay on the %s card, with notes in detail", async (tab, original) => {
     const { service, handlers } = fakeService();
-    const [assigned, ...rest] = entries;
+    const entry = {
+      ...original, offerStatus: original.kind === "OFFER" ? "PENDING" : null,
+      serviceType: "POST_CONSTRUCTION", address: "Rua de Exemplo, unidade fictícia",
+      notes: "Use the demonstration checklist.", offeredCompensation: 132.75, scheduledStart: "14:30",
+    };
     render(<CleanerHubApp hubOptions={{ service }} />);
-    act(() => handlers.agenda({ entries: [{ ...assigned, serviceType: "POST_CONSTRUCTION", scheduledDate: today }, ...rest], fromCache: false }));
-    const card = screen.getByRole("button", { name: /Maple Example House.*Pós-obra/ });
+    act(() => handlers.agenda({ entries: [entry], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: new RegExp(`^${tab}`) }));
+    const card = screen.getByRole("button", { name: /Pós-obra/ });
+    expect(card).toHaveTextContent(entry.address);
+    const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(`${tomorrow}T12:00:00`));
+    expect(card).toHaveTextContent(date);
+    expect(card).toHaveTextContent("14:30");
+    if (entry.kind === "ASSIGNED") expect(card).toHaveTextContent(/US\$\s*132,75/);
+
     await userEvent.click(card);
     expect(screen.getByText("Tipo de serviço")).toBeVisible();
     expect(screen.getByText("Pós-obra")).toBeVisible();
+    expect(screen.getByText(/US\$\s*132,75/)).toBeVisible();
+    expect(screen.getByText("Instruções", { exact: true })).toBeVisible();
+    expect(screen.getByText(entry.notes)).toBeVisible();
+  });
+
+  it("identifies a removed service using its last confirmed details and discards its private fields", async () => {
+    const { service, handlers } = fakeService();
+    const entry = { ...entries[0], notes: "Synthetic checklist instructions", offeredCompensation: 132.75 };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [entry], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /Maple Example House/ }));
+    const latest = { ...entry, propertyName: "Synthetic Studio", scheduledDate: tomorrow, scheduledStart: "14:45" };
+    act(() => handlers.agenda({ entries: [latest], fromCache: false }));
+    expect(screen.getByText(entry.notes)).toBeVisible();
+    act(() => handlers.agenda({ entries: [], fromCache: false }));
+    const main = screen.getByRole("main");
+    expect(main).toHaveTextContent("Synthetic Studio");
+    expect(main).toHaveTextContent("14:45");
+    expect(main).not.toHaveTextContent("Maple Example House");
+    expect(main).not.toHaveTextContent(entry.notes);
+    expect(main).not.toHaveTextContent("132,75");
+    expect(screen.queryByRole("button", { name: "Abrir checklist" })).not.toBeInTheDocument();
+
+    // A second server-confirmed session on the same phone may retain onboarding, not the removal context.
+    act(() => handlers.session({ status: "signed-in", uid: "u1", organizationId: "other-org", cleanerId: "other-cleaner", sessionId: "session-other" }));
+    act(() => handlers.agenda({ entries: [], fromCache: false }));
+    expect(screen.getByRole("main")).not.toHaveTextContent("Synthetic Studio");
+    expect(screen.getByRole("main")).not.toHaveTextContent("14:45");
+  });
+
+  it("falls back to the generic message when an opened Job has no service identity", async () => {
+    const { service, handlers } = fakeService();
+    const entry = { ...entries[0], propertyName: null, scheduledDate: null, scheduledStart: null };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [entry], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
+    await userEvent.click(document.querySelector('[data-job-id="j1"]'));
+    act(() => handlers.agenda({ entries: [], fromCache: false }));
+    expect(screen.getByText("Este serviço não está mais na sua agenda.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Abrir checklist" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -291,7 +345,9 @@ describe("CleanerHubApp (live data boundary)", () => {
     act(() => handlers.agenda({ entries, fromCache: false }));
     expect(screen.getByRole("heading", { name: "Olá, Ana" })).toBeInTheDocument();
     expect(screen.getByText("Agenda atualizada")).toBeInTheDocument();
-    expect(screen.getByText(/Saiu da sua agenda/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Mudanças recentes" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Cedar Example Loft")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Caixa de entrada/ })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /^Agendadas/ }));
     const card = document.querySelector('[data-job-id="j1"]');
     expect(card).toHaveTextContent("Maple Example House");
@@ -331,7 +387,10 @@ describe("CleanerHubApp (live data boundary)", () => {
 
   it("shows unavailability from the response and from a reopened server projection", async () => {
     const { service, handlers } = fakeService();
-    const automaticOffer = { ...entries[1], offerStatus: "PENDING", offerDistributionMode: "FIRST_ACCEPT_WINS" };
+    const automaticOffer = {
+      ...entries[1], offerStatus: "PENDING", offerDistributionMode: "FIRST_ACCEPT_WINS",
+      notes: "Use demonstration supplies.", address: "Synthetic Lane",
+    };
     service.respondToMyOffer.mockResolvedValue({ state: "already-taken", status: null });
     render(<CleanerHubApp hubOptions={{ service }} />);
     act(() => handlers.agenda({ entries: [automaticOffer], fromCache: false }));
@@ -339,6 +398,9 @@ describe("CleanerHubApp (live data boundary)", () => {
     await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
     await userEvent.click(screen.getByRole("button", { name: "Aceitar serviço" }));
     expect(screen.getByText("Indisponível — a vaga deste serviço já foi preenchida.")).toHaveAttribute("role", "status");
+    expect(screen.queryByText(automaticOffer.notes)).not.toBeInTheDocument();
+    expect(screen.queryByText(automaticOffer.address)).not.toBeInTheDocument();
+    expect(screen.queryByText(/US\$\s*140/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Aceitar serviço" })).toBeNull();
 
     act(() => handlers.agenda({ entries: [{ ...automaticOffer, offerStatus: "ALREADY_TAKEN", jobStatus: "ASSIGNED" }], fromCache: false }));
@@ -346,6 +408,24 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.getByRole("button", { name: /Birch Example Flat.*Indisponível/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
     expect(screen.queryByRole("button", { name: "Aceitar serviço" })).toBeNull();
+  });
+
+  it.each([
+    ["Tenho interesse", { state: "unavailable" }, "Esta oferta não está mais aberta."],
+    ["Não posso", { state: "answered", status: "DECLINED" }, "Você recusou"],
+  ])("removes private offer details on the %s response before a new snapshot", async (action, response, message) => {
+    const { service, handlers } = fakeService();
+    const offer = { ...entries[1], offerStatus: "PENDING", notes: "Use demonstration supplies." };
+    service.respondToMyOffer.mockResolvedValue(response);
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [offer], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Birch Example Flat/ }));
+    expect(screen.getByText(offer.notes)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: action }));
+    expect(await screen.findByText(message)).toBeVisible();
+    expect(screen.queryByText(offer.notes)).not.toBeInTheDocument();
+    expect(screen.queryByText(/US\$\s*140/)).not.toBeInTheDocument();
   });
 
   it("passes the displayed schedule revision and leaves updated automatic offers actionable after a stale response", async () => {
@@ -500,6 +580,68 @@ describe("CleanerHubApp (live data boundary)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
     expect(service.openMyChecklist).toHaveBeenCalledWith("j1");
     expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();
+  });
+});
+
+describe("Hub theme preference", () => {
+  it.each([
+    [null, "light"], ["unknown", "light"], ["light", "light"], ["dark", "dark"], ["auto", "auto"],
+  ])("normalizes %s to %s", (stored, expected) => {
+    expect(normalizeHubTheme(stored)).toBe(expected);
+  });
+});
+
+describe("Cleaner Hub appearance", () => {
+  const getTheme = () => document.querySelector(".hb-root").dataset.theme;
+  const key = "cleanflow.cleanerHub.theme";
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("defaults to light on a dark phone, remembers the choice and follows changes in Automatic", async () => {
+    const media = Object.assign(new EventTarget(), { matches: true });
+    vi.stubGlobal("matchMedia", (query) => query === "(prefers-color-scheme: dark)" ? media : { matches: false });
+    function changeSystemTheme(dark) {
+      media.matches = dark;
+      act(() => media.dispatchEvent(Object.assign(new Event("change"), { matches: dark })));
+    }
+    const { service } = fakeService();
+    const { unmount } = render(<CleanerHubApp hubOptions={{ service }} />);
+    await userEvent.click(screen.getByRole("button", { name: "Conta" }));
+    const choose = (name) => screen.getByRole("button", { name });
+    expect(getTheme()).toBe("light");
+    expect(choose("Claro")).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(choose("Escuro"));
+    changeSystemTheme(false);
+    expect(getTheme()).toBe("dark");
+    expect(window.localStorage.getItem(key)).toBe("dark");
+
+    unmount();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    expect(getTheme()).toBe("dark");
+    await userEvent.click(choose("Conta"));
+    expect(choose("Escuro")).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(choose("Automático"));
+    expect(window.localStorage.getItem(key)).toBe("auto");
+    expect(getTheme()).toBe("light");
+    changeSystemTheme(true);
+    expect(getTheme()).toBe("dark");
+    await userEvent.click(choose("Claro"));
+    expect(getTheme()).toBe("light");
+  });
+
+  it("keeps the appearance control usable when storage is unavailable", async () => {
+    const storageGet = Storage.prototype.getItem;
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (name) {
+      if (name === key) throw new Error("Storage unavailable");
+      return storageGet.call(this, name);
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
+    const { service } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    expect(getTheme()).toBe("light");
+    await userEvent.click(screen.getByRole("button", { name: "Conta" }));
+    await userEvent.click(screen.getByRole("button", { name: "Escuro" }));
+    expect(getTheme()).toBe("dark");
   });
 });
 

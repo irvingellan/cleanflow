@@ -33,6 +33,23 @@ export function formatDate(value, translate = null, language = "en") {
   }).format(date);
 }
 
+/** Identify a previous service using only details already shared with its recipient. */
+export function removedServiceLabel(service, language = "en") {
+  if (!service) return "";
+  const { propertyName, scheduledDate, scheduledStart } = service;
+  const date = scheduledDate && formatDate(scheduledDate, null, language);
+  const time = formatServiceTime(scheduledStart, language);
+  return [propertyName, date, time].filter(Boolean).join(" · ");
+}
+
+export function formatServiceTime(value, language = "en") {
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
+  const [hour, minute] = value.split(":").map(Number);
+  return new Intl.DateTimeFormat({ pt: "pt-BR", en: "en-US", es: "es-US" }[language] || "en-US", {
+    hour: "numeric", minute: "2-digit",
+  }).format(new Date(2000, 0, 1, hour, minute));
+}
+
 export function formatShortWeekday(value, language = "en") {
   const date = new Date(`${value}T00:00:00`);
 

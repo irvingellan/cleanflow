@@ -144,6 +144,7 @@ export function buildCurrentJobCreateData({
   notes,
   guestName,
   serviceType = defaultServiceType,
+  requiredCleanerCount = 1,
 }) {
   const normalizedGuestName = optionalText(guestName);
   const normalizedScheduledStart = optionalText(scheduledStart);
@@ -192,6 +193,13 @@ export function buildCurrentJobCreateData({
 
   if (normalizedGuestName) {
     job.guestName = normalizedGuestName;
+  }
+
+  if (requiredCleanerCount !== 1) {
+    if (!Number.isInteger(requiredCleanerCount) || requiredCleanerCount < 1 || requiredCleanerCount > 10) {
+      throw new Error("The number of cleaners must be between 1 and 10.");
+    }
+    job.requiredCleanerCount = requiredCleanerCount;
   }
 
   return job;

@@ -4,7 +4,6 @@
  */
 
 export const completedWindowDays = 30;
-export const changesWindowDays = 7;
 const openStatuses = ["ASSIGNED", "IN_PROGRESS"];
 
 const serviceDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -30,7 +29,7 @@ function sortKey(entry) {
 const byTime = (first, second) => sortKey(first).localeCompare(sortKey(second));
 
 /**
- * @returns {{today: object[], upcoming: object[], completed: object[], offers: object[], changes: object[], openCount: number}}
+ * @returns {{today: object[], upcoming: object[], completed: object[], offers: object[], openCount: number}}
  */
 export function buildCleanerAgenda(entries = [], { now = new Date() } = {}) {
   const today = localDateKey(now);
@@ -50,12 +49,7 @@ export function buildCleanerAgenda(entries = [], { now = new Date() } = {}) {
     .filter((entry) => Number.isFinite(entry.offerExpiresAtMs) && entry.offerExpiresAtMs > now.getTime())
     .filter((entry) => !entry.scheduledDate || entry.scheduledDate >= today)
     .sort(byTime);
-  const changesFrom = now.getTime() - changesWindowDays * 24 * 60 * 60 * 1000;
-  const changes = entries
-    .filter((entry) => entry.kind === "CHANGE" && Number(entry.atMs) >= changesFrom)
-    .sort((first, second) => Number(second.atMs) - Number(first.atMs));
-
-  return { today: todayList, upcoming, completed, offers, changes, openCount: todayList.length + upcoming.length };
+  return { today: todayList, upcoming, completed, offers, openCount: todayList.length + upcoming.length };
 }
 
 export function findAgendaEntry(entries, jobId) {

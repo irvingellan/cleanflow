@@ -38,7 +38,7 @@ describe("CreateCleaningForm", () => {
     expect(screen.getByLabelText("Scheduled time")).toHaveValue("11:00");
     expect(screen.getByLabelText("Service type")).toHaveValue("STANDARD");
     expect(screen.getByDisplayValue("Unassigned")).toBeVisible();
-    expect(screen.queryByLabelText("Cleaners needed")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Cleaners needed")).toHaveValue("1");
   });
 
   it("copies only the Property's canonical client ID and passes the optional guest name", async () => {

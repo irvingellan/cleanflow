@@ -272,6 +272,8 @@ export function JobViews({
           hasError={hasCleanerError}
           canOfferAutomatically={!isLoadingAssignments && !isLoadingOffers && !hasAssignmentsError && !hasOffersError
             && jobOffers.length === 0 && jobAssignments.length === 0}
+          existingOfferCleanerIds={jobOffers.map((offer) => offer.cleanerId || offer.id)}
+          property={properties.find((candidate) => candidate.id === selectedJob.propertyId) || null}
           onBack={returnToJobDetail}
           onSent={(count, updatedJob) => {
             recordOffersCreated(count, updatedJob);

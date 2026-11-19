@@ -142,7 +142,7 @@ async function createJob(jobId, extra = {}) {
     clientName: "Synthetic Client",
     clientPrice: 250,
     cleanerPayout: 150,
-    notes: "private-manager-note",
+    notes: "synthetic-job-instructions",
     guestName: "private-guest",
     scheduledDate: dateKey(3),
     scheduledStart: "10:30",
@@ -260,6 +260,7 @@ test("assignment through the real manager callable appears only in that cleaner'
     assert.ok(!serialized.includes(secret), `agenda must not expose ${secret}`);
   }
 
+  assert.equal(entries[0].notes, "synthetic-job-instructions");
   assert.equal(entries[0].offeredCompensation, null);
 
   // Cleaner B cannot list or read A's entries; neither can query without the filter.
@@ -320,11 +321,22 @@ test("complete agenda keeps more than seven assignments across months, including
 
 test("cross-organization: a cleaner of one organization reads nothing in another", async () => {
   await link("cleaner-a");
+  const otherJob = admin.doc("organizations/other-org/jobs/other-job");
+  await otherJob.update({ notes: "Other organization task" });
+  await otherJob.collection("offers").doc("cleaner-a").set({
+    cleanerId: "cleaner-a", status: "INTERESTED", offeredCompensation: 73,
+  });
+  await otherJob.collection("assignments").doc("current").set({
+    cleanerId: "cleaner-a", isActive: true, sourceOfferId: "cleaner-a",
+  });
   await sync("other-job", "other-org");
   const otherEntries = await admin.collection("organizations/other-org/cleanerAgenda").where("kind", "==", "ASSIGNED").get();
-  assert.equal(otherEntries.size, 1); // projection exists there for that org's own cleaner record
+  assert.equal(otherEntries.size, 1);
+  assert.deepEqual([otherEntries.docs[0].get("notes"), otherEntries.docs[0].get("offeredCompensation")],
+    ["Other organization task", 73]);
   const dbA = cleanerDb(uidA);
   await assertFails(dbA.collection("organizations/other-org/cleanerAgenda").where("cleanerId", "==", "cleaner-a").get());
+  await assertFails(dbA.doc(otherEntries.docs[0].ref.path).get());
   await assertFails(dbA.doc("organizations/other-org/jobs/other-job").get());
   // The other organization's manager cannot issue codes for this organization.
   await assert.rejects(issueCleanerAccessCode.run({ auth: { uid: "other-manager", token: { firebase: { sign_in_provider: "password" } } }, data: { cleanerId: "cleaner-a" } }), { code: "permission-denied" });
@@ -370,7 +382,8 @@ test("reschedule and roster removal through existing manager paths update the ag
 });
 
 test("offers stay separate: interest is recorded through the existing Offer service and never becomes an assignment", async () => {
-  await createJob("job-offer", { operationalStatus: "OFFERED" });
+  await createJob("job-offer", { operationalStatus: "OFFERED", serviceType: "DEEP_CLEANING" });
+  await admin.doc(`${root}/properties/property`).update({ address: "Synthetic site A" });
   const offer = (cleanerId, extra = {}) => admin.doc(`${root}/jobs/job-offer/offers/${cleanerId}`).set({
     cleanerId, cleanerName: cleanerId, status: "PENDING", offeredCompensation: 140,
     publicOfferTokenHash: `hash-${cleanerId}`, publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 86400000), ...extra,
@@ -379,6 +392,11 @@ test("offers stay separate: interest is recorded through the existing Offer serv
   await offer("cleaner-b", { publicOfferExpiresAt: null }); // never sent as a link
   await link("cleaner-a");
   await sync("job-offer");
+  const entryPath = `${root}/cleanerAgenda/cleaner-a__job-offer`;
+  const holder = await assertSucceeds(cleanerDb(uidA).doc(entryPath).get());
+  assert.deepEqual([holder.get("notes"), holder.get("offeredCompensation"), holder.get("serviceType"), holder.get("address")],
+    ["synthetic-job-instructions", 140, "DEEP_CLEANING", "Synthetic site A"]);
+  assert.doesNotMatch(JSON.stringify(holder.data()), /private-door-code|private-access|private-guest/);
   let agenda = await agendaFor("cleaner-a");
   assert.deepEqual(agenda.map((item) => [item.kind, item.offerStatus, item.offeredCompensation]), [["OFFER", "PENDING", 140]]);
   assert.equal((await agendaFor("cleaner-b")).length, 0);
@@ -397,6 +415,7 @@ test("offers stay separate: interest is recorded through the existing Offer serv
 
   // A cleaner can only address her own Offer document; an unsent Offer cannot be answered.
   await link("cleaner-b");
+  await assertFails(cleanerDb(uidB).doc(entryPath).get());
   assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidB, { jobId: "job-offer", status: "INTERESTED" })), { state: "expired", status: null });
   await admin.doc(`${root}/jobs/job-offer/offers/cleaner-b`).delete();
   assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidB, { jobId: "job-offer", status: "INTERESTED" })), { state: "unavailable", status: null });
@@ -447,6 +466,8 @@ test("FB08: one spot filled closes the other invitations for links, open tabs an
   assert.equal((await requestPublicOffer("POST", tokens["cleaner-b"], { status: "INTERESTED" })).code, 200);
   const openTab = await requestPublicOffer("GET", tokens["cleaner-c"]);
   assert.equal(openTab.code, 200);
+  assert.doesNotMatch(JSON.stringify(openTab.body), /synthetic-job-instructions/);
+  await admin.doc(`${root}/jobs/job-fill/offers/cleaner-a`).update({ offeredCompensation: 97 });
 
   await managerConfirms("job-fill", "cleaner-a");
   await sync("job-fill");
@@ -468,7 +489,13 @@ test("FB08: one spot filled closes the other invitations for links, open tabs an
   assert.deepEqual(statuses, { "cleaner-a": "INTERESTED", "cleaner-b": "INTERESTED", "cleaner-c": "PENDING" });
   const agendaB = await agendaFor("cleaner-b");
   assert.deepEqual(agendaB.map((item) => [item.kind, item.offerStatus]), [["OFFER", "ALREADY_TAKEN"]]);
-  assert.doesNotMatch(JSON.stringify(agendaB), /cleaner-a|private-manager-note/);
+  assert.doesNotMatch(JSON.stringify(agendaB), /cleaner-a|synthetic-job-instructions/);
+  assert.equal(agendaB[0].notes, undefined);
+  assert.equal(agendaB[0].offeredCompensation, 140);
+  const ownEntryPath = `${root}/cleanerAgenda/cleaner-a__job-fill`;
+  const current = await assertSucceeds(cleanerDb(uidA).doc(ownEntryPath).get());
+  assert.deepEqual([current.get("notes"), current.get("offeredCompensation")], ["synthetic-job-instructions", 97]);
+  await assertFails(cleanerDb(uidB).doc(ownEntryPath).get());
   assert.equal((await admin.collection(`${root}/jobs/job-fill/assignments`).get()).size, 1);
 
   // Removing the assignment reopens the spot for the remaining invitations.
@@ -896,13 +923,15 @@ test("three invitees for an unversioned automatic batch retain one assignment, p
   await sync(job.id);
   const entriesAfterReplay = await admin.collection(`${root}/cleanerAgenda`).get();
   assert.deepEqual(entriesAfterReplay.docs.map((doc) => doc.data()), entriesBeforeReplay.docs.map((doc) => doc.data()));
-  assert.equal((await agendaFor(winnerId)).filter((entry) => entry.jobId === job.id && entry.kind === "ASSIGNED").length, 1);
+  const winnerEntry = await assertSucceeds(cleanerDb(winnerUid).doc(`${root}/cleanerAgenda/${winnerId}__${job.id}`).get());
+  assert.deepEqual([winnerEntry.get("kind"), winnerEntry.get("notes"), winnerEntry.get("offeredCompensation")],
+    ["ASSIGNED", "synthetic-job-instructions", 140]);
   for (const [loserId, loserUid] of losers) {
     const visible = await assertSucceeds(cleanerDb(loserUid).collection(`${root}/cleanerAgenda`).where("cleanerId", "==", loserId).get());
     const entries = visible.docs.map((doc) => doc.data());
     assert.deepEqual(entries.map((entry) => [entry.jobId, entry.kind, entry.offerStatus]), [[job.id, "OFFER", "ALREADY_TAKEN"]]);
     const serialized = JSON.stringify(entries);
-    for (const privateValue of [winnerId, "Synthetic Client", "private-guest", "private-manager-note", "clientPrice", "cleanerPayout"]) {
+    for (const privateValue of [winnerId, "Synthetic Client", "private-guest", "synthetic-job-instructions", "clientPrice", "cleanerPayout"]) {
       assert.ok(!serialized.includes(privateValue), `loser must not see ${privateValue}`);
     }
     await assertFails(cleanerDb(loserUid).doc(`${root}/cleanerAgenda/${winnerId}__${job.id}`).get());
@@ -969,7 +998,7 @@ test("three simultaneous acceptances fill exactly two versioned slots and retrie
   for (const [winnerId, winnerUid] of winners) {
     const assigned = (await agendaFor(winnerId)).filter(({ jobId, kind }) => jobId === job.id && kind === "ASSIGNED");
     assert.equal(assigned.length, 1);
-    assert.deepEqual([assigned[0].acknowledged, assigned[0].offeredCompensation], [true, null]);
+    assert.deepEqual([assigned[0].acknowledged, assigned[0].offeredCompensation], [true, 150]);
     assert.ok(!JSON.stringify(loserAgenda.docs[0].data()).includes(winnerId));
     await assertFails(cleanerDb(loserUid).doc(`${root}/cleanerAgenda/${winnerId}__${job.id}`).get());
     await assertFails(cleanerDb(loserUid).doc(`${job.path}/offers/${winnerId}`).get());
@@ -990,7 +1019,7 @@ test("a partial versioned batch keeps active invitations private and allows only
   assert.equal(partial.offerDistributionClosedAt, undefined);
   await sync(job.id);
   const [pending] = await agendaFor("cleaner-b");
-  assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", null]);
+  assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", 150]);
   assert.doesNotMatch(JSON.stringify(pending), /cleaner-a|Ana Example|assignedCleanerIds|private-|clientPrice|cleanerPayout/);
 
   const db = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
@@ -1229,7 +1258,8 @@ test("the manager explicitly opts in once; a browser cannot forge automatic resp
   assert.equal(offer.offeredChecklistContextRevision, 0);
   assert.ok(offer.publicOfferExpiresAt.toMillis() > Date.now());
   assert.deepEqual([(await job.get()).data().offerDistributionMode, (await job.get()).data().operationalStatus], [autoMode, "OFFERED"]);
-  await assert.rejects(createAutomaticJobOffers.run(managerRequest(payload)), { code: "failed-precondition" });
+  assert.equal(offer.offeredCompensation, 150);
+  await assert.rejects(createAutomaticJobOffers.run(managerRequest(payload)), { code: "already-exists" });
 
   await assertFails(browserJob.update({ offerDistributionMode: "MANUAL" }));
   await assertFails(browserJob.update({ firstAcceptClaim: { cleanerId: "cleaner-a" } }));
@@ -1323,7 +1353,7 @@ test("reschedule confirmation is private and one final response belongs to each 
     assert.deepEqual(prompt.reschedule, {
       state: "PENDING", scheduleRevision: moved.scheduleRevision, scheduledDate: moved.scheduledDate, scheduledStart: "12:15",
     });
-    assert.doesNotMatch(JSON.stringify(prompt), /private-|clientPrice|cleanerPayout|assignmentId|byCleaner|cleaner-[abc]/);
+    assert.doesNotMatch(JSON.stringify(prompt), /private-|synthetic-job-instructions|clientPrice|cleanerPayout|assignmentId|byCleaner|cleaner-[abc]/);
   }
   assert.equal((await listNotificationInbox.run(cleanerRequest(uidC, { role: "CLEANER" }))).items.length, 0);
   const before = (await job.get()).data();
@@ -1592,4 +1622,43 @@ test("rescheduling an unversioned automatic batch still invalidates its earlier 
   assert.deepEqual(await assignmentsFor(job), []);
   assert.equal((await original.offer.get()).get("status"), "PENDING");
   assert.equal((await original.offer.get()).get("automaticOfferBatchVersion"), undefined);
+});
+
+
+test("send to more cleaners adds offers to the open automatic batch and never reopens a full one", async () => {
+  const job = jobDocument("auto-extend");
+  await createJob(job.id, { requiredCleanerCount: 2 });
+  for (const [cleanerId] of automaticCleaners) await link(cleanerId);
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] }));
+  const before = (await job.get()).data();
+  const firstOffer = (await job.collection("offers").doc("cleaner-a").get()).data();
+
+  assert.equal((await accept(job.id, uidA)).state, "assigned");
+  const extended = await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-b"] }));
+  assert.deepEqual(extended, { jobId: job.id, count: 1 });
+  const added = (await job.collection("offers").doc("cleaner-b").get()).data();
+  assert.deepEqual(
+    [added.status, added.offerDistributionMode, added.automaticOfferBatchVersion, added.offeredChecklistContextRevision, added.offeredCompensation],
+    ["PENDING", autoMode, 2, before.automaticOfferBatch.openingContextRevision, 150],
+  );
+  assert.equal((await job.collection("offers").doc("cleaner-a").get()).data().publicOfferExpiresAt.isEqual(firstOffer.publicOfferExpiresAt), true);
+  await assert.rejects(createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] })), { code: "already-exists" });
+
+  assert.equal((await accept(job.id, uidB)).state, "assigned");
+  assert.deepEqual((await job.get()).data().assignedCleanerIds, ["cleaner-a", "cleaner-b"]);
+  await assert.rejects(createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-c"] })), { code: "failed-precondition" });
+  assert.equal((await job.collection("offers").doc("cleaner-c").get()).exists, false);
+});
+
+test("an automatic offer falls back to the Property cleaner price when the Job has none", async () => {
+  const job = jobDocument("auto-property-price");
+  await createJob(job.id);
+  await job.update({ cleanerPayout: FieldValue.delete() });
+  await admin.doc(`${root}/properties/property`).update({ defaultCleanerPrice: 95 });
+  try {
+    await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] }));
+    assert.equal((await job.collection("offers").doc("cleaner-a").get()).data().offeredCompensation, 95);
+  } finally {
+    await admin.doc(`${root}/properties/property`).update({ defaultCleanerPrice: FieldValue.delete() });
+  }
 });

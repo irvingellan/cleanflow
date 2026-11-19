@@ -25,6 +25,7 @@ export function CreateCleaningForm({
     cleanerPayout: property?.defaultCleanerPrice ?? "",
     guestName: "",
     notes: "",
+    requiredCleanerCount: "1",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -101,6 +102,8 @@ export function CreateCleaningForm({
         cleanerPayout,
         notes,
         guestName: formValues.guestName,
+        ...(Number(formValues.requiredCleanerCount) > 1
+          ? { requiredCleanerCount: Number(formValues.requiredCleanerCount) } : {}),
       });
 
       onCreated(job);
@@ -173,6 +176,15 @@ export function CreateCleaningForm({
         </label>
 
         <JobServiceTypeSelect value={formValues.serviceType} onChange={updateField} disabled={isSaving} />
+
+        <label>
+          {translate("jobs.cleanersNeeded")}
+          <select name="requiredCleanerCount" value={formValues.requiredCleanerCount} onChange={updateField} disabled={isSaving}>
+            {Array.from({ length: 10 }, (_, index) => String(index + 1)).map((count) => (
+              <option key={count} value={count}>{count}</option>
+            ))}
+          </select>
+        </label>
 
         <label>
           {translate("common.date")}
