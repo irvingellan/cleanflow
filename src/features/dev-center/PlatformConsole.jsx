@@ -3,6 +3,7 @@ import { Icon } from "../../components/Icon.jsx";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { getPlatformOverview } from "./devCenterService.js";
+import { AttentionList, UsageDetails } from "./PlatformUsage.jsx";
 import { HealthBadge, HealthDetails } from "./PlatformHealth.jsx";
 import "./platformConsole.css";
 
@@ -145,6 +146,7 @@ function CompanyDetail({ org, onBack, onAccessDenied }) {
       <p>{translate("platform.created")} <DateValue value={org.createdAt} /></p>
     </div>
     <HealthDetails health={org.health} />
+    {read.status === "ready" && <UsageDetails usage={read.data.usage} />}
     <section className="cf-block platform-panel" aria-labelledby="platform-members">
       <div className="cf-block__header"><h3 id="platform-members">{translate("platform.members")}</h3></div>
       {read.status !== "ready" ? <ReadStatus read={read} detail /> : read.data.people.length ? (
@@ -179,20 +181,29 @@ export function PlatformConsole({ children }) {
   const { translate } = useTranslation();
   const [denied, setDenied] = useState(false);
   const read = usePlatformRead(undefined, setDenied);
-  const [selected, setSelected] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("company"));
   const [ascending, setAscending] = useState(false);
   const restoreFocus = useRef(null);
+  const attentionFocus = useRef(null);
   if (denied) return <StateCard isError status="alert" message={translate("platform.denied")} />;
   if (read.status !== "ready") return <ReadStatus read={read} />;
-  if (selected) return <><CompanyDetail key={selected.id} org={selected} onAccessDenied={setDenied} onBack={() => {
-    restoreFocus.current = selected.id;
-    setSelected(null);
-  }} />{children}</>;
   const { organizations } = read.data;
+  const selected = organizations.find(org => org.id === selectedId);
+  if (selected) return <><CompanyDetail key={selected.id} org={selected} onAccessDenied={setDenied} onBack={() => {
+    if (!attentionFocus.current) restoreFocus.current = selected.id;
+    if (new URLSearchParams(window.location.hash.slice(1)).has("company")) {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    }
+    setSelectedId(null);
+  }} />{children}</>;
   return <><div className="platform-overview">
+    <AttentionList organizations={organizations} restoreFocus={attentionFocus} onOpen={(org, key) => {
+      attentionFocus.current = key;
+      setSelectedId(org.id);
+    }} />
     <Summary organizations={organizations} />
     {organizations.length ? <CompanyTable organizations={organizations} ascending={ascending}
-      onSort={() => setAscending(value => !value)} onOpen={setSelected} restoreFocus={restoreFocus} /> :
+      onSort={() => setAscending(value => !value)} onOpen={org => setSelectedId(org.id)} restoreFocus={restoreFocus} /> :
       <StateCard status="status" message={translate("platform.empty")} />}
   </div>{children}</>;
 }

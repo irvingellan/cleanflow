@@ -13,11 +13,21 @@ const first = {
   people: { activeManagers: 1, activeCleaners: 2, archivedCleaners: 3 },
   clients: { active: 4, archived: 0 }, properties: { active: 5, archived: 1 },
   jobs: { total: 9, created30d: 7, scheduled7d: 3, completed30d: 2 },
-  attention: { openIssues: 3, waitingOffers: 1 },
+  attention: { openIssues: 3, waitingOffers: 1 }, attentionReasons: [],
   health: { status: "ok", pageLoads: 220, failedPageLoads: 1, pageFailureRate: 1 / 220, timedLoads: 210, medianMs: 250, p95Ms: 400, failedOperations: { offers: 2 }, operationAttempts: { offers: 90 }, operationFailureRates: { offers: 2 / 90 } },
 };
 const second = { ...first, id: "example-south", displayName: null, lastActivityAt: null };
 const third = { ...first, id: "example-east", displayName: "East Demo", lastActivityAt: "2026-01-15T10:00:00Z" };
+
+const usage = {
+  adoption: { profiles: 10, hubAccess: 8, active30d: 6, submitted30d: 4 },
+  checklists: { submitted30d: 12, photos30d: 20, completedJobs30d: 5, completedWithChecklist30d: 3 },
+  reports: { prepared30d: 5, sent30d: 4 },
+  notifications: { managerDevices: 2, managerActive7d: 1, cleanerDevices: 8, deliveries7d: { sent: 10, partial: 1, failed: 1, noDevice: 2 } },
+  weeklyJobs: Array.from({ length: 8 }, (_, i) => ({
+    startDate: new Date(Date.UTC(2026, 0, 5 + i * 7)).toISOString().slice(0, 10), count: i,
+  })),
+};
 
 function show(language = "en") {
   localStorage.setItem("cleanflow-language", language);
@@ -192,4 +202,52 @@ describe("PlatformConsole", () => {
     expect(screen.queryByText("North Demo")).not.toBeInTheDocument();
     expect(screen.queryByText("Version panel")).not.toBeInTheDocument();
   });
+  it("links each attention reason to its company and restores focus to that reason", async () => {
+    const user = userEvent.setup();
+    const flagged = { ...first, attentionReasons: ["errors", "oldOffers"] };
+    getPlatformOverview.mockResolvedValueOnce({ organizations: [flagged, second] }).mockResolvedValueOnce({ people: [], usage });
+    show();
+    const attention = await screen.findByRole("region", { name: "Needs your attention" });
+    expect(within(attention).getAllByRole("link")).toHaveLength(2);
+    const offer = within(attention).getByText(/more than 24 hours/).closest("li");
+    const link = within(offer).getByRole("link", { name: "North Demo" });
+    expect(link).toHaveAttribute("href", "/platform#company=example-north");
+    link.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("heading", { name: "Cleaner Hub adoption" });
+    expect(getPlatformOverview).toHaveBeenLastCalledWith(first.id);
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    const restored = screen.getByText(/more than 24 hours/).closest("li");
+    expect(within(restored).getByRole("link")).toHaveFocus();
+  });
+
+  it("opens a bookmarked company, shows its funnel, weekly trend and checklist coverage", async () => {
+    window.history.replaceState(null, "", "/platform#company=example-north");
+    try {
+      getPlatformOverview.mockResolvedValueOnce({ organizations: [first] }).mockResolvedValueOnce({ people: [], usage });
+      show("pt");
+      const funnel = await screen.findByRole("region", { name: "Adoção do Cleaner Hub" });
+      expect(within(funnel).getAllByRole("listitem").map(li => li.querySelector("strong").textContent)).toEqual(["10", "8", "6", "4"]);
+      expect(screen.getByText("3 de 5 (60%)")).toBeVisible();
+      expect(screen.getByText("Marcados como enviados").nextElementSibling).toHaveTextContent("4");
+      expect(screen.getByText("Parcialmente enviadas").nextElementSibling).toHaveTextContent("1");
+      const trend = screen.getByRole("region", { name: "Serviços criados por semana" });
+      expect(within(trend).getAllByRole("listitem")).toHaveLength(8);
+      expect(trend.querySelector("time")).toHaveAttribute("datetime", "2026-01-05");
+      fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
+      expect(window.location.hash).toBe("");
+    } finally { window.history.replaceState(null, "", "/"); }
+  });
+
+  it("distinguishes an empty attention list and a company without completed jobs", async () => {
+    getPlatformOverview.mockResolvedValueOnce({ organizations: [first] }).mockResolvedValueOnce({
+      people: [], usage: { ...usage, checklists: { ...usage.checklists, completedJobs30d: 0, completedWithChecklist30d: 0 } },
+    });
+    show();
+    expect(await screen.findByText("No companies currently need attention.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "North Demo" }));
+    expect(await screen.findByText("No completed jobs")).toBeVisible();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+
 });
