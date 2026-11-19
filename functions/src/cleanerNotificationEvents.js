@@ -2,7 +2,7 @@ import { rosterCleanerIds } from "./cleanerAgenda.js";
 import { automaticOfferBatch, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import {
   cleanerInbox, cleanerInboxTypes as types, inboxEventId, inboxEventRecord,
-  offerInboxGeneration, validInboxSegment,
+  offerInboxGeneration, removedServiceNotice, validInboxSegment,
 } from "./notificationInboxEvents.js";
 import { publicOfferState } from "./publicOfferResponseService.js";
 import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
@@ -74,19 +74,24 @@ export function recordCleanerJobInboxEvents(database, { organizationId, jobId, b
   if (![organizationId, jobId].every(validInboxSegment) || typeof eventId !== "string" || !eventId) return 0;
   const previous = before?.data();
   const current = after?.data();
+  if ([previous, current].some((job) => job?.organizationId != null && job.organizationId !== organizationId)) return 0;
   const organization = database.collection("organizations").doc(organizationId);
-  const records = planCleanerJobInboxEvents(previous, current).map(({ cleanerId, type, automaticAssignmentId }) => ({
-    organizationId,
-    jobId,
-    cleanerId,
-    type,
-    eventId: inboxEventId("cleaner-job", organizationId, jobId, cleanerId, type, eventId),
-    transitionKey: inboxEventId(eventId),
-    contextRevision: notificationRevision(current?.checklistContextRevision),
-    scheduleRevision: notificationRevision(current?.scheduleRevision),
-    ...(automaticAssignmentId ? { automaticAssignmentId } : {}),
-    createdAt: after?.updateTime || before?.readTime,
-  }));
+  const records = planCleanerJobInboxEvents(previous, current).map(({ cleanerId, type, automaticAssignmentId }) => {
+    const removedService = removedServiceNotice(type, previous);
+    return {
+      organizationId,
+      jobId,
+      cleanerId,
+      type,
+      eventId: inboxEventId("cleaner-job", organizationId, jobId, cleanerId, type, eventId),
+      transitionKey: inboxEventId(eventId),
+      contextRevision: notificationRevision(current?.checklistContextRevision),
+      scheduleRevision: notificationRevision(current?.scheduleRevision),
+      ...(automaticAssignmentId ? { automaticAssignmentId } : {}),
+      createdAt: after?.updateTime || before?.readTime,
+      ...(removedService ? { removedService } : {}),
+    };
+  });
   return storeCleanerEvents(database, organization, records);
 }
 
