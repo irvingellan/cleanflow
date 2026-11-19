@@ -12,15 +12,9 @@ const allowed = [
   "functions/src/devCenterData.js",
   "functions/src/runtime/firebase.js",
   "src/features/auth/managerAccessService.js",
-  "src/features/cleaner-agenda/cleanerAgendaService.js",
-  "src/features/dashboard/dashboardReads.js",
-  "src/features/payouts/payoutProofService.js",
-  "src/features/payouts/payoutService.js",
   "src/features/telemetry/managerOperationTelemetryService.js",
   "src/features/telemetry/managerPageLoadDiagnosticsService.js",
   "src/features/telemetry/managerPageLoadService.js",
-  "src/features/weekly-close/weeklyCloseModel.js",
-  "src/features/weekly-close/weeklyCloseService.js",
   "src/services/organization/currentOrganization.js",
 ];
 
