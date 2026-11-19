@@ -11,6 +11,7 @@ import { collection as serverCollection, getDocs as getServerDocs } from "fireba
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
 import { managerDecisionOf, offerManagerDecisions, rosterCleanerIds } from "./offerSlots.js";
 import {
@@ -19,7 +20,6 @@ import {
   normalizeJobRecord,
 } from "./jobCompatibility.js";
 
-const organizationId = "cleanflow-demo";
 const publicOfferTokenLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
 
 function createPublicOfferToken() {
@@ -42,7 +42,7 @@ function offerDocument(jobId, cleanerId) {
   return doc(
     db,
     "organizations",
-    organizationId,
+    currentOrganizationId(),
     "jobs",
     jobId,
     "offers",
@@ -51,7 +51,7 @@ function offerDocument(jobId, cleanerId) {
 }
 
 function jobDocument(jobId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId);
 }
 
 function jobFromSnapshot(snapshot) {
@@ -72,7 +72,7 @@ function canCreatePublicOfferLinkForJob(job) {
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobOffers(jobId) {
   const snapshot = await withReadDeadline(getServerDocs(
-    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "offers"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs", jobId, "offers"),
   ));
 
   return snapshot.docs.map((offerDocumentSnapshot) => ({
