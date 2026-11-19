@@ -311,6 +311,23 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "getPlatformOverview",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "DEV_CENTER_DEVELOPER_UIDS",
+        },
+      ],
+    },
+  ],
+  [
     "issueChecklistCapability",
     {
       "callableTrigger": {},

@@ -125,6 +125,13 @@ describe("DevCenter action states", () => {
     expect(screen.queryByRole("heading", { name: "Demo data" })).not.toBeInTheDocument();
   });
 
+  it("shows the platform entry only after developer authorization", () => {
+    const { rerender } = render(buildDevCenter({ environment: "production", authorized: false }));
+    expect(screen.queryByRole("button", { name: "Platform" })).not.toBeInTheDocument();
+    rerender(buildDevCenter({ environment: "production", authorized: true }));
+    expect(screen.getByRole("button", { name: "Platform" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("never grants mutation UI solely because the environment is Sandbox", () => {
     render(buildDevCenter({ environment: "sandbox", authorized: false }));
     expect(screen.queryAllByRole("button", { name: "Generate" })).toHaveLength(0);

@@ -1,0 +1,92 @@
+.platform-switch { justify-self: start; margin: 0; }
+.platform-overview, .platform-detail { display: grid; gap: 18px; min-width: 0; container-type: inline-size; }
+.platform-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-xl);
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-raise);
+}
+.platform-summary > div { display: flex; flex-direction: column; justify-content: space-between; padding: 16px 20px; }
+.platform-summary > div + div { border-inline-start: 1px solid var(--cf-divider); }
+.platform-summary dt { display: flex; align-items: center; gap: 8px; color: var(--cf-text-secondary); font-size: var(--cf-text-sm); }
+.platform-summary .cf-icon { flex-shrink: 0; color: var(--cf-brand-text); }
+.platform-summary dd {
+  margin: 5px 0 0;
+  color: var(--cf-text);
+  font-size: 1.875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 730;
+  line-height: 1.15;
+}
+.platform-table { border-collapse: collapse; width: 100%; font-size: var(--cf-text-sm); }
+.platform-table th, .platform-table td { padding: 12px 10px; vertical-align: top; text-align: start; overflow-wrap: anywhere; }
+.platform-table :is(th, td):first-child { padding-inline-start: 16px; }
+.platform-table :is(th, td):last-child { padding-inline-end: 16px; }
+.platform-table thead { background: var(--cf-surface-subtle); color: var(--cf-text-secondary); }
+.platform-table thead th { padding-block: 9px; vertical-align: middle; font-size: var(--cf-text-xs); font-weight: 650; }
+.platform-table tr { border-top: 1px solid var(--cf-divider); }
+.platform-directory tbody tr { cursor: pointer; }
+.platform-directory tbody tr:is(:hover,:focus-within) { background: var(--cf-surface-subtle); }
+.platform-company, .platform-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.platform-company { color: var(--cf-brand-text); font-weight: 700; }
+.platform-company .cf-icon { flex-shrink: 0; }
+.platform-org-id { display: block; color: var(--cf-text-muted); font-weight: 400; }
+.platform-table button:focus-visible, .platform-switch button:focus-visible {
+  outline: 2px solid var(--cf-focus);
+  outline-offset: -1px;
+  border-radius: 4px;
+}
+.platform-directory td .cf-state { white-space: nowrap; }
+.platform-directory .platform-metrics { font-size: var(--cf-text-xs); }
+.platform-metrics { display: grid; gap: 5px; margin: 0; }
+.platform-metrics > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.platform-metrics :is(dt, dd) { margin: 0; }
+.platform-metrics dt, .platform-muted { color: var(--cf-text-secondary); }
+.platform-metrics dd { color: var(--cf-text); font-variant-numeric: tabular-nums; font-weight: 650; }
+.platform-notice { display: grid; justify-items: start; gap: 8px; }
+.platform-notice .state-card { margin: 0; }
+.platform-detail-heading .back-button { margin: 0 0 8px; }
+.platform-detail-heading h3 { width: fit-content; max-width: 100%; margin: 0; font-size: var(--cf-text-xl); overflow-wrap: anywhere; }
+.platform-detail-heading p, .platform-failures p { margin: 3px 0 0; color: var(--cf-text-secondary); font-size: var(--cf-text-sm); }
+.platform-health-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 10px 18px 15px; }
+.platform-health-facts dt { color: var(--cf-text-secondary); font-size: var(--cf-text-sm); }
+.platform-health-facts dd { margin: 2px 0 0; font-variant-numeric: tabular-nums; font-size: var(--cf-text-lg); font-weight: 680; }
+.platform-failures { border-top: 1px solid var(--cf-divider); padding: 12px 18px; }
+.platform-failures h4 { margin: 0 0 4px; font-size: var(--cf-text-sm); }
+.platform-failures .platform-metrics { max-width: 30em; font-size: var(--cf-text-sm); }
+.platform-detail-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px), 1fr)); gap: 12px; }
+.platform-panel > .platform-metrics { padding: 5px 18px 16px; font-size: var(--cf-text-sm); }
+.platform-panel > :is(.platform-notice, .state-card) { margin: 0 16px 16px; }
+.platform-people th[scope="row"] { font-weight: 600; }
+@container (max-width: 949px) {
+  .platform-table .platform-wide { display: none; }
+}
+@container (max-width: 579px) {
+  .platform-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .platform-summary > div { padding: 12px 14px; }
+  .platform-summary > div:nth-child(3) { border-inline-start: 0; }
+  .platform-summary > div:nth-child(n+3) { border-top: 1px solid var(--cf-divider); }
+  .platform-summary dt { font-size: var(--cf-text-xs); }
+  .platform-summary dd { font-size: 1.5rem; }
+  .platform-table th, .platform-table td { padding: 10px 6px; }
+  .platform-table :is(th, td):first-child { padding-inline-start: 10px; }
+  .platform-table :is(th, td):last-child { padding-inline-end: 10px; }
+  .platform-table .cf-state { padding-inline: 6px; gap: 3px; }
+  .platform-people :is(th, td):is(:nth-child(2), :nth-child(3)) { white-space: nowrap; }
+  .platform-health-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 12px; }
+  .platform-health-facts dt { font-size: var(--cf-text-xs); }
+}
