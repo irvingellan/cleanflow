@@ -1,6 +1,48 @@
 {
   "indexes": [
     {
+      "collectionGroup": "assignments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "cleanerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cleanerAcknowledgedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "checklistRuns",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "readyForReviewCleanerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "readyForReviewAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "draftMutations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "cleanerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "cleanerUnavailability",
       "queryScope": "COLLECTION",
       "fields": [
