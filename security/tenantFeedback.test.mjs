@@ -49,11 +49,16 @@ test("additional companies keep feedback private and never contact the existing 
   const network = t.mock.method(globalThis, "fetch", () => { throw Error("Unexpected feedback transport"); });
   for (const org of organizations.slice(1)) {
     const before = await versions(org);
-    assert.deepEqual(await submitFeedback.run(request(org, { ...input, organizationId: defaultOrganizationId })), { submitted: true });
+    const earliest = (await member(org).get()).readTime;
+    const submitted = request(org, { ...input, organizationId: defaultOrganizationId, createdAt: 0 });
+    assert.deepEqual(await submitFeedback.run(submitted), { submitted: true });
     const saved = await reports(org).get();
     assert.equal(saved.size, 1);
     const { createdAt, ...fields } = saved.docs[0].data();
-    assert.ok(createdAt.isEqual(saved.docs[0].createTime));
+    // Firestore rounds server timestamps to milliseconds. Use the two server reads
+    // around the write, independently of the caller's clock and the commit time.
+    const writtenAt = Math.floor(createdAt.toMillis());
+    assert.ok(writtenAt >= Math.floor(earliest.toMillis()) && writtenAt <= Math.floor(saved.readTime.toMillis()));
     assert.deepEqual(fields, { message: "Synthetic note", screen: "Services", appVersion: "v1.0", viewport: "375 × 812",
       createdByUid: managers.get(org), status: "NEW" });
     assert.deepEqual(await versions(org), before);
