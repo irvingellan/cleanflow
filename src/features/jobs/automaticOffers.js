@@ -17,6 +17,23 @@ export function isAutomaticOfferJob(job) {
   return job?.offerDistributionMode === FIRST_ACCEPT_WINS;
 }
 
+/**
+ * An open automatic batch can still receive more cleaners ("send to more
+ * cleaners"). Mirrors canExtendAutomaticOfferBatch in
+ * functions/src/managerAutomaticOffers.js; the server decides.
+ */
+export function canExtendAutomaticOfferJob(job) {
+  const batch = job?.automaticOfferBatch;
+  const roster = job?.assignedCleanerIds;
+  return isAutomaticOfferJob(job) && job.schemaVersion === 2 && !job.archivedAt
+    && batch?.version === 2 && Number.isInteger(batch.capacity)
+    && batch.capacity === (job.requiredCleanerCount ?? 1)
+    && !job.firstAcceptClaim && !job.offerDistributionClosedAt
+    && ["OFFERED", "ASSIGNED"].includes(job.operationalStatus)
+    && !job.assignedCleanerId && Array.isArray(roster) && roster.length < batch.capacity
+    && (job.checklistContextRevision ?? 0) === batch.currentContextRevision;
+}
+
 export function canOptIntoAutomaticOffers(job) {
   const capacity = job?.requiredCleanerCount === undefined ? 1 : job.requiredCleanerCount;
   return job?.schemaVersion === 2 && job.operationalStatus === "UNASSIGNED" && !job.archivedAt

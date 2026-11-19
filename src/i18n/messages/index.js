@@ -17,9 +17,10 @@ import lifecycle from "./16-lifecycle.js";
 import checklistsDraft from "./17-checklists-draft.js";
 import shell from "./18-shell.js";
 import home from "./19-home.js";
+import offersSpots from "./20-offers-spots.js";
 
 // Order matters: a later part may override a key from an earlier one.
-const parts = [core, checklistsGallery, checklistsEvidence, checklistPreview, checklistPreviewCleaner, common, checklistsNotes, jobsFinancial, jobsEdit, publicOffer, jobsNewService, jobsAssignment, devCenter, notifications, weeklyClose, lifecycle, checklistsDraft, shell, home];
+const parts = [core, checklistsGallery, checklistsEvidence, checklistPreview, checklistPreviewCleaner, common, checklistsNotes, jobsFinancial, jobsEdit, publicOffer, jobsNewService, jobsAssignment, devCenter, notifications, weeklyClose, lifecycle, checklistsDraft, shell, home, offersSpots];
 
 export const messages = { en: {}, pt: {}, es: {} };
 for (const part of parts) {

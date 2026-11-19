@@ -16,6 +16,8 @@ function section(id, title, items) {
 // Each template has the same section shape as a resolved Property checklist.
 const templates = {
   STANDARD: [],
+  // A touch-up uses the Property checklist only.
+  AIRBNB_TOUCH_UP: [],
   DEEP_CLEANING: [section("deep-cleaning", "Deep cleaning", [
     ["buildup", "Remove built-up grease and grime"],
     ["bathroom", "Scrub bathroom grout and remove limescale"],

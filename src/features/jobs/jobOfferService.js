@@ -100,7 +100,7 @@ export async function respondToJobOffer({ jobId, cleanerId, status }) {
   });
 }
 
-export async function createJobOffers({ jobId, cleaners, automatic = false }) {
+export async function createJobOffers({ jobId, cleaners, automatic = false, offeredCompensation = null }) {
   const reference = jobDocument(jobId);
 
   if (automatic) {
@@ -133,6 +133,9 @@ export async function createJobOffers({ jobId, cleaners, automatic = false }) {
           cleanerId: cleaner.id,
           cleanerName: cleaner.name,
           status: "PENDING",
+          // The Hub shows this amount; a public link may still confirm or edit it.
+          ...(typeof offeredCompensation === "number" && Number.isFinite(offeredCompensation) && offeredCompensation >= 0
+            ? { offeredCompensation } : {}),
           createdAt: serverTimestamp(),
         },
       );

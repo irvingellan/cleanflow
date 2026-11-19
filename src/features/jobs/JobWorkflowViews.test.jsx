@@ -11,6 +11,8 @@ const { createJobOffers, respondToJobOffer, createIssue } = vi.hoisted(() => ({
 
 vi.mock("./jobOfferService.js", () => ({ createJobOffers, respondToJobOffer }));
 vi.mock("../issues/issueService.js", () => ({ createIssue }));
+const { setRequiredCleanerCount } = vi.hoisted(() => ({ setRequiredCleanerCount: vi.fn() }));
+vi.mock("./assignmentService.js", () => ({ setRequiredCleanerCount }));
 
 import { OfferCleaners } from "./JobWorkflowViews.jsx";
 
@@ -165,5 +167,53 @@ describe("automatic offer opt-in", () => {
     });
     expect(screen.queryByRole("checkbox", { name: "Assign automatically to the first cleaner who accepts" }))
       .not.toBeInTheDocument();
+  });
+});
+
+
+describe("offer amount, cleaner count and send to more (Nov 19 feedback)", () => {
+  const cleaners = [{ id: "ana", name: "Ana" }, { id: "bia", name: "Bia" }];
+  const render2 = (job, extra = {}) => render(<TranslationProvider>
+    <OfferCleaners job={{ id: "job-1", ...job }} cleaners={cleaners} onSent={vi.fn()} {...extra} />
+  </TranslationProvider>);
+  beforeEach(() => { window.localStorage.setItem("cleanflow-language", "en"); setRequiredCleanerCount.mockReset().mockResolvedValue({}); });
+
+  it("shows the amount from the Property when the Job has none, and sends it on manual offers", async () => {
+    render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [] }, { property: { defaultCleanerPrice: 95 } });
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("95");
+    await userEvent.click(screen.getByLabelText("Ana"));
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], offeredCompensation: 95 });
+  });
+
+  it("warns before sending an offer with no amount", () => {
+    render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [] });
+    expect(screen.getByTestId("offer-amount-missing")).toBeInTheDocument();
+  });
+
+  it("saves the chosen number of cleaners before the first automatic batch", async () => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
+    render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], cleanerPayout: 120 });
+    await userEvent.click(screen.getByRole("button", { name: "One more cleaner" }));
+    expect(screen.getByRole("checkbox", { name: "Assign the available spots to the first cleaners who accept" })).toBeChecked();
+    await userEvent.click(screen.getByLabelText("Ana"));
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(setRequiredCleanerCount).toHaveBeenCalledWith("job-1", 2);
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], automatic: true });
+  });
+
+  it("adds cleaners to an open automatic batch and blocks those already offered", async () => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
+    render2({
+      schemaVersion: 2, operationalStatus: "ASSIGNED", assignedCleanerIds: ["ana"], requiredCleanerCount: 2, cleanerPayout: 120,
+      offerDistributionMode: "FIRST_ACCEPT_WINS", checklistContextRevision: 1,
+      automaticOfferBatch: { version: 2, capacity: 2, openingContextRevision: 0, currentContextRevision: 1 },
+    }, { existingOfferCleanerIds: ["ana"] });
+    expect(screen.getByLabelText(/Ana · Already offered/)).toBeDisabled();
+    expect(screen.queryByRole("checkbox", { name: /first cleaners who accept/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("offer-cleaner-count")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("Bia"));
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[1]], automatic: true });
   });
 });

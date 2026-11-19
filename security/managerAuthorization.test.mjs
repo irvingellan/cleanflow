@@ -169,7 +169,7 @@ test("only a manager can write a known Job service type without changing the che
   await assertSucceeds(legacy.update({ notes: "Synthetic note" }));
   assert.equal((await legacy.get()).data().serviceType, undefined);
 
-  for (const serviceType of ["STANDARD", "DEEP_CLEANING", "MOVE_IN_OUT", "POST_CONSTRUCTION"]) {
+  for (const serviceType of ["STANDARD", "AIRBNB_TOUCH_UP", "DEEP_CLEANING", "MOVE_IN_OUT", "POST_CONSTRUCTION"]) {
     const created = jobs.doc();
     await assertSucceeds(created.set({ organizationId: org, serviceType }));
     await assertSucceeds(legacy.update({ serviceType }));

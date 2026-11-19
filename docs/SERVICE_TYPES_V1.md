@@ -63,3 +63,10 @@ Revisar nessa ordem. Publicar a pilha como uma única entrega funcional, com aut
 Para voltar atrás, restaurar primeiro o Hosting anterior. Se a escolha de tipo ainda não foi usada, é possível restaurar as versões anteriores das Functions afetadas e das Rules. Uma vez gravados Jobs de outros tipos, preservar as Functions capazes de montar e ler seus Runs e manter as Rules aditivas válidas. Uma correção posterior deve preservar os Runs existentes e seus snapshots. Nenhuma etapa requer migração ou reescrita de Runs.
 
 Os novos itens guardam texto em inglês no snapshot junto com as chaves de tradução. O Hosting anterior consegue ler as tarefas pelo texto guardado. Um build de recuperação com o leitor atual preserva também o tipo e a tradução local. Revalidar Rules, inventário de Functions e os dois domínios de Hosting após cada etapa. Os executores existentes de Hosting-only e de atualização de notificações não cobrem esta combinação de alvos.
+
+## Airbnb touch-up (added 2026-11)
+
+`AIRBNB_TOUCH_UP` is a short refresh between stays. It adds no checklist section: the
+Property checklist applies. Releasing it needs, in order: Rules (the allowed list),
+then every Function that imports `functions/src/serviceTypes.js` (older Functions
+normalize an unknown type to `STANDARD`), then Hosting.

@@ -4,12 +4,16 @@ import {
   formatCreatedAt,
   formatDate,
   formatOperationalStatus,
+  formatPrice,
   formatStatus,
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { createIssue } from "../issues/issueService.js";
 import { createJobOffers, respondToJobOffer } from "./jobOfferService.js";
-import { automaticOfferOptInLabel, canOptIntoAutomaticOffers } from "./automaticOffers.js";
+import { automaticOfferOptInLabel, canExtendAutomaticOfferJob, canOptIntoAutomaticOffers } from "./automaticOffers.js";
+import { setRequiredCleanerCount } from "./assignmentService.js";
+import { isAssignmentAwareJob, optionalJobPrice } from "./jobCompatibility.js";
+import { maxCleanersPerJob, requiredCleanerCount } from "./offerSlots.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 import { CleanerSelectionOption, CleanerSelectionStatus, sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 
@@ -19,6 +23,8 @@ export function OfferCleaners({
   isLoading,
   hasError,
   canOfferAutomatically = true,
+  existingOfferCleanerIds = [],
+  property = null,
   onBack,
   onSent,
 }) {
@@ -32,11 +38,21 @@ export function OfferCleaners({
   const currentDistribution = distribution?.jobId === job.id ? distribution.mode : null;
   const automatic = currentDistribution !== "manual" && canOptIn;
   const unavailableAutomatic = currentDistribution === "automatic" && !canOptIn;
+  // "Send to more cleaners" on an open automatic batch keeps it automatic.
+  const extendingAutomatic = canExtendAutomaticOfferJob(job);
+  const isFirstSend = existingOfferCleanerIds.length === 0 && !extendingAutomatic;
+  const canChooseCleanerCount = isFirstSend && isAssignmentAwareJob(job)
+    && ["UNASSIGNED", "OFFERED"].includes(job.operationalStatus) && !(job.assignedCleanerIds?.length);
+  const [cleanerCount, setCleanerCount] = useState(requiredCleanerCount(job));
+  const unavailableCleanerIds = new Set([...existingOfferCleanerIds, ...(job.assignedCleanerIds || [])]);
+  // The amount every new Offer carries: the Job pay, else the Property default.
+  const offerAmount = optionalJobPrice(job.cleanerPayout) ?? optionalJobPrice(property?.defaultCleanerPrice) ?? null;
   const [hasSendError, setHasSendError] = useState(false);
   const context = useCleanerSelectionContext(job, !isLoading && !hasError && cleaners.length > 0);
   const visibleCleaners = sortByCleanerExperience(filterCleanersByName(cleaners, cleanerSearch), context.result);
 
   function toggleCleaner(cleanerId) {
+    if (unavailableCleanerIds.has(cleanerId)) return;
     if (currentDistribution === null) {
       setDistribution({ jobId: job.id, mode: canOptIn ? "automatic" : "manual" });
     }
@@ -61,10 +77,13 @@ export function OfferCleaners({
     setHasSendError(false);
 
     try {
+      if (canChooseCleanerCount && cleanerCount !== requiredCleanerCount(job)) {
+        await setRequiredCleanerCount(job.id, cleanerCount);
+      }
       const updatedJob = await createJobOffers({
         jobId: job.id,
         cleaners: selectedCleaners,
-        ...(canOptIn && automatic ? { automatic: true } : {}),
+        ...((canOptIn && automatic) || extendingAutomatic ? { automatic: true } : offerAmount === null ? {} : { offeredCompensation: offerAmount }),
       });
       onSent(selectedCleaners.length, updatedJob);
     } catch {
@@ -123,15 +142,41 @@ export function OfferCleaners({
             <div className="cleaner-list">
               {visibleCleaners.map((cleaner) => (
                 <CleanerSelectionOption key={cleaner.id} className="cleaner-option"
-                  cleanerId={cleaner.id} name={cleaner.name || translate("common.notProvided")}
+                  cleanerId={cleaner.id} name={unavailableCleanerIds.has(cleaner.id)
+                    ? `${cleaner.name || translate("common.notProvided")} · ${translate("offers.alreadyOffered")}`
+                    : cleaner.name || translate("common.notProvided")}
                   context={context.result} language={language} type="checkbox"
                   checked={selectedCleanerIds.includes(cleaner.id)}
+                  disabled={unavailableCleanerIds.has(cleaner.id)}
                   onChange={() => toggleCleaner(cleaner.id)} />
               ))}
             </div>
           )}
 
-          {(canOptIn || unavailableAutomatic) && (
+          {canChooseCleanerCount && (
+            <div className="offer-spots" data-testid="offer-cleaner-count">
+              <span>{translate("offers.cleanersNeeded")}</span>
+              <span className="offer-spots__stepper" role="group" aria-label={translate("offers.spotsLabel")}>
+                <button className="button" type="button" aria-label={translate("offers.spotsLess")}
+                  disabled={isSending || cleanerCount <= 1}
+                  onClick={() => setCleanerCount((count) => Math.max(1, count - 1))}>−</button>
+                <span className="offer-spots__count" aria-live="polite">{cleanerCount}</span>
+                <button className="button" type="button" aria-label={translate("offers.spotsMore")}
+                  disabled={isSending || cleanerCount >= maxCleanersPerJob}
+                  onClick={() => setCleanerCount((count) => Math.min(maxCleanersPerJob, count + 1))}>+</button>
+              </span>
+            </div>
+          )}
+
+          {offerAmount === null ? (
+            <p className="form-error" role="status" data-testid="offer-amount-missing">{translate("offers.amountMissing")}</p>
+          ) : (
+            <p className="form-helper" data-testid="offer-amount">
+              {translate("offers.amountForCleaner", { amount: formatPrice(offerAmount, translate, language) })}
+            </p>
+          )}
+
+          {(canOptIn || unavailableAutomatic) && !extendingAutomatic && (
             <label className="cleaner-option">
               <input
                 type="checkbox"
@@ -139,7 +184,7 @@ export function OfferCleaners({
                 disabled={isSending}
                 onChange={(event) => setDistribution({ jobId: job.id, mode: event.target.checked ? "automatic" : "manual" })}
               />
-              <span>{automaticOfferOptInLabel(job, language, translate)}</span>
+              <span>{automaticOfferOptInLabel({ ...job, requiredCleanerCount: cleanerCount }, language, translate)}</span>
             </label>
           )}
 

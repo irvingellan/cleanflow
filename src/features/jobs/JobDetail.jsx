@@ -31,7 +31,7 @@ import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 import { sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
-import { isAutomaticOfferJob } from "./automaticOffers.js";
+import { canExtendAutomaticOfferJob, isAutomaticOfferJob } from "./automaticOffers.js";
 import { canAssignCleanerDirectly, canDirectlyFillJob } from "./assignmentService.js";
 import {
   formatCreatedAt,
@@ -245,7 +245,8 @@ export function JobDetail({
     ? canManageAssignmentAwareOffers(job)
     : !isCompleted;
   // An assignment-aware Job can still need additional cleaners before work starts.
-  const canOfferToCleaners = canManageOffers && !automaticOfferJob;
+  // An open automatic batch can also receive more cleaners (server-checked).
+  const canOfferToCleaners = canManageOffers && (!automaticOfferJob || canExtendAutomaticOfferJob(job));
   const knownCleanerNames = Object.fromEntries(
     knownCleaners.map((cleaner) => [cleaner.id, cleaner.name]),
   );

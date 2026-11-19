@@ -608,6 +608,7 @@ export async function createJob({
   notes,
   guestName,
   serviceType,
+  requiredCleanerCount,
 }) {
   const job = buildCurrentJobCreateData({
     organizationId,
@@ -622,6 +623,7 @@ export async function createJob({
     notes,
     guestName,
     serviceType,
+    ...(requiredCleanerCount === undefined ? {} : { requiredCleanerCount }),
   });
   const jobDocument = await addDoc(
     jobsCollection(),

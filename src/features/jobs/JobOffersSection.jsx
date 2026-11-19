@@ -90,6 +90,14 @@ export function JobOffersSection({
         </div>
       </div>
 
+      {isAssignmentAware && automaticOfferJob && sortedOffers.length > 0 && (
+        <div className="offer-spots" data-testid="offer-spots">
+          <span>{translate(isJobFilled(job) ? "offers.spotsFilled" : "offers.automaticSpots", {
+            filled: rosterCleanerIds(job).length, total: requiredCleanerCount(job),
+          })}</span>
+        </div>
+      )}
+
       {isAssignmentAware && !automaticOfferJob && sortedOffers.length > 0 && (
         <div className="offer-spots" data-testid="offer-spots">
           <span>{translate(isJobFilled(job) ? "offers.spotsFilled" : "offers.spotsOpen", {

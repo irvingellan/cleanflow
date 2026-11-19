@@ -990,7 +990,7 @@ test("a partial versioned batch keeps active invitations private and allows only
   assert.equal(partial.offerDistributionClosedAt, undefined);
   await sync(job.id);
   const [pending] = await agendaFor("cleaner-b");
-  assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", null]);
+  assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", 150]);
   assert.doesNotMatch(JSON.stringify(pending), /cleaner-a|Ana Example|assignedCleanerIds|private-|clientPrice|cleanerPayout/);
 
   const db = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
@@ -1229,7 +1229,8 @@ test("the manager explicitly opts in once; a browser cannot forge automatic resp
   assert.equal(offer.offeredChecklistContextRevision, 0);
   assert.ok(offer.publicOfferExpiresAt.toMillis() > Date.now());
   assert.deepEqual([(await job.get()).data().offerDistributionMode, (await job.get()).data().operationalStatus], [autoMode, "OFFERED"]);
-  await assert.rejects(createAutomaticJobOffers.run(managerRequest(payload)), { code: "failed-precondition" });
+  assert.equal(offer.offeredCompensation, 150);
+  await assert.rejects(createAutomaticJobOffers.run(managerRequest(payload)), { code: "already-exists" });
 
   await assertFails(browserJob.update({ offerDistributionMode: "MANUAL" }));
   await assertFails(browserJob.update({ firstAcceptClaim: { cleanerId: "cleaner-a" } }));
@@ -1592,4 +1593,43 @@ test("rescheduling an unversioned automatic batch still invalidates its earlier 
   assert.deepEqual(await assignmentsFor(job), []);
   assert.equal((await original.offer.get()).get("status"), "PENDING");
   assert.equal((await original.offer.get()).get("automaticOfferBatchVersion"), undefined);
+});
+
+
+test("send to more cleaners adds offers to the open automatic batch and never reopens a full one", async () => {
+  const job = jobDocument("auto-extend");
+  await createJob(job.id, { requiredCleanerCount: 2 });
+  for (const [cleanerId] of automaticCleaners) await link(cleanerId);
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] }));
+  const before = (await job.get()).data();
+  const firstOffer = (await job.collection("offers").doc("cleaner-a").get()).data();
+
+  assert.equal((await accept(job.id, uidA)).state, "assigned");
+  const extended = await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-b"] }));
+  assert.deepEqual(extended, { jobId: job.id, count: 1 });
+  const added = (await job.collection("offers").doc("cleaner-b").get()).data();
+  assert.deepEqual(
+    [added.status, added.offerDistributionMode, added.automaticOfferBatchVersion, added.offeredChecklistContextRevision, added.offeredCompensation],
+    ["PENDING", autoMode, 2, before.automaticOfferBatch.openingContextRevision, 150],
+  );
+  assert.equal((await job.collection("offers").doc("cleaner-a").get()).data().publicOfferExpiresAt.isEqual(firstOffer.publicOfferExpiresAt), true);
+  await assert.rejects(createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] })), { code: "already-exists" });
+
+  assert.equal((await accept(job.id, uidB)).state, "assigned");
+  assert.deepEqual((await job.get()).data().assignedCleanerIds, ["cleaner-a", "cleaner-b"]);
+  await assert.rejects(createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-c"] })), { code: "failed-precondition" });
+  assert.equal((await job.collection("offers").doc("cleaner-c").get()).exists, false);
+});
+
+test("an automatic offer falls back to the Property cleaner price when the Job has none", async () => {
+  const job = jobDocument("auto-property-price");
+  await createJob(job.id);
+  await job.update({ cleanerPayout: FieldValue.delete() });
+  await admin.doc(`${root}/properties/property`).update({ defaultCleanerPrice: 95 });
+  try {
+    await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] }));
+    assert.equal((await job.collection("offers").doc("cleaner-a").get()).data().offeredCompensation, 95);
+  } finally {
+    await admin.doc(`${root}/properties/property`).update({ defaultCleanerPrice: FieldValue.delete() });
+  }
 });
