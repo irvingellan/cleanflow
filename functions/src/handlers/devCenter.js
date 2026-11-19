@@ -26,7 +26,7 @@ import { allowedDeveloperUids, devCenterEnvironmentOptions } from "../runtime/de
 import { db, liveMessaging, organizationReference } from "../runtime/firebase.js";
 // Developer tools are deliberately pinned to the default organization: they must
 // never read, seed or clear another company's data, whatever the caller's claim says.
-import { defaultOrganizationId as devCenterOrganizationId } from "../runtime/organization.js";
+import { defaultOrganizationId as devCenterOrganizationId, organizationIdForRequest } from "../runtime/organization.js";
 
 function devCenterEnvironment() {
   return resolveDevCenterEnvironment(devCenterEnvironmentOptions());
@@ -205,10 +205,11 @@ export async function getManagerNotificationDiagnostics(request) {
 }
 
 export async function reportManagerNotificationHealth(request) {
-  await requireOrganizationManager(db, request, devCenterOrganizationId);
+  const organizationId = organizationIdForRequest(request);
+  await requireOrganizationManager(db, request, organizationId);
   return reportManagerDeviceHealth({
     database: db,
-    organizationId: devCenterOrganizationId,
+    organizationId,
     userId: request.auth.uid,
     input: request.data,
   });
@@ -235,12 +236,12 @@ export async function sendDeveloperTestNotification(request) {
 
 export async function sendCurrentManagerTestNotification(request) {
   return dispatchCurrentManagerTestNotification({
-  database: db,
-  organizationId: devCenterOrganizationId,
-  request,
-  sendFcm: (message) => liveMessaging().send(message),
-  logger,
-});
+    database: db,
+    organizationId: organizationIdForRequest(request),
+    request,
+    sendFcm: (message) => liveMessaging().send(message),
+    logger,
+  });
 }
 
 export async function generateDevCenterScenario(request) {

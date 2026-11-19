@@ -127,13 +127,13 @@ report lookup or a manager check); no caller supplies a Storage path.
 
 ## 7. Developer tools and seed tooling
 
-They must stay on the default organization. None of them takes an organization from a request.
+Scenario generation and cleanup target the default organization. Manager device checks use the signed-in manager’s organization.
 
 | Location | Status |
 | --- | --- |
 | `functions/src/handlers/devCenter.js`: scenario generation, cleanup, diagnostics, developer test notification | pinned; made explicit in P4-S12 |
 | `functions/src/devCenterData.js` | pinned; made explicit in P4-S12 |
-| `functions/src/handlers/devCenter.js`: `reportManagerNotificationHealth`, `sendCurrentManagerTestNotification` | these two are **manager** callables that live in the developer module. Pinned, they refuse a manager of any other company | needs decision (D-2) |
+| `functions/src/handlers/devCenter.js`: `reportManagerNotificationHealth`, `sendCurrentManagerTestNotification` | manager callables that verify active membership and use the selected organization for the device health record, cooldown and notification audit | scoped |
 | `functions/src/handlers/managerNotifications.js`: `previewManagerReminder` | developer-only preview; takes the organization from the caller in P4-S12 |
 | `functions/scripts/seedPublicOfferEmulator.js`, `scripts/seed*.js`, `scripts/serviceLifecycleFixtures.mjs` | emulator and seed tooling for the default organization | safe |
 | `scripts/inventoryData.mjs`, `scripts/pilotScorecard.mjs`, `scripts/cleanerPushPilot.mjs`, `scripts/approveCleanerPushPilot.mjs`, `scripts/refactorBaseline.mjs` | operator tooling for the default organization. A second company is not covered by these reports | needs decision (D-3) |
@@ -148,6 +148,11 @@ They must stay on the default organization. None of them takes an organization f
 | `organizations/{org}/cleanerPushAccounts/{uid}/devices/{session}` | yes, and by path | the account ID is derived from organization and cleaner; ownership is compared on every use | safe |
 | `organizations/{org}/managerNotificationInbox/*`, `organizations/{org}/cleanerNotificationInboxes/{cleanerId}/items/*` | yes, and by path | events of another organization are dropped; cleaner access re-checks the session | safe; the caller's organization changes in P4-S10 |
 | `organizations/{org}/managerReminderDeliveries/{id}` | yes, and the ID hashes the organization | one claim per organization and window | fix in P4-S12 (organization as a parameter) |
+
+The manager security gate runs `security/tenantManagerNotifications.test.mjs` for the
+default organization and two additional companies. If the full callable inventory is
+integrated later, point its two manager device entries to this regression suite.
+Developer-only diagnostics and scenario tools retain their separate coverage.
 
 ## Other single-organization assumptions
 
@@ -164,10 +169,6 @@ They must stay on the default organization. None of them takes an organization f
 - **D-1 Reminder time.** Every company gets its reminders at 07:00 and 19:00 in the first
   company's timezone until per-company settings exist. Accept for now, or hold the
   reminder loop until settings exist?
-- **D-2 Two manager callables in the developer module.** Device health reports and the
-  "test this device" notification stay pinned to the default organization under the
-  plan, so a second company's managers are refused there. Nothing leaks, but the feature
-  is missing for them. Move the two to the caller's organization in a follow-up?
 - **D-3 Operator reports.** Inventory, scorecard and push-pilot scripts read the default
   organization only. Add an organization option when a second company starts?
 - **D-4 Feedback.** In-app feedback from any company lands in the same issue tracker.
