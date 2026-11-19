@@ -188,12 +188,15 @@ for (const [own, other] of [["org-a", "org-b"], ["org-b", "org-a"]]) {
     for (const name of ["clients", "properties", "cleaners", "payouts"]) {
       const created = db.doc(`${root(own)}/${name}/created-by-manager`);
       await assertSucceeds(created.set({ organizationId: own, fixture: true }));
-      await assertSucceeds(created.update({ edited: true }));
-      await assertSucceeds(created.delete());
+      await assertSucceeds(created.update({ archivedAt: new Date(0) }));
+      await assertFails(created.delete());
+      assert.equal((await assertSucceeds(created.get())).data().archivedAt.toMillis(), 0);
     }
     const issue = db.doc(`${root(own)}/jobs/job-1/issues/created-by-manager`);
     await assertSucceeds(issue.set({ organizationId: own, status: "OPEN" }));
-    await assertSucceeds(issue.delete());
+    await assertSucceeds(issue.update({ status: "RESOLVED" }));
+    await assertFails(issue.delete());
+    assert.equal((await assertSucceeds(issue.get())).data().status, "RESOLVED");
 
     const proof = manager(own).storage().ref(proofPath(own));
     assert.equal((await assertSucceeds(proof.getMetadata())).size, 3);
