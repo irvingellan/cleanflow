@@ -159,7 +159,7 @@ Developer-only diagnostics and scenario tools retain their separate coverage.
 | Location | What it assumes | Status |
 | --- | --- | --- |
 | Firebase Authentication | one user pool for every company; an account belongs to one organization | safe (design trade-off D7) |
-| `functions/src/handlers/feedback.js` | feedback from every company goes to one issue tracker and includes the reporter's identifier | needs decision (D-4) |
+| `functions/src/handlers/feedback.js` | default-organization feedback uses the existing issue tracker; other organizations store private reports under their own document | scoped |
 | `functions/src/cleanerPushPilot.js`, `CLEANER_PUSH_*` environment | one push pilot gate for the project; readiness records are per organization | safe |
 | `AUTOMATIC_OFFERS_MODE`, `NOTIFICATION_INBOX_MODE` | one switch per project, not per company | safe (per-company settings are a later, optional step) |
 | Hosting | one site and one app for every company | safe |
@@ -171,5 +171,3 @@ Developer-only diagnostics and scenario tools retain their separate coverage.
   reminder loop until settings exist?
 - **D-3 Operator reports.** Inventory, scorecard and push-pilot scripts read the default
   organization only. Add an organization option when a second company starts?
-- **D-4 Feedback.** In-app feedback from any company lands in the same issue tracker.
-  Keep, or route by organization before onboarding a second company?

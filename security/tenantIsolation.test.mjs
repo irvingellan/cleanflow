@@ -226,6 +226,19 @@ test("an account without sign-in, or signed in anonymously, is refused everywher
   }
 });
 
+test("a manager cannot access feedback reports from the browser, including in her own organization", async () => {
+  for (const org of organizations) {
+    const path = `${root(org)}/feedbackReports`;
+    await environment.withSecurityRulesDisabled(ctx => ctx.firestore().doc(`${path}/example`).set({ status: "NEW" }));
+    const report = manager(org, { organizationId: org }).firestore().collection(path);
+    await assertFails(report.doc("example").get());
+    await assertFails(report.get());
+    await assertFails(report.doc("another").set({ status: "NEW" }));
+    await assertFails(report.doc("example").update({ status: "CLOSED" }));
+    await assertFails(report.doc("example").delete());
+  }
+});
+
 test("the organization document itself and unnamed paths are closed to every account", async () => {
   for (const context of [manager("org-a"), cleaner("org-a"), anonymousAccount(), environment.unauthenticatedContext()]) {
     const db = context.firestore();
