@@ -9,9 +9,11 @@ import { resolveCleanerPushMode } from "../cleanerPushPilot.js";
 import { requireActiveCleaner } from "../cleanerHubAccess.js";
 import { notificationOutcomeLog } from "../notificationOutcomeLog.js";
 import { devCenterEnvironmentOptions } from "../runtime/devCenter.js";
-import { db, emulatorPushDisabled, liveMessaging, organizationId } from "../runtime/firebase.js";
+import { db, emulatorPushDisabled, liveMessaging } from "../runtime/firebase.js";
+import { organizationIdForRequest } from "../runtime/organization.js";
 
 async function cleanerPushIdentity(request) {
+  const organizationId = organizationIdForRequest(request);
   return { organizationId, ...await requireActiveCleaner(db, request, organizationId) };
 }
 
@@ -41,6 +43,7 @@ export async function getCleanerPushDeviceStatus(request) {
  * cleaner's active phones; a cleaner sends a test to her own phone only.
  */
 export async function cleanerPushTest(request) {
+  const organizationId = organizationIdForRequest(request);
   const data = request.data;
   if (!data || typeof data !== "object" || Array.isArray(data)
     || !["overview", "send"].includes(data.action)

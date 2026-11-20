@@ -12,6 +12,7 @@ import { collection as serverCollection, getDocs as getServerDocs } from "fireba
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import {
   getAssignedCleanerIds,
   isAssignmentAwareJob,
@@ -21,29 +22,28 @@ import { isAutomaticOfferJob } from "./automaticOffers.js";
 import { buildAssignmentChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
 import { isJobFilled, managerDecisionOf, maxCleanersPerJob, requiredCleanerCount } from "./offerSlots.js";
 
-const organizationId = "cleanflow-demo";
 const assignmentSchemaVersion = 1;
 const assignCleanerDirectlyCall = httpsCallable(functions, "assignCleanerDirectly");
 const removeAutomaticCleanerAssignmentCall = httpsCallable(functions, "removeAutomaticCleanerAssignment");
 
 function jobDocument(jobId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId);
 }
 
 function offersCollection(jobId) {
-  return collection(db, "organizations", organizationId, "jobs", jobId, "offers");
+  return collection(db, "organizations", currentOrganizationId(), "jobs", jobId, "offers");
 }
 
 function offerDocument(jobId, offerId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId, "offers", offerId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId, "offers", offerId);
 }
 
 function assignmentsCollection(jobId) {
-  return collection(db, "organizations", organizationId, "jobs", jobId, "assignments");
+  return collection(db, "organizations", currentOrganizationId(), "jobs", jobId, "assignments");
 }
 
 function assignmentDocument(jobId, assignmentId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId, "assignments", assignmentId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId, "assignments", assignmentId);
 }
 
 function jobFromSnapshot(snapshot) {
@@ -126,7 +126,7 @@ function assertRosterEditable(snapshot) {
   return job;
 }
 
-export function buildAssignmentCreateData(job, offer) {
+export function buildAssignmentCreateData(job, offer, organizationId = currentOrganizationId()) {
   const assignment = {
     schemaVersion: assignmentSchemaVersion,
     organizationId,
@@ -172,7 +172,7 @@ export function assignmentRemovalJobUpdate(job, cleanerId, hasActionableOffers) 
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobAssignments(jobId) {
   const snapshot = await withReadDeadline(getServerDocs(
-    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "assignments"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs", jobId, "assignments"),
   ));
 
   return snapshot.docs
@@ -186,6 +186,7 @@ export async function getJobAssignments(jobId) {
  * or a double click cannot put an extra cleaner on a single-cleaner Job.
  */
 export async function assignInterestedCleaner(jobId, offerId, { addSpot = false } = {}) {
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, offerId);
   const newAssignmentReference = doc(assignmentsCollection(jobId));
@@ -213,7 +214,7 @@ export async function assignInterestedCleaner(jobId, offerId, { addSpot = false 
       throw assignmentError("too-many-cleaners", "This Job already has the maximum number of cleaners.", job);
     }
 
-    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, offer));
+    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, offer, organizationId));
     const jobUpdate = {
       assignedCleanerIds: [...assignedCleanerIds, offer.cleanerId],
       operationalStatus: "ASSIGNED",
@@ -230,8 +231,9 @@ export async function assignInterestedCleaner(jobId, offerId, { addSpot = false 
 }
 
 export async function assignCleanerDirectly(jobId, cleanerId, replacementOfferId) {
+  const jobReference = jobDocument(jobId);
   await assignCleanerDirectlyCall({ jobId, cleanerId, ...(replacementOfferId ? { replacementOfferId } : {}) });
-  return jobFromSnapshot(await getDoc(jobDocument(jobId)));
+  return jobFromSnapshot(await getDoc(jobReference));
 }
 
 async function hasActionableOffers(jobId) {
@@ -243,8 +245,13 @@ async function hasActionableOffers(jobId) {
 }
 
 export async function removeAssignment(jobId, assignmentId, actorUid) {
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const job = assertRosterEditable(await getDoc(jobReference));
+  // The callable derives its company from the current session, not from the Job reference.
+  if (currentOrganizationId() !== organizationId) {
+    throw assignmentError("organization-changed", "The active company changed.");
+  }
   if (isAutomaticOfferJob(job) && job.automaticOfferBatch?.version === 2) {
     await removeAutomaticCleanerAssignmentCall({ jobId, assignmentId });
     return jobFromSnapshot(await getDoc(jobReference));
@@ -288,6 +295,7 @@ export async function removeAssignment(jobId, assignmentId, actorUid) {
 }
 
 export async function replaceAssignment(jobId, assignmentId, replacementOfferId, actorUid) {
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const assignmentReference = assignmentDocument(jobId, assignmentId);
   const offerReference = offerDocument(jobId, replacementOfferId);
@@ -329,7 +337,7 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
     }
 
     transaction.update(assignmentReference, removal);
-    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, replacementOffer));
+    transaction.set(newAssignmentReference, buildAssignmentCreateData(job, replacementOffer, organizationId));
     const jobUpdate = {
       assignedCleanerIds: replacementCleanerIds(
         job,

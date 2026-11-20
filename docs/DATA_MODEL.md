@@ -38,6 +38,14 @@ Potential roles include owner/admin, manager, supervisor, and cleaner. The
 exact authorization model remains **PLANNED**; authentication identity and a
 business profile may remain separate.
 
+### Feedback reports
+
+The default organization keeps its existing feedback destination. Other organizations store
+feedback in `organizations/{organizationId}/feedbackReports/{reportId}`. An active manager
+submits through the callable. It records the message, screen, app version, viewport,
+`createdByUid`, server `createdAt` and initial status `NEW`. The account email stays out
+of the report metadata. Browser clients have no direct access to this collection.
+
 ## Client
 
 A Client is the business/customer responsible for service payment.

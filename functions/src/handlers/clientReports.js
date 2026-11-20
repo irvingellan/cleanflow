@@ -9,10 +9,12 @@ import {
   setReportPhotoVisibilityForManager,
 } from "../clientReportService.js";
 import { getClientPortalForManager, issueClientPortalForManager, revokeClientPortalForManager } from "../clientPortalService.js";
-import { db, organizationId } from "../runtime/firebase.js";
+import { db } from "../runtime/firebase.js";
+import { organizationIdForRequest } from "../runtime/organization.js";
 import { hashToken, newChecklistCapabilityToken } from "../runtime/publicHttp.js";
 
 export async function getClientReportCapability(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
@@ -24,6 +26,7 @@ export async function getClientReportCapability(request) {
 }
 
 export async function setReportPhotoVisibility(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Checklist Run Job is invalid.");
@@ -34,6 +37,7 @@ export async function setReportPhotoVisibility(request) {
 }
 
 export async function createClientReport(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
@@ -63,6 +67,7 @@ export async function createClientReport(request) {
 }
 
 export async function revokeClientReport(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const jobId = request.data?.jobId;
   if (!validChecklistRunJobId(jobId)) throw new HttpsError("invalid-argument", "Client report request is invalid.");
@@ -78,6 +83,7 @@ export async function revokeClientReport(request) {
  * link. The link itself is returned only when it is created.
  */
 export async function clientPortalAccess(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   const clientId = request.data?.clientId;
   const action = request.data?.action;
