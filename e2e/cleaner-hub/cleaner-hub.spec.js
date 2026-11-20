@@ -577,13 +577,19 @@ test("reports and approves worked time in the signed-in experiences", async ({ p
     await expect(cleaner.getByRole("heading", { name: "Informar minhas horas" })).toBeVisible();
     await expect(cleaner.getByLabel("Horas", { exact: true })).toHaveValue("2");
     await expect(cleaner.getByLabel("Minutos", { exact: true })).toHaveValue("0");
-    await evidence(cleaner, "stage-b-report-light");
+    const hours = cleaner.locator("section").filter({ has: cleaner.getByRole("heading", { name: "Informar minhas horas" }) }).last();
+    await evidence(hours, "stage-b-report-light");
     await cleaner.getByLabel("Horas", { exact: true }).fill("1");
     await cleaner.getByLabel("Minutos", { exact: true }).fill("58");
     await cleaner.getByRole("button", { name: "Salvar horas" }).click();
     await expect(cleaner.getByText("Aguardando aprovação · 2 h")).toBeVisible();
-    await cleaner.emulateMedia({ colorScheme: "dark" });
-    await evidence(cleaner, "stage-b-waiting-dark");
+    await cleaner.getByRole("button", { name: "Conta", exact: true }).click();
+    await cleaner.getByRole("button", { name: "Escuro", exact: true }).click();
+    await expect(cleaner.locator(".hb-root")).toHaveAttribute("data-theme", "dark");
+    await cleaner.getByRole("button", { name: "Agenda", exact: true }).click();
+    await cleaner.getByRole("button", { name: /^Agendadas/ }).click();
+    await cleaner.locator(`[data-job-id="${job.id}"]`).click();
+    await evidence(hours, "stage-b-waiting-dark");
 
     await loginManager(page, fixture);
     await page.setViewportSize({ width: 375, height: 812 });
@@ -593,7 +599,8 @@ test("reports and approves worked time in the signed-in experiences", async ({ p
     await page.getByLabel("Hours", { exact: true }).fill("1");
     await page.getByLabel("Minutes", { exact: true }).fill("55");
     await page.getByRole("heading", { name: "Hours to approve" }).scrollIntoViewIfNeeded();
-    await evidence(page, "stage-b-manager-approval");
+    const approvals = page.locator("section").filter({ has: page.getByRole("heading", { name: "Hours to approve" }) }).last();
+    await evidence(approvals, "stage-b-manager-approval");
     await page.getByRole("button", { name: "Approve hours" }).click();
     await expect(page.getByText(/Approved · 1 h 55 min/)).toBeVisible();
     await expect(cleaner.getByText(/Aprovadas · 1 h 55 min/)).toBeVisible();
@@ -604,7 +611,7 @@ test("reports and approves worked time in the signed-in experiences", async ({ p
     await page.getByRole("button", { name: "Approve hours" }).click();
     await expect(page.getByText(/Approved · 2 h 10 min/)).toBeVisible();
     await expect(cleaner.getByText(/Aprovadas · 2 h 10 min/)).toBeVisible();
-    await evidence(cleaner, "stage-b-approved-dark");
+    await evidence(hours, "stage-b-approved-dark");
   } finally {
     await context.close();
   }

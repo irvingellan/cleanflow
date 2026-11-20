@@ -145,3 +145,11 @@ describe("issued statement and payments", () => {
     expect(message).not.toContain("Example St");
   });
 });
+
+it("accepts the rounded aggregate of approved crew minutes including zero and more than a day", () => {
+  const hours = { source: "APPROVED_ASSIGNMENTS", approved: true, roster: ["a", "b"] };
+  expect(billableMinutes({ ...hours, approvedMinutes: 0 })).toBe(0);
+  expect(billableMinutes({ ...hours, approvedMinutes: 1800 })).toBe(1800);
+  expect(billableMinutes({ ...hours, approvedMinutes: 3000 })).toBeNull();
+  expect(billableMinutes({ approved: true, approvedMinutes: 1800 })).toBeNull();
+});
