@@ -135,13 +135,22 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
     });
     const ownOffer = acceptedOfferFor(cleanerId, assignment, job, jobOffers);
     const agreement = ownOffer ?? (assignment?.source === "MANAGER_DIRECT" ? assignment.paySnapshot : null);
+    const pay = offerPayForRecipient(agreement, job, cleanerId);
+    const canReportTime = assignment && (pay.offeredPay?.mode === "HOURLY"
+      || (!agreement && job.pay?.mode === "HOURLY"));
+    const workedTime = canReportTime && {
+      reportedMinutes: assignment.reportedWork?.minutes ?? null,
+      approvedMinutes: assignment.approvedWork?.minutes ?? null,
+      payoutCents: assignment.payoutCents ?? null,
+    };
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, job),
       kind: agendaKinds.assigned,
       ...holderDetails,
       acknowledged: Boolean(assignment?.cleanerAcknowledgedAt),
       offerStatus: null,
-      ...offerPayForRecipient(agreement, job, cleanerId),
+      ...pay,
+      ...(workedTime && { workedTime }),
       checklist: { ...checklistSummary },
       checklistStatus: checklistSummary.status,
       checklistStarted: checklistSummary.started,
@@ -204,6 +213,7 @@ const comparedFields = [
 export function sameEntry(previous, next) {
   return Boolean(previous) && isDeepStrictEqual(previous.reschedule, next.reschedule)
     && isDeepStrictEqual(previous.offeredPay, next.offeredPay)
+    && isDeepStrictEqual(previous.workedTime, next.workedTime)
     && comparedFields.every((field) => (previous[field] ?? null) === (next[field] ?? null));
 }
 

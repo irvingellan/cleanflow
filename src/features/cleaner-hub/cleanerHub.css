@@ -626,3 +626,8 @@
 .hb-root .cf-notice:has(.hb-reschedule) { grid-template-columns: auto minmax(0,1fr); align-items: start; }
 .hb-root .cf-notice:has(.hb-reschedule) .cf-notice__actions { grid-column: 1 / -1; flex-flow: row wrap; min-width: 0; }
 .hb-facts dd { white-space: pre-line; }
+
+.worked-time-form { display: grid; gap: 8px; }
+.worked-time-form__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.worked-time-form__fields label { display: grid; gap: 4px; font-weight: 650; }
+.worked-time-form__fields input { min-height: 44px; font-size: 16px; }
