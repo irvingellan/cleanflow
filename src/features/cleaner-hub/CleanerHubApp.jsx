@@ -22,6 +22,7 @@ import {
   normalizeJobAccess,
 } from "./cleanerAgendaModel.js";
 import { detectHubLanguage, hubLanguages, hubMoney, hubTranslate } from "./cleanerHubMessages.js";
+import { RescheduleResponse } from "./RescheduleResponse.jsx";
 import { useCleanerHub } from "./useCleanerHub.js";
 import "./cleanerHub.css";
 
@@ -165,7 +166,27 @@ function monthLabel(t, month) {
 
 const checklistChipStates = ["available", "started", "submitted"];
 
-function JobCard({ t, entry, onOpen }) {
+function AgendaResponse({ t, entry, onAnswer, propertyName }) {
+  if (entry.kind !== "ASSIGNED" || !entry.reschedule) return null;
+  return <RescheduleResponse key={entry.reschedule.scheduleRevision} language={t.lang}
+    propertyName={propertyName} reschedule={entry.reschedule} disabled={entry.rescheduleBusy}
+    onAnswer={onAnswer && (decision => onAnswer(entry, decision))} />;
+}
+
+function ScheduleFeedback({ t, feedback }) {
+  const status = useRef(null);
+  useLayoutEffect(() => {
+    if (feedback && document.activeElement === document.body) status.current?.focus({ preventScroll: true });
+  }, [feedback]);
+  if (!feedback) return null;
+  const key = { CONFIRMED: "inbox.reschedule.confirmed", DECLINED: "inbox.reschedule.declined",
+    stale: "inbox.reschedule.stale", error: "inbox.actionError" }[feedback.state];
+  return <p className="hb-schedule-feedback" ref={status} tabIndex={-1} role={["stale", "error"].includes(feedback.state) ? "alert" : "status"}>
+    {feedback.propertyName && <strong>{feedback.propertyName} · </strong>}{inboxMessage(t.lang, key)}
+  </p>;
+}
+
+function JobCard({ t, entry, onOpen, onAnswer }) {
   const offer = entry.kind === "OFFER";
   const taken = offer && entry.offerStatus === "ALREADY_TAKEN";
   const checklist = offer ? null : checklistSituation(entry);
@@ -195,17 +216,18 @@ function JobCard({ t, entry, onOpen }) {
         </span>
         <HubIcon name="arrowR" size={16} />
       </button>
+      {onAnswer && <AgendaResponse t={t} entry={entry} onAnswer={onAnswer} />}
     </li>
   );
 }
 
-function DayGroups({ t, entries, today, onOpen }) {
+function DayGroups({ t, entries, today, onOpen, onAnswer }) {
   const days = [...new Set(entries.map((entry) => entry.scheduledDate || ""))];
   return days.map((day) => (
     <section key={day || "none"} className="hb-day" aria-label={dayLabel(t, day, today)}>
       <h3 className="mw-micro">{dayLabel(t, day, today)}</h3>
       <ul className="hb-jobs">
-        {entries.filter((entry) => (entry.scheduledDate || "") === day).map((entry) => <JobCard key={entry.id} t={t} entry={entry} onOpen={onOpen} />)}
+        {entries.filter((entry) => (entry.scheduledDate || "") === day).map((entry) => <JobCard key={entry.id} t={t} entry={entry} onOpen={onOpen} onAnswer={onAnswer} />)}
       </ul>
     </section>
   ));
@@ -217,7 +239,7 @@ function DayGroups({ t, entries, today, onOpen }) {
  * the months that have work. The count is the loaded list, so when the
  * schedule is not confirmed right now the summary says it may be incomplete.
  */
-function Scheduled({ t, entries, today, live, onOpen, navigation, setNavigation }) {
+function Scheduled({ t, entries, today, live, onOpen, onAnswer, navigation, setNavigation }) {
   const months = agendaMonths(entries);
   const { mode, month } = navigation;
   const setMode = (mode) => setNavigation((current) => ({ ...current, mode }));
@@ -260,12 +282,12 @@ function Scheduled({ t, entries, today, live, onOpen, navigation, setNavigation 
             <button type="button" className="hb-iconbtn" disabled={position >= months.length - 1} onClick={() => setMonth(months[position + 1])} aria-label={t("hb.sched.nextMonth")}><HubIcon name="arrowR" size={18} /></button>
           </div>
           <p className="mw-hint">{t("hb.sched.monthOf", { n: position + 1, total: months.length })}</p>
-          <DayGroups t={t} entries={entriesInMonth(entries, current)} today={today} onOpen={onOpen} />
+          <DayGroups t={t} entries={entriesInMonth(entries, current)} today={today} onOpen={onOpen} onAnswer={onAnswer} />
         </>
       ) : months.map((key) => (
         <section key={key || "none"} className="hb-month" aria-label={monthLabel(t, key)}>
           <h3 className="hb-month-title">{monthLabel(t, key)} <span className="mw-sec tnum">· {entriesInMonth(entries, key).length}</span></h3>
-          <DayGroups t={t} entries={entriesInMonth(entries, key)} today={today} onOpen={onOpen} />
+          <DayGroups t={t} entries={entriesInMonth(entries, key)} today={today} onOpen={onOpen} onAnswer={onAnswer} />
         </section>
       ))}
     </div>
@@ -278,13 +300,22 @@ function Agenda({ t, hub, name, segment, setSegment, go, today, scheduledNavigat
   const { schedule, freshness } = hub;
   const list = segment === "today" ? schedule.today : segment === "upcoming" ? schedule.upcoming : schedule.completed;
   const pendingOffers = schedule.offers.filter((entry) => entry.offerStatus === "PENDING").length;
-  const pendingChecklists = [...schedule.today, ...schedule.upcoming].filter((entry) => checklistSituation(entry).pending);
+  const openJobs = [...schedule.today, ...schedule.upcoming];
+  const pendingChanges = openJobs.filter(entry => entry.reschedule?.state === "PENDING");
+  const pendingChecklists = openJobs.filter((entry) => checklistSituation(entry).pending);
   return (
     <div className="hb-screen">
       <header className="hb-hello">
         <h2>{name ? t("hb.hello", { name }) : t("hb.helloNoName")}</h2>
         <p className="mw-sec">{t("hb.helloSub", { count: schedule.openCount })}</p>
       </header>
+      <ScheduleFeedback t={t} feedback={hub.scheduleFeedback} />
+      {pendingChanges.map(entry => (
+        <section key={entry.jobId} data-reschedule-banner={entry.jobId}
+          aria-label={[inboxMessage(t.lang, "inbox.reschedule.title"), entry.propertyName].filter(Boolean).join(" · ")}>
+          <AgendaResponse t={t} entry={entry} propertyName={entry.propertyName} onAnswer={hub.answerReschedule} />
+        </section>
+      ))}
       <FreshnessBanner t={t} freshness={freshness} onRetry={hub.retryStartup} online={hub.online} />
       {pendingChecklists.length > 0 && (
         <section className="hb-clnotice" aria-label={t("hb.clpending.title", { count: pendingChecklists.length })} data-testid="checklist-pending">
@@ -311,9 +342,9 @@ function Agenda({ t, hub, name, segment, setSegment, go, today, scheduledNavigat
         ))}
       </div>
       {segment === "upcoming"
-        ? <Scheduled t={t} entries={list} today={today} live={freshness.state === "live"} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} navigation={scheduledNavigation} setNavigation={setScheduledNavigation} />
+        ? <Scheduled t={t} entries={list} today={today} onAnswer={hub.answerReschedule} live={freshness.state === "live"} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} navigation={scheduledNavigation} setNavigation={setScheduledNavigation} />
         : list.length
-          ? <DayGroups t={t} entries={list} today={today} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} />
+          ? <DayGroups t={t} entries={list} today={today} onAnswer={hub.answerReschedule} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} />
           : (
             <div className={`hb-empty${freshness.state === "live" ? "" : " is-uncertain"}`}>
               <HubIcon name={freshness.state === "live" ? "checkCircle" : "info"} size={22} />
@@ -411,9 +442,13 @@ function JobInstructions({ t, notes }) {
 }
 
 function RemovedService({ t, label, message }) {
+  const status = useRef(null);
+  useLayoutEffect(() => {
+    if (message && document.activeElement === document.body) status.current?.focus({ preventScroll: true });
+  }, [message]);
   return (
     <div className="hb-screen">
-      <div className="hb-empty is-uncertain" role="status">
+      <div className="hb-empty is-uncertain" role="status" ref={status} tabIndex={-1}>
         <HubIcon name="userX" size={22} />
         <p>{message || (label ? inboxMessage(t.lang, "inbox.event.UNASSIGNED") : t("hb.job.notYours"))}</p>
         {label && <strong>{label}</strong>}
@@ -450,7 +485,8 @@ function JobView({ t, hub, entry, jobId, today, removedLabel }) {
     return () => { checklistAttempt.current += 1; };
   }, [jobId, canTryChecklist]);
   if (!entry || entry.kind !== "ASSIGNED") {
-    return <RemovedService t={t} label={removedLabel} />;
+    const declined = hub.scheduleFeedback?.jobId === jobId && hub.scheduleFeedback.state === "DECLINED";
+    return <RemovedService t={t} label={removedLabel} message={declined ? inboxMessage(t.lang, "inbox.reschedule.declined") : null} />;
   }
   const status = assignedStatusKey(entry);
   const situation = checklistSituation(entry);
@@ -480,6 +516,8 @@ function JobView({ t, hub, entry, jobId, today, removedLabel }) {
         <span className={`hb-status is-${status}`}>{t(`hb.st.${status}`)}</span>
         <h2>{entry.propertyName || "—"}</h2>
       </div>
+      {hub.scheduleFeedback?.jobId === jobId && ["error", "stale"].includes(hub.scheduleFeedback.state) && <ScheduleFeedback t={t} feedback={hub.scheduleFeedback} />}
+      <AgendaResponse t={t} entry={entry} onAnswer={hub.answerReschedule} />
       <dl className="hb-facts">
         <div><dt><HubIcon name="calendar" size={15} />{t("hb.job.when")}</dt><dd>{`${dayLabel(t, entry.scheduledDate, today)} · ${t.time(entry.scheduledStart) || t("hb.timeNotSet")}`}</dd></div>
         <div><dt><HubIcon name="pin" size={15} />{t(entry.address ? "hb.job.address" : "hb.job.where")}</dt><dd>{entry.address || entry.propertyName || "—"}</dd></div>
@@ -806,7 +844,8 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   }, [sessionScope]);
   const active = session.status === "signed-in" && hub.membership.state === "active" && !hub.revoked;
   const inbox = useNotificationInbox({
-    role: "CLEANER", sessionKey: active ? session.sessionId : null, service: hubOptions?.inboxService,
+    role: "CLEANER", sessionKey: active ? sessionScope : null, service: hubOptions?.inboxService,
+    scheduleResponses: hub.scheduleResponses,
   });
   const push = useCleanerNotificationSettings({ session, active, platform, displayMode, language: t.lang });
   const browserTitle = `${t("hb.brand")} · CleanFlow`;

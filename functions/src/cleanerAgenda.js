@@ -1,7 +1,9 @@
+import { isDeepStrictEqual } from "node:util";
 import { FieldValue } from "firebase-admin/firestore";
 import { publicOfferState } from "./publicOfferResponseService.js";
 import { automaticOfferBatchVersion, FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
+import { projectCleanerReschedule, rosterScheduleConfirmation } from "./rescheduleConfirmations.js";
 import { normalizeServiceType } from "./serviceTypes.js";
 
 /**
@@ -116,7 +118,7 @@ function acceptedOfferFor(cleanerId, assignment, job, offers) {
     && ["ACCEPTED", "INTERESTED", "SELECTED"].includes(offer.status));
 }
 
-export function computeAgendaEntries({ organizationId, jobId, job, address = null, offers = [], assignments = [], now = new Date(), checklist = null }) {
+export function computeAgendaEntries({ organizationId, jobId, job, address = null, offers = [], assignments = [], now = new Date(), checklist = null, scheduleHistory = null }) {
   const checklistSummary = checklist || { status: "NONE", started: false };
   const entries = new Map();
   if (!job || job.archivedAt || (job.organizationId != null && job.organizationId !== organizationId)) return entries;
@@ -130,6 +132,9 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
   for (const cleanerId of roster) {
     const assignment = assignments.find(item => item?.cleanerId === cleanerId && item.isActive === true
       && belongsToJob(item, organizationId, jobId));
+    const reschedule = projectCleanerReschedule({
+      job, cleanerId, organizationId, jobId, scheduleRevision: job.scheduleRevision, assignment, history: scheduleHistory,
+    });
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, job),
       kind: agendaKinds.assigned,
@@ -140,6 +145,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
       checklist: { ...checklistSummary },
       checklistStatus: checklistSummary.status,
       checklistStarted: checklistSummary.started,
+      ...(Number.isSafeInteger(job.scheduleRevision) && job.scheduleRevision > 0 && { reschedule }),
     });
   }
   const activeReplacement = job.manualReplacementOffer?.offerId;
@@ -196,7 +202,8 @@ const comparedFields = [
 ];
 
 export function sameEntry(previous, next) {
-  return Boolean(previous) && comparedFields.every((field) => (previous[field] ?? null) === (next[field] ?? null));
+  return Boolean(previous) && isDeepStrictEqual(previous.reschedule, next.reschedule)
+    && comparedFields.every((field) => (previous[field] ?? null) === (next[field] ?? null));
 }
 
 /**
@@ -269,8 +276,13 @@ export async function syncCleanerAgendaForJob(database, {
       transaction.get(runRef.collection("evidenceState").doc("current")),
     ]);
     const job = jobSnapshot.exists ? jobSnapshot.data() : null;
-    const propertySnapshot = job && !job.archivedAt && validId(job.propertyId)
-      ? await transaction.get(organization.collection("properties").doc(job.propertyId)) : null;
+    const hasConfirmation = rosterCleanerIds(job).some(cleanerId =>
+      rosterScheduleConfirmation(job, cleanerId, job.scheduleRevision, organizationId));
+    const [propertySnapshot, historySnapshot] = await Promise.all([
+      job && !job.archivedAt && validId(job.propertyId)
+        ? transaction.get(organization.collection("properties").doc(job.propertyId)) : null,
+      hasConfirmation ? transaction.get(jobRef.collection("scheduleHistory").doc(String(job.scheduleRevision))) : null,
+    ]);
     const property = propertySnapshot?.data();
     const address = property && (property.organizationId == null || property.organizationId === organizationId)
       ? property.address : null;
@@ -281,7 +293,8 @@ export async function syncCleanerAgendaForJob(database, {
       job,
       address,
       offers: offersSnapshot.docs.map((snapshot) => ({ ...snapshot.data(), offerReferenceId: snapshot.id })),
-      assignments: assignmentsSnapshot.docs.map((snapshot) => snapshot.data()),
+      assignments: assignmentsSnapshot.docs.map((snapshot) => ({ ...snapshot.data(), id: snapshot.id })),
+      scheduleHistory: historySnapshot?.data(),
       now: current,
       checklist: checklistAgendaSummary({
         run: runSnapshot.exists ? runSnapshot.data() : null,
@@ -302,6 +315,7 @@ export async function syncCleanerAgendaForJob(database, {
     let deleted = 0;
     for (const [cleanerId, entry] of next) {
       if (sameEntry(previous.get(cleanerId), entry)) continue;
+      // Replace the entire projection so fields from an earlier recipient state disappear.
       transaction.set(agenda.doc(agendaEntryId(cleanerId, jobId)), { ...entry, syncedAt: FieldValue.serverTimestamp() });
       written += 1;
     }

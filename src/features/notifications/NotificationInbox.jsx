@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanerMessagingWorkerPath, cleanerPushReceiptEvent } from "./cleanerPushBinding.js";
 import { Icon } from "../../components/Icon.jsx";
 import { formatDate, removedServiceLabel } from "../../lib/presentation.js";
+import { RescheduleResponse } from "../cleaner-hub/RescheduleResponse.jsx";
 import { inboxMessage } from "./notificationInboxMessages.js";
 import { notificationInboxEnabled } from "./notificationInboxMode.js";
 import { notificationInboxService } from "./notificationInboxService.js";
@@ -13,7 +14,17 @@ function unreadCount(items) {
   return items.filter((item) => item.read === false).length;
 }
 
-export function useNotificationInbox({ role, sessionKey, service = notificationInboxService }) {
+function noticeWithResponse(item, state, revision) {
+  if (!item.reschedule || item.reschedule.scheduleRevision !== revision) return item;
+  if (state === "DECLINED") {
+    const { jobId, ...notice } = item;
+    return { ...notice, serviceLabel: null, openable: false, reschedule: { state, scheduleRevision: revision } };
+  }
+  if (state === "CONFIRMED") return { ...item, reschedule: { ...item.reschedule, state } };
+  return { ...item, rescheduleBusy: state === "sending" || state === "stale" };
+}
+
+export function useNotificationInbox({ role, sessionKey, service = notificationInboxService, scheduleResponses }) {
   const enabled = notificationInboxEnabled();
   const [snapshot, setSnapshot] = useState({ sessionKey: null, state: "loading", ...empty });
   const current = useRef(null);
@@ -110,13 +121,7 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
       request.version += 1;
       setSnapshot(previous => ({
         ...previous,
-        items: previous.items.map(item => item.id === id && item.reschedule?.scheduleRevision === result.scheduleRevision
-          ? {
-            ...item,
-            ...(result.state === "DECLINED" ? { openable: false, serviceLabel: null } : {}),
-            reschedule: result.state === "DECLINED"
-              ? { state: result.state } : { ...item.reschedule, state: result.state },
-          } : item),
+        items: previous.items.map(item => item.id === id ? noticeWithResponse(item, result.state, result.scheduleRevision) : item),
       }));
     }
     if (["read", "opened", "unavailable"].includes(result?.state)) {
@@ -131,11 +136,23 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
   }
 
   const data = enabled && snapshot.sessionKey === sessionKey ? snapshot : { state: "loading", ...empty };
+  const items = scheduleResponses?.byJob.size ? data.items.map(item => {
+    const reply = item.jobId && scheduleResponses.byJob.get(item.jobId);
+    return reply ? noticeWithResponse(item, reply.state, reply.revision) : item;
+  }) : data.items;
+  function respondToReschedule(id, fields) {
+    const send = () => action("respondToReschedule", id, fields);
+    const item = items.find(notice => notice.id === id);
+    if (scheduleResponses && item?.jobId && item.reschedule?.scheduleRevision === fields.scheduleRevision) {
+      return scheduleResponses.submit({ jobId: item.jobId, revision: fields.scheduleRevision, propertyName: item.serviceLabel }, send);
+    }
+    return send();
+  }
   return {
-    ...data, refresh,
+    ...data, items, refresh,
     loadOlder: () => data.nextCursor && load(data.nextCursor),
     mark: (id) => action("mark", id), open: (id) => action("open", id),
-    respondToReschedule: role === "CLEANER" ? (id, fields) => action("respondToReschedule", id, fields) : null,
+    respondToReschedule: role === "CLEANER" ? respondToReschedule : null,
   };
 }
 
@@ -262,9 +279,6 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
               ? [formatDate(automatic.scheduledDate, null, language), automatic.scheduledStart].filter(Boolean).join(" · ")
               : null;
             const decision = item.reschedule?.state;
-            const proposedSchedule = decision === "PENDING" && item.reschedule.scheduledDate
-              ? [formatDate(item.reschedule.scheduledDate, null, language), item.reschedule.scheduledStart].filter(Boolean).join(" · ")
-              : null;
             return (
               <li key={item.id} className={`cf-notice cf-tone--${look.tone}${item.read ? "" : " is-unread"}`}>
                 <span className="cf-notice__icon" aria-hidden="true"><Icon name={look.icon} size={20} /></span>
@@ -279,21 +293,15 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
                   {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
                   {automatic?.cleanerLabel && <p>{t("inbox.automatic.assignee", { cleaner: automatic.cleanerLabel })}</p>}
                   {schedule && <p className="cf-notice__service">{schedule}</p>}
-                  {proposedSchedule && <p>{t("inbox.reschedule.prompt", { schedule: proposedSchedule })}</p>}
-                  {["CONFIRMED", "DECLINED"].includes(decision)
-                    && <p role="status">{t(decision === "CONFIRMED" ? "inbox.reschedule.confirmed" : "inbox.reschedule.declined")}</p>}
+                  {item.reschedule && <RescheduleResponse key={item.reschedule.scheduleRevision} language={language}
+                    reschedule={item.reschedule} disabled={busyId !== null || item.rescheduleBusy}
+                    onAnswer={inbox.respondToReschedule ? decision => respond(item, decision) : undefined} />}
                   {!item.openable && !removedLabel && decision !== "DECLINED" && <p className="cf-notice__unavailable">{t(item.type === "PUSH_TEST" ? "inbox.testNotice" : "inbox.targetUnavailable")}</p>}
                 </div>
                 <div className="cf-notice__actions">
                   {item.openable && <button type="button" className={`button${item.read ? "" : " button--primary"}`} disabled={busyId !== null} onClick={() => act("open", item.id)}>
                     {t(look.action)}
                   </button>}
-                  {proposedSchedule && inbox.respondToReschedule && <>
-                    <button type="button" className="button button--primary" disabled={busyId !== null}
-                      onClick={() => respond(item, "CONFIRMED")}>{t("inbox.reschedule.confirm")}</button>
-                    <button type="button" className="button" disabled={busyId !== null}
-                      onClick={() => respond(item, "DECLINED")}>{t("inbox.reschedule.decline")}</button>
-                  </>}
                   {!item.read && <button type="button" className="button button--text" disabled={busyId !== null} onClick={() => act("mark", item.id)}>{t("inbox.markRead")}</button>}
                 </div>
               </li>

@@ -596,3 +596,32 @@
   background: transparent;
   box-shadow: none;
 }
+
+/* The same dated decision appears on the agenda, the Job and its private notice. */
+.hb-reschedule {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--cf-attention-border);
+  border-radius: 14px;
+  color: var(--cf-text);
+  background: var(--cf-attention-bg);
+  overflow-wrap: anywhere;
+}
+.hb-reschedule-heading { color: var(--cf-attention-text); font-size: 1rem; line-height: 1.35; }
+.hb-reschedule-heading span { font-weight: 600; }
+.hb-reschedule-times { display: grid; gap: 3px; margin: 0; }
+.hb-reschedule-times > div { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px; align-items: baseline; }
+.hb-reschedule-times dt { color: var(--cf-text-secondary); font-size: .875rem; }
+.hb-reschedule-times dd { margin: 0; font-variant-numeric: tabular-nums; }
+.hb-reschedule-times > div:last-child dd { font-weight: 650; }
+.hb-reschedule > p { margin: 0; color: var(--cf-attention-text); }
+.hb-reschedule-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hb-reschedule-actions .button { flex: 1 1 80px; min-height: 44px; justify-content: center; line-height: 1.25; white-space: normal; }
+.hb-reschedule-actions .hb-decline { border-color: var(--cf-risk-text); color: var(--cf-risk-text); background: var(--cf-risk-bg); }
+.hb-reschedule-result, .hb-schedule-feedback { margin: 0; padding: 8px 12px; border-radius: 10px; color: var(--cf-success-text); background: var(--cf-success-bg); }
+.hb-schedule-feedback[role="alert"] { color: var(--cf-warning-text); background: var(--cf-warning-bg); }
+.hb-jobs li > .hb-reschedule, .hb-jobs li > .hb-reschedule-result { margin-top: 4px; }
+.hb-root .cf-notice:has(.hb-reschedule) { grid-template-columns: auto minmax(0,1fr); align-items: start; }
+.hb-root .cf-notice:has(.hb-reschedule) .cf-notice__actions { grid-column: 1 / -1; flex-flow: row wrap; min-width: 0; }

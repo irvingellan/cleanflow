@@ -2,6 +2,7 @@ import { onIdTokenChanged, signInWithCustomToken, signOut } from "firebase/auth"
 import { clearIndexedDbPersistence, collection, disableNetwork, doc, enableNetwork, getDocFromServer, getDocsFromServer, onSnapshot, query, terminate, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { prepareCleanerPushAccountSwitch, prepareCleanerPushSignOut } from "../notifications/cleanerPushService.js";
+export { loadAgendaReschedules, respondToAgendaReschedule } from "../notifications/notificationInboxService.js";
 import { cleanerHubFirebase } from "./cleanerHubFirebase.js";
 
 /**
