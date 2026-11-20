@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { getAllCleaners } from "../cleaners/cleanerService.js";
 import { getPayoutProofUrl, uploadPayoutProof } from "./payoutProofService.js";
 import { groupUnpaidJobsByCleaner } from "./payoutGrouping.js";
@@ -13,6 +14,13 @@ import {
  * inside the existing Payout services.
  */
 export function usePayoutsController({ view }) {
+  const organizationId = currentOrganizationId();
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const [payoutGroups, setPayoutGroups] = useState([]);
   const [recentPayouts, setRecentPayouts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,7 +71,11 @@ export function usePayoutsController({ view }) {
     });
   }
 
-  function attachProof(payoutId, file, onProgress) {
+  async function attachProof(payoutId, file, onProgress) {
+    // Recording a payout can finish after the manager session that started it has closed.
+    if (!mounted.current || currentOrganizationId() !== organizationId) {
+      throw Object.assign(new Error("The active company changed."), { code: "organization-changed" });
+    }
     return uploadPayoutProof({ payoutId, file, onProgress });
   }
 

@@ -3,8 +3,8 @@ import { rosterCleanerIds } from "../jobs/offerSlots.js";
 import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import { servicePeriod } from "../weekly-close/weeklyCloseModel.js";
 import { buildCleanerAgenda } from "./cleanerAgendaModel.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const batchSize = 30;
 
 async function readByIds(collectionName, values, pick, signal) {
@@ -12,7 +12,7 @@ async function readByIds(collectionName, values, pick, signal) {
   const rows = [];
   for (let offset = 0; offset < ids.length; offset += batchSize) {
     signal?.throwIfAborted();
-    const docs = await getServerRecordsById(organizationId, collectionName, ids.slice(offset, offset + batchSize));
+    const docs = await getServerRecordsById(currentOrganizationId(), collectionName, ids.slice(offset, offset + batchSize));
     rows.push(...docs.map((doc) => ({ id: doc.id, ...pick(doc.data()) })));
   }
   return rows;

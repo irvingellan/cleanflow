@@ -91,6 +91,8 @@ jobs:
       - run: npm run build:emulators
       - run: npm run test:security
       - run: npm run test:cleaner-hub:security
+      - run: npm run test:tenant-isolation
+      - run: npm run test:tenant-isolation:functions
       - run: npm run test:e2e
       - run: npm run test:cleaner-hub:e2e
       - name: Verify image processing and pending-thumbnail regressions in Chromium and WebKit

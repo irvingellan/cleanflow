@@ -10,8 +10,8 @@ import {
 import { getServerRecordsById, serverFirestore } from "../../services/firebase/serverReads.js";
 import { cleanerLookupBatches } from "../cleaners/cleanerLookupBatches.js";
 import { managerDecisionOf } from "../jobs/offerSlots.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
 const maxConcurrentDashboardReads = 4;
 
@@ -40,11 +40,11 @@ export function createDashboardRead(isActive) {
 }
 
 function jobsCollection() {
-  return collection(serverFirestore(), "organizations", organizationId, "jobs");
+  return collection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
 }
 
 function propertiesCollection() {
-  return collection(serverFirestore(), "organizations", organizationId, "properties");
+  return collection(serverFirestore(), "organizations", currentOrganizationId(), "properties");
 }
 
 export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, weekStart, nextWeekStart }, read) {
@@ -100,7 +100,7 @@ export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, w
 }
 
 async function readJobRecords(jobId, subcollection, status, max, read) {
-  const records = collection(serverFirestore(), "organizations", organizationId, "jobs", jobId, subcollection);
+  const records = collection(serverFirestore(), "organizations", currentOrganizationId(), "jobs", jobId, subcollection);
   const snapshot = await read(query(records, where("status", "==", status), limit(max)));
   return snapshot.docs.map((record) => ({ ...record.data(), id: record.id }));
 }
@@ -121,7 +121,7 @@ export function getOpenJobIssues(jobId, read = getDocs) {
 
 export async function getCleanerNamesById(cleanerIds, read = getDocs) {
   const batches = cleanerLookupBatches(cleanerIds);
-  const records = await Promise.all(batches.map((batch) => getServerRecordsById(organizationId, "cleaners", batch, read)));
+  const records = await Promise.all(batches.map((batch) => getServerRecordsById(currentOrganizationId(), "cleaners", batch, read)));
   return Object.fromEntries(records.flatMap((docs) => (
     docs.map((cleaner) => [cleaner.id, cleaner.data().name])
   )));

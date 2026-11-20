@@ -1,8 +1,8 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { managerPageClientMetadata } from "./managerPageLoadService.js";
 
-const organizationId = "cleanflow-demo";
 const allowedOperations = new Set([
   "offers", "issues", "assignments", "checklist-run", "checklist-capability", "cleaners",
 ]);
@@ -46,7 +46,7 @@ function recordOperationEvent({ operation, phase, startedAtMs, result, uid, page
     createdAt: serverTimestamp(),
   };
   void Promise.resolve(addDoc(
-    collection(db, "organizations", organizationId, "managerOperationEvents"),
+    collection(db, "organizations", currentOrganizationId(), "managerOperationEvents"),
     event,
   )).catch(() => undefined);
 }

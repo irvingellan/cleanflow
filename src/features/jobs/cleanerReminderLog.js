@@ -1,13 +1,12 @@
 import { doc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { rosterCleanerIds } from "./offerSlots.js";
 
 // Section 12: the manager records that she sent a cleaner reminder herself
 // (WhatsApp or copy). Copying or opening WhatsApp is never treated as proof.
 // A record belongs to one schedule revision: after a time change the reminder
 // is pending again.
-
-const organizationId = "cleanflow-demo";
 
 function scheduleRevision(job) {
   return Number.isInteger(job?.scheduleRevision) && job.scheduleRevision >= 0 ? job.scheduleRevision : 0;
@@ -32,7 +31,7 @@ export async function markCleanerReminderSent(jobId, cleanerId, actorUid) {
   if (typeof cleanerId !== "string" || !cleanerId || typeof actorUid !== "string" || !actorUid) {
     throw new Error("A cleaner and the signed-in manager are required.");
   }
-  const reference = doc(db, "organizations", organizationId, "jobs", jobId);
+  const reference = doc(db, "organizations", currentOrganizationId(), "jobs", jobId);
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(reference);
     if (!snapshot.exists()) throw new Error("Job not found.");
