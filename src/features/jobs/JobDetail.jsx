@@ -28,7 +28,7 @@ import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { getCleanerContactsById } from "../cleaners/cleanerService.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
-import { sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
+import { sortCleanerOptions, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { canExtendAutomaticOfferJob, isAutomaticOfferJob } from "./automaticOffers.js";
@@ -237,7 +237,7 @@ export function JobDetail({
     ["OFFERED", "ASSIGNED"].includes(job.operationalStatus);
   const canDirectAssign = canDirectlyFillJob(job);
   const cleanerSelection = useCleanerSelectionContext(job, (canDirectAssign && isDirectAssignmentOpen) || (canEditRoster && Boolean(replacementTargetId)));
-  const directCleanerOptions = sortByCleanerExperience(
+  const directCleanerOptions = sortCleanerOptions(
     filterCleanersByName(availableCleaners.filter((cleaner) => canAssignCleanerDirectly(job, cleaner)), directCleanerSearch),
     cleanerSelection.result,
   );

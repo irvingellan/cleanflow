@@ -1,3 +1,4 @@
+import { managerOrganizationId as organizationId } from "../../services/firebase/config.js";
 import {
   addDoc,
   collection,
@@ -16,6 +17,7 @@ import {
   where as serverWhere,
 } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
+import { readAvailabilityForPicker } from "../availability/managerAvailabilityService.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
@@ -33,7 +35,6 @@ import {
   projectCleanerSelectionContext,
 } from "./cleanerSelectionContext.js";
 
-const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
 const upcomingSummaryLimit = 3;
 const activeOperationalStatuses = [
@@ -77,12 +78,12 @@ export function subscribeToJob(jobId, onChange) {
 const servicePeriodPageSize = 50;
 const maxServicePeriodJobs = 200;
 
-/** Both reads use the existing organization-scoped manager Job Rules. */
+/** Read each source once per picker. A failed source keeps the other facts usable. */
 export async function getCleanerSelectionContext(target, { signal } = {}) {
   signal?.throwIfAborted();
   const records = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
   const { propertyId, scheduledDate } = target;
-  const [schedule, history] = await Promise.all([
+  const sources = [
     scheduledDate ? getServerDocs(serverQuery(records,
       serverWhere("scheduledDate", "==", scheduledDate),
       serverWhere("operationalStatus", "in", committedCleanerStatuses),
@@ -92,10 +93,19 @@ export async function getCleanerSelectionContext(target, { signal } = {}) {
       serverWhere("operationalStatus", "==", "COMPLETED"),
       serverOrderBy("completedAt", "desc"),
       serverLimit(cleanerSelectionHistoryLimit + 1))) : null,
-  ]);
+    scheduledDate ? readAvailabilityForPicker(scheduledDate) : null,
+  ];
+  // Finish before the picker's ten-second deadline. A stalled source cannot discard completed reads.
+  const reads = await Promise.allSettled(sources.map(source => source && withReadDeadline(source, 8_000)));
   signal?.throwIfAborted();
-  const rows = (results) => results?.docs.map((row) => ({ ...row.data(), id: row.id })) || [];
-  return projectCleanerSelectionContext(target, rows(schedule), rows(history));
+  const failure = reads.find(read => read.status === "rejected");
+  if (failure && !reads.some(read => read.status === "fulfilled" && read.value !== null)) throw failure.reason;
+  const [schedule, history, availability] = reads;
+  const rows = (read) => read.value?.docs.map(row => ({ ...row.data(), id: row.id })) || [];
+  const result = projectCleanerSelectionContext(target, rows(schedule), rows(history), availability.value ?? []);
+  if (schedule.status === "rejected" || history.status === "rejected") result.jobContextUnavailable = true;
+  if (availability.status === "rejected") result.availabilityUnavailable = true;
+  return result;
 }
 
 /** Cursor includes the document ID, so jobs on the same date cannot be skipped. */

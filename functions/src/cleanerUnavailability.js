@@ -71,9 +71,10 @@ async function authorize(transaction, org, { uid, role, claims, cleanerId }) {
   );
   const membership = member.data();
   const profile = cleaner.data();
-  const authorized = role === "CLEANER" ? isActiveCleanerSession(membership, claims)
+  const authorized = role === "CLEANER"
+    ? isActiveCleanerSession(membership, claims) && eligibleCleaner(profile)
     : isActiveManagerMembership(membership) && belongsToOrganization(membership, org.id);
-  if (!authorized || !eligibleCleaner(profile) || !belongsToOrganization(profile, org.id)) throw forbidden();
+  if (!authorized || !belongsToOrganization(profile, org.id)) throw forbidden();
 }
 
 async function listBlocks(transaction, org, cleanerId, today) {

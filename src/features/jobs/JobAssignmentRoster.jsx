@@ -1,10 +1,11 @@
 import { StateCard } from "../../components/UiPrimitives.jsx";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import {
+  CleanerAvailabilityConfirmation,
   CleanerSelectionOption,
   CleanerSelectionStatus,
   cleanerReplacementOption,
-  sortByCleanerExperience,
+  sortCleanerOptions,
 } from "./CleanerSelectionContext.jsx";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { FIRST_ACCEPT_WINS } from "./automaticOffers.js";
@@ -102,6 +103,8 @@ export function JobAssignmentRoster({
                           onChange={() => setDirectCleanerId(cleaner.id)} />
                       ))}
                   </fieldset>
+                  <CleanerAvailabilityConfirmation selected={availableCleaners.filter(cleaner => cleaner.id === directCleanerId)}
+                    context={cleanerSelection.result} language={language} />
                   {directCleanerId && (
                     <div role="status">
                       <p className="form-hint">{translate("jobs.cleanerPickerSelected", {
@@ -221,7 +224,7 @@ export function JobAssignmentRoster({
                             onChange={(event) => setReplacementOfferId(event.target.value)}
                           >
                             <option value="">{translate("common.notProvided")}</option>
-                            {sortByCleanerExperience(eligibleReplacementOffers, cleanerSelection.result, (offer) => offer.cleanerId).map((offer) => (
+                            {sortCleanerOptions(eligibleReplacementOffers, cleanerSelection.result, (offer) => offer.cleanerId).map((offer) => (
                               <option key={offer.id} value={offer.id}>
                                 {cleanerReplacementOption(currentCleanerName(
                                   offer.cleanerId,
@@ -233,6 +236,9 @@ export function JobAssignmentRoster({
                             ))}
                           </select>
                         </label>
+                        <CleanerAvailabilityConfirmation selected={eligibleReplacementOffers.filter(offer => offer.id === replacementOfferId).map(offer => ({
+                          id: offer.cleanerId, name: currentCleanerName(offer.cleanerId, offer.cleanerName, cleanerNamesById, translate("common.notProvided")),
+                        }))} context={cleanerSelection.result} language={language} />
                         <div className="button-row">
                           <button className="button" type="button" disabled={replacingAssignmentId !== null} onClick={() => {
                             setReplacementTargetId(null);

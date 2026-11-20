@@ -35,7 +35,7 @@ beforeEach(() => {
   mocks.context.mockReset().mockResolvedValue(result());
   mocks.createOffers.mockReset().mockResolvedValue({ id: job.id, operationalStatus: "OFFERED" });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("manager cleaner selection context", () => {
   it("orders cleaners by recent house history and keeps a same-day job selectable", async () => {
@@ -55,6 +55,61 @@ describe("manager cleaner selection context", () => {
     expect(mocks.createOffers).toHaveBeenCalledWith({ jobId: job.id, cleaners: [cleaners[1]] });
   });
 
+  it.each(["manual", "automatic"])("shows blocked cleaners last, starts them unchecked, and sends a %s offer after explicit selection", async (mode) => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", mode === "automatic" ? "enabled" : "disabled");
+    const target = { ...job, scheduledStart: "10:30", schemaVersion: 2, assignedCleanerIds: [], operationalStatus: "UNASSIGNED" };
+    const context = result();
+    context.byCleanerId.experienced.unavailability = { state: "blocked", periods: [{ startTime: "09:00", endTime: "12:00" }] };
+    context.byCleanerId.new = { sameDayStarts: [], completedHereCount: 0, unavailability: { state: "blocked", periods: [] } };
+    mocks.context.mockResolvedValue(context);
+    render(page({ job: target, onSent: vi.fn() }));
+    const blocked = await screen.findByRole("checkbox", { name: "Riley Demo", description: /Unavailable this day.*9:00 AM–12:00 PM/ });
+    expect(screen.getAllByRole("checkbox").filter(input => input.getAttribute("aria-label")).map(input => input.getAttribute("aria-label")))
+      .toEqual(["Taylor Demo", "Riley Demo", "Alex Demo"]);
+    expect(blocked).toBeEnabled();
+    expect(blocked).not.toBeChecked();
+    expect(screen.queryByText(/You selected/)).toBeNull();
+    fireEvent.click(blocked);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Taylor Demo" }));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Taylor" } });
+    expect(screen.getByText("You selected Riley Demo for an unavailable period.")).toBeVisible();
+    expect(mocks.context).toHaveBeenCalledTimes(1);
+    expect(mocks.context.mock.calls[0][0]).toMatchObject({ scheduledStart: "10:30" });
+    fireEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(mocks.createOffers).toHaveBeenCalledExactlyOnceWith({ jobId: job.id, cleaners: [cleaners[1], cleaners[2]],
+      ...(mode === "automatic" ? { automatic: true } : {}) });
+  });
+
+  it("distinguishes partial blocks on an untimed Job, then resolves a changed Job start", async () => {
+    const context = result();
+    context.byCleanerId.other.unavailability = { state: "unknown", periods: [{ startTime: "13:30", endTime: "15:00" }] };
+    mocks.context.mockResolvedValueOnce(context).mockResolvedValueOnce(result());
+    const { rerender } = render(page());
+    const affected = await screen.findByRole("checkbox", { name: "Taylor Demo", description: /Possible time conflict.*1:30 PM–3:00 PM/ });
+    fireEvent.click(affected);
+    expect(screen.getByText("Check the time with Taylor Demo before confirming.")).toBeVisible();
+    rerender(page({ job: { ...job, scheduledStart: "09:00" } }));
+    await waitFor(() => expect(screen.queryByText(/Possible time conflict/)).toBeNull());
+    expect(screen.queryByText(/Check the time with Taylor Demo/)).toBeNull();
+    expect(mocks.context).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves a verified availability mark when schedule history could not be read", async () => {
+    const context = result();
+    context.byCleanerId.other.unavailability = { state: "blocked", periods: [] };
+    mocks.context.mockResolvedValue({ ...context, jobContextUnavailable: true });
+    render(page());
+    expect(await screen.findByText(/Some schedule or recent history details could not be checked/)).toBeVisible();
+    expect(screen.queryByText(/Search limits reached/)).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Taylor Demo", description: /Unavailable this day/ })).toBeEnabled();
+  });
+  it("keeps the available history and warns when only the availability read fails", async () => {
+    mocks.context.mockResolvedValue({ ...result(), availabilityUnavailable: true });
+    render(page());
+    expect(await screen.findByText(/Unavailable days could not be checked/)).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Riley Demo", description: /Cleaned here 3 times/ })).toBeEnabled();
+  });
+
   it("shows truncated counts as lower bounds and does not mark unconfirmed statuses", async () => {
     mocks.context.mockResolvedValue({ ...result(), historyPartial: true, schedulePartial: true });
     render(page());
@@ -67,6 +122,7 @@ describe("manager cleaner selection context", () => {
     mocks.context.mockRejectedValue(new Error("read failed"));
     render(page());
     expect(await screen.findByText(/Schedules and recent history could not be checked/)).toBeVisible();
+    expect(screen.getByText(/Unavailable days could not be checked/)).toBeVisible();
     expect(checkboxOrder()).toEqual(["Alex Demo", "Riley Demo", "Taylor Demo"]);
     fireEvent.click(screen.getByRole("checkbox", { name: "Alex Demo" }));
     expect(screen.getByRole("button", { name: "Create offers" })).toBeEnabled();

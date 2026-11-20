@@ -38,6 +38,38 @@ describe("cleaner selection context", () => {
     });
   });
 
+  it("marks only blocks overlapping the actual start and gives full days precedence in either order", () => {
+    const block = { startDate: target.scheduledDate, endDate: target.scheduledDate };
+    const first = { ...block, startTime: "09:00", endTime: "12:00" };
+    const second = { ...block, startTime: "10:00", endTime: "11:00" };
+    const rows = [
+      { ...first, cleanerId: "partial" }, { ...second, cleanerId: "partial" }, { ...first, cleanerId: "partial" },
+      { ...first, cleanerId: "full-last" }, { ...block, cleanerId: "full-last" },
+      { ...block, cleanerId: "full-first" }, { ...first, cleanerId: "full-first" },
+      { ...block, cleanerId: "ending", startTime: "07:00", endTime: "10:00" },
+      { ...block, cleanerId: "tomorrow", startDate: "2026-11-14", endDate: "2026-11-14" },
+      { ...block, cleanerId: "yesterday", startDate: "2026-11-12", endDate: "2026-11-12" },
+    ];
+    const options = projectCleanerSelectionContext({ ...target, scheduledStart: "10:00" }, [], [], rows).byCleanerId;
+    expect(Object.keys(options).sort()).toEqual(["full-first", "full-last", "partial"]);
+    expect(options.partial.unavailability).toEqual({ state: "blocked", periods: [
+      { startTime: "09:00", endTime: "12:00" }, { startTime: "10:00", endTime: "11:00" },
+    ] });
+    expect(options["full-first"].unavailability).toEqual({ state: "blocked", periods: [] });
+    expect(options["full-last"].unavailability).toEqual(options["full-first"].unavailability);
+    expect(options.partial.sameDayStarts).toEqual([]);
+  });
+
+  it.each([undefined, "", "25:00"])("marks partial periods as uncertain for an unset or invalid job start %s", start => {
+    const period = { cleanerId: "cleaner-b", startDate: target.scheduledDate, endDate: target.scheduledDate, startTime: "14:00", endTime: "17:30" };
+    const result = projectCleanerSelectionContext({ ...target, scheduledStart: start }, [assigned], [completed], [period]);
+    expect(result.byCleanerId["cleaner-b"]).toEqual({
+      completedHereCount: 1, lastCompletedHereDate: "2026-11-12", sameDayStarts: ["13:15"],
+      unavailability: { state: "unknown", periods: [{ startTime: "14:00", endTime: "17:30" }] },
+    });
+    expect(result.byCleanerId["cleaner-a"].unavailability).toBeUndefined();
+  });
+
   it("keeps the overflow records out of the displayed facts and records partial coverage", () => {
     const schedule = Array.from({ length: cleanerSelectionScheduleLimit }, (_, index) => ({ ...assigned, id: `active-${index}` }));
     const history = Array.from({ length: cleanerSelectionHistoryLimit }, (_, index) => ({ ...completed, id: `done-${index}` }));

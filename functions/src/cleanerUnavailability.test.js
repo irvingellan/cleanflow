@@ -124,7 +124,7 @@ describe("availability calls", () => {
     expect(records[blockRoot + "elsewhere"]).toBeDefined();
   });
 
-  it("requires a current same-organization membership and eligible profile before accessing availability", async () => {
+  it("requires a current same-organization membership and an eligible profile for cleaner self-service", async () => {
     for (const [path, data, role] of [
       ["/members/account", { ...claims, active: true, role: "CLEANER", sessionId: "retired" }, "CLEANER"],
       ["/members/account", { ...claims, active: true, role: "CLEANER", organizationId: "elsewhere" }, "CLEANER"],
@@ -133,7 +133,9 @@ describe("availability calls", () => {
       ["/cleaners/worker", { active: true, organizationId: null }, "MANAGER"],
       ["/cleaners/worker", { active: true, organizationId: "elsewhere" }, "CLEANER"],
       ["/cleaners/worker", { active: true, archivedAt: "date" }, "CLEANER"],
-      ["/cleaners/worker", { active: false }, "MANAGER"],
+      ["/cleaners/worker", { active: false }, "CLEANER"],
+      ["/cleaners/worker", { active: false, organizationId: "elsewhere" }, "MANAGER"],
+      ["/cleaners/worker", undefined, "MANAGER"],
     ]) {
       const { invoke, transaction } = fixture({ [root + path]: data });
       const input = role === "MANAGER" ? { ...day, cleanerId } : day;

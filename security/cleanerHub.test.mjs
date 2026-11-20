@@ -223,6 +223,18 @@ test("cleaners and managers maintain availability blocks without changing assign
   assert.equal((await job.collection("assignments").where("isActive", "==", true).get()).size, 1);
 });
 
+test("the manager can maintain periods for an inactive profile while cleaner access stays revoked", async () => {
+  await link("cleaner-a");
+  await admin.doc(root + "/cleaners/cleaner-a").update({ active: false });
+  const days = { startDate: dateKey(3), endDate: dateKey(3) };
+  const { block } = await setCleanerUnavailability.run(managerRequest({ ...days, cleanerId: "cleaner-a" }));
+  assert.equal(block.createdBy, "MANAGER");
+  await assert.rejects(listMyUnavailability.run(cleanerRequest(uidA, {})), { code: "permission-denied" });
+  await assert.rejects(setMyUnavailability.run(cleanerRequest(uidA, days)), { code: "permission-denied" });
+  await assert.rejects(removeMyUnavailability.run(cleanerRequest(uidA, { blockId: block.id })), { code: "permission-denied" });
+  assert.deepEqual(await removeCleanerUnavailability.run(managerRequest({ cleanerId: "cleaner-a", blockId: block.id })), { removed: true });
+});
+
 test("availability calls enforce organization, session and exact input fields", async () => {
   await link("cleaner-a");
   const days = { startDate: dateKey(2), endDate: dateKey(2) };

@@ -1,4 +1,5 @@
 .av-panel, .av-form, .av-form fieldset { display: grid; gap: 16px; min-width: 0; }
+.panel > .av-panel { margin-block-start: 28px; }
 .av-panel { color: var(--cf-text); }
 .av-panel h2, .av-panel h3, .av-panel p { margin: 0; }
 .av-panel h2 { line-height: 1.2; }

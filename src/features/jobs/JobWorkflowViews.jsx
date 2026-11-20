@@ -15,7 +15,7 @@ import { setRequiredCleanerCount } from "./assignmentService.js";
 import { isAssignmentAwareJob, optionalJobPrice } from "./jobCompatibility.js";
 import { maxCleanersPerJob, requiredCleanerCount } from "./offerSlots.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
-import { CleanerSelectionOption, CleanerSelectionStatus, sortByCleanerExperience, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
+import { CleanerAvailabilityConfirmation, CleanerSelectionOption, CleanerSelectionStatus, sortCleanerOptions, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
 
 export function OfferCleaners({
   job,
@@ -49,7 +49,7 @@ export function OfferCleaners({
   const offerAmount = optionalJobPrice(job.cleanerPayout) ?? optionalJobPrice(property?.defaultCleanerPrice) ?? null;
   const [hasSendError, setHasSendError] = useState(false);
   const context = useCleanerSelectionContext(job, !isLoading && !hasError && cleaners.length > 0);
-  const visibleCleaners = sortByCleanerExperience(filterCleanersByName(cleaners, cleanerSearch), context.result);
+  const visibleCleaners = sortCleanerOptions(filterCleanersByName(cleaners, cleanerSearch), context.result);
 
   function toggleCleaner(cleanerId) {
     if (unavailableCleanerIds.has(cleanerId)) return;
@@ -153,6 +153,8 @@ export function OfferCleaners({
             </div>
           )}
 
+          <CleanerAvailabilityConfirmation selected={cleaners.filter(cleaner => selectedCleanerIds.includes(cleaner.id))}
+            context={context.result} language={language} />
           {canChooseCleanerCount && (
             <div className="offer-spots" data-testid="offer-cleaner-count">
               <span>{translate("offers.cleanersNeeded")}</span>
