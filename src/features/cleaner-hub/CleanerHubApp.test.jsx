@@ -66,6 +66,18 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.getByText(entry.notes)).toBeVisible();
   });
 
+  it.each([["Ofertas", entries[1]], ["Agendadas", entries[0]]])("shows the agreed hourly rate on the %s card and detail", async (tab, original) => {
+    const { service, handlers } = fakeService();
+    const entry = { ...original, offeredCompensation: undefined, offeredPay: { mode: "HOURLY", rateCents: 3125 } };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [entry], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: new RegExp(`^${tab}`) }));
+    const card = screen.getByRole("button", { name: /31,25 por hora/ });
+    await userEvent.click(card);
+    expect(screen.getByText(/31,25 por hora/)).toBeVisible();
+    if (entry.kind === "OFFER") expect(screen.getByText(/Você informa suas horas no final do serviço/)).toBeVisible();
+  });
+
   it("identifies a removed service using its last confirmed details and discards its private fields", async () => {
     const { service, handlers } = fakeService();
     const entry = { ...entries[0], notes: "Synthetic checklist instructions", offeredCompensation: 132.75 };

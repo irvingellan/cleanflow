@@ -601,7 +601,7 @@ function OfferView({ t, hub, entry, today, removedLabel }) {
     }
   }
 
-  const amount = hubMoney(entry.offeredCompensation, t.lang);
+  const amount = hubMoney(entry.offeredCompensation, t.lang, true);
   const statusKey = taken ? "hb.offer.ALREADY_TAKEN" : reply === "assigned" ? "hb.offer.assigned" : offerStatusKey(entry);
   return (
     <div className="hb-screen">

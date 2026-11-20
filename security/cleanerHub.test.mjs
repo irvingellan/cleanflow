@@ -1777,7 +1777,8 @@ test("reschedule decline removes only that assignment, audits once, and keeps a 
 
 test("a previous invitee can privately express interest in a new manual replacement without reopening the automatic batch", async () => {
   const job = jobDocument("reschedule-replacement-interest");
-  await createJob(job.id, { requiredCleanerCount: 2 });
+  const hourly = { mode: "HOURLY", rateCents: 3125 };
+  await createJob(job.id, { requiredCleanerCount: 2, pay: hourly });
   for (const [cleanerId] of automaticCleaners) await link(cleanerId);
   await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a", "cleaner-b", "cleaner-c"] }));
   assert.equal((await accept(job.id, uidA)).state, "assigned");
@@ -1797,6 +1798,8 @@ test("a previous invitee can privately express interest in a new manual replacem
   assert.deepEqual(repeated, created);
   const ref = job.collection("offers").doc(created.offerId);
   const raw = (await ref.get()).data();
+  assert.deepEqual(raw.offeredPay, hourly);
+  assert.equal(raw.offeredCompensation, undefined);
   assert.deepEqual([raw.offerKind, raw.cleanerId, raw.status, raw.scheduleRevision, raw.publicOfferTokenHash],
     ["MANUAL_REPLACEMENT", "cleaner-c", "PENDING", moved.scheduleRevision, undefined]);
   assert.deepEqual((await originalOffer.get()).data(), original);
@@ -1988,6 +1991,35 @@ test("send to more cleaners adds offers to the open automatic batch and never re
   assert.deepEqual((await job.get()).data().assignedCleanerIds, ["cleaner-a", "cleaner-b"]);
   await assert.rejects(createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-c"] })), { code: "failed-precondition" });
   assert.equal((await job.collection("offers").doc("cleaner-c").get()).exists, false);
+});
+
+test("hourly offers are snapshotted; only their cleaner can read the rate through the Hub", async () => {
+  const job = jobDocument("hourly-offer");
+  const offeredPay = { mode: "HOURLY", rateCents: 3179 };
+  await createJob(job.id, { pay: offeredPay, billing: { mode: "HOURLY", hourlyRateCents: 7654 } });
+  await link("cleaner-a");
+  await link("cleaner-b");
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] }));
+  const offer = job.collection("offers").doc("cleaner-a");
+  assert.deepEqual((await offer.get()).get("offeredPay"), offeredPay);
+  assert.equal((await offer.get()).get("offeredCompensation"), undefined);
+  await job.update({ "pay.rateCents": 2000 });
+  await sync(job.id);
+  const entryPath = `${root}/cleanerAgenda/cleaner-a__${job.id}`;
+  const own = cleanerDb(uidA).doc(entryPath);
+  const projected = (await assertSucceeds(own.get())).data();
+  assert.deepEqual(projected.offeredPay, offeredPay);
+  assert.equal(projected.billing, undefined);
+  assert.equal(projected.pay, undefined);
+  assert.equal(projected.clientPrice, undefined);
+  await assertFails(cleanerDb(uidB).doc(entryPath).get());
+  await assertFails(cleanerDb(uidB).doc(entryPath).update({ offeredPay }));
+  await assertFails(own.update({ offeredPay }));
+  await assertFails(cleanerDb(uidA).doc(offer.path).update({ offeredPay }));
+  await assertFails(environment.authenticatedContext("other-manager", managerRequest().auth.token).firestore().doc(entryPath).get());
+  assert.equal((await accept(job.id, uidA)).state, "assigned");
+  await sync(job.id);
+  assert.deepEqual((await own.get()).get("offeredPay"), offeredPay);
 });
 
 test("an automatic offer falls back to the Property cleaner price when the Job has none", async () => {

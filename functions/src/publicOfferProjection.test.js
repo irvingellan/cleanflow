@@ -79,6 +79,17 @@ describe("public offer projection", () => {
     });
   });
 
+  it("projects only the recipient's snapshotted hourly rate", () => {
+    const job = { schemaVersion: 2, operationalStatus: "OFFERED", pay: { mode: "HOURLY", rateCents: 9999 } };
+    const offer = { ...availableOffer(), offeredPay: { mode: "HOURLY", rateCents: 3125, internal: "private" } };
+    const result = publicOfferResult(offer, job);
+    expect(result.offer.offeredPay).toEqual({ mode: "HOURLY", rateCents: 3125 });
+    expect(result.offer).not.toHaveProperty("offeredCompensation");
+    expect(result.offer).not.toHaveProperty("pay");
+    expect(publicOfferResult({ ...offer, offeredPay: { mode: "HOURLY", rateCents: -1 } }, job).offer)
+      .toMatchObject({ offeredCompensation: null });
+  });
+
   it("uses the v2 per-Offer snapshot and excludes Job prices, margin, and team fields", () => {
     const snapshotted = publicOfferResult({
       ...availableOffer(),

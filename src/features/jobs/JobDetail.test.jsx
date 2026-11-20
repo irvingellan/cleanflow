@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
@@ -485,6 +486,19 @@ describe("JobDetail lifecycle actions", () => {
       });
       expect(screen.getByRole("status")).toHaveTextContent("Service details saved.");
     });
+  });
+
+  it("previews the selected type's current rates before a manager changes service details", () => {
+    const property = { serviceRates: { MOVE_IN_OUT: {
+      client: { mode: "HOURLY", amountCents: 4321 }, cleaner: { mode: "FIXED", amountCents: 6500 },
+    } } };
+    renderJobDetail("UNASSIGNED", {}, {}, {}, property);
+    fireEvent.click(screen.getByRole("button", { name: "Edit service details" }));
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "MOVE_IN_OUT" } });
+    expect(screen.getByRole("status")).toHaveTextContent("Client price · $43.21 per hour");
+    expect(screen.getByRole("status")).toHaveTextContent("Cleaner payout · $65.00");
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "DEEP_CLEANING" } });
+    expect(screen.getByRole("status")).toHaveTextContent("Client price · Not set");
   });
 
   it("preserves the edit form and shows an error when saving Job details fails", async () => {
@@ -1107,6 +1121,23 @@ describe("JobDetail lifecycle actions", () => {
         delete HTMLElement.prototype.scrollIntoView;
       }
     }
+  });
+
+  it("copies a manual hourly offer in the cleaner's language without putting the rate in the WhatsApp URL", async () => {
+    window.localStorage.setItem("cleanflow-language", "en");
+    const user = userEvent.setup();
+    const offeredPay = { mode: "HOURLY", rateCents: 3167 };
+    const offer = { id: "hourly", cleanerId: "worker", cleanerName: "Example Cleaner", status: "PENDING", offeredPay };
+    const onCreatePublicOfferLink = vi.fn().mockResolvedValue({ url: "https://example.test/offer/private-token", offeredPay });
+    renderJobDetail("OFFERED", { schemaVersion: 1, pay: { ...offeredPay, rateCents: 1000 }, offers: [offer] },
+      { onCreatePublicOfferLink }, { knownCleaners: [{ id: "worker", name: "Example Cleaner", phone: "+12025550110", preferredLanguage: "pt" }] });
+    await user.click(screen.getByRole("button", { name: "Create public link" }));
+    expect(screen.getByText(/31.67 per hour/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Create public link" }));
+    await user.click(await screen.findByRole("button", { name: "Copy offer message" }));
+    const copied = await navigator.clipboard.readText();
+    expect(copied).toMatch(/31,67 por hora\nVocê informa suas horas/);
+    expect(screen.getByRole("link", { name: "Open in WhatsApp" }).href).toBe("https://wa.me/12025550110");
   });
 
   it("keeps real public-offer actions and response statuses without exposing simulation", async () => {

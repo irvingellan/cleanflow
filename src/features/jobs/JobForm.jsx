@@ -2,7 +2,11 @@ import { useState } from "react";
 import { defaultServiceType } from "../../../functions/src/serviceTypes.js";
 import { BackButton } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
-import { maximumGuestNameLength, optionalJobPrice } from "./jobCompatibility.js";
+import { maximumGuestNameLength } from "./jobCompatibility.js";
+import { resolveJobPricing } from "../pricing/pricingModel.js";
+import { jobPriceFormValues, readJobPriceForm } from "./jobPricingForm.js";
+import { JobPriceFields } from "./JobPriceFields.jsx";
+import { serviceTypeMessage } from "./serviceTypeMessages.js";
 import { createJob } from "./jobService.js";
 import { JobServiceTypeSelect } from "./JobServiceTypeSelect.jsx";
 
@@ -14,19 +18,18 @@ export function CreateCleaningForm({
   onBack,
   onCreated,
 }) {
-  const { translate } = useTranslation();
+  const { translate, language } = useTranslation();
   const [selectedProperty, setSelectedProperty] = useState(property);
   const [propertySearch, setPropertySearch] = useState("");
-  const [formValues, setFormValues] = useState({
+  const [formValues, setFormValues] = useState(() => ({
     serviceType: defaultServiceType,
     scheduledDate: "",
     scheduledStart: "11:00",
-    clientPrice: property?.defaultClientPrice ?? "",
-    cleanerPayout: property?.defaultCleanerPrice ?? "",
+    ...jobPriceFormValues(resolveJobPricing({ serviceType: defaultServiceType }, { property })),
     guestName: "",
     notes: "",
     requiredCleanerCount: "1",
-  });
+  }));
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const propertyName = selectedProperty?.name ?? "";
@@ -45,6 +48,12 @@ export function CreateCleaningForm({
     ? [selectedProperty, ...matchingProperties]
     : matchingProperties;
 
+  const propertyRates = resolveJobPricing({ serviceType: formValues.serviceType }, {
+    property: selectedProperty, cleanerCount: Number(formValues.requiredCleanerCount),
+  });
+  const missingRate = propertyRates.client.state !== "ready" || propertyRates.cleaner.state !== "ready";
+  const legacyType = !selectedProperty?.serviceRates && formValues.serviceType !== defaultServiceType;
+
   function selectProperty(event) {
     const nextProperty = availableProperties.find(
       (candidate) => candidate.id === event.target.value,
@@ -53,8 +62,9 @@ export function CreateCleaningForm({
       setSelectedProperty(nextProperty);
       setFormValues((currentValues) => ({
         ...currentValues,
-        clientPrice: nextProperty?.defaultClientPrice ?? "",
-        cleanerPayout: nextProperty?.defaultCleanerPrice ?? "",
+        ...jobPriceFormValues(resolveJobPricing({ serviceType: currentValues.serviceType }, {
+          property: nextProperty, cleanerCount: Number(currentValues.requiredCleanerCount),
+        })),
       }));
     }
     setPropertySearch("");
@@ -64,10 +74,21 @@ export function CreateCleaningForm({
   function updateField(event) {
     const { name, value } = event.target;
 
-    setFormValues((currentValues) => ({
-      ...currentValues,
-      [name]: value,
-    }));
+    setFormValues((current) => {
+      const next = { ...current, [name]: value };
+      if (name === "serviceType" || name === "requiredCleanerCount") {
+        const pricing = jobPriceFormValues(resolveJobPricing({ serviceType: next.serviceType }, {
+          property: selectedProperty, cleanerCount: Number(next.requiredCleanerCount),
+        }));
+        if (name === "serviceType") {
+          // Legacy forms kept the entered amounts when changing type before a rate table existed.
+          if (selectedProperty?.serviceRates || value === defaultServiceType) return { ...next, ...pricing };
+        } else if (selectedProperty?.serviceRates?.[next.serviceType]?.cleaner?.byCleanerCount) {
+          return { ...next, cleanerPayout: pricing.cleanerPayout, cleanerMode: pricing.cleanerMode };
+        }
+      }
+      return next;
+    });
   }
 
   async function handleSubmit(event) {
@@ -79,11 +100,10 @@ export function CreateCleaningForm({
       return;
     }
 
-    const clientPrice = optionalJobPrice(formValues.clientPrice);
-    const cleanerPayout = optionalJobPrice(formValues.cleanerPayout);
+    const prices = readJobPriceForm(formValues);
     const notes = formValues.notes.trim();
 
-    if (clientPrice === null || cleanerPayout === null) {
+    if (!prices) {
       setSaveError(translate("jobs.priceInvalid"));
       return;
     }
@@ -98,8 +118,7 @@ export function CreateCleaningForm({
         serviceType: formValues.serviceType,
         scheduledDate: formValues.scheduledDate,
         scheduledStart: formValues.scheduledStart,
-        clientPrice,
-        cleanerPayout,
+        ...prices,
         notes,
         guestName: formValues.guestName,
         ...(Number(formValues.requiredCleanerCount) > 1
@@ -207,35 +226,11 @@ export function CreateCleaningForm({
           />
         </label>
 
-        <div className="form-row">
-          <label>
-            {translate("jobs.clientPrice")}
-            <input
-              type="number"
-              name="clientPrice"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
-              value={formValues.clientPrice}
-              onChange={updateField}
-            />
-          </label>
-
-          <label>
-            {translate("jobs.cleanerPayout")}
-            <input
-              type="number"
-              name="cleanerPayout"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
-              value={formValues.cleanerPayout}
-              onChange={updateField}
-            />
-          </label>
-        </div>
+        <JobPriceFields values={formValues} onChange={updateField} disabled={isSaving} />
         {selectedProperty && (
-          <p className="form-helper">{translate("jobs.propertyPriceHint")}</p>
+          <p className="form-helper" aria-live="polite">{missingRate
+            ? serviceTypeMessage(language, legacyType ? "legacyTypeRate" : "missingTypeRate")
+            : translate("jobs.propertyPriceHint")}</p>
         )}
 
         <label>

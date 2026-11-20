@@ -48,3 +48,10 @@ describe("groupUnpaidJobsByCleaner", () => {
     });
   });
 });
+
+it("keeps the entire hourly job out of payable groups and totals", () => {
+  const fixed = { id: "fixed", assignedCleanerId: "one", cleanerPayout: 72 };
+  const hourly = { ...fixed, id: "hourly", pay: { mode: "HOURLY", rateCents: 2500 } };
+  expect(groupUnpaidJobsByCleaner([hourly], [])).toEqual([]);
+  expect(groupUnpaidJobsByCleaner([fixed, hourly], [])).toEqual(groupUnpaidJobsByCleaner([fixed], []));
+});

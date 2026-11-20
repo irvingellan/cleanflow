@@ -256,6 +256,7 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
 
   const jobIds = ["synthetic-auto-offer-a", "synthetic-auto-offer-b"];
   const jobs = await Promise.all(jobIds.map(createJob));
+  await jobs[0].update({ pay: { mode: "HOURLY", rateCents: 317923 } });
   await Promise.all(jobIds.map((jobId) => createAutomaticJobOffers.run(manager({ jobId, cleanerIds: [cleanerA, cleanerB] }))));
   const beforeAward = await Promise.all(jobs.map((job) => job.get()));
   for (const job of jobs) {
@@ -269,6 +270,7 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
   const offers = (await inboxReference(cleanerA).where("type", "==", "NEW_OFFER").get()).docs;
   assert.equal(offers.length, 2);
   const event = offers.find((item) => item.data().jobId === jobs[0].id);
+  assert.doesNotMatch(JSON.stringify(event.data()), /offeredPay|rateCents|317923/);
   const attempts = [];
   const partialProvider = async (messages) => {
     attempts.push(messages);
@@ -298,6 +300,7 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
   assert.equal(cleanerPushDisplay({ data: messageA.data }, { bindingId: second.bindingId }), null);
   const simulatedDisplay = cleanerPushDisplay({ data: messageA.data }, { bindingId: first.bindingId, language: "pt" });
   assert.equal(simulatedDisplay.options.tag, `cleanflow-cleaner-${event.id}`);
+  assert.doesNotMatch(JSON.stringify([messageA.data, messageB.data, simulatedDisplay]), /offeredPay|rateCents|317923|3179[.,]23/);
   assert.doesNotMatch(JSON.stringify(simulatedDisplay), /Synthetic property marker|synthetic-auto-offer|synthetic-cleaner/);
   assert.deepEqual(await open(other, event.id), { state: "unavailable", destination: null });
   assert.deepEqual(await open(primary, event.id), { state: "opened", destination: { kind: "OFFER", jobId: jobs[0].id } });

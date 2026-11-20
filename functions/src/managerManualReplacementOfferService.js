@@ -1,3 +1,4 @@
+import { hourlyOfferSnapshot } from "./offerPay.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireMission2Writes } from "./mission2WriteControl.js";
@@ -105,6 +106,7 @@ export function createManualReplacementOfferForManager(database, {
     transaction.create(offerRef, {
       organizationId, jobId, cleanerId, cleanerName: cleaner.name.trim(), status: "PENDING",
       offerKind: manualReplacementOfferKind, replacementOfferId: offerRef.id, scheduleRevision,
+      ...hourlyOfferSnapshot(job.pay),
       publicOfferExpiresAt: Timestamp.fromMillis(time.getTime() + offerLifetimeMs),
       createdAt: FieldValue.serverTimestamp(), createdByUid: actorUid,
     });

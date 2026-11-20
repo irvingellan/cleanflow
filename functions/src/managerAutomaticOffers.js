@@ -1,3 +1,4 @@
+import { canSuggestDefaultCleanerPrice, hourlyOfferSnapshot } from "./offerPay.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireMission2Writes } from "./mission2WriteControl.js";
@@ -31,7 +32,7 @@ function validAmount(value) {
  * price existed). Null only when neither is set.
  */
 export function automaticOfferCompensation(job, property) {
-  return validAmount(job?.cleanerPayout) ?? validAmount(property?.defaultCleanerPrice);
+  return validAmount(job?.cleanerPayout) ?? (canSuggestDefaultCleanerPrice(job, property) ? validAmount(property?.defaultCleanerPrice) : null);
 }
 
 /**
@@ -86,7 +87,7 @@ export async function createAutomaticJobOffersForManager(database, {
     const property = typeof job.propertyId === "string" && validId(job.propertyId)
       ? (await transaction.get(organization.collection("properties").doc(job.propertyId))).data()
       : undefined;
-    const compensation = automaticOfferCompensation(job, property);
+    const compensation = hourlyOfferSnapshot(job.pay) ?? { offeredCompensation: automaticOfferCompensation(job, property) };
     const revision = checklistContextRevision(job);
     const capacity = automaticOfferCapacity(job);
     const extending = Object.hasOwn(job, "automaticOfferBatch");
@@ -131,7 +132,7 @@ export async function createAutomaticJobOffersForManager(database, {
         offeredPropertyName: typeof job.propertyName === "string" ? job.propertyName : null,
         offeredScheduledDate: typeof job.scheduledDate === "string" ? job.scheduledDate : null,
         offeredScheduledStart: typeof job.scheduledStart === "string" ? job.scheduledStart : null,
-        offeredCompensation: compensation,
+        ...compensation,
         publicOfferExpiresAt: expiresAt,
         createdAt: FieldValue.serverTimestamp(),
       });

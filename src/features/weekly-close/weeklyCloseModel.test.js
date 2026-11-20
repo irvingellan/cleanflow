@@ -269,3 +269,35 @@ describe("explicit period bounds", () => {
     expect(() => servicePeriod(period)).toThrow(RangeError);
   });
 });
+
+describe("hourly services in the weekly close", () => {
+  it.each([
+    { billing: { mode: "HOURLY", hourlyRateCents: 4000, hours: { start: "08:00", end: "12:00" } } },
+    { pay: { mode: "HOURLY", rateCents: 2500 } },
+    { pay: { mode: "HOURLY", rateCents: 2500 }, billing: { mode: "HOURLY", hourlyRateCents: 4000, hours: { approved: true, approvedMinutes: 90 } } },
+  ])("excludes both sides and any stale fixed amounts while hours need review", (pricing) => {
+    const hourly = job({ id: "hourly", ...pricing });
+    const fixed = job({ payoutId: "payout-1" });
+    const historical = close([fixed], { payouts: [paid()] });
+    const result = close([fixed, hourly], { payouts: [paid()] });
+    expect(result.jobs.find(({ id }) => id === "hourly")).toMatchObject({
+      clientCharge: null, cleanerPayout: null, paidAmount: null, outstandingAmount: null,
+      grossOperationalMargin: null, attentionReasons: ["hours_review"],
+    });
+    for (const field of ["knownClientCharges", "knownCleanerPayoutTotal", "knownCleanerPaidTotal",
+      "knownCleanerOutstandingTotal", "knownGrossOperationalMargin"]) {
+      expect(result.overall[field]).toBe(historical.overall[field]);
+      expect(result.clients[0][field]).toBe(historical.clients[0][field]);
+      expect(close([hourly]).overall[field]).toBeNull();
+    }
+  });
+
+  it("uses an existing approved client time and never treats a rate as a flat fee", () => {
+    expect(close([job({ billing: { mode: "HOURLY", hourlyRateCents: 3500,
+      hours: { approved: true, approvedMinutes: 90 } } })]).overall.clientCharges).toBe(52.5);
+  });
+
+  it("flags conflicting duplicate hourly records", () => {
+    expect(close([job(), job({ pay: { mode: "HOURLY", rateCents: 2500 } })]).excluded.conflictingDuplicate).toBe(1);
+  });
+});

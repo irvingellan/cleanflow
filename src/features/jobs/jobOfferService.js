@@ -1,3 +1,4 @@
+import { hourlyOfferSnapshot } from "../../../functions/src/offerPay.js";
 import {
   doc,
   getDoc,
@@ -100,7 +101,7 @@ export async function respondToJobOffer({ jobId, cleanerId, status }) {
   });
 }
 
-export async function createJobOffers({ jobId, cleaners, automatic = false, offeredCompensation = null }) {
+export async function createJobOffers({ jobId, cleaners, automatic = false, offeredCompensation = null, offeredPay = null }) {
   const reference = jobDocument(jobId);
 
   if (automatic) {
@@ -125,20 +126,30 @@ export async function createJobOffers({ jobId, cleaners, automatic = false, offe
       throw error;
     }
 
-    for (const cleaner of cleaners) {
-      transaction.set(
-        offerDocument(jobId, cleaner.id),
-        {
-          jobId,
-          cleanerId: cleaner.id,
-          cleanerName: cleaner.name,
-          status: "PENDING",
-          // The Hub shows this amount; a public link may still confirm or edit it.
-          ...(typeof offeredCompensation === "number" && Number.isFinite(offeredCompensation) && offeredCompensation >= 0
-            ? { offeredCompensation } : {}),
-          createdAt: serverTimestamp(),
-        },
-      );
+    const hourly = hourlyOfferSnapshot(job.pay);
+    if (hourly?.offeredPay?.rateCents !== offeredPay?.rateCents) {
+      throw new Error("The hourly offer rate changed. Refresh the Job before sending.");
+    }
+    const fixed = typeof offeredCompensation === "number" && Number.isFinite(offeredCompensation) && offeredCompensation >= 0
+      ? { offeredCompensation } : {};
+    const price = hourly ?? fixed;
+    // A second manager or a retry must never replace a recipient's existing offer.
+    const recipients = cleaners.map(cleaner => ({ cleaner, ref: offerDocument(jobId, cleaner.id) }));
+    const priorOffers = await Promise.all(recipients.map(({ ref }) => transaction.get(ref)));
+    if (priorOffers.some(offer => offer.exists())) {
+      throw new Error("A selected cleaner already has an offer. Refresh the Job before sending.");
+    }
+    for (const { cleaner, ref } of recipients) {
+      transaction.set(ref, {
+        jobId,
+        cleanerId: cleaner.id,
+        cleanerName: cleaner.name,
+        status: "PENDING",
+        ...price,
+        // A new hourly invitation can be viewed in the Hub before its public link is issued.
+        ...(price.offeredPay && { publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + publicOfferTokenLifetimeMilliseconds) }),
+        createdAt: serverTimestamp(),
+      });
     }
 
     if (job.operationalStatus === "UNASSIGNED") {
@@ -195,15 +206,16 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
       throw error;
     }
 
+    const hourly = hourlyOfferSnapshot(offer.offeredPay);
     const expiresAtMs = automatic ? offer.publicOfferExpiresAt.toMillis() : legacyExpiresAtMs;
     transaction.update(offerReference, {
       publicOfferTokenHash: tokenHash,
       ...(!automatic ? {
         publicOfferExpiresAt: Timestamp.fromMillis(expiresAtMs),
-        offeredCompensation,
+        ...(!hourly && { offeredCompensation }),
       } : {}),
     });
-    return { expiresAtMs, offeredCompensation: automatic ? offer.offeredCompensation ?? null : offeredCompensation };
+    return { expiresAtMs, ...(hourly ?? { offeredCompensation: automatic ? offer.offeredCompensation ?? null : offeredCompensation }) };
   });
 
   return {

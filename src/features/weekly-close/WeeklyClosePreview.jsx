@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { hoursReviewLabel } from "../pricing/pricingMessages.js";
 import { BackButton, StateCard } from "../../components/UiPrimitives.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
@@ -174,7 +175,7 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
           <div><dt>{isPartial ? t("loadedCount") : translate("weeklyClose.completedServiceCount")}</dt><dd>{totals.completedServiceCount}</dd></div>
           {metrics.map(([key, amount, known]) => <div key={key}>
             <dt>{translate(`weeklyClose.${key}`)}</dt><dd>{aggregateMoney(amount)}</dd>
-            {amount === null && canShowSubtotal(totals, key) && <small>{translate("weeklyClose.knownSubtotal", { amount: money(known) })}</small>}
+            {amount === null && known !== null && canShowSubtotal(totals, key) && <small>{translate("weeklyClose.knownSubtotal", { amount: money(known) })}</small>}
             {amount === null && pendingCount(totals, key) > 0 && <small>{pendingCopy(pendingCount(totals, key))}</small>}
           </div>)}
         </dl>
@@ -202,7 +203,7 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
               {[["clientCharges", "knownClientCharges"], ["cleanerPayoutTotal", "knownCleanerPayoutTotal"],
                 ["grossOperationalMargin", "knownGrossOperationalMargin"]].map(([key, knownKey]) => <span key={key}>
                 <small>{translate(`weeklyClose.${key}`)}</small><strong>{aggregateMoney(client[key])}</strong>
-                {client[key] === null && canShowSubtotal(client, key) && <small>{translate("weeklyClose.knownSubtotal", { amount: money(client[knownKey]) })}</small>}
+                {client[key] === null && client[knownKey] !== null && canShowSubtotal(client, key) && <small>{translate("weeklyClose.knownSubtotal", { amount: money(client[knownKey]) })}</small>}
                 {client[key] === null && pendingCount(client, key) > 0 && <small>{pendingCopy(pendingCount(client, key))}</small>}
               </span>)}
             </summary>
@@ -218,7 +219,7 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
                     {translate(`weeklyClose.status.${job.payoutStatus}`)}</span></dd></div>
                 </dl>
                 {job.attentionReasons.length > 0 && <ul className="weekly-close-reasons">
-                  {job.attentionReasons.map((reason) => <li key={reason}>{translate(`weeklyClose.reason.${reason}`)}</li>)}
+                  {job.attentionReasons.map((reason) => <li key={reason}>{reason === "hours_review" ? hoursReviewLabel(language) : translate(`weeklyClose.reason.${reason}`)}</li>)}
                 </ul>}
               </li>)}
             </ul>

@@ -6,6 +6,8 @@ export const maximumGuestNameLength = 120;
 
 import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
 import { defaultServiceType, isServiceType, normalizeServiceType } from "../../../functions/src/serviceTypes.js";
+import { jobPriceSnapshot } from "./jobPricingForm.js";
+import { resolveJobPricing } from "../pricing/pricingModel.js";
 import { getChecklistContextRevision } from "./checklistContextRevision.js";
 
 function optionalText(value) {
@@ -29,14 +31,9 @@ export function optionalJobPrice(value) {
 }
 
 export function getJobGrossMargin(job) {
-  const clientPrice = optionalJobPrice(job?.clientPrice);
-  const cleanerPayout = optionalJobPrice(job?.cleanerPayout);
-
-  if (clientPrice === undefined || cleanerPayout === undefined) {
-    return null;
-  }
-
-  return clientPrice - cleanerPayout;
+  const { client, cleaner } = resolveJobPricing(job ?? {});
+  if (client.amountCents == null || cleaner.amountCents == null) return null;
+  return (client.amountCents - cleaner.amountCents) / 100;
 }
 
 function validateServiceType(serviceType) {
@@ -141,6 +138,8 @@ export function buildCurrentJobCreateData({
   scheduledStart,
   clientPrice,
   cleanerPayout,
+  billing,
+  pay,
   notes,
   guestName,
   serviceType = defaultServiceType,
@@ -160,6 +159,7 @@ export function buildCurrentJobCreateData({
   }
 
   const job = {
+    ...jobPriceSnapshot({ clientPrice: normalizedClientPrice, cleanerPayout: normalizedCleanerPayout, billing, pay }),
     organizationId,
     propertyId,
     propertyName,
@@ -174,13 +174,6 @@ export function buildCurrentJobCreateData({
     dataProvenance: "REAL",
   };
 
-  if (normalizedClientPrice !== undefined) {
-    job.clientPrice = normalizedClientPrice;
-  }
-
-  if (normalizedCleanerPayout !== undefined) {
-    job.cleanerPayout = normalizedCleanerPayout;
-  }
   const normalizedClientId = optionalText(clientId);
 
   if (normalizedClientId) {

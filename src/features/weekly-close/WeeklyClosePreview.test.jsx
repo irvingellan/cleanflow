@@ -213,3 +213,14 @@ describe("Weekly Close manager preview", () => {
     expect(document.querySelector(".weekly-close-preview").textContent).not.toContain("weeklyClose.");
   });
 });
+
+it("labels the pending hourly service in both reconciliation views", async () => {
+  loadWeeklyClose.mockResolvedValue(buildWeeklyClose({ weekStart, jobs: [{
+    id: "hourly", dataProvenance: "REAL", operationalStatus: "COMPLETED",
+    scheduledDate: "2026-09-22", propertyName: "Sample hourly property",
+    pay: { mode: "HOURLY", rateCents: 2500 }, clientPrice: 100,
+  }] }));
+  mount();
+  expect((await screen.findAllByText("Needs review: hours")).length).toBeGreaterThan(0);
+  expect(screen.queryByText(/\$0\.00/)).toBeNull();
+});

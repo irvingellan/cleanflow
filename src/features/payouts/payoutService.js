@@ -12,6 +12,8 @@ import { db } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
+import { needsHoursReview } from "../pricing/hourlyReview.js";
+
 const organizationId = "cleanflow-demo";
 const allowedPaymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 const maximumJobsPerPayout = 100;
@@ -39,6 +41,7 @@ function completionSortValue(job) {
 
 export function isEligibleForLegacyPayout(job) {
   return (
+    !needsHoursReview(job) &&
     !isAssignmentAwareJob(job) &&
     job.operationalStatus === "COMPLETED" &&
     Boolean(job.assignedCleanerId) &&
@@ -56,7 +59,7 @@ function payoutError(code, message) {
 
 // One-shot server read with a deadline: a full-SDK read on a stalled realtime
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
-export async function getUnpaidCompletedJobs() {
+export async function getUnpaidCompletedJobs({ includePendingHours = false } = {}) {
   const snapshot = await withReadDeadline(getServerDocs(serverQuery(
     serverCollection(serverFirestore(), "organizations", organizationId, "jobs"),
     serverWhere("operationalStatus", "==", "COMPLETED"),
@@ -66,7 +69,8 @@ export async function getUnpaidCompletedJobs() {
   // records a payout; some also have no completedAt, so do not order them out of the query.
   return snapshot.docs
     .map(jobFromSnapshot)
-    .filter(isEligibleForLegacyPayout)
+    .filter((job) => isEligibleForLegacyPayout(job) || (includePendingHours &&
+      !job.archivedAt && !job.payoutId && !job.payoutPaidAt && needsHoursReview(job)))
     .sort((firstJob, secondJob) => completionSortValue(secondJob) - completionSortValue(firstJob));
 }
 

@@ -1,3 +1,5 @@
+import { needsHoursReview } from "../pricing/hourlyReview.js";
+
 export function groupUnpaidJobsByCleaner(jobs, cleaners) {
   const cleanersById = Object.fromEntries(
     cleaners.map((cleaner) => [cleaner.id, cleaner]),
@@ -5,6 +7,7 @@ export function groupUnpaidJobsByCleaner(jobs, cleaners) {
   const groupsByCleanerId = new Map();
 
   jobs.forEach((job) => {
+    if (needsHoursReview(job)) return;
     const cleaner = cleanersById[job.assignedCleanerId] || {
       id: job.assignedCleanerId,
       name: job.assignedCleanerName || "",

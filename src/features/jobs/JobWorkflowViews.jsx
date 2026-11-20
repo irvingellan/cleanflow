@@ -1,10 +1,12 @@
 import { useId, useState } from "react";
+import { pricingMessage } from "../pricing/pricingMessages.js";
+import { canSuggestDefaultCleanerPrice, hourlyOfferSnapshot } from "../../../functions/src/offerPay.js";
+import { formatOfferCompensation } from "./offerCompensation.js";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import {
   formatCreatedAt,
   formatDate,
   formatOperationalStatus,
-  formatPrice,
   formatStatus,
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
@@ -51,7 +53,10 @@ export function OfferCleaners({
   const [cleanerCount, setCleanerCount] = useState(requiredCleanerCount(job));
   const alreadyOfferedOrAssigned = new Set([...existingOfferCleanerIds, ...(job.assignedCleanerIds || [])]);
   // The amount every new Offer carries: the Job pay, else the Property default.
-  const offerAmount = optionalJobPrice(job.cleanerPayout) ?? optionalJobPrice(property?.defaultCleanerPrice) ?? null;
+  const hourly = hourlyOfferSnapshot(job.pay);
+  const offerAmount = optionalJobPrice(job.cleanerPayout)
+    ?? (canSuggestDefaultCleanerPrice(job, property) ? optionalJobPrice(property?.defaultCleanerPrice) : null);
+  const offerPrice = hourly ?? (offerAmount == null ? {} : { offeredCompensation: offerAmount });
   const [hasSendError, setHasSendError] = useState(false);
   const context = useCleanerSelectionContext(job, !isLoading && !hasError && cleaners.length > 0);
   const checkingAvailability = Boolean(job.scheduledDate) && context.status === "loading";
@@ -106,7 +111,7 @@ export function OfferCleaners({
       const updatedJob = await createJobOffers({
         jobId: job.id,
         cleaners: selectedCleaners,
-        ...((canOptIn && automatic) || extendingAutomatic ? { automatic: true } : offerAmount === null ? {} : { offeredCompensation: offerAmount }),
+        ...((canOptIn && automatic) || extendingAutomatic ? { automatic: true } : offerPrice),
       });
       onSent(selectedCleaners.length, updatedJob);
     } catch {
@@ -199,11 +204,12 @@ export function OfferCleaners({
             </div>
           )}
 
-          {offerAmount === null ? (
+          {offerPrice.offeredCompensation == null && !offerPrice.offeredPay ? (
             <p className="form-error" role="status" data-testid="offer-amount-missing">{translate("offers.amountMissing")}</p>
           ) : (
             <p className="form-helper" data-testid="offer-amount">
-              {translate("offers.amountForCleaner", { amount: formatPrice(offerAmount, translate, language) })}
+              {translate("offers.amountForCleaner", { amount: formatOfferCompensation(offerPrice, translate, language) })}
+              {offerPrice.offeredPay && <><br />{pricingMessage(language, "reportHours")}</>}
             </p>
           )}
 

@@ -9,9 +9,9 @@ const firebase = vi.hoisted(() => ({
 vi.mock("firebase/firestore", () => firebase);
 vi.mock("firebase/firestore/lite", () => ({ ...firebase, getDocs: firebase.getServerDocs }));
 vi.mock("../../services/firebase/client.js", () => ({ db: { test: true } }));
-vi.mock("../../services/firebase/serverReads.js", () => ({ serverFirestore: () => ({ test: true }) }));
+vi.mock("../../services/firebase/serverReads.js", () => ({ serverFirestore: () => ({ test: true }), withReadDeadline: (read) => read }));
 
-import { getPayoutEvidenceForJobs } from "./payoutService.js";
+import { getPayoutEvidenceForJobs, getUnpaidCompletedJobs } from "./payoutService.js";
 
 const snapshot = (records) => ({ docs: records.map((record) => ({ id: record.id, data: () => record.data })) });
 
@@ -102,4 +102,16 @@ describe("complete server-backed weekly payout evidence", () => {
     expect(firebase.getDocs).not.toHaveBeenCalled();
     expect(firebase.runTransaction).not.toHaveBeenCalled();
   });
+});
+
+it("lists unpaid hourly services for review with the same read and keeps them out of the payable list", async () => {
+  const fixed = { operationalStatus: "COMPLETED", assignedCleanerId: "one", cleanerPayout: 100 };
+  const hourly = { ...fixed, schemaVersion: 2, pay: { mode: "HOURLY", rateCents: 2200 } };
+  firebase.getServerDocs.mockResolvedValue(snapshot([
+    { id: "fixed", data: fixed }, { id: "hourly", data: hourly },
+    { id: "paid", data: { ...hourly, payoutId: "paid-record" } },
+    { id: "archived", data: { ...hourly, archivedAt: new Date() } },
+  ]));
+  expect((await getUnpaidCompletedJobs()).map(job => job.id)).toEqual(["fixed"]);
+  expect((await getUnpaidCompletedJobs({ includePendingHours: true })).map(job => job.id)).toEqual(["fixed", "hourly"]);
 });

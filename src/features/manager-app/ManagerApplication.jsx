@@ -226,6 +226,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
   const {
     directory: {
       payoutGroups,
+      pendingHoursJobs,
       recentPayouts,
       isLoading: isLoadingPayouts,
       hasError: hasPayoutsError,
@@ -730,6 +731,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           view={view}
           showPayouts={showPayouts}
           payoutGroups={payoutGroups}
+          pendingHoursJobs={pendingHoursJobs}
           recentPayouts={recentPayouts}
           isLoadingPayouts={isLoadingPayouts}
           hasPayoutsError={hasPayoutsError}

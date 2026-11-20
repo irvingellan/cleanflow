@@ -1,6 +1,10 @@
 import { normalizeDataProvenance } from "../../lib/dataProvenance.js";
 import { getAssignedCleanerIds, isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
+import { billableMinutes, hourlyAmountCents, PRICING_HOURLY } from "../billing/billingStatementModel.js";
+import { needsHoursReview } from "../pricing/hourlyReview.js";
+import { resolveJobPricing } from "../pricing/pricingModel.js";
+
 const dayMilliseconds = 86_400_000;
 export const maxServicePeriodDays = 31;
 const text = (value) => typeof value === "string" ? value.trim() : "";
@@ -86,6 +90,8 @@ function jobFingerprint(job) {
     job.propertyId, job.propertyName, job.schemaVersion, job.assignedCleanerId,
     job.assignedCleanerName, getAssignedCleanerIds(job).sort(),
     money(job.clientPrice), money(job.cleanerPayout), job.payoutId,
+    job.billing?.mode, job.billing?.hourlyRateCents, billableMinutes(job.billing?.hours),
+    job.pay?.mode, job.pay?.rateCents,
     Boolean(job.payoutPaidAt), timestamp(job.payoutPaidAt), job.legacyPayoutEligible === true,
   ]);
 }
@@ -149,7 +155,9 @@ function payoutEvidence(job, payoutCents, index, organizationId, complete) {
 }
 
 function totals(rows, truncated = false) {
+  const onlyPendingHours = rows.length > 0 && rows.every((row) => row.attentionReasons.includes("hours_review"));
   const sum = (field) => {
+    if (onlyPendingHours) return null;
     const total = rows.reduce((value, row) => value + (row[field] ?? 0), 0);
     return Number.isSafeInteger(total) ? total : null;
   };
@@ -228,16 +236,28 @@ export function buildWeeklyClose({
     const clientId = text(job.clientId);
     const clientName = text(job.clientName) || text(clientsById.get(clientId)?.name);
     const propertyName = text(job.propertyName) || text(propertiesById.get(job.propertyId)?.name);
-    const client = money(job.clientPrice);
-    const payout = money(job.cleanerPayout);
-    const evidence = payoutEvidence(job, payout.cents, index, organizationId, payoutLookupComplete);
+    const pendingHours = needsHoursReview(job);
+    let client = money(job.clientPrice);
+    let payout = money(job.cleanerPayout);
+    if (pendingHours) {
+      client = payout = { cents: null, state: "pending" };
+    } else if (job.billing?.mode === PRICING_HOURLY) {
+      const rate = resolveJobPricing(job).client;
+      client = {
+        cents: hourlyAmountCents(rate.rateCents, billableMinutes(job.billing.hours)),
+        state: rate.state === "ready" ? "valid" : "missing",
+      };
+    }
+    const evidence = pendingHours
+      ? { status: "UNKNOWN", paidCents: null, outstandingCents: null, reason: "hours_review" }
+      : payoutEvidence(job, payout.cents, index, organizationId, payoutLookupComplete);
     const cleanerIds = isAssignmentAwareJob(job) ? getAssignedCleanerIds(job)
       : [text(job.assignedCleanerId)].filter(Boolean);
     const cleanerNames = cleanerIds.map((cleanerId) => text(cleanerNamesById[cleanerId])
       || (!isAssignmentAwareJob(job) ? text(job.assignedCleanerName) : "")).filter(Boolean);
     const attentionReasons = [];
-    if (client.state !== "valid") attentionReasons.push(`${client.state}_client_price`);
-    if (payout.state !== "valid") attentionReasons.push(`${payout.state}_cleaner_payout`);
+    if (!pendingHours && client.state !== "valid") attentionReasons.push(`${client.state}_client_price`);
+    if (!pendingHours && payout.state !== "valid") attentionReasons.push(`${payout.state}_cleaner_payout`);
     if (!clientId) attentionReasons.push("missing_client_association");
     if (clientId && clients && !clientsById.has(clientId)) attentionReasons.push("client_link_unresolved");
     const propertyClientId = text(propertiesById.get(job.propertyId)?.clientId);

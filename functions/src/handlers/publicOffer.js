@@ -1,3 +1,4 @@
+import { hourlyOfferSnapshot } from "../offerPay.js";
 import { logger } from "firebase-functions";
 import { publicOfferState as offerState, respondToPublicOffer } from "../publicOfferResponseService.js";
 import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "../firstAcceptWins.js";
@@ -90,12 +91,13 @@ export function publicOfferResult(offerData, jobData, {
     ? offeredCompensation
     : null;
 
-  offer.offeredCompensation = safeOfferedCompensation;
+  const hourly = hourlyOfferSnapshot(offerData.offeredPay);
+  Object.assign(offer, hourly ?? { offeredCompensation: safeOfferedCompensation });
   if (Object.values(assignmentAcknowledgmentStates).includes(assignmentAcknowledgment)) {
     offer.assignmentAcknowledgment = assignmentAcknowledgment;
   }
   // Keep the existing legacy wire field for old clients during rollout.
-  if (!isAssignmentAwareJobData(jobData)) {
+  if (!hourly && !isAssignmentAwareJobData(jobData)) {
     offer.cleanerPayout = safeOfferedCompensation;
   }
 

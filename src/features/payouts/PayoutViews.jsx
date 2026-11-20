@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { hoursReviewLabel } from "../pricing/pricingMessages.js";
 import { Icon } from "../../components/Icon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
+import { formatDate as formatServiceDate } from "../../lib/presentation.js";
 import { validatePayoutProofFile } from "./payoutProofService.js";
 
 const paymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
@@ -64,6 +66,7 @@ function PayoutProofSourcePicker({ disabled, onSelect, compact = false }) {
 
 export function PayoutDirectory({
   payoutGroups,
+  pendingHoursJobs = [],
   recentPayouts,
   isLoading,
   hasError,
@@ -76,7 +79,7 @@ export function PayoutDirectory({
   formatPrice,
   formatCreatedAt,
 }) {
-  const { translate } = useTranslation();
+  const { translate, language } = useTranslation();
 
   return (
     <section aria-labelledby="payouts-title">
@@ -116,7 +119,16 @@ export function PayoutDirectory({
         </p>
       )}
 
-      {!isLoading && !hasError && payoutGroups.length === 0 && (
+      {!isLoading && !hasError && pendingHoursJobs.length > 0 && (
+        <section aria-labelledby="pending-hours-title">
+          <h3 id="pending-hours-title">{hoursReviewLabel(language)}</h3>
+          <ul>{pendingHoursJobs.map((job) => (
+            <li key={job.id}>{job.propertyName || translate("properties.unnamed")}{job.scheduledDate && ` · ${formatServiceDate(job.scheduledDate, translate, language)}`}</li>
+          ))}</ul>
+        </section>
+      )}
+
+      {!isLoading && !hasError && payoutGroups.length === 0 && pendingHoursJobs.length === 0 && (
         <p className="property-history-state">{translate("payouts.empty")}</p>
       )}
 

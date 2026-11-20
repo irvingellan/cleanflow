@@ -680,7 +680,7 @@ export function JobDetail({
 
   function openOfferLinkForm(offer) {
     const offerWithRecentSnapshot = publicOfferLink?.offerId === offer.id
-      ? { ...offer, offeredCompensation: publicOfferLink.offeredCompensation ?? null }
+      ? { ...offer, ...publicOfferLink }
       : offer;
     const suggestion = getOfferCompensationSuggestion(job, offerWithRecentSnapshot);
     setOfferCompensationInput(suggestion.value);
@@ -694,7 +694,7 @@ export function JobDetail({
 
     let offeredCompensation;
     try {
-      offeredCompensation = automaticOfferJob ? null : parseOfferCompensationInput(offerCompensationInput);
+      offeredCompensation = automaticOfferJob || offer.offeredPay ? null : parseOfferCompensationInput(offerCompensationInput);
     } catch {
       setOfferCompensationErrorFor(offer.id);
       return;
@@ -736,6 +736,7 @@ export function JobDetail({
       scheduledDate: job.scheduledDate,
       scheduledStart: job.scheduledStart,
       offeredCompensation: publicOfferLink.offeredCompensation ?? null,
+      offeredPay: publicOfferLink.offeredPay,
       publicUrl: publicOfferLink.url,
       language: cleanerLanguageFor(offer.cleanerId),
       translate: (key, replacements) => translateInLanguage(
@@ -879,6 +880,7 @@ export function JobDetail({
         />
       )}
       <JobDetailsSection
+        property={property}
         job={job}
         translate={translate}
         language={language}

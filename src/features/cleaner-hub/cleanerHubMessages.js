@@ -1,6 +1,8 @@
 // Cleaner Hub copy, [pt-BR, en, es]. Wording comes from the approved Cleaner Hub
 // V1 visual, rewritten only where the prototype described simulated behaviour.
 const M = {
+  "hb.offer.perHour": ["{amount} por hora", "{amount} per hour", "{amount} por hora"],
+  "hb.offer.reportHours": ["Você informa suas horas no final do serviço.", "You report your hours at the end.", "Al terminar el servicio, indicas las horas trabajadas."],
   "hb.appLabel": ["Minha agenda CleanFlow", "My CleanFlow schedule", "Mi agenda CleanFlow"],
   "hb.brand": ["Minha agenda", "My schedule", "Mi agenda"],
   "hb.tabs": ["Navegação do app", "App navigation", "Navegación"],
@@ -238,7 +240,12 @@ export function hubMessageKeys() {
   return Object.keys(M);
 }
 
-export function hubMoney(amount, lang) {
+export function hubMoney(amount, lang, withHoursNote = false) {
+  if (amount?.mode === "HOURLY") {
+    if (!Number.isSafeInteger(amount.rateCents) || amount.rateCents < 0) return null;
+    const rate = hubTranslate(lang, "hb.offer.perHour", { amount: hubMoney(amount.rateCents / 100, lang) });
+    return withHoursNote ? `${rate}\n${hubTranslate(lang, "hb.offer.reportHours")}` : rate;
+  }
   if (typeof amount !== "number" || !Number.isFinite(amount)) return null;
   return new Intl.NumberFormat({ pt: "pt-BR", en: "en-US", es: "es-US" }[lang] || "en-US", {
     style: "currency", currency: "USD", maximumFractionDigits: amount % 1 ? 2 : 0,

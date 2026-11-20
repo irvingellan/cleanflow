@@ -80,6 +80,20 @@ describe("cleaner agenda projection", () => {
     expect(sameEntry(entries.get("bia"), { ...entries.get("bia"), offerExpiresAtMs: future.toMillis() + 1 })).toBe(false);
   });
 
+  it("refreshes only a recipient's rate and keeps client and other pay fields out of the projection", () => {
+    const offeredPay = { mode: "HOURLY", rateCents: 3125 };
+    const input = { organizationId: "o", jobId: "j", now,
+      job: job({ operationalStatus: "OFFERED", assignedCleanerIds: [], pay: { mode: "HOURLY", rateCents: 8080 } }),
+      offers: [{ cleanerId: "first", status: "PENDING", publicOfferExpiresAt: future, offeredPay: { ...offeredPay, private: true } },
+        { cleanerId: "second", status: "PENDING", publicOfferExpiresAt: future, offeredPay: { ...offeredPay, rateCents: 2525 } }] };
+    const entries = computeAgendaEntries(input);
+    expect(entries.get("first").offeredPay).toEqual(offeredPay);
+    expect(entries.get("second").offeredPay.rateCents).toBe(2525);
+    expect(entries.get("first")).not.toHaveProperty("offeredCompensation");
+    expect(sameEntry(entries.get("first"), structuredClone(entries.get("first")))).toBe(true);
+    expect(sameEntry(entries.get("first"), { ...entries.get("first"), offeredPay: { ...offeredPay, rateCents: 4000 } })).toBe(false);
+  });
+
   it("refreshes type, address and job instructions for current offer and assignment holders", () => {
     const input = {
       organizationId: "o", jobId: "j", now,

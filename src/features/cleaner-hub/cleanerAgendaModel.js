@@ -32,9 +32,13 @@ const byTime = (first, second) => sortKey(first).localeCompare(sortKey(second));
  * @returns {{today: object[], upcoming: object[], completed: object[], offers: object[], openCount: number}}
  */
 export function buildCleanerAgenda(entries = [], { now = new Date() } = {}) {
+  // Cards and detail share a display value: fixed dollars or a tagged hourly rate.
+  // Keep this view adapter out of the persisted agenda and the payment records.
+  const displayEntries = entries.map(entry => entry.offeredPay
+    ? { ...entry, offeredCompensation: entry.offeredPay } : entry);
   const today = localDateKey(now);
   const completedFrom = addDaysToKey(today, -completedWindowDays);
-  const assigned = entries.filter((entry) => entry.kind === "ASSIGNED");
+  const assigned = displayEntries.filter((entry) => entry.kind === "ASSIGNED");
   const open = assigned.filter((entry) => openStatuses.includes(entry.jobStatus));
 
   // Earlier days still open are shown under Today with their own date, so the
@@ -44,7 +48,7 @@ export function buildCleanerAgenda(entries = [], { now = new Date() } = {}) {
   const completed = assigned
     .filter((entry) => entry.jobStatus === "COMPLETED" && (!entry.scheduledDate || entry.scheduledDate >= completedFrom))
     .sort((first, second) => byTime(second, first));
-  const offers = entries
+  const offers = displayEntries
     .filter((entry) => entry.kind === "OFFER" && ["PENDING", "INTERESTED", "ALREADY_TAKEN"].includes(entry.offerStatus))
     .filter((entry) => Number.isFinite(entry.offerExpiresAtMs) && entry.offerExpiresAtMs > now.getTime())
     .filter((entry) => !entry.scheduledDate || entry.scheduledDate >= today)

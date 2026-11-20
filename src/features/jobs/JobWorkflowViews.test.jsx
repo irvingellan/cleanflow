@@ -187,6 +187,17 @@ describe("offer amount, cleaner count and send to more (Nov 19 feedback)", () =>
     expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], offeredCompensation: 95 });
   });
 
+  it("shows and sends the snapshotted hourly rate without using a property total", async () => {
+    const pay = { mode: "HOURLY", rateCents: 3125 };
+    render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], pay },
+      { property: { defaultCleanerPrice: 95 } });
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("$31.25 per hour");
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("You report your hours at the end.");
+    await userEvent.click(screen.getByLabelText("Ana"));
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], offeredPay: pay });
+  });
+
   it("warns before sending an offer with no amount", () => {
     render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [] });
     expect(screen.getByTestId("offer-amount-missing")).toBeInTheDocument();

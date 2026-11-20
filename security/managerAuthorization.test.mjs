@@ -2475,6 +2475,13 @@ test("public capability GET/response remains independent of auth and only update
     publicOfferTokenHash: createHash("sha256").update(declineToken).digest("hex"),
     publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 60_000),
   });
+  const offeredPay = { mode: "HOURLY", rateCents: 3125 };
+  await job.collection("offers").doc("cleaner-decline").update({ offeredPay });
+  const hourly = await http("GET", { token: declineToken });
+  assert.deepEqual(hourly.body.offer.offeredPay, offeredPay);
+  assert.equal(hourly.body.offer.offeredCompensation, undefined);
+  assert.equal((await http("GET", { token })).body.offer.offeredPay, undefined);
+  await assertFails(account("outsider").firestore().doc(`${job.path}/offers/cleaner-decline`).update({ offeredPay }));
   assert.equal((await http("POST", {}, { token: declineToken, status: "DECLINED" })).code, 200);
   assert.equal((await job.collection("offers").doc("cleaner-decline").get()).data().status, "DECLINED");
   assert.deepEqual((await job.get()).data(), beforeJob);

@@ -1,3 +1,4 @@
+import { buildWhatsAppChatUrl } from "./whatsappHandoff.js";
 import { describe, expect, it } from "vitest";
 import {
   buildCleanerOfferMessage,
@@ -46,6 +47,22 @@ describe("per-cleaner Offer compensation", () => {
     expect(parseOfferCompensationInput("0")).toBe(0);
     expect(() => parseOfferCompensationInput("-1")).toThrow();
     expect(() => parseOfferCompensationInput("not money")).toThrow();
+  });
+
+  it("copies the hourly rate and instructions and keeps the chat URL free of message contents", () => {
+    const translate = (key, values = {}) => ({
+      "offers.messageCompensation": values.amount,
+      "offers.messageLink": values.url,
+    })[key] || key;
+    const pay = { mode: "HOURLY", rateCents: 3125 };
+    const message = buildCleanerOfferMessage({ offeredPay: pay, offeredCompensation: 90,
+      language: "en", translate, publicUrl: "https://example.test/offer/synthetic" });
+    expect(message).toContain("$31.25 per hour\nYou report your hours at the end.");
+    expect(message).not.toContain("90.00");
+    expect(getOfferCompensationSuggestion({ cleanerPayout: 90 }, { offeredPay: pay }))
+      .toEqual({ value: "31.25", source: "offer", mode: "HOURLY" });
+    expect(buildWhatsAppChatUrl("+12025550110")).toBe("https://wa.me/12025550110");
+    expect(buildWhatsAppChatUrl("")).toBeNull();
   });
 
   it("builds the copied message from the snapshotted amount and uses explicit missing copy", () => {

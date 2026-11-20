@@ -41,6 +41,16 @@ describe("Public automatic offer", () => {
     expect(screen.queryByRole("button", { name: /Aceitar serviço|Tenho interesse|Não posso/ })).toBeNull();
   });
 
+  it("shows the manual hourly offer in the recipient's selected language", async () => {
+    window.localStorage.setItem("cleanflow-language", "en");
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ offer: {
+      status: "PENDING", preferredLanguage: "pt", offeredPay: { mode: "HOURLY", rateCents: 3167 },
+    } })));
+    render(<TranslationProvider><App /></TranslationProvider>);
+    expect(await screen.findByText(/31,67 por hora/)).toBeVisible();
+    expect(screen.getByText(/Você informa suas horas no final do serviço/)).toBeVisible();
+  });
+
   it("replaces stale public response controls when the server requires the Hub", async () => {
     const { offerDistributionMode: _, ...staleOffer } = automaticOffer;
     const fetchOffer = vi.fn()

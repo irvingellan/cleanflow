@@ -250,6 +250,25 @@ its recorded price, even if it is missing. Later changes to Property rates
 never fill in or recalculate recorded Jobs, Offers or Payouts. A known hourly
 rate is distinct from an approved amount for the work.
 
+Job creation and service-type changes on a saved Job copy the selected
+Property rates. Fixed snapshots use `clientPrice` and `cleanerPayout`
+in dollars. An hourly side uses `billing.mode` and `billing.hourlyRateCents`
+for the client or `pay.mode` and `pay.rateCents` for the cleaner. The manager
+can edit the Job snapshot. A recorded payout or approved billing hours locks
+that edit. For a Property with no service table, switching the type in the
+legacy creation form keeps amounts already entered and prompts for review.
+
+An hourly Offer stores the recipient's own `offeredPay` with `mode: "HOURLY"`
+and `rateCents`. A later Job edit leaves the issued Offer intact. The
+authenticated cleaner agenda and the manual public offer use this snapshot.
+Automatic public invitations continue to direct the cleaner to the Hub.
+
+A completed service awaiting hours appears for review in weekly close and
+payouts. Neither its hourly rate nor a stale fixed amount contributes to a
+financial subtotal. Client-approved time is independent of each cleaner's
+payable time. The fixed team payout and the eligibility of single-cleaner
+legacy Jobs follow the existing payout model.
+
 ### Client pricing
 
 A Job may be priced as:

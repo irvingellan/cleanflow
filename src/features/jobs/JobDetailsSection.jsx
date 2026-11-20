@@ -2,11 +2,16 @@ import { JobDetailSection } from "./JobDetailSection.jsx";
 import { JobServiceTypeSelect } from "./JobServiceTypeSelect.jsx";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
 import { currentScheduleConfirmations, currentScheduleRevision } from "./scheduleConfirmation.js";
+import { requiredCleanerCount } from "./offerSlots.js";
+import { resolveJobPricing } from "../pricing/pricingModel.js";
+import { formatPricingRate } from "../pricing/pricingMessages.js";
+import { jobPricesLocked } from "./jobPricingForm.js";
 import { canEditJobDetails, maximumGuestNameLength } from "./jobCompatibility.js";
 
 /** The Details section of Job Detail: the schedule edit form, the details edit form (guest name and notes) and the notes. */
 export function JobDetailsSection({
   job,
+  property,
   translate,
   language,
   scheduleSectionRef,
@@ -36,6 +41,10 @@ export function JobDetailsSection({
   setJobDetailsSaveError,
   jobDetailFormValues,
 }) {
+  const typeChanged = jobDetailValues.serviceType !== jobDetailValues.initialServiceType;
+  const nextRates = typeChanged && property
+    ? resolveJobPricing({ serviceType: jobDetailValues.serviceType }, { property, cleanerCount: requiredCleanerCount(job) })
+    : null;
   return (
     <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
     <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
@@ -126,8 +135,17 @@ export function JobDetailsSection({
       )}
       {isEditingJobDetails && (
         <form className="cleaning-form" noValidate onSubmit={saveJobDetails}>
-          <JobServiceTypeSelect value={jobDetailValues.serviceType} disabled={isSavingJobDetails}
+          <JobServiceTypeSelect value={jobDetailValues.serviceType} disabled={isSavingJobDetails || jobPricesLocked(job)}
             onChange={(event) => setJobDetailValues((current) => ({ ...current, serviceType: event.target.value }))} />
+          {typeChanged && (
+            <div className="form-hint" role="status">
+              <p>{serviceTypeMessage(language, "typePriceChange")}</p>
+              {nextRates && <>
+                <p>{translate("jobs.clientPrice")} · {formatPricingRate(nextRates.client, language, translate)}</p>
+                <p>{translate("jobs.cleanerPayout")} · {formatPricingRate(nextRates.cleaner, language, translate)}</p>
+              </>}
+            </div>
+          )}
           <label>
             {translate("jobs.guestName")}
             <input

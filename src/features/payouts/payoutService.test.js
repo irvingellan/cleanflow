@@ -13,3 +13,11 @@ describe("legacy payout eligibility", () => {
     expect(isEligibleForLegacyPayout({ ...legacyJob, schemaVersion: 2 })).toBe(false);
   });
 });
+
+it.each([
+  { pay: { mode: "HOURLY", rateCents: 2000 } },
+  { billing: { mode: "HOURLY", hourlyRateCents: 3000, hours: { approved: false, approvedMinutes: 60 } } },
+])("refuses to pay an hourly job awaiting hours even with stale fixed dollars", (pricing) => {
+  expect(isEligibleForLegacyPayout({ operationalStatus: "COMPLETED",
+    assignedCleanerId: "cleaner-1", cleanerPayout: 100, ...pricing })).toBe(false);
+});

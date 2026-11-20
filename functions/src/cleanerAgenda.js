@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { hourlyOfferSnapshot } from "./offerPay.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { publicOfferState } from "./publicOfferResponseService.js";
 import { automaticOfferBatchVersion, FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
@@ -74,6 +75,10 @@ export function offeredCompensationFor(offer, job) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function recipientCompensation(offer, job) {
+  return hourlyOfferSnapshot(offer?.offeredPay) ?? { offeredCompensation: offeredCompensationFor(offer, job) };
+}
+
 function baseEntry(organizationId, jobId, cleanerId, job) {
   return {
     organizationId,
@@ -141,7 +146,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
       ...holderDetails,
       acknowledged: Boolean(assignment?.cleanerAcknowledgedAt),
       offerStatus: null,
-      offeredCompensation: offeredCompensationFor(acceptedOfferFor(cleanerId, assignment, job, jobOffers), job),
+      ...recipientCompensation(acceptedOfferFor(cleanerId, assignment, job, jobOffers), job),
       checklist: { ...checklistSummary },
       checklistStatus: checklistSummary.status,
       checklistStarted: checklistSummary.started,
@@ -183,7 +188,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
       offerStatus: closed ? "ALREADY_TAKEN" : offer.status,
       offerExpiresAtMs,
       // Closed invitations keep only the amount saved on the recipient's own Offer.
-      offeredCompensation: offeredCompensationFor(offer, closed ? null : job),
+      ...recipientCompensation(offer, closed ? null : job),
       ...(automatic ? { offerDistributionMode: FIRST_ACCEPT_WINS } : {}),
       ...(offer === replacement ? { replacementOfferId: activeReplacement } : {}),
     });
@@ -203,6 +208,7 @@ const comparedFields = [
 
 export function sameEntry(previous, next) {
   return Boolean(previous) && isDeepStrictEqual(previous.reschedule, next.reschedule)
+    && isDeepStrictEqual(previous.offeredPay, next.offeredPay)
     && comparedFields.every((field) => (previous[field] ?? null) === (next[field] ?? null));
 }
 

@@ -1,3 +1,5 @@
+import { pricingMessage } from "../pricing/pricingMessages.js";
+import { hourlyOfferSnapshot } from "../../../functions/src/offerPay.js";
 import { formatDate, formatPrice, hasValue } from "../../lib/presentation.js";
 import { optionalJobPrice } from "./jobCompatibility.js";
 
@@ -6,6 +8,10 @@ import { optionalJobPrice } from "./jobCompatibility.js";
  * an amount for the manager to confirm or edit before issuing that Offer's link.
  */
 export function getOfferCompensationSuggestion(job, offer) {
+  const hourly = hourlyOfferSnapshot(offer?.offeredPay);
+  if (hourly) {
+    return { value: hourly.offeredPay ? String(hourly.offeredPay.rateCents / 100) : "", source: "offer", mode: "HOURLY" };
+  }
   if (Object.prototype.hasOwnProperty.call(offer || {}, "offeredCompensation")) {
     const amount = optionalJobPrice(offer.offeredCompensation);
     return {
@@ -30,12 +36,22 @@ export function parseOfferCompensationInput(value) {
   return amount ?? null;
 }
 
+export function formatOfferCompensation({ offeredPay, offeredCompensation }, translate, language) {
+  const hourly = hourlyOfferSnapshot(offeredPay);
+  if (hourly?.offeredPay) {
+    return pricingMessage(language, "perHour", { value: formatPrice(hourly.offeredPay.rateCents / 100, translate, language) });
+  }
+  return !hourly && hasValue(offeredCompensation)
+    ? formatPrice(offeredCompensation, translate, language) : translate("publicOffer.amountNotSet");
+}
+
 export function buildCleanerOfferMessage({
   cleanerName,
   propertyName,
   scheduledDate,
   scheduledStart,
   offeredCompensation,
+  offeredPay,
   publicUrl,
   language,
   translate,
@@ -55,10 +71,9 @@ export function buildCleanerOfferMessage({
 
   lines.push(
     translate("offers.messageCompensation", {
-      amount: hasValue(offeredCompensation)
-        ? formatPrice(offeredCompensation, translate, language)
-        : translate("publicOffer.amountNotSet"),
+      amount: formatOfferCompensation({ offeredPay, offeredCompensation }, translate, language),
     }),
+    ...(hourlyOfferSnapshot(offeredPay)?.offeredPay ? [pricingMessage(language, "reportHours")] : []),
     "",
     translate("offers.messageLink", { url: publicUrl }),
   );

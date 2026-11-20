@@ -25,3 +25,23 @@ describe("Weekly Close entry in Payouts", () => {
     expect(onUploadProof).not.toHaveBeenCalled();
   });
 });
+
+it.each([["en", "Needs review: hours"], ["pt", "Precisa de revisão: horas"], ["es", "Requiere revisión: horas"]])(
+  "shows pending hours outside the selectable payout groups in %s", (language, heading) => {
+    localStorage.setItem("cleanflow-language", language);
+    const formatPrice = vi.fn(String);
+    const props = { payoutGroups: [], recentPayouts: [], pendingHoursJobs: [
+      { id: "pending", propertyName: "Sample property", scheduledDate: "2026-09-21" },
+    ], formatPrice, formatCreatedAt: String };
+    const view = (state) => <TranslationProvider><PayoutDirectory {...props} {...state} /></TranslationProvider>;
+    const { rerender } = render(view({ isLoading: true }));
+    expect(screen.queryByText(heading)).toBeNull();
+    rerender(view({ hasError: true }));
+    expect(screen.queryByText(heading)).toBeNull();
+    rerender(view({}));
+    expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+    expect(screen.getByText(/Sample property/)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(formatPrice).not.toHaveBeenCalled();
+  },
+);

@@ -1,3 +1,4 @@
+import { pricingMessage } from "../pricing/pricingMessages.js";
 import {
   isJobFilled,
   manualOfferAvailability,
@@ -7,9 +8,9 @@ import {
 } from "./offerSlots.js";
 import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { automaticOfferDisplayStatus } from "./automaticOffers.js";
-import { formatCreatedAt, formatPrice, hasValue } from "../../lib/presentation.js";
-import { getOfferCompensationSuggestion } from "./offerCompensation.js";
-import { buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
+import { formatCreatedAt, hasValue } from "../../lib/presentation.js";
+import { formatOfferCompensation, getOfferCompensationSuggestion } from "./offerCompensation.js";
+import { buildWhatsAppChatUrl, buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
 
 /** One offer in the Offers section of Job Detail: its status, the manager's actions, the public link and the message for the cleaner. */
 export function JobOfferRow({
@@ -80,10 +81,9 @@ export function JobOfferRow({
   const compensationSuggestion = getOfferCompensationSuggestion(job, offer);
   const isEditingOfferCompensation = editingOfferCompensationFor === offer.id;
   const offerMessage = offerMessageFor(offer, offerCleanerName);
-  const offerWhatsAppUrl = buildWhatsAppHandoffUrl(
-    cleanerPhonesById[offer.cleanerId],
-    offerMessage,
-  );
+  const phone = cleanerPhonesById[offer.cleanerId];
+  const offerWhatsAppUrl = publicOfferLink?.offeredPay
+    ? buildWhatsAppChatUrl(phone) : buildWhatsAppHandoffUrl(phone, offerMessage);
 
   return (
     <article className="offer-status-item">
@@ -184,7 +184,9 @@ export function JobOfferRow({
           className="offer-compensation-form"
           onSubmit={(event) => createOfferLink(event, offer)}
         >
-          <label>
+          {compensationSuggestion.mode === "HOURLY" ? (
+            <p>{formatOfferCompensation(offer, translate, language)}<br />{pricingMessage(language, "reportHours")}</p>
+          ) : <label>
             {translate("offers.offeredCompensation")}
             <input
               type="number"
@@ -197,7 +199,7 @@ export function JobOfferRow({
                 setOfferCompensationErrorFor(null);
               }}
             />
-          </label>
+          </label>}
           <p className="offer-compensation-form__help">
             {compensationSuggestion.source === "job"
               ? translate("offers.jobAmountSuggestion")
@@ -250,9 +252,8 @@ export function JobOfferRow({
           </a>
           <p className="offer-compensation-summary">
             <strong>{translate("offers.offeredCompensation")}:</strong>{" "}
-            {hasValue(publicOfferLink.offeredCompensation)
-              ? formatPrice(publicOfferLink.offeredCompensation, translate, language)
-              : translate("publicOffer.amountNotSet")}
+            {formatOfferCompensation(publicOfferLink, translate, language)}
+            {publicOfferLink.offeredPay && <><br />{pricingMessage(language, "reportHours")}</>}
           </p>
           <p className="form-hint">
             {translate("jobs.messageForCleanerLanguage", {
@@ -284,8 +285,8 @@ export function JobOfferRow({
           {!offerWhatsAppUrl && (
             <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
           )}
-          <p className="form-hint">{translate("whatsapp.manualSendNote")}</p>
-          {!hasValue(publicOfferLink.offeredCompensation) && (
+          <p className="form-hint">{publicOfferLink.offeredPay ? pricingMessage(language, "copyBeforeWhatsApp") : translate("whatsapp.manualSendNote")}</p>
+          {!publicOfferLink.offeredPay && !hasValue(publicOfferLink.offeredCompensation) && (
             <p className="offer-compensation-warning" role="status">
               {translate("offers.amountNotSetWarning")}
             </p>
