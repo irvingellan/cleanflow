@@ -247,6 +247,33 @@ test("a real Inbox event fans out only to authorized current sessions through an
 });
 
 
+test("an extended automatic invitation keeps frozen personal and house terms out of push and lockscreen content", async () => {
+  const account = await link(cleanerB);
+  const registration = await register(account, installationB);
+  const job = await createJob("synthetic-fixed-extension");
+  await job.update({ requiredCleanerCount: 2, cleanerPayout: 243.57 });
+  await createAutomaticJobOffers.run(manager({ jobId: job.id, cleanerIds: [cleanerA] }));
+  await createAutomaticJobOffers.run(manager({ jobId: job.id, cleanerIds: [cleanerB] }));
+  const after = await job.collection("offers").doc(cleanerB).get();
+  assert.deepEqual([after.get("offeredCompensation"), after.get("offeredFirstSlotExtraCents"), after.get("fixedHousePay")],
+    [121.78, 1, { totalCents: 24357, teamSize: 2 }]);
+  const args = { organizationId, jobId: job.id, offerId: cleanerB, after };
+  assert.equal(await recordCleanerOfferInboxEvent(functionDatabase, args), 1);
+  assert.equal(await recordCleanerOfferInboxEvent(functionDatabase, args), 0);
+  const [event] = (await inboxReference(cleanerB).where("type", "==", "NEW_OFFER").get()).docs;
+  const sent = [];
+  const result = await dispatch(cleanerB, event.id, async messages => {
+    sent.push(...messages);
+    return { responses: messages.map(() => ({ success: true })), successCount: messages.length, failureCount: 0 };
+  });
+  assert.equal(result.deliveryStatus, "FCM_ACCEPTED");
+  assert.equal(sent.length, 1);
+  const display = cleanerPushDisplay(sent[0], { bindingId: registration.bindingId, language: "en" });
+  assert.ok(display);
+  assert.doesNotMatch(JSON.stringify([event.data(), sent[0].data, display, (await receiptReference(event.id).get()).data()]),
+    /offeredCompensation|offeredFirstSlotExtraCents|fixedHousePay|offeredPayEstimated|teamSize|totalCents|syncExtendedBatchAgenda|243[.,]57|121[.,]7[89]/);
+});
+
 test("two overlapping automatic offer batches survive partial provider outcomes and only the current recipient can open", async () => {
   const primary = await link(cleanerA);
   const secondary = await link(cleanerA, true);

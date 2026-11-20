@@ -79,6 +79,18 @@ describe("createPublicOfferLink compensation snapshot", () => {
     });
   });
 
+  it.each([125, 0, null])("keeps a saved fixed amount (%s) when a manager rotates the link", async saved => {
+    mocks.runTransaction.mockImplementationOnce(async (_db, callback) => callback({
+      get: async ref => ({ exists: () => true, data: () => ref.path.endsWith("jobs/job-1")
+        ? { schemaVersion: 2, operationalStatus: "OFFERED", cleanerPayout: 800 }
+        : { status: "PENDING", offeredCompensation: saved } }),
+      update: mocks.transactionUpdate,
+    }));
+    const link = await createPublicOfferLink({ jobId: "job-1", cleanerId: "cleaner-1", offeredCompensation: 100 });
+    expect(link.offeredCompensation).toBe(saved);
+    expect(mocks.transactionUpdate.mock.calls[0][1]).not.toHaveProperty("offeredCompensation");
+  });
+
   it("rotates the public link without changing an hourly snapshot or putting it in the URL", async () => {
     const offeredPay = { mode: "HOURLY", rateCents: 3125 };
     mocks.runTransaction.mockImplementationOnce(async (_database, callback) => callback({
@@ -161,6 +173,19 @@ describe("manual hourly offers", () => {
     }));
     return set;
   }
+  it("uses Job slots rather than invited-recipient count and rejects a stale fixed quote", async () => {
+    const fixed = { schemaVersion: 2, operationalStatus: "OFFERED", assignedCleanerIds: [], requiredCleanerCount: 3, cleanerPayout: 100 };
+    const cleaners = ["a", "b", "c", "d", "e"].map(id => ({ id, name: id }));
+    const input = { jobId: "hourly-job", cleaners, offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1 };
+    const set = transactionWithOffer(false, fixed);
+    await createJobOffers(input);
+    expect(set).toHaveBeenCalledTimes(cleaners.length);
+    for (const [, offer] of set.mock.calls) expect(offer).toMatchObject({ offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1 });
+    const stale = transactionWithOffer(false, { ...fixed, cleanerPayout: 99.99 });
+    await expect(createJobOffers(input)).rejects.toThrow("rate changed");
+    expect(stale).not.toHaveBeenCalled();
+  });
+
   it("saves only the agreed hourly rate and makes the new Hub invitation visible", async () => {
     const set = transactionWithOffer(false);
     await send();

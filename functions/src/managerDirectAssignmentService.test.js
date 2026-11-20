@@ -102,6 +102,17 @@ async function rejectedWithoutWrite(records, reason) {
 }
 
 describe("manager direct Assignment", () => {
+  it("freezes a direct assignee's personal terms without copying Job totals or client money", async () => {
+    const { database, records } = fakeDatabase(fixtures({
+      job: { ...baseJob, requiredCleanerCount: 3, clientPrice: 700, cleanerPayout: 100 },
+    }));
+    const result = await assignCleanerDirectlyForManager(database, request);
+    const assignment = records.get(jobPath + "/assignments/" + result.assignmentId);
+    expect(assignment.paySnapshot).toEqual({ offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1, fixedHousePay: { totalCents: 10000, teamSize: 3 } });
+    expect(assignment).not.toHaveProperty("cleanerPayout");
+    expect(assignment).not.toHaveProperty("clientPrice");
+  });
+
   it.each(["UNASSIGNED", "OFFERED"])("assigns an active Cleaner to a %s v2 Job with no Offer", async (status) => {
     const { database, records, writes } = fakeDatabase(fixtures({
       job: { ...baseJob, operationalStatus: status },

@@ -76,6 +76,7 @@ export function CreateCleaningForm({
 
     setFormValues((current) => {
       const next = { ...current, [name]: value };
+      if (name === "cleanerMode") next.fixedPerCleaner = false;
       if (name === "serviceType" || name === "requiredCleanerCount") {
         const pricing = jobPriceFormValues(resolveJobPricing({ serviceType: next.serviceType }, {
           property: selectedProperty, cleanerCount: Number(next.requiredCleanerCount),
@@ -84,7 +85,7 @@ export function CreateCleaningForm({
           // Legacy forms kept the entered amounts when changing type before a rate table existed.
           if (selectedProperty?.serviceRates || value === defaultServiceType) return { ...next, ...pricing };
         } else if (selectedProperty?.serviceRates?.[next.serviceType]?.cleaner?.byCleanerCount) {
-          return { ...next, cleanerPayout: pricing.cleanerPayout, cleanerMode: pricing.cleanerMode };
+          return { ...next, cleanerPayout: pricing.cleanerPayout, cleanerMode: pricing.cleanerMode, fixedPerCleaner: pricing.fixedPerCleaner };
         }
       }
       return next;

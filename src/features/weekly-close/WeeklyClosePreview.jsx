@@ -214,7 +214,11 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
                     <small>{job.cleanerNames?.length ? job.cleanerNames.join(" · ") : translate("weeklyClose.cleanerNotResolved")}</small></dd></div>
                   <div><dt>{translate("weeklyClose.serviceDate")}</dt><dd>{formatDate(job.serviceDate, translate, language)}</dd></div>
                   <div><dt>{translate("weeklyClose.clientCharge")}</dt><dd>{money(job.clientCharge)}</dd></div>
-                  <div><dt>{translate("weeklyClose.cleanerPayout")}</dt><dd>{money(job.cleanerPayout)}</dd></div>
+                  <div><dt>{translate("weeklyClose.cleanerPayout")}</dt><dd>{money(job.cleanerPayout)}
+                    {job.cleanerShares?.length > 1 && job.cleanerShares.map((share, index) => <small key={index}>
+                      {share.name || translate("weeklyClose.cleanerNotResolved")} · {money(share.amount)}
+                      {share.paidAmount !== null && <> · {translate("weeklyClose.status.PAID")} {money(share.paidAmount)}</>}
+                    </small>)}</dd></div>
                   <div><dt>{translate("weeklyClose.payoutStatus")}</dt><dd><span className={`weekly-close-status weekly-close-status--${job.payoutStatus.toLowerCase()}`}>
                     {translate(`weeklyClose.status.${job.payoutStatus}`)}</span></dd></div>
                 </dl>

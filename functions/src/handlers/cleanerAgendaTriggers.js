@@ -9,12 +9,12 @@ function agendaHandler(recordInbox, { deferInitialAutomaticOfferSync = false } =
     try {
       const context = { organizationId: event.params.orgId, jobId: event.params.jobId };
       const { before, after } = event.data || {};
-      // The automatic distribution transaction creates every Offer with a
-      // Job update. Its Job trigger reprojects the complete committed batch.
-      const jobTriggerOwnsAgenda = deferInitialAutomaticOfferSync
-        && before?.exists === false && isAutomaticOfferJob(after?.data());
+      // The initial batch writes the Job. An extension writes only Offers, and
+      // designates one of them to project the entire committed extension.
+      const createdOffer = deferInitialAutomaticOfferSync && before?.exists === false ? after?.data() : null;
+      const skipAgendaSync = isAutomaticOfferJob(createdOffer) && createdOffer.syncExtendedBatchAgenda !== true;
       await Promise.all([
-        jobTriggerOwnsAgenda ? null : syncCleanerAgendaForJob(db, context),
+        skipAgendaSync ? null : syncCleanerAgendaForJob(db, context),
         recordInbox?.(db, {
           ...context, offerId: event.params.offerId, eventId: event.id,
           before, after,

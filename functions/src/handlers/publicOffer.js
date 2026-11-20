@@ -1,4 +1,4 @@
-import { hourlyOfferSnapshot } from "../offerPay.js";
+import { offerPayForRecipient } from "../offerPay.js";
 import { logger } from "firebase-functions";
 import { publicOfferState as offerState, respondToPublicOffer } from "../publicOfferResponseService.js";
 import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "../firstAcceptWins.js";
@@ -73,32 +73,14 @@ export function publicOfferResult(offerData, jobData, {
     preferredLanguage,
   };
 
-  // The per-cleaner Offer snapshot is authoritative. Versionless/v1 Offers
-  // without a snapshot retain the old single-cleaner Job payout fallback; a v2
-  // Job-level amount is ambiguous and must never be presented as each cleaner's.
-  const hasOfferCompensation = Object.prototype.hasOwnProperty.call(
-    offerData,
-    "offeredCompensation",
-  );
-  const legacyFallback = !isAssignmentAwareJobData(jobData)
-    ? jobData.cleanerPayout
-    : null;
-  const offeredCompensation = hasOfferCompensation
-    ? offerData.offeredCompensation
-    : legacyFallback;
-  const safeOfferedCompensation = typeof offeredCompensation === "number" &&
-      Number.isFinite(offeredCompensation) && offeredCompensation >= 0
-    ? offeredCompensation
-    : null;
-
-  const hourly = hourlyOfferSnapshot(offerData.offeredPay);
-  Object.assign(offer, hourly ?? { offeredCompensation: safeOfferedCompensation });
+  const compensation = offerPayForRecipient(offerData, jobData);
+  Object.assign(offer, compensation);
   if (Object.values(assignmentAcknowledgmentStates).includes(assignmentAcknowledgment)) {
     offer.assignmentAcknowledgment = assignmentAcknowledgment;
   }
   // Keep the existing legacy wire field for old clients during rollout.
-  if (!hourly && !isAssignmentAwareJobData(jobData)) {
-    offer.cleanerPayout = safeOfferedCompensation;
+  if (!offerData.offeredPay && !isAssignmentAwareJobData(jobData)) {
+    offer.cleanerPayout = compensation.offeredCompensation;
   }
 
   return {

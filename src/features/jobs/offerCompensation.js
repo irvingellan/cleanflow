@@ -1,5 +1,5 @@
-import { pricingMessage } from "../pricing/pricingMessages.js";
-import { hourlyOfferSnapshot } from "../../../functions/src/offerPay.js";
+import { offerPayNote, pricingMessage } from "../pricing/pricingMessages.js";
+import { hourlyOfferSnapshot, newOfferPay } from "../../../functions/src/offerPay.js";
 import { formatDate, formatPrice, hasValue } from "../../lib/presentation.js";
 import { optionalJobPrice } from "./jobCompatibility.js";
 
@@ -20,7 +20,7 @@ export function getOfferCompensationSuggestion(job, offer) {
     };
   }
 
-  const amount = optionalJobPrice(job?.cleanerPayout);
+  const amount = newOfferPay(job ?? {}).offeredCompensation;
   if (amount !== undefined && amount !== null) {
     return { value: String(amount), source: "job" };
   }
@@ -36,13 +36,16 @@ export function parseOfferCompensationInput(value) {
   return amount ?? null;
 }
 
-export function formatOfferCompensation({ offeredPay, offeredCompensation }, translate, language) {
+export function formatOfferCompensation(offer, translate, language) {
+  const { offeredPay, offeredCompensation } = offer;
   const hourly = hourlyOfferSnapshot(offeredPay);
   if (hourly?.offeredPay) {
     return pricingMessage(language, "perHour", { value: formatPrice(hourly.offeredPay.rateCents / 100, translate, language) });
   }
-  return !hourly && hasValue(offeredCompensation)
-    ? formatPrice(offeredCompensation, translate, language) : translate("publicOffer.amountNotSet");
+  if (hourly || !hasValue(offeredCompensation)) return translate("publicOffer.amountNotSet");
+  const base = formatPrice(offeredCompensation, translate, language);
+  const extra = offerPayNote(offer, language);
+  return extra ? `${base} · ${extra}` : base;
 }
 
 export function buildCleanerOfferMessage({
@@ -51,6 +54,8 @@ export function buildCleanerOfferMessage({
   scheduledDate,
   scheduledStart,
   offeredCompensation,
+  offeredFirstSlotExtraCents,
+  offeredPayEstimated,
   offeredPay,
   publicUrl,
   language,
@@ -71,7 +76,7 @@ export function buildCleanerOfferMessage({
 
   lines.push(
     translate("offers.messageCompensation", {
-      amount: formatOfferCompensation({ offeredPay, offeredCompensation }, translate, language),
+      amount: formatOfferCompensation({ offeredPay, offeredCompensation, offeredFirstSlotExtraCents, offeredPayEstimated }, translate, language),
     }),
     ...(hourlyOfferSnapshot(offeredPay)?.offeredPay ? [pricingMessage(language, "reportHours")] : []),
     "",

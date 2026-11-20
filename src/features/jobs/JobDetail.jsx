@@ -1,3 +1,4 @@
+import { offerPayForRecipient } from "../../../functions/src/offerPay.js";
 import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
@@ -680,7 +681,7 @@ export function JobDetail({
 
   function openOfferLinkForm(offer) {
     const offerWithRecentSnapshot = publicOfferLink?.offerId === offer.id
-      ? { ...offer, ...publicOfferLink }
+      ? publicOfferLink
       : offer;
     const suggestion = getOfferCompensationSuggestion(job, offerWithRecentSnapshot);
     setOfferCompensationInput(suggestion.value);
@@ -735,8 +736,7 @@ export function JobDetail({
       propertyName: job.propertyName || translate("properties.unnamed"),
       scheduledDate: job.scheduledDate,
       scheduledStart: job.scheduledStart,
-      offeredCompensation: publicOfferLink.offeredCompensation ?? null,
-      offeredPay: publicOfferLink.offeredPay,
+      ...offerPayForRecipient({ offeredCompensation: null, ...publicOfferLink }, job, offer.cleanerId),
       publicUrl: publicOfferLink.url,
       language: cleanerLanguageFor(offer.cleanerId),
       translate: (key, replacements) => translateInLanguage(

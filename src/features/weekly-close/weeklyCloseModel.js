@@ -2,7 +2,8 @@ import { normalizeDataProvenance } from "../../lib/dataProvenance.js";
 import { getAssignedCleanerIds, isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
 import { billableMinutes, hourlyAmountCents, PRICING_HOURLY } from "../billing/billingStatementModel.js";
-import { needsHoursReview } from "../pricing/hourlyReview.js";
+import { payoutTimestamp, recordedShareCents } from "../payouts/payoutReceipt.js";
+import { fixedPayoutShares, payoutNeedsHoursReview } from "../payouts/payoutShares.js";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
 
 const dayMilliseconds = 86_400_000;
@@ -68,19 +69,6 @@ function money(value) {
 
 const dollars = (cents) => cents === null ? null : cents / 100;
 
-function timestamp(value) {
-  try {
-    let milliseconds;
-    if (value instanceof Date) milliseconds = value.getTime();
-    else if (typeof value?.toMillis === "function") milliseconds = value.toMillis();
-    else if (Number.isFinite(value?.seconds)) milliseconds = value.seconds * 1000;
-    else if (typeof value === "string" && value.trim()) milliseconds = Date.parse(value);
-    return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : null;
-  } catch {
-    return null;
-  }
-}
-
 // Only reconciliation-relevant fields participate in duplicate comparison;
 // private notes/contacts/access information never enter this projection.
 function jobFingerprint(job) {
@@ -88,18 +76,23 @@ function jobFingerprint(job) {
     job.organizationId, normalizeDataProvenance(job), Boolean(job.archivedAt),
     job.operationalStatus, job.scheduledDate, job.clientId, job.clientName,
     job.propertyId, job.propertyName, job.schemaVersion, job.assignedCleanerId,
-    job.assignedCleanerName, getAssignedCleanerIds(job).sort(),
+    job.assignedCleanerName, getAssignedCleanerIds(job),
     money(job.clientPrice), money(job.cleanerPayout), job.payoutId,
     job.billing?.mode, job.billing?.hourlyRateCents, billableMinutes(job.billing?.hours),
-    job.pay?.mode, job.pay?.rateCents,
-    Boolean(job.payoutPaidAt), timestamp(job.payoutPaidAt), job.legacyPayoutEligible === true,
+    job.pay?.mode, job.pay?.rateCents, job.pay?.perCleanerCents, sortedEntries(job.payoutIdsByCleaner),
+    sortedEntries(job.payoutAgreementsByCleaner),
+    Boolean(job.payoutPaidAt), payoutTimestamp(job.payoutPaidAt), job.legacyPayoutEligible === true,
   ]);
+}
+
+function sortedEntries(map) {
+  return map && typeof map === "object" ? Object.entries(map).sort(([a], [b]) => a.localeCompare(b)) : map;
 }
 
 function payoutFingerprint(payout) {
   return JSON.stringify([
     payout.organizationId, payout.cleanerId, payout.status, payout.jobIds,
-    money(payout.amount), timestamp(payout.paidAt),
+    money(payout.amount), payoutTimestamp(payout.paidAt), sortedEntries(payout.jobAmountsCents),
   ]);
 }
 
@@ -121,9 +114,46 @@ function payoutIndex(payouts) {
   return { byId, byJob, conflicts };
 }
 
+const unknown = reason => ({ status: "UNKNOWN", paidCents: null, outstandingCents: null, reason });
+
+function teamPayoutEvidence(job, shares, index, organizationId, complete) {
+  if (!complete) return unknown("payout_lookup_incomplete");
+  const links = job.payoutIdsByCleaner;
+  const references = index.byJob.get(job.id) ?? new Set();
+  if (!links && !references.size) return unknown("v2_payout_untracked");
+  if (!shares.length || !links || typeof links !== "object" || Array.isArray(links)
+    || job.payoutId || job.payoutPaidAt) return unknown("payout_link_conflict");
+  const linked = Object.entries(links);
+  if (!linked.length || linked.length !== references.size
+    || linked.some(([cleanerId, id]) => !shares.some(share => share.cleanerId === cleanerId)
+      || !references.has(id) || index.conflicts.has(id))) return unknown("payout_link_conflict");
+  const paidByCleaner = new Map();
+  let paidCents = 0;
+  let outstandingCents = 0;
+  let mismatch = false;
+  let unknownOutstanding = false;
+  for (const { cleanerId, cents } of shares) {
+    if (!Object.hasOwn(links, cleanerId)) {
+      if (cents === null) unknownOutstanding = true;
+      else outstandingCents += cents;
+      continue;
+    }
+    const payout = index.byId.get(links[cleanerId]);
+    if (!payout || payout.organizationId !== organizationId || payout.cleanerId !== cleanerId
+      || payout.status !== "PAID" || payoutTimestamp(payout.paidAt) === null || !payout.jobAmountsCents
+      || !Array.isArray(payout.jobIds) || !payout.jobIds.includes(job.id)) return unknown("payout_evidence_invalid");
+    const recorded = recordedShareCents(payout, job.id);
+    if (recorded === null) return unknown("payout_evidence_invalid");
+    paidByCleaner.set(cleanerId, recorded);
+    paidCents += recorded;
+    if (cents !== null && recorded !== cents) mismatch = true;
+  }
+  // An edited or inconsistent agreement cannot change what its linked receipt actually paid.
+  return { status: mismatch || unknownOutstanding ? "UNKNOWN" : outstandingCents ? "OUTSTANDING" : "PAID",
+    paidCents, outstandingCents: unknownOutstanding ? null : outstandingCents, paidByCleaner, ...(mismatch && { reason: "payout_amount_mismatch" }) };
+}
+
 function payoutEvidence(job, payoutCents, index, organizationId, complete) {
-  const unknown = (reason) => ({ status: "UNKNOWN", paidCents: null, outstandingCents: null, reason });
-  if (isAssignmentAwareJob(job)) return unknown("v2_payout_untracked");
   if (!complete) return unknown("payout_lookup_incomplete");
   const references = [...(index.byJob.get(job.id) || [])];
   const linkedId = text(job.payoutId);
@@ -142,13 +172,12 @@ function payoutEvidence(job, payoutCents, index, organizationId, complete) {
     || payout.jobIds.filter((id) => id === job.id).length !== 1) {
     return unknown("payout_link_conflict");
   }
-  // Existing payouts can group Jobs but contain no immutable per-Job allocation.
-  // Never distribute or multiply a batch amount to manufacture a paid line item.
-  if (payout.jobIds.length !== 1) return unknown("payout_batch_allocation_unknown");
+  // Historical batches without explicit line amounts cannot prove a per-Job payment.
+  if (payout.jobIds.length !== 1 && !payout.jobAmountsCents) return unknown("payout_batch_allocation_unknown");
   if (payout.organizationId !== organizationId || !text(job.assignedCleanerId)
     || payout.cleanerId !== job.assignedCleanerId || payout.status !== "PAID"
-    || timestamp(payout.paidAt) === null) return unknown("payout_evidence_invalid");
-  const recordedAmount = money(payout.amount).cents;
+    || payoutTimestamp(payout.paidAt) === null) return unknown("payout_evidence_invalid");
+  const recordedAmount = recordedShareCents(payout, job.id);
   if (recordedAmount === null || payoutCents === null) return unknown("payout_evidence_invalid");
   if (recordedAmount !== payoutCents) return unknown("payout_amount_mismatch");
   return { status: "PAID", paidCents: recordedAmount, outstandingCents: 0 };
@@ -188,7 +217,7 @@ function publicRow(row) {
   return {
     id: row.id, clientId: row.clientId, clientName: row.clientName,
     propertyName: row.propertyName, serviceDate: row.serviceDate,
-    cleanerNames: row.cleanerNames, clientCharge: dollars(row.clientCents),
+    cleanerNames: row.cleanerNames, cleanerShares: row.cleanerShares, clientCharge: dollars(row.clientCents),
     cleanerPayout: dollars(row.payoutCents), payoutStatus: row.payoutStatus,
     paidAmount: dollars(row.paidCents), outstandingAmount: dollars(row.outstandingCents),
     grossOperationalMargin: dollars(row.marginCents), attentionReasons: row.attentionReasons,
@@ -236,7 +265,7 @@ export function buildWeeklyClose({
     const clientId = text(job.clientId);
     const clientName = text(job.clientName) || text(clientsById.get(clientId)?.name);
     const propertyName = text(job.propertyName) || text(propertiesById.get(job.propertyId)?.name);
-    const pendingHours = needsHoursReview(job);
+    const pendingHours = payoutNeedsHoursReview(job);
     let client = money(job.clientPrice);
     let payout = money(job.cleanerPayout);
     if (pendingHours) {
@@ -248,13 +277,28 @@ export function buildWeeklyClose({
         state: rate.state === "ready" ? "valid" : "missing",
       };
     }
+    const shares = fixedPayoutShares(job);
+    if (!pendingHours && shares.length) {
+      payout = shares.every(share => share.cents !== null)
+        ? { cents: shares.reduce((sum, share) => sum + share.cents, 0), state: "valid" }
+        : { cents: null, state: payout.state === "invalid" ? "invalid" : "missing" };
+    }
+    else if (!pendingHours && job.pay?.mode === "FIXED" && Object.hasOwn(job.pay, "perCleanerCents")) {
+      payout = { cents: null, state: "invalid" };
+    }
     const evidence = pendingHours
       ? { status: "UNKNOWN", paidCents: null, outstandingCents: null, reason: "hours_review" }
+      : isAssignmentAwareJob(job) ? teamPayoutEvidence(job, shares, index, organizationId, payoutLookupComplete)
       : payoutEvidence(job, payout.cents, index, organizationId, payoutLookupComplete);
     const cleanerIds = isAssignmentAwareJob(job) ? getAssignedCleanerIds(job)
       : [text(job.assignedCleanerId)].filter(Boolean);
     const cleanerNames = cleanerIds.map((cleanerId) => text(cleanerNamesById[cleanerId])
       || (!isAssignmentAwareJob(job) ? text(job.assignedCleanerName) : "")).filter(Boolean);
+    const cleanerShares = shares.map(({ cleanerId, cents }) => ({
+      name: text(cleanerNamesById[cleanerId]) || (!isAssignmentAwareJob(job) ? text(job.assignedCleanerName) : ""),
+      amount: dollars(cents),
+      paidAmount: evidence.paidByCleaner?.has(cleanerId) ? dollars(evidence.paidByCleaner.get(cleanerId)) : null,
+    }));
     const attentionReasons = [];
     if (!pendingHours && client.state !== "valid") attentionReasons.push(`${client.state}_client_price`);
     if (!pendingHours && payout.state !== "valid") attentionReasons.push(`${payout.state}_cleaner_payout`);
@@ -268,7 +312,7 @@ export function buildWeeklyClose({
     }
     if (evidence.reason) attentionReasons.push(evidence.reason);
     rows.push({
-      id, clientId, clientName, propertyName, serviceDate: job.scheduledDate, cleanerNames,
+      id, clientId, clientName, propertyName, serviceDate: job.scheduledDate, cleanerNames, cleanerShares,
       clientCents: client.cents, payoutCents: payout.cents,
       marginCents: client.cents === null || payout.cents === null ? null : client.cents - payout.cents,
       payoutStatus: evidence.status, paidCents: evidence.paidCents,

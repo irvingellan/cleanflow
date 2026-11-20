@@ -334,7 +334,7 @@ describe("CreateCleaningForm", () => {
     expect(screen.getByLabelText("Cleaner payout")).toHaveValue(35);
     fireEvent.change(screen.getByLabelText("Client price per hour"), { target: { value: "52.25" } });
     fireEvent.change(screen.getByLabelText("Cleaners needed"), { target: { value: "2" } });
-    expect(screen.getByLabelText("Cleaner payout")).toHaveValue(28);
+    expect(screen.getByLabelText("Amount per cleaner (USD)")).toHaveValue(28);
     expect(screen.getByLabelText("Client price per hour")).toHaveValue(52.25);
     fireEvent.change(screen.getByLabelText("Cleaner pay method"), { target: { value: "HOURLY" } });
     fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);

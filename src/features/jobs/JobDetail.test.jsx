@@ -798,7 +798,7 @@ describe("JobDetail lifecycle actions", () => {
     const whatsappLink = screen.getByRole("link", {
       name: managerLanguage === "pt" ? "Abrir no WhatsApp" : "Open in WhatsApp",
     });
-    expect(new URL(whatsappLink.href).searchParams.get("text")).toBe(writeText.mock.calls[0][0]);
+    expect(whatsappLink.href).toBe("https://wa.me/19495551234");
     expect(screen.getByRole("button", {
       name: managerLanguage === "pt" ? "Mensagem da oferta copiada" : "Offer message copied",
     })).toBeVisible();
@@ -1140,6 +1140,31 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByRole("link", { name: "Open in WhatsApp" }).href).toBe("https://wa.me/12025550110");
   });
 
+  it("copies the fixed share plus the conditional first-spot cents and opens an empty WhatsApp chat", async () => {
+    window.localStorage.setItem("cleanflow-language", "en");
+    const user = userEvent.setup();
+    const terms = { offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1, fixedHousePay: { totalCents: 10000, teamSize: 3 } };
+    const offer = { id: "fixed", cleanerId: "worker", cleanerName: "Example Cleaner", status: "PENDING", ...terms };
+    const url = "https://example.test/offer/private-token";
+    renderJobDetail("OFFERED", { schemaVersion: 2, assignedCleanerIds: [], requiredCleanerCount: 3,
+      cleanerPayout: 100, clientPrice: 295, offers: [offer] },
+      { onCreatePublicOfferLink: vi.fn().mockResolvedValue({ url, ...terms }) },
+      { knownCleaners: [{ id: "worker", name: "Example Cleaner", phone: "+12025550110", preferredLanguage: "pt" }] });
+    await user.click(screen.getByRole("button", { name: "Create public link" }));
+    const snapshot = screen.getByLabelText("Offered compensation (USD)");
+    expect(snapshot).toHaveValue(33.33);
+    expect(snapshot).toHaveAttribute("readonly");
+    expect(screen.getByText(/\+\$0.01 if you get the first spot/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Create public link" }));
+    await user.click(await screen.findByRole("button", { name: "Copy offer message" }));
+    const copied = await navigator.clipboard.readText();
+    expect(copied).toMatch(/33,33.*0,01 se a primeira vaga for sua/);
+    expect(copied).toContain("Estimativa com base no tamanho previsto da equipe");
+    expect(copied).toContain(url);
+    expect(copied).not.toMatch(/100,00|295,00/);
+    expect(screen.getByRole("link", { name: "Open in WhatsApp" }).href).toBe("https://wa.me/12025550110");
+  });
+
   it("keeps real public-offer actions and response statuses without exposing simulation", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = navigator.clipboard;
@@ -1208,7 +1233,7 @@ describe("JobDetail lifecycle actions", () => {
     const copiedMessage = writeText.mock.calls[0][0];
     expect(copiedMessage).toContain("Offered compensation: $125.00");
     expect(copiedMessage).toContain("https://cleanflow.example/offer/test-token");
-    expect(new URL(whatsappLink.href).searchParams.get("text")).toBe(copiedMessage);
+    expect(whatsappLink.href).toBe("https://wa.me/19495551234");
     expect(copiedMessage).not.toContain("$400.00");
     expect(copiedMessage).not.toContain("$160.00");
     expect(copiedMessage).not.toContain("$240.00");
@@ -1313,7 +1338,7 @@ describe("JobDetail lifecycle actions", () => {
     expect(writeText.mock.calls[0][0]).not.toContain("$600.00");
     expect(writeText.mock.calls[0][0]).not.toContain("$900.00");
     const v2WhatsAppLink = screen.getByRole("link", { name: "Open in WhatsApp" });
-    expect(new URL(v2WhatsAppLink.href).searchParams.get("text")).toBe(writeText.mock.calls[0][0]);
+    expect(v2WhatsAppLink.href).toBe("https://wa.me/19495551234");
     expect(screen.queryByText("Amount not set. The cleaner will see ‘Amount not set / To be agreed.’")).not.toBeInTheDocument();
 
     Object.defineProperty(navigator, "clipboard", {
@@ -1340,6 +1365,7 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.click(within(pendingOffer).getByRole("button", { name: "Create public link" }));
 
     expect(screen.getByLabelText("Offered compensation (USD)")).toHaveValue(null);
+    expect(screen.getByLabelText("Offered compensation (USD)")).toHaveAttribute("readonly");
     expect(screen.getByRole("status")).toHaveTextContent("Amount not set");
     expect(onCreatePublicOfferLink).not.toHaveBeenCalled();
   });

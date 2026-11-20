@@ -17,6 +17,12 @@ describe("per-cleaner Offer compensation", () => {
     )).toEqual({ value: "150", source: "job" });
   });
 
+  it("suggests an individual amount only on an older offer without a snapshot", () => {
+    const job = { cleanerPayout: 100, requiredCleanerCount: 3 };
+    expect(getOfferCompensationSuggestion(job, {})).toEqual({ value: "33.33", source: "job" });
+    expect(getOfferCompensationSuggestion(job, { offeredCompensation: 65 })).toEqual({ value: "65", source: "offer" });
+  });
+
   it("leaves missing Job payout blank and preserves an explicit zero", () => {
     expect(getOfferCompensationSuggestion(
       { schemaVersion: 2 },

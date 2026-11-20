@@ -45,6 +45,8 @@ export function JobDetailsSection({
   const nextRates = typeChanged && property
     ? resolveJobPricing({ serviceType: jobDetailValues.serviceType }, { property, cleanerCount: requiredCleanerCount(job) })
     : null;
+  const recordedRates = resolveJobPricing(job);
+  const checkPrices = !nextRates || nextRates.client.state !== "ready" || nextRates.cleaner.state !== "ready";
   return (
     <JobDetailSection jobId={job.id} title={translate("jobs.section.details")}>
     <section ref={scheduleSectionRef} tabIndex={-1} className="job-details-edit" aria-label={translate("jobs.editSchedule")}>
@@ -139,10 +141,10 @@ export function JobDetailsSection({
             onChange={(event) => setJobDetailValues((current) => ({ ...current, serviceType: event.target.value }))} />
           {typeChanged && (
             <div className="form-hint" role="status">
-              <p>{serviceTypeMessage(language, "typePriceChange")}</p>
+              <p>{serviceTypeMessage(language, checkPrices ? "keepJobPrices" : "typePriceChange")}</p>
               {nextRates && <>
-                <p>{translate("jobs.clientPrice")} · {formatPricingRate(nextRates.client, language, translate)}</p>
-                <p>{translate("jobs.cleanerPayout")} · {formatPricingRate(nextRates.cleaner, language, translate)}</p>
+                <p>{translate("jobs.clientPrice")} · {formatPricingRate(nextRates.client.state === "ready" ? nextRates.client : recordedRates.client, language, translate)}</p>
+                <p>{translate("jobs.cleanerPayout")} · {formatPricingRate(nextRates.cleaner.state === "ready" ? nextRates.cleaner : recordedRates.cleaner, language, translate)}</p>
               </>}
             </div>
           )}

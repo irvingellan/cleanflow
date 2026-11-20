@@ -7,7 +7,8 @@ export const maximumGuestNameLength = 120;
 import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
 import { defaultServiceType, isServiceType, normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { jobPriceSnapshot } from "./jobPricingForm.js";
-import { resolveJobPricing } from "../pricing/pricingModel.js";
+import { requiredCleanerCount as plannedCleanerCount } from "./offerSlots.js";
+import { fixedCleanerShares, resolveJobPricing } from "../pricing/pricingModel.js";
 import { getChecklistContextRevision } from "./checklistContextRevision.js";
 
 function optionalText(value) {
@@ -31,9 +32,23 @@ export function optionalJobPrice(value) {
 }
 
 export function getJobGrossMargin(job) {
-  const { client, cleaner } = resolveJobPricing(job ?? {});
-  if (client.amountCents == null || cleaner.amountCents == null) return null;
-  return (client.amountCents - cleaner.amountCents) / 100;
+  const pricing = resolveJobPricing(job ?? {});
+  const assigned = getAssignedCleanerIds(job);
+  const teamSize = job?.operationalStatus === "COMPLETED" && assigned.length ? assigned.length : plannedCleanerCount(job);
+  const shares = fixedCleanerShares(pricing, teamSize);
+  if (pricing.client.amountCents == null || !shares) return null;
+  return (pricing.client.amountCents - shares.totalCents) / 100;
+}
+
+/** The history of one cleaner shows that cleaner's share of the fixed Job agreement. */
+export function cleanerHistoryPay(job, cleanerId) {
+  const team = isAssignmentAwareJob(job) ? getAssignedCleanerIds(job) : [job.assignedCleanerId].filter(Boolean);
+  const slot = team.indexOf(cleanerId);
+  if (slot < 0) return null;
+  const count = job.operationalStatus === "COMPLETED" ? team.length : Math.max(team.length, plannedCleanerCount(job));
+  const shares = fixedCleanerShares(resolveJobPricing(job), count);
+  if (!shares) return null;
+  return (slot === 0 ? shares.firstCents : shares.otherCents) / 100;
 }
 
 function validateServiceType(serviceType) {

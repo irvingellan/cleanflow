@@ -1,30 +1,22 @@
-import { needsHoursReview } from "../pricing/hourlyReview.js";
+import { unpaidPayoutShares } from "./payoutShares.js";
 
 export function groupUnpaidJobsByCleaner(jobs, cleaners) {
-  const cleanersById = Object.fromEntries(
-    cleaners.map((cleaner) => [cleaner.id, cleaner]),
-  );
-  const groupsByCleanerId = new Map();
-
-  jobs.forEach((job) => {
-    if (needsHoursReview(job)) return;
-    const cleaner = cleanersById[job.assignedCleanerId] || {
-      id: job.assignedCleanerId,
-      name: job.assignedCleanerName || "",
-      preferredPaymentMethod: "",
-    };
-    const currentGroup = groupsByCleanerId.get(cleaner.id) || {
-      cleaner,
-      jobs: [],
-      total: 0,
-    };
-
-    currentGroup.jobs.push(job);
-    currentGroup.total += job.cleanerPayout;
-    groupsByCleanerId.set(cleaner.id, currentGroup);
-  });
-
-  return [...groupsByCleanerId.values()].sort((firstGroup, secondGroup) =>
-    (firstGroup.cleaner.name || "").localeCompare(secondGroup.cleaner.name || ""),
-  );
+  const cleanersById = new Map(cleaners.map(cleaner => [cleaner.id, cleaner]));
+  const groups = new Map();
+  for (const job of jobs) {
+    for (const { cleanerId, cents } of unpaidPayoutShares(job)) {
+      const cleaner = cleanersById.get(cleanerId) || {
+        id: cleanerId,
+        name: job.assignedCleanerId === cleanerId ? job.assignedCleanerName || "" : "",
+        preferredPaymentMethod: "",
+      };
+      const group = groups.get(cleanerId) ?? { cleaner, jobs: [], totalCents: 0 };
+      group.jobs.push(job.cleanerPayout === cents / 100
+        ? job : { ...job, payoutShareCents: cents });
+      group.totalCents += cents;
+      groups.set(cleanerId, group);
+    }
+  }
+  return [...groups.values()].sort((a, b) => (a.cleaner.name || "").localeCompare(b.cleaner.name || ""))
+    .map(({ cleaner, jobs, totalCents }) => ({ cleaner, jobs, total: totalCents / 100 }));
 }

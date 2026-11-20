@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { pricingMessage } from "../pricing/pricingMessages.js";
-import { canSuggestDefaultCleanerPrice, hourlyOfferSnapshot } from "../../../functions/src/offerPay.js";
+import { newOfferPay, offerPayForRecipient } from "../../../functions/src/offerPay.js";
 import { formatOfferCompensation } from "./offerCompensation.js";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import {
@@ -15,7 +15,7 @@ import { createIssue } from "../issues/issueService.js";
 import { createJobOffers, respondToJobOffer } from "./jobOfferService.js";
 import { automaticOfferOptInLabel, canExtendAutomaticOfferJob, canOptIntoAutomaticOffers } from "./automaticOffers.js";
 import { setRequiredCleanerCount } from "./assignmentService.js";
-import { isAssignmentAwareJob, optionalJobPrice } from "./jobCompatibility.js";
+import { isAssignmentAwareJob } from "./jobCompatibility.js";
 import { maxCleanersPerJob, requiredCleanerCount } from "./offerSlots.js";
 import { filterCleanersByName } from "../cleaners/cleanerSearch.js";
 import { CleanerAvailabilityConfirmation, CleanerSelectionOption, CleanerSelectionStatus, sortCleanerOptions, useCleanerSelectionContext } from "./CleanerSelectionContext.jsx";
@@ -52,11 +52,8 @@ export function OfferCleaners({
     && ["UNASSIGNED", "OFFERED"].includes(job.operationalStatus) && !(job.assignedCleanerIds?.length);
   const [cleanerCount, setCleanerCount] = useState(requiredCleanerCount(job));
   const alreadyOfferedOrAssigned = new Set([...existingOfferCleanerIds, ...(job.assignedCleanerIds || [])]);
-  // The amount every new Offer carries: the Job pay, else the Property default.
-  const hourly = hourlyOfferSnapshot(job.pay);
-  const offerAmount = optionalJobPrice(job.cleanerPayout)
-    ?? (canSuggestDefaultCleanerPrice(job, property) ? optionalJobPrice(property?.defaultCleanerPrice) : null);
-  const offerPrice = hourly ?? (offerAmount == null ? {} : { offeredCompensation: offerAmount });
+  const terms = newOfferPay(job, property, canChooseCleanerCount ? cleanerCount : requiredCleanerCount(job));
+  const offerPrice = offerPayForRecipient(terms, job);
   const [hasSendError, setHasSendError] = useState(false);
   const context = useCleanerSelectionContext(job, !isLoading && !hasError && cleaners.length > 0);
   const checkingAvailability = Boolean(job.scheduledDate) && context.status === "loading";
@@ -108,10 +105,13 @@ export function OfferCleaners({
       if (canChooseCleanerCount && cleanerCount !== requiredCleanerCount(job)) {
         await setRequiredCleanerCount(job.id, cleanerCount);
       }
+      const manualTerms = terms.offeredPay ? { offeredPay: terms.offeredPay } : {};
+      if (terms.offeredCompensation != null) manualTerms.offeredCompensation = terms.offeredCompensation;
+      if (terms.offeredFirstSlotExtraCents) manualTerms.offeredFirstSlotExtraCents = terms.offeredFirstSlotExtraCents;
       const updatedJob = await createJobOffers({
         jobId: job.id,
         cleaners: selectedCleaners,
-        ...((canOptIn && automatic) || extendingAutomatic ? { automatic: true } : offerPrice),
+        ...((canOptIn && automatic) || extendingAutomatic ? { automatic: true } : manualTerms),
       });
       onSent(selectedCleaners.length, updatedJob);
     } catch {

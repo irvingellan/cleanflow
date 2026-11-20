@@ -76,10 +76,19 @@ describe("completed services for payment", () => {
     expect(bea).toMatchObject({ name: "Bea", total: null, knownTotal: 70, unknownCount: 1 });
   });
 
-  it("does not split a shared service's single amount", () => {
-    expect(cleanerPayoutFor(job("s", { assignedCleanerIds: ["c-ana", "c-bea"], cleanerPayout: 200 }))).toBeNull();
-    expect(cleanerPayoutFor(job("s", { cleanerPayout: 200 }))).toBe(200);
-    expect(cleanerPayoutFor(job("s", { cleanerPayout: -1 }))).toBeNull();
+  it("shows each completed cleaner's agreed amount and keeps unverified receipts and hourly work unknown", () => {
+    const shared = job("s", { assignedCleanerIds: ["c-ana", "c-bea"], cleanerPayout: 200 });
+    expect(cleanerPayoutFor(shared)).toBeNull();
+    expect(cleanerPayoutFor(shared, "c-ana")).toBe(100);
+    const agreed = { ...shared, payoutAgreementsByCleaner: { "c-ana": { offeredCompensation: 93.27 }, "c-bea": null } };
+    expect(cleanerPayoutFor(agreed, "c-ana")).toBe(93.27);
+    expect(cleanerPayoutFor(agreed, "c-bea")).toBeNull();
+    const paid = { ...agreed, payoutIdsByCleaner: { "c-ana": "receipt" } };
+    expect(cleanerPayoutFor(paid, "c-ana", 8201)).toBe(82.01);
+    expect(cleanerPayoutFor(paid, "c-ana")).toBeNull();
+    expect(cleanerPayoutFor({ ...shared, pay: { mode: "HOURLY", rateCents: 3200 } }, "c-bea")).toBeNull();
+    expect(cleanerPayoutFor(job("solo", { cleanerPayout: 200 }))).toBe(200);
+    expect(cleanerPayoutFor(job("bad", { cleanerPayout: -1 }))).toBeNull();
   });
 });
 

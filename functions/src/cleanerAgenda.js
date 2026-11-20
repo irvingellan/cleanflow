@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { hourlyOfferSnapshot } from "./offerPay.js";
+import { offerPayForRecipient } from "./offerPay.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { publicOfferState } from "./publicOfferResponseService.js";
 import { automaticOfferBatchVersion, FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
@@ -69,14 +69,7 @@ export function rosterCleanerIds(job) {
 
 /** Same per-recipient amount rule as the public Offer projection. */
 export function offeredCompensationFor(offer, job) {
-  const value = Object.prototype.hasOwnProperty.call(offer || {}, "offeredCompensation")
-    ? offer.offeredCompensation
-    : !isAssignmentAwareJobData(job) ? job?.cleanerPayout : null;
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function recipientCompensation(offer, job) {
-  return hourlyOfferSnapshot(offer?.offeredPay) ?? { offeredCompensation: offeredCompensationFor(offer, job) };
+  return offerPayForRecipient(offer, job).offeredCompensation ?? null;
 }
 
 function baseEntry(organizationId, jobId, cleanerId, job) {
@@ -140,13 +133,15 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
     const reschedule = projectCleanerReschedule({
       job, cleanerId, organizationId, jobId, scheduleRevision: job.scheduleRevision, assignment, history: scheduleHistory,
     });
+    const ownOffer = acceptedOfferFor(cleanerId, assignment, job, jobOffers);
+    const agreement = ownOffer ?? (assignment?.source === "MANAGER_DIRECT" ? assignment.paySnapshot : null);
     entries.set(cleanerId, {
       ...baseEntry(organizationId, jobId, cleanerId, job),
       kind: agendaKinds.assigned,
       ...holderDetails,
       acknowledged: Boolean(assignment?.cleanerAcknowledgedAt),
       offerStatus: null,
-      ...recipientCompensation(acceptedOfferFor(cleanerId, assignment, job, jobOffers), job),
+      ...offerPayForRecipient(agreement, job, cleanerId),
       checklist: { ...checklistSummary },
       checklistStatus: checklistSummary.status,
       checklistStarted: checklistSummary.started,
@@ -188,7 +183,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
       offerStatus: closed ? "ALREADY_TAKEN" : offer.status,
       offerExpiresAtMs,
       // Closed invitations keep only the amount saved on the recipient's own Offer.
-      ...recipientCompensation(offer, closed ? null : job),
+      ...offerPayForRecipient(offer, closed ? null : job, cleanerId),
       ...(automatic ? { offerDistributionMode: FIRST_ACCEPT_WINS } : {}),
       ...(offer === replacement ? { replacementOfferId: activeReplacement } : {}),
     });
@@ -202,7 +197,7 @@ export function agendaEntryId(cleanerId, jobId) {
 
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
-  "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offerExpiresAtMs",
+  "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offeredFirstSlotExtraCents", "offeredPayEstimated", "offerExpiresAtMs",
   "offerDistributionMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType", "address", "notes",
 ];
 

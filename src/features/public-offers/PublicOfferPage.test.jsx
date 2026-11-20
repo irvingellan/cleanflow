@@ -51,6 +51,27 @@ describe("Public automatic offer", () => {
     expect(screen.getByText(/Você informa suas horas no final do serviço/)).toBeVisible();
   });
 
+  it("shows only the offered individual amount and the first-spot condition in the recipient's language", async () => {
+    window.localStorage.setItem("cleanflow-language", "en");
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ offer: {
+      status: "PENDING", preferredLanguage: "es", offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1, offeredPayEstimated: true,
+      cleanerPayout: 100, clientPrice: 275,
+    } })));
+    render(<TranslationProvider><App /></TranslationProvider>);
+    expect(await screen.findByText(/33,33.*0,01.*si te asignan la primera plaza/)).toBeVisible();
+    expect(screen.getByText(/Estimación según el tamaño previsto del equipo/)).toBeVisible();
+    expect(screen.queryByText(/100,00|275,00/)).toBeNull();
+  });
+
+  it("never presents a house or client price when the offer has no personal terms", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ offer: {
+      status: "PENDING", preferredLanguage: "en", cleanerPayout: 100, clientPrice: 275,
+    } })));
+    render(<TranslationProvider><App /></TranslationProvider>);
+    expect(await screen.findByText("Amount not set / To be agreed")).toBeVisible();
+    expect(screen.queryByText(/100.00|275.00/)).toBeNull();
+  });
+
   it("replaces stale public response controls when the server requires the Hub", async () => {
     const { offerDistributionMode: _, ...staleOffer } = automaticOffer;
     const fetchOffer = vi.fn()

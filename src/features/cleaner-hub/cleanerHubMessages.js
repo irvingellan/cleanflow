@@ -1,3 +1,5 @@
+import { offerPayNote } from "../pricing/pricingMessages.js";
+
 // Cleaner Hub copy, [pt-BR, en, es]. Wording comes from the approved Cleaner Hub
 // V1 visual, rewritten only where the prototype described simulated behaviour.
 const M = {
@@ -238,6 +240,12 @@ export function hasHubMessage(key) {
 
 export function hubMessageKeys() {
   return Object.keys(M);
+}
+
+export function hubOfferPay(entry, lang, withHoursNote = false) {
+  const amount = hubMoney(entry.offeredPay ?? entry.offeredCompensation, lang, withHoursNote);
+  const extra = offerPayNote(entry, lang, (value) => hubMoney(value, lang));
+  return amount && extra ? `${amount} · ${extra}` : amount;
 }
 
 export function hubMoney(amount, lang, withHoursNote = false) {

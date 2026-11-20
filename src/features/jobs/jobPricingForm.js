@@ -16,6 +16,7 @@ export function jobPriceFormValues({ client, cleaner }, job = {}) {
   return {
     clientMode: client.mode,
     clientPrice: inputAmount(client, job.clientPrice, job.billing?.mode, job.billing?.hourlyRateCents),
+    fixedPerCleaner: cleaner.perCleaner === true,
     cleanerMode: cleaner.mode,
     cleanerPayout: inputAmount(cleaner, job.cleanerPayout, job.pay?.mode, job.pay?.rateCents),
   };
@@ -28,7 +29,7 @@ function inputCents(value) {
 }
 
 // Blank fixed amounts are optional snapshots. An hourly selection requires an explicit rate.
-export function readJobPriceForm({ clientMode, clientPrice, cleanerMode, cleanerPayout }) {
+export function readJobPriceForm({ clientMode, clientPrice, cleanerMode, cleanerPayout, fixedPerCleaner }) {
   const hourlyClient = clientMode === PRICING_HOURLY;
   const hourlyCleaner = cleanerMode === PRICING_HOURLY;
   if ((!hourlyClient && clientMode !== PRICING_FIXED) || (!hourlyCleaner && cleanerMode !== PRICING_FIXED)) return null;
@@ -36,16 +37,18 @@ export function readJobPriceForm({ clientMode, clientPrice, cleanerMode, cleaner
   const cleanerCents = inputCents(cleanerPayout);
   if (clientCents === null || cleanerCents === null ||
       (hourlyClient && clientCents === undefined) || (hourlyCleaner && cleanerCents === undefined)) return null;
+  const individualFixed = fixedPerCleaner === true && !hourlyCleaner && cleanerCents !== undefined;
   return {
     clientPrice: hourlyClient || clientCents === undefined ? undefined : clientCents / 100,
-    cleanerPayout: hourlyCleaner || cleanerCents === undefined ? undefined : cleanerCents / 100,
+    cleanerPayout: hourlyCleaner || individualFixed || cleanerCents === undefined ? undefined : cleanerCents / 100,
     ...(hourlyClient ? { billing: { mode: PRICING_HOURLY, hourlyRateCents: clientCents } } : {}),
+    ...(individualFixed ? { pay: { mode: PRICING_FIXED, perCleanerCents: cleanerCents } } : {}),
     ...(hourlyCleaner ? { pay: { mode: PRICING_HOURLY, rateCents: cleanerCents } } : {}),
   };
 }
 
 export function jobPricesLocked(job) {
-  return Boolean(job?.payoutId || job?.payoutPaidAt || job?.billing?.hours?.approved === true);
+  return Boolean(job?.payoutId || job?.payoutPaidAt || Object.keys(job?.payoutIdsByCleaner ?? {}).length || job?.billing?.hours?.approved === true);
 }
 
 // Validate a manager's pricing write independently of the form. Only copy rate fields;
@@ -62,7 +65,8 @@ export function jobPriceSnapshot({ clientPrice, cleanerPayout, billing, pay }) {
 export function snapshotFromResolvedPricing({ client, cleaner }) {
   return {
     ...(client.amountCents != null ? { clientPrice: client.amountCents / 100 } : {}),
-    ...(cleaner.amountCents != null ? { cleanerPayout: cleaner.amountCents / 100 } : {}),
+    ...(cleaner.amountCents != null && !cleaner.perCleaner ? { cleanerPayout: cleaner.amountCents / 100 } : {}),
+    ...(cleaner.amountCents != null && cleaner.perCleaner ? { pay: { mode: PRICING_FIXED, perCleanerCents: cleaner.amountCents } } : {}),
     ...(client.rateCents != null ? { billing: { mode: client.mode, hourlyRateCents: client.rateCents } } : {}),
     ...(cleaner.rateCents != null ? { pay: { mode: cleaner.mode, rateCents: cleaner.rateCents } } : {}),
   };

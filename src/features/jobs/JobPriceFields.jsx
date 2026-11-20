@@ -19,6 +19,7 @@ export function JobPriceFields({ values, onChange, disabled }) {
           <label>
             {values[modeKey] === PRICING_HOURLY
               ? serviceTypeMessage(language, amountKey + "Hourly")
+              : amountKey === "cleanerPayout" && values.fixedPerCleaner ? pricingMessage(language, "teamAmount")
               : translate("jobs." + amountKey)}
             <input type="number" name={amountKey} min="0" step="0.01" inputMode="decimal"
               value={values[amountKey]} onChange={onChange} disabled={disabled} />

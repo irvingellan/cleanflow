@@ -79,6 +79,27 @@ describe("manager job pricing writes", () => {
     expect(db.transaction.update.mock.calls[1][1]).toEqual({ notes: "Synthetic note", guestName: db.deleted });
   });
 
+  it("preserves both legacy agreements when the new service type has no property rate", async () => {
+    const job = record({ propertyId: "sample-property", serviceType: "STANDARD", clientPrice: 83.41, cleanerPayout: 61.27 });
+    const property = record({ defaultClientPrice: 86.73, defaultCleanerPrice: 54.39 });
+    db.transaction.get.mockResolvedValueOnce(job).mockResolvedValueOnce(property);
+    await updateJobDetails("sample-job", { serviceType: "AIRBNB_TOUCH_UP" });
+    expect(db.transaction.update.mock.calls[0][1]).toEqual({
+      serviceType: "AIRBNB_TOUCH_UP", notes: db.deleted, guestName: db.deleted,
+    });
+  });
+
+  it("updates each ready side independently and preserves the other side's billing metadata", async () => {
+    const job = record({ propertyId: "sample-property", serviceType: "STANDARD",
+      billing: { mode: "HOURLY", hourlyRateCents: 1845, hours: { minutes: 45 } }, cleanerPayout: 41.01 });
+    const property = record({ serviceRates: { AIRBNB_TOUCH_UP: { cleaner: { mode: "FIXED", amountCents: 5507 } } } });
+    db.transaction.get.mockResolvedValueOnce(job).mockResolvedValueOnce(property);
+    await updateJobDetails("sample-job", { serviceType: "AIRBNB_TOUCH_UP" });
+    expect(db.transaction.update.mock.calls[0][1]).toEqual({
+      serviceType: "AIRBNB_TOUCH_UP", notes: db.deleted, guestName: db.deleted, cleanerPayout: 55.07,
+    });
+  });
+
   it.each([{ payoutId: "recorded" }, { payoutPaidAt: new Date(0) }, { billing: { hours: { approved: true } } }])(
     "rejects a price edit when a concurrent read finds recorded money or approved hours", async (fields) => {
       db.transaction.get.mockResolvedValue(record(fields));

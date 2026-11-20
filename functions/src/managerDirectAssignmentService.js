@@ -1,3 +1,5 @@
+import { newOfferPay } from "./offerPay.js";
+import { requiredCleanerCount } from "./offerSlots.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { hasMission2JobState, requireMission2Writes } from "./mission2WriteControl.js";
@@ -91,7 +93,8 @@ export async function assignCleanerDirectlyForManager(database, {
     }
     if (!jobSnapshot.exists) throw new HttpsError("not-found", "Job not found.");
     const job = jobSnapshot.data();
-    if (job.schemaVersion !== 2 || job.archivedAt || !eligibleStatuses.has(job.operationalStatus)) {
+    if ((job.organizationId != null && job.organizationId !== organizationId)
+      || job.schemaVersion !== 2 || job.archivedAt || !eligibleStatuses.has(job.operationalStatus)) {
       throw precondition("This Job cannot receive a Cleaner assignment.", "job-ineligible");
     }
     if (!cleanerSnapshot.exists) throw new HttpsError("not-found", "Cleaner not found.");
@@ -156,6 +159,11 @@ export async function assignCleanerDirectlyForManager(database, {
       transaction.update(replacementRef, {
         status: "SELECTED", replacementAssignmentId: newAssignmentReference.id, selectedAt: FieldValue.serverTimestamp(),
       });
+    } else {
+      const property = job.cleanerPayout == null && !job.pay && validRosterId(job.propertyId)
+        ? (await transaction.get(database.doc(`organizations/${organizationId}/properties/${job.propertyId}`))).data() : null;
+      const snapshot = newOfferPay({ ...job, organizationId }, property, Math.max(requiredCleanerCount(job), assignedCleanerIds.length));
+      if (snapshot.offeredPay || snapshot.offeredCompensation != null) nextAssignment.paySnapshot = snapshot;
     }
     transaction.create(newAssignmentReference, nextAssignment);
     const replacementRecipient = job.manualReplacementOffer?.cleanerId;

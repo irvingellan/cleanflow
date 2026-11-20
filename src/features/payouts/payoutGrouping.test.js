@@ -55,3 +55,23 @@ it("keeps the entire hourly job out of payable groups and totals", () => {
   expect(groupUnpaidJobsByCleaner([hourly], [])).toEqual([]);
   expect(groupUnpaidJobsByCleaner([fixed, hourly], [])).toEqual(groupUnpaidJobsByCleaner([fixed], []));
 });
+
+it("uses roster order for the residual cent and omits only the cleaner whose payment was recorded", () => {
+  const job = { id: "team", schemaVersion: 2, assignedCleanerIds: ["z", "b", "a"], cleanerPayout: 100 };
+  const groups = input => groupUnpaidJobsByCleaner([input], []).map(group => [group.cleaner.id, group.jobs[0].payoutShareCents, group.total]);
+  expect(groups(job)).toEqual([["z", 3334, 33.34], ["b", 3333, 33.33], ["a", 3333, 33.33]]);
+  expect(groups({ ...job, payoutIdsByCleaner: { z: "already-paid" } })).toEqual([["b", 3333, 33.33], ["a", 3333, 33.33]]);
+  expect(groups({ ...job, pay: { mode: "FIXED", perCleanerCents: 2000 } }))
+    .toEqual([["z", 2000, 20], ["b", 2000, 20], ["a", 2000, 20]]);
+  expect(groups({ ...job, payoutId: "historical-payment" })).toEqual([]);
+});
+
+it("does not substitute the current house total for a frozen, unknown or hourly individual agreement", () => {
+  const job = { id: "team", schemaVersion: 2, assignedCleanerIds: ["first", "second"], cleanerPayout: 500,
+    payoutAgreementsByCleaner: { first: { offeredCompensation: 63.45 }, second: { offeredCompensation: null } } };
+  const groups = groupUnpaidJobsByCleaner([job], []);
+  expect(groups.map(group => [group.cleaner.id, group.total])).toEqual([["first", 63.45]]);
+  expect(groupUnpaidJobsByCleaner([{ ...job, payoutAgreementsByCleaner: {
+    first: null, second: { offeredPay: { mode: "HOURLY", rateCents: 2000 } },
+  } }], [])).toEqual([]);
+});

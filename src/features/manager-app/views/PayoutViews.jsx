@@ -7,7 +7,7 @@ export function PayoutViews({
   view,
   showPayouts,
   payoutGroups,
-  pendingHoursJobs,
+  pendingHoursJobs, missingAgreementJobs,
   recentPayouts,
   isLoadingPayouts,
   hasPayoutsError,
@@ -35,6 +35,7 @@ export function PayoutViews({
         <PayoutDirectory
           payoutGroups={payoutGroups}
           pendingHoursJobs={pendingHoursJobs}
+          missingAgreementJobs={missingAgreementJobs}
           recentPayouts={recentPayouts}
           isLoading={isLoadingPayouts}
           hasError={hasPayoutsError}

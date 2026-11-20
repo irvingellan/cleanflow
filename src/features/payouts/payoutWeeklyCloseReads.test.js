@@ -6,12 +6,17 @@ const firebase = vi.hoisted(() => ({
   runTransaction: vi.fn(), serverTimestamp: vi.fn(), where: vi.fn(),
 }));
 
+vi.mock("./payoutAgreements.js", () => ({
+  enrichPayoutAgreements: vi.fn(async jobs => jobs),
+  jobWithPayoutAgreementsInTransaction: vi.fn(async (_transaction, _ref, job) => job),
+}));
 vi.mock("firebase/firestore", () => firebase);
 vi.mock("firebase/firestore/lite", () => ({ ...firebase, getDocs: firebase.getServerDocs }));
 vi.mock("../../services/firebase/client.js", () => ({ db: { test: true } }));
 vi.mock("../../services/firebase/serverReads.js", () => ({ serverFirestore: () => ({ test: true }), withReadDeadline: (read) => read }));
 
-import { getPayoutEvidenceForJobs, getUnpaidCompletedJobs } from "./payoutService.js";
+import { jobWithPayoutAgreementsInTransaction } from "./payoutAgreements.js";
+import { getPayoutEvidenceForJobs, getUnpaidCompletedJobs, recordPayout } from "./payoutService.js";
 
 const snapshot = (records) => ({ docs: records.map((record) => ({ id: record.id, data: () => record.data })) });
 
@@ -114,4 +119,38 @@ it("lists unpaid hourly services for review with the same read and keeps them ou
   ]));
   expect((await getUnpaidCompletedJobs()).map(job => job.id)).toEqual(["fixed"]);
   expect((await getUnpaidCompletedJobs({ includePendingHours: true })).map(job => job.id)).toEqual(["fixed", "hourly"]);
+});
+
+describe("individual payout transaction", () => {
+  it("stores exact receipt lines, protects the legacy link and cannot pay a team member twice", async () => {
+    const team = { schemaVersion: 2, operationalStatus: "COMPLETED", cleanerPayout: 100, assignedCleanerIds: ["z", "a", "b"] };
+    const single = { operationalStatus: "COMPLETED", cleanerPayout: 12, assignedCleanerId: "a" };
+    const jobs = { team, single };
+    const receipts = [];
+    firebase.collection.mockReturnValue("payouts");
+    firebase.doc.mockImplementation((...args) => ({ id: args.length === 1 ? "receipt-" + (receipts.length + 1) : args.at(-1) }));
+    firebase.serverTimestamp.mockReturnValue(new Date());
+    const transaction = {
+      get: vi.fn(async ref => ({ id: ref.id, data: () => jobs[ref.id] })),
+      set: vi.fn((_ref, data) => receipts.push(data)),
+      update: vi.fn((ref, patch) => Object.assign(jobs[ref.id], patch)),
+    };
+    firebase.runTransaction.mockImplementation((_db, callback) => callback(transaction));
+    const pay = (id, jobIds) => recordPayout({ cleaner: { id }, jobIds, paymentMethod: "ZELLE" });
+    await expect(pay("a", ["team", "single"])).resolves.toMatchObject({ amount: 45.33 });
+    expect(receipts[0]).toMatchObject({ cleanerId: "a", jobIds: ["team", "single"],
+      jobAmountsCents: { team: 3333, single: 1200 }, amount: 45.33 });
+    expect(team.payoutId).toBeUndefined();
+    expect(team.payoutIdsByCleaner).toEqual({ a: "receipt-1" });
+    expect(single.payoutId).toBe("receipt-1");
+    await expect(pay("a", ["team"])).rejects.toMatchObject({ code: "job-not-payable" });
+    await expect(pay("unknown", ["team"])).rejects.toMatchObject({ code: "job-not-payable" });
+    jobWithPayoutAgreementsInTransaction.mockImplementationOnce(async (_tx, _ref, source) => ({
+      ...source, payoutAgreementsByCleaner: { z: { offeredCompensation: 47.79 } },
+    }));
+    await expect(pay("z", ["team"])).resolves.toMatchObject({ amount: 47.79 });
+    expect(receipts[1].jobAmountsCents).toEqual({ team: 4779 });
+    expect(team.payoutIdsByCleaner).toEqual({ a: "receipt-1", z: "receipt-2" });
+    expect(receipts).toHaveLength(2);
+  });
 });

@@ -1,6 +1,7 @@
 import { openSpots, requiredCleanerCount, rosterCleanerIds } from "../jobs/offerSlots.js";
 import { currentScheduleRevision } from "../jobs/scheduleConfirmation.js";
 import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
+import { fixedPayoutShares } from "../payouts/payoutShares.js";
 import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 
 // Cleaner Agenda: the manager's compact views of one service period —
@@ -70,15 +71,16 @@ function cleanerGroups(jobs, cleanerById, propertyById, makeRow) {
     .sort((a, b) => (a.name || "￿").localeCompare(b.name || "￿") || a.cleanerId.localeCompare(b.cleanerId));
 }
 
-/**
- * Cleaner payout for one completed service, only when the record says it
- * unambiguously: a stored amount on a service done by exactly one cleaner.
- * A shared service keeps one Job-level amount today, so its split is unknown.
- */
-export function cleanerPayoutFor(job) {
-  if (rosterCleanerIds(job).length !== 1) return null;
-  const amount = job?.cleanerPayout;
-  return typeof amount === "number" && Number.isFinite(amount) && amount >= 0 ? amount : null;
+/** An explicitly linked receipt owns the amount already paid; an unreadable receipt stays unknown. */
+export function cleanerPayoutFor(job, cleanerId, paidCents = null) {
+  const roster = rosterCleanerIds(job);
+  const id = cleanerId ?? (roster.length === 1 ? roster[0] : null);
+  if (!id || !roster.includes(id)) return null;
+  if (job.payoutId || job.payoutPaidAt || Object.hasOwn(job.payoutIdsByCleaner ?? {}, id)) {
+    return Number.isSafeInteger(paidCents) && paidCents >= 0 ? paidCents / 100 : null;
+  }
+  const share = fixedPayoutShares(job).find(item => item.cleanerId === id);
+  return share?.cents == null ? null : share.cents / 100;
 }
 
 /** House and client choices for the period, from the services it contains. */
@@ -96,7 +98,7 @@ export function agendaFilterOptions({ period, jobs = [], properties = [], client
   return { properties: sorted(houses), clients: sorted(owners) };
 }
 
-export function buildCleanerAgenda({ period, jobs = [], cleaners = [], properties = [], filters = {} }) {
+export function buildCleanerAgenda({ period, jobs = [], cleaners = [], properties = [], filters = {}, receiptAmounts = new Map() }) {
   if (!period?.start || !period?.end || period.start > period.end) throw new RangeError("A valid period is required.");
   const cleanerById = new Map(cleaners.map((cleaner) => [cleaner.id, cleaner]));
   const propertyById = new Map(properties.map((property) => [property.id, property]));
@@ -117,7 +119,10 @@ export function buildCleanerAgenda({ period, jobs = [], cleaners = [], propertie
   const completed = cleanerGroups(
     live.filter((job) => job.operationalStatus === "COMPLETED"),
     cleanerById, propertyById,
-    (job) => ({ ...row(job, propertyById), payout: cleanerPayoutFor(job), shared: rosterCleanerIds(job).length > 1 }),
+    (job, cleanerId) => {
+      const paid = receiptAmounts.get(agendaScheduleKey(cleanerId, job.id));
+      return { ...row(job, propertyById), payout: cleanerPayoutFor(job, cleanerId, paid), paid: paid != null };
+    },
   ).map((group) => {
     const known = group.rows.filter((entry) => entry.payout !== null);
     const knownCents = known.reduce((sum, entry) => sum + Math.round(entry.payout * 100), 0);

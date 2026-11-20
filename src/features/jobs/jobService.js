@@ -655,22 +655,27 @@ export async function createJob({
 }
 
 // Update only pricing keys: the billing map may also contain fees or hours.
-function priceUpdates(job, snapshot, typeChanged = false) {
+function priceUpdates(job, snapshot, resolved) {
   if (jobPricesLocked(job)) throw new Error("Recorded Job prices are read-only.");
-  const changes = {
-    clientPrice: snapshot.clientPrice ?? deleteField(),
-    cleanerPayout: snapshot.cleanerPayout ?? deleteField(),
-  };
-  if (snapshot.billing) {
-    changes["billing.mode"] = snapshot.billing.mode;
-    changes["billing.hourlyRateCents"] = snapshot.billing.hourlyRateCents;
-  } else if (job.billing?.mode && job.billing.mode !== "FIXED") {
-    changes["billing.mode"] = "FIXED";
-    changes["billing.hourlyRateCents"] = deleteField();
+  const changes = {};
+  // An explicit price edit may clear a field. An absent rate on retyping a Job
+  // leaves that side of its existing agreement, including recorded hours, intact.
+  if (!resolved || resolved.client.state === "ready") {
+    changes.clientPrice = snapshot.clientPrice ?? deleteField();
+    if (snapshot.billing) {
+      changes["billing.mode"] = snapshot.billing.mode;
+      changes["billing.hourlyRateCents"] = snapshot.billing.hourlyRateCents;
+    } else if (job.billing?.mode && job.billing.mode !== "FIXED") {
+      changes["billing.mode"] = "FIXED";
+      changes["billing.hourlyRateCents"] = deleteField();
+    }
+    if (job.billing?.hours && (resolved || !snapshot.billing)) changes["billing.hours"] = deleteField();
   }
-  if (job.billing?.hours && (typeChanged || !snapshot.billing)) changes["billing.hours"] = deleteField();
-  if (snapshot.pay) changes.pay = snapshot.pay;
-  else if (job.pay) changes.pay = deleteField();
+  if (!resolved || resolved.cleaner.state === "ready") {
+    changes.cleanerPayout = snapshot.cleanerPayout ?? deleteField();
+    if (snapshot.pay) changes.pay = snapshot.pay;
+    else if (job.pay) changes.pay = deleteField();
+  }
   return changes;
 }
 
@@ -710,7 +715,7 @@ export async function updateJobDetails(jobId, details) {
       const pricing = resolveJobPricing({ serviceType: updates.serviceType }, {
         property: property.data(), cleanerCount: cleanerCountForJob(job),
       });
-      prices = priceUpdates(job, snapshotFromResolvedPricing(pricing), true);
+      prices = priceUpdates(job, snapshotFromResolvedPricing(pricing), pricing);
     }
     transaction.update(reference, {
       ...updates,

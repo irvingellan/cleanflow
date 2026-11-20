@@ -3,7 +3,7 @@ import { DetailItem } from "../../components/UiPrimitives.jsx";
 import { formatPrice } from "../../lib/presentation.js";
 
 import { resolveJobPricing } from "../pricing/pricingModel.js";
-import { formatPricingRate } from "../pricing/pricingMessages.js";
+import { formatPricingRate, pricingMessage } from "../pricing/pricingMessages.js";
 import { JobPriceFields } from "./JobPriceFields.jsx";
 import { jobPricesLocked } from "./jobPricingForm.js";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
@@ -33,7 +33,7 @@ export function JobFinancialSection({
       <h3>{translate("lifecycle.financialSnapshot")}</h3>
       <dl className="detail-list">
         <DetailItem label={translate("jobs.clientPrice")} value={formatPricingRate(client, language, translate)} />
-        <DetailItem label={translate("jobs.cleanerPayout")} value={formatPricingRate(cleaner, language, translate)} />
+        <DetailItem label={cleaner.perCleaner ? pricingMessage(language, "teamAmount") : translate("jobs.cleanerPayout")} value={formatPricingRate(cleaner, language, translate)} />
         <DetailItem label={translate("jobs.grossMargin")} value={grossMargin === null
           ? translate("jobs.notSet") : formatPrice(grossMargin, translate, language)} />
       </dl>
@@ -52,7 +52,7 @@ export function JobFinancialSection({
         <form className="cleaning-form" noValidate onSubmit={savePrices}>
           <JobPriceFields values={priceValues} disabled={isSavingPrices} onChange={(event) => {
             const { name, value } = event.target;
-            setPriceValues((current) => ({ ...current, [name]: value }));
+            setPriceValues((current) => ({ ...current, [name]: value, ...(name === "cleanerMode" ? { fixedPerCleaner: false } : {}) }));
           }} />
           {priceSaveError && <p className="form-error" role="alert">{priceSaveError}</p>}
           <div className="button-row">

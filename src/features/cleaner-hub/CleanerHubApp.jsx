@@ -21,7 +21,7 @@ import {
   normalizeAccessCodeInput,
   normalizeJobAccess,
 } from "./cleanerAgendaModel.js";
-import { detectHubLanguage, hubLanguages, hubMoney, hubTranslate } from "./cleanerHubMessages.js";
+import { detectHubLanguage, hubLanguages, hubOfferPay, hubTranslate } from "./cleanerHubMessages.js";
 import { AvailabilityPanel } from "../availability/AvailabilityPanel.jsx";
 import { availabilityMessage } from "../availability/availabilityMessages.js";
 import { RescheduleResponse } from "./RescheduleResponse.jsx";
@@ -195,7 +195,7 @@ function JobCard({ t, entry, onOpen, onAnswer }) {
   const service = !taken && (!offer || entry.serviceType) ? serviceTypeLabel(t.lang, entry.serviceType) : null;
   const address = !taken && entry.address;
   const place = address || entry.propertyName;
-  const amount = !taken && hubMoney(entry.offeredCompensation, t.lang);
+  const amount = !taken && hubOfferPay(entry, t.lang);
   return (
     <li>
       <button type="button" className="hb-job" onClick={() => onOpen(entry)} data-job-id={entry.jobId}>
@@ -524,7 +524,7 @@ function JobView({ t, hub, entry, jobId, today, removedLabel }) {
         <div><dt><HubIcon name="calendar" size={15} />{t("hb.job.when")}</dt><dd>{`${dayLabel(t, entry.scheduledDate, today)} · ${t.time(entry.scheduledStart) || t("hb.timeNotSet")}`}</dd></div>
         <div><dt><HubIcon name="pin" size={15} />{t(entry.address ? "hb.job.address" : "hb.job.where")}</dt><dd>{entry.address || entry.propertyName || "—"}</dd></div>
         <div><dt><HubIcon name="clipboard" size={15} />{serviceTypeMessage(t.lang, "field")}</dt><dd>{serviceTypeLabel(t.lang, entry.serviceType)}</dd></div>
-        <div><dt><HubIcon name="dollar" size={15} />{t("hb.job.agreedPay")}</dt><dd>{hubMoney(entry.offeredCompensation, t.lang) || t("hb.job.payNotSet")}</dd></div>
+        <div><dt><HubIcon name="dollar" size={15} />{t("hb.job.agreedPay")}</dt><dd>{hubOfferPay(entry, t.lang) || t("hb.job.payNotSet")}</dd></div>
       </dl>
       <JobInstructions t={t} notes={entry.notes} />
       <section className={`hb-checkcard is-${situation.state}`} data-checklist-state={situation.state} aria-labelledby="hb-checklist-title">
@@ -601,7 +601,7 @@ function OfferView({ t, hub, entry, today, removedLabel }) {
     }
   }
 
-  const amount = hubMoney(entry.offeredCompensation, t.lang, true);
+  const amount = hubOfferPay(entry, t.lang, true);
   const statusKey = taken ? "hb.offer.ALREADY_TAKEN" : reply === "assigned" ? "hb.offer.assigned" : offerStatusKey(entry);
   return (
     <div className="hb-screen">

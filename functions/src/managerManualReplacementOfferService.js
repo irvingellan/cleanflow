@@ -1,4 +1,4 @@
-import { hourlyOfferSnapshot } from "./offerPay.js";
+import { newOfferPay } from "./offerPay.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireMission2Writes } from "./mission2WriteControl.js";
@@ -102,11 +102,13 @@ export function createManualReplacementOfferForManager(database, {
       throw new HttpsError("failed-precondition", "An offer is already open for this vacancy.", { reason: "replacement-pending" });
     }
 
+    const property = job.cleanerPayout == null && !job.pay && validRosterId(job.propertyId)
+      ? (await transaction.get(organization.collection("properties").doc(job.propertyId))).data() : null;
     await requireMission2Writes(transaction, database);
     transaction.create(offerRef, {
       organizationId, jobId, cleanerId, cleanerName: cleaner.name.trim(), status: "PENDING",
       offerKind: manualReplacementOfferKind, replacementOfferId: offerRef.id, scheduleRevision,
-      ...hourlyOfferSnapshot(job.pay),
+      ...newOfferPay(job, property, batch.capacity),
       publicOfferExpiresAt: Timestamp.fromMillis(time.getTime() + offerLifetimeMs),
       createdAt: FieldValue.serverTimestamp(), createdByUid: actorUid,
     });

@@ -1180,7 +1180,7 @@ test("three invitees for an unversioned automatic batch retain one assignment, p
 });
 
 test("three simultaneous acceptances fill exactly two versioned slots and retries keep the same assignments", async () => {
-  await createJob("auto-two-slots-race", { requiredCleanerCount: 2 });
+  await createJob("auto-two-slots-race", { requiredCleanerCount: 2, cleanerPayout: 150.01 });
   const job = jobDocument("auto-two-slots-race");
   await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: automaticCleaners.map(([id]) => id) }));
   for (const [cleanerId] of automaticCleaners) await link(cleanerId);
@@ -1198,7 +1198,7 @@ test("three simultaneous acceptances fill exactly two versioned slots and retrie
   });
   assert.ok(committedJob.offerDistributionClosedAt);
   assert.equal(committedJob.firstAcceptClaim, undefined);
-  assert.equal(committedJob.cleanerPayout, 150);
+  assert.equal(committedJob.cleanerPayout, 150.01);
 
   const committedAssignments = await assignmentsFor(job);
   assert.equal(committedAssignments.length, 2);
@@ -1222,7 +1222,10 @@ test("three simultaneous acceptances fill exactly two versioned slots and retrie
   for (const [winnerId, winnerUid] of winners) {
     const assigned = (await agendaFor(winnerId)).filter(({ jobId, kind }) => jobId === job.id && kind === "ASSIGNED");
     assert.equal(assigned.length, 1);
-    assert.deepEqual([assigned[0].acknowledged, assigned[0].offeredCompensation], [true, 150]);
+    const amount = winnerId === committedJob.assignedCleanerIds[0] ? 75.01 : 75;
+    assert.deepEqual([assigned[0].acknowledged, assigned[0].offeredCompensation], [true, amount]);
+    assert.equal(assigned[0].fixedHousePay, undefined);
+    assert.equal(assigned[0].offeredPayEstimated, undefined);
     assert.ok(!JSON.stringify(loserAgenda.docs[0].data()).includes(winnerId));
     await assertFails(cleanerDb(loserUid).doc(`${root}/cleanerAgenda/${winnerId}__${job.id}`).get());
     await assertFails(cleanerDb(loserUid).doc(`${job.path}/offers/${winnerId}`).get());
@@ -1231,9 +1234,9 @@ test("three simultaneous acceptances fill exactly two versioned slots and retrie
 });
 
 test("a partial versioned batch keeps active invitations private and allows only their authorized reset or revoke", async () => {
-  await createJob("auto-two-slots-partial", { requiredCleanerCount: 2 });
+  await createJob("auto-two-slots-partial", { requiredCleanerCount: 2, cleanerPayout: 150.01 });
   const job = jobDocument("auto-two-slots-partial");
-  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: automaticCleaners.map(([id]) => id) }));
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-c", "cleaner-b", "cleaner-a"] }));
   for (const [cleanerId] of automaticCleaners) await link(cleanerId);
 
   assert.equal((await accept(job.id, uidA)).state, "assigned");
@@ -1243,7 +1246,12 @@ test("a partial versioned batch keeps active invitations private and allows only
   assert.equal(partial.offerDistributionClosedAt, undefined);
   await sync(job.id);
   const [pending] = await agendaFor("cleaner-b");
-  assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", 150]);
+  assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", 75]);
+  const [first] = await agendaFor("cleaner-a");
+  assert.equal(first.offeredCompensation, 75.01);
+  assert.equal(pending.offeredFirstSlotExtraCents, undefined);
+  assert.equal(pending.offeredPayEstimated, true);
+  assert.equal(pending.fixedHousePay, undefined);
   assert.doesNotMatch(JSON.stringify(pending), /cleaner-a|Ana Example|assignedCleanerIds|private-|clientPrice|cleanerPayout/);
 
   const db = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
@@ -1845,7 +1853,7 @@ test("a previous invitee can privately express interest in a new manual replacem
 
 test("manual replacement waits for current automatic offers to become exhausted", async () => {
   const job = jobDocument("reschedule-replacement-exhaustion");
-  await createJob(job.id, { requiredCleanerCount: 2 });
+  await createJob(job.id, { requiredCleanerCount: 2, cleanerPayout: 150.01 });
   for (const [cleanerId] of automaticCleaners) await link(cleanerId);
   await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a", "cleaner-b"] }));
   assert.equal((await accept(job.id, uidA)).state, "assigned");
@@ -1868,6 +1876,13 @@ test("manual replacement waits for current automatic offers to become exhausted"
   })), { state: "answered", status: "DECLINED" });
   const answered = (await original.get()).data();
   const replacement = await request();
+  const saved = (await job.collection("offers").doc(replacement.offerId).get()).data();
+  assert.deepEqual([saved.offeredCompensation, saved.offeredFirstSlotExtraCents, saved.fixedHousePay],
+    [75, 1, { totalCents: 15001, teamSize: 2 }]);
+  await sync(job.id);
+  const [visible] = await agendaFor("cleaner-c");
+  assert.deepEqual([visible.offeredCompensation, visible.offeredFirstSlotExtraCents, visible.offeredPayEstimated], [75, 1, true]);
+  assert.equal(visible.fixedHousePay, undefined);
   assert.match(replacement.offerId, /^replacement-[A-Za-z0-9]{20}$/);
   assert.ok((await job.get()).get("offerDistributionClosedAt"));
   assert.deepEqual((await original.get()).data(), answered);
@@ -1982,8 +1997,10 @@ test("send to more cleaners adds offers to the open automatic batch and never re
   const added = (await job.collection("offers").doc("cleaner-b").get()).data();
   assert.deepEqual(
     [added.status, added.offerDistributionMode, added.automaticOfferBatchVersion, added.offeredChecklistContextRevision, added.offeredCompensation],
-    ["PENDING", autoMode, 2, before.automaticOfferBatch.openingContextRevision, 150],
+    ["PENDING", autoMode, 2, before.automaticOfferBatch.openingContextRevision, 75],
   );
+  assert.equal(added.syncExtendedBatchAgenda, true);
+  assert.equal(firstOffer.syncExtendedBatchAgenda, undefined);
   assert.equal((await job.collection("offers").doc("cleaner-a").get()).data().publicOfferExpiresAt.isEqual(firstOffer.publicOfferExpiresAt), true);
   await assert.rejects(createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ["cleaner-a"] })), { code: "already-exists" });
 

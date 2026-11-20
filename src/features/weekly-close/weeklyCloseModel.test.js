@@ -301,3 +301,58 @@ describe("hourly services in the weekly close", () => {
     expect(close([job(), job({ pay: { mode: "HOURLY", rateCents: 2500 } })]).excluded.conflictingDuplicate).toBe(1);
   });
 });
+
+describe("fixed team payout evidence", () => {
+  const team = job({ schemaVersion: 2, assignedCleanerId: null, assignedCleanerIds: ["z", "a", "b"] });
+  const names = { z: "Example Z", a: "Example A", b: "Example B" };
+  const line = (id, cleanerId, cents) => paid({ id, cleanerId, jobIds: ["job-1", "another-job"],
+    jobAmountsCents: { "job-1": cents, "another-job": 2500 }, amount: (cents + 2500) / 100 });
+
+  it("keeps the house and client totals and reports the actual cents for every cleaner in roster order", () => {
+    const result = close([team], { cleanerNamesById: names });
+    expect(result.jobs[0]).toMatchObject({ cleanerPayout: 100, clientCharge: 200, payoutStatus: "UNKNOWN", cleanerShares: [
+      { name: "Example Z", amount: 33.34, paidAmount: null }, { name: "Example A", amount: 33.33, paidAmount: null },
+      { name: "Example B", amount: 33.33, paidAmount: null },
+    ] });
+    const overridden = close([{ ...team, pay: { mode: "FIXED", perCleanerCents: 5000 } }]);
+    expect(overridden.jobs[0].cleanerShares.map(share => share.amount)).toEqual([50, 50, 50]);
+    expect(overridden.overall).toMatchObject({ cleanerPayoutTotal: 150, clientCharges: 200, grossOperationalMargin: 50 });
+    expect(close([team, { ...team, assignedCleanerIds: ["a", "z", "b"] }]).excluded.conflictingDuplicate).toBe(1);
+  });
+
+  it("honors an agreed personal fixed amount despite later Job edits, preserving zero and missing terms", () => {
+    const incompleteTeam = { ...team, requiredCleanerCount: 4, assignedCleanerIds: ["z", "a"], cleanerPayout: 175,
+      payoutAgreementsByCleaner: { z: { offeredCompensation: 42.01 }, a: { offeredCompensation: 0 } } };
+    const result = close([incompleteTeam]).jobs[0];
+    expect(result.cleanerPayout).toBe(42.01);
+    expect(result.cleanerShares.map(share => share.amount)).toEqual([42.01, 0]);
+    const stale = close([{ ...incompleteTeam, payoutAgreementsByCleaner: { z: null } }]).jobs[0];
+    expect(stale.cleanerPayout).toBeNull();
+    expect(stale.cleanerShares.map(share => share.amount)).toEqual([null, 87.5]);
+    const hourly = close([{ ...incompleteTeam,
+      payoutAgreementsByCleaner: { z: { offeredPay: { mode: "HOURLY", rateCents: 2900 } } } }]).jobs[0];
+    expect(hourly.cleanerPayout).toBeNull();
+    expect(hourly.attentionReasons).toContain("hours_review");
+  });
+
+  it("reconciles one or all individual receipts, including grouped payments, with explicit reciprocal links", () => {
+    const first = line("one", "z", 3334);
+    const afterFirst = { ...team, payoutIdsByCleaner: { z: "one" } };
+    const partial = close([afterFirst], { payouts: [first] });
+    expect(partial.jobs[0]).toMatchObject({ paidAmount: 33.34, outstandingAmount: 66.66, payoutStatus: "OUTSTANDING" });
+    expect(partial.jobs[0].cleanerShares.map(share => share.paidAmount)).toEqual([33.34, null, null]);
+    const full = close([{ ...team, payoutIdsByCleaner: { z: "one", a: "two", b: "three" } }],
+      { payouts: [first, line("two", "a", 3333), line("three", "b", 3333)] });
+    expect(full.overall).toMatchObject({ cleanerPaidTotal: 100, cleanerOutstandingTotal: 0, unknownPayoutCount: 0 });
+    const changed = close([{ ...afterFirst, cleanerPayout: 120 }], { payouts: [first] }).jobs[0];
+    expect(changed).toMatchObject({ payoutStatus: "UNKNOWN", paidAmount: 33.34, outstandingAmount: 80 });
+    expect(changed.attentionReasons).toContain("payout_amount_mismatch");
+    for (const receipt of [
+      { ...first, amount: 9 }, { ...first, cleanerId: "b" }, { ...first, organizationId: "other" },
+      { ...first, jobAmountsCents: undefined }, { ...first, jobIds: ["another-job"] },
+    ]) {
+      expect(close([afterFirst], { payouts: [receipt] }).jobs[0].paidAmount).toBeNull();
+    }
+    expect(close([team], { payouts: [first] }).jobs[0].paidAmount).toBeNull();
+  });
+});

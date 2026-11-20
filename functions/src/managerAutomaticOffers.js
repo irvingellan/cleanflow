@@ -1,4 +1,4 @@
-import { canSuggestDefaultCleanerPrice, hourlyOfferSnapshot } from "./offerPay.js";
+import { newOfferPay } from "./offerPay.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireMission2Writes } from "./mission2WriteControl.js";
@@ -20,19 +20,6 @@ const maxRecipients = 50;
 function validId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 160
     && value === value.trim() && value !== "." && value !== ".." && !value.includes("/");
-}
-
-function validAmount(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-/**
- * The amount each automatic Offer shows its cleaner: the Job payout, or the
- * Property default when the Job has none (Jobs created before the Property
- * price existed). Null only when neither is set.
- */
-export function automaticOfferCompensation(job, property) {
-  return validAmount(job?.cleanerPayout) ?? (canSuggestDefaultCleanerPrice(job, property) ? validAmount(property?.defaultCleanerPrice) : null);
 }
 
 /**
@@ -87,7 +74,7 @@ export async function createAutomaticJobOffersForManager(database, {
     const property = typeof job.propertyId === "string" && validId(job.propertyId)
       ? (await transaction.get(organization.collection("properties").doc(job.propertyId))).data()
       : undefined;
-    const compensation = hourlyOfferSnapshot(job.pay) ?? { offeredCompensation: automaticOfferCompensation(job, property) };
+    const compensation = newOfferPay(job, property);
     const revision = checklistContextRevision(job);
     const capacity = automaticOfferCapacity(job);
     const extending = Object.hasOwn(job, "automaticOfferBatch");
@@ -128,6 +115,7 @@ export async function createAutomaticJobOffersForManager(database, {
         status: "PENDING",
         offerDistributionMode: FIRST_ACCEPT_WINS,
         automaticOfferBatchVersion,
+        ...(extending && cleaner.id === cleanerIds[0] && { syncExtendedBatchAgenda: true }),
         offeredChecklistContextRevision: extending ? job.automaticOfferBatch.openingContextRevision : revision,
         offeredPropertyName: typeof job.propertyName === "string" ? job.propertyName : null,
         offeredScheduledDate: typeof job.scheduledDate === "string" ? job.scheduledDate : null,

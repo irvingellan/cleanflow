@@ -224,3 +224,16 @@ it("labels the pending hourly service in both reconciliation views", async () =>
   expect((await screen.findAllByText("Needs review: hours")).length).toBeGreaterThan(0);
   expect(screen.queryByText(/\$0\.00/)).toBeNull();
 });
+
+it("shows the roster shares with their house total in the weekly job breakdown", async () => {
+  loadWeeklyClose.mockResolvedValueOnce(buildWeeklyClose({ weekStart, jobs: [{
+    id: "team", schemaVersion: 2, assignedCleanerIds: ["z", "b", "a"], dataProvenance: "REAL",
+    propertyName: "Example Property", clientId: "client", clientName: "Example Client", scheduledDate: "2026-09-22",
+    operationalStatus: "COMPLETED", cleanerPayout: 100, clientPrice: 220,
+  }], cleanerNamesById: { z: "Example First", b: "Example Second", a: "Example Third" } }));
+  mount();
+  await screen.findByText("Example Client", { selector: "strong" });
+  expect(screen.getByText(/Example First · \$33\.34/)).toBeInTheDocument();
+  expect(screen.getByText(/Example Second · \$33\.33/)).toBeInTheDocument();
+  expect(screen.getByText(/Example Third · \$33\.33/)).toBeInTheDocument();
+});

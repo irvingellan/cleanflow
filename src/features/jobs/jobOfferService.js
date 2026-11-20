@@ -1,4 +1,4 @@
-import { hourlyOfferSnapshot } from "../../../functions/src/offerPay.js";
+import { newOfferPay, storedOfferPay } from "../../../functions/src/offerPay.js";
 import {
   doc,
   getDoc,
@@ -101,7 +101,9 @@ export async function respondToJobOffer({ jobId, cleanerId, status }) {
   });
 }
 
-export async function createJobOffers({ jobId, cleaners, automatic = false, offeredCompensation = null, offeredPay = null }) {
+export async function createJobOffers({
+  jobId, cleaners, automatic = false, offeredCompensation, offeredFirstSlotExtraCents, offeredPay,
+}) {
   const reference = jobDocument(jobId);
 
   if (automatic) {
@@ -120,19 +122,25 @@ export async function createJobOffers({ jobId, cleaners, automatic = false, offe
     }
 
     const job = jobFromSnapshot(snapshot);
-    if (!canCreateOffersForJob(job) || isAutomaticOfferJob(job)) {
+    if ((job.organizationId != null && job.organizationId !== organizationId) || !canCreateOffersForJob(job) || isAutomaticOfferJob(job)) {
       const error = new Error("Offers cannot be created after work starts.");
       error.code = "offer-management-locked";
       throw error;
     }
 
-    const hourly = hourlyOfferSnapshot(job.pay);
-    if (hourly?.offeredPay?.rateCents !== offeredPay?.rateCents) {
-      throw new Error("The hourly offer rate changed. Refresh the Job before sending.");
+    let property = null;
+    if (job.cleanerPayout == null && !job.pay && typeof job.propertyId === "string" && job.propertyId && !job.propertyId.includes("/")) {
+      const propertySnapshot = await transaction.get(doc(db, "organizations", organizationId, "properties", job.propertyId));
+      if (propertySnapshot.exists()) property = propertySnapshot.data();
     }
-    const fixed = typeof offeredCompensation === "number" && Number.isFinite(offeredCompensation) && offeredCompensation >= 0
-      ? { offeredCompensation } : {};
-    const price = hourly ?? fixed;
+    const quote = newOfferPay({ ...job, organizationId }, property);
+    if (offeredPay?.rateCents !== quote.offeredPay?.rateCents ||
+        (offeredCompensation !== undefined && offeredCompensation !== quote.offeredCompensation) ||
+        (offeredCompensation !== undefined && offeredFirstSlotExtraCents !== quote.offeredFirstSlotExtraCents)) {
+      throw new Error("The offer rate changed. Refresh the Job before sending.");
+    }
+    // With no configured amount the manager can still agree a personal amount at first link issuance.
+    const price = quote.offeredCompensation === null && !job.pay ? {} : quote;
     // A second manager or a retry must never replace a recipient's existing offer.
     const recipients = cleaners.map(cleaner => ({ cleaner, ref: offerDocument(jobId, cleaner.id) }));
     const priorOffers = await Promise.all(recipients.map(({ ref }) => transaction.get(ref)));
@@ -206,16 +214,18 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
       throw error;
     }
 
-    const hourly = hourlyOfferSnapshot(offer.offeredPay);
+    const firstPrice = !automatic && !offer.offeredPay && !Object.hasOwn(offer, "offeredCompensation")
+      ? { offeredCompensation } : {};
+    const terms = storedOfferPay({ ...offer, ...firstPrice });
     const expiresAtMs = automatic ? offer.publicOfferExpiresAt.toMillis() : legacyExpiresAtMs;
     transaction.update(offerReference, {
       publicOfferTokenHash: tokenHash,
       ...(!automatic ? {
         publicOfferExpiresAt: Timestamp.fromMillis(expiresAtMs),
-        ...(!hourly && { offeredCompensation }),
+        ...firstPrice,
       } : {}),
     });
-    return { expiresAtMs, ...(hourly ?? { offeredCompensation: automatic ? offer.offeredCompensation ?? null : offeredCompensation }) };
+    return { expiresAtMs, ...terms };
   });
 
   return {

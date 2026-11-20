@@ -1,4 +1,5 @@
-import { pricingMessage } from "../pricing/pricingMessages.js";
+import { offerPayForRecipient } from "../../../functions/src/offerPay.js";
+import { offerPayNote, pricingMessage } from "../pricing/pricingMessages.js";
 import {
   isJobFilled,
   manualOfferAvailability,
@@ -10,7 +11,7 @@ import { currentCleanerName } from "../cleaners/cleanerIdentity.js";
 import { automaticOfferDisplayStatus } from "./automaticOffers.js";
 import { formatCreatedAt, hasValue } from "../../lib/presentation.js";
 import { formatOfferCompensation, getOfferCompensationSuggestion } from "./offerCompensation.js";
-import { buildWhatsAppChatUrl, buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
+import { buildWhatsAppChatUrl } from "./whatsappHandoff.js";
 
 /** One offer in the Offers section of Job Detail: its status, the manager's actions, the public link and the message for the cleaner. */
 export function JobOfferRow({
@@ -78,12 +79,14 @@ export function JobOfferRow({
   const canDecideOffer = Boolean(onDecideOffer) && isAssignmentAware && canEditRoster && isOpenOffer;
   const canReopenOffer = Boolean(onReopenOffer) && isAssignmentAware && canEditRoster
     && availability === "closed" && !isJobFilled(job);
-  const compensationSuggestion = getOfferCompensationSuggestion(job, offer);
+  const currentTerms = publicOfferLink?.offerId === offer.id ? { offeredCompensation: null, ...publicOfferLink } : offer;
+  const compensationSuggestion = getOfferCompensationSuggestion(job, currentTerms);
+  const recipientPay = offerPayForRecipient(currentTerms, job, offer.cleanerId);
+  const extra = compensationSuggestion.source === "offer" && offerPayNote(recipientPay, language);
   const isEditingOfferCompensation = editingOfferCompensationFor === offer.id;
   const offerMessage = offerMessageFor(offer, offerCleanerName);
   const phone = cleanerPhonesById[offer.cleanerId];
-  const offerWhatsAppUrl = publicOfferLink?.offeredPay
-    ? buildWhatsAppChatUrl(phone) : buildWhatsAppHandoffUrl(phone, offerMessage);
+  const offerWhatsAppUrl = offerMessage && buildWhatsAppChatUrl(phone);
 
   return (
     <article className="offer-status-item">
@@ -185,7 +188,7 @@ export function JobOfferRow({
           onSubmit={(event) => createOfferLink(event, offer)}
         >
           {compensationSuggestion.mode === "HOURLY" ? (
-            <p>{formatOfferCompensation(offer, translate, language)}<br />{pricingMessage(language, "reportHours")}</p>
+            <p>{formatOfferCompensation(recipientPay, translate, language)}<br />{pricingMessage(language, "reportHours")}</p>
           ) : <label>
             {translate("offers.offeredCompensation")}
             <input
@@ -193,6 +196,7 @@ export function JobOfferRow({
               min="0"
               step="0.01"
               inputMode="decimal"
+              readOnly={compensationSuggestion.source === "offer"}
               value={offerCompensationInput}
               onChange={(event) => {
                 setOfferCompensationInput(event.target.value);
@@ -200,6 +204,7 @@ export function JobOfferRow({
               }}
             />
           </label>}
+          {extra && <p className="form-hint">{extra}</p>}
           <p className="offer-compensation-form__help">
             {compensationSuggestion.source === "job"
               ? translate("offers.jobAmountSuggestion")
@@ -252,7 +257,7 @@ export function JobOfferRow({
           </a>
           <p className="offer-compensation-summary">
             <strong>{translate("offers.offeredCompensation")}:</strong>{" "}
-            {formatOfferCompensation(publicOfferLink, translate, language)}
+            {formatOfferCompensation(recipientPay, translate, language)}
             {publicOfferLink.offeredPay && <><br />{pricingMessage(language, "reportHours")}</>}
           </p>
           <p className="form-hint">
@@ -285,7 +290,7 @@ export function JobOfferRow({
           {!offerWhatsAppUrl && (
             <p className="form-hint">{translate("whatsapp.phoneNeeded")}</p>
           )}
-          <p className="form-hint">{publicOfferLink.offeredPay ? pricingMessage(language, "copyBeforeWhatsApp") : translate("whatsapp.manualSendNote")}</p>
+          <p className="form-hint">{pricingMessage(language, "copyBeforeWhatsApp")}</p>
           {!publicOfferLink.offeredPay && !hasValue(publicOfferLink.offeredCompensation) && (
             <p className="offer-compensation-warning" role="status">
               {translate("offers.amountNotSetWarning")}

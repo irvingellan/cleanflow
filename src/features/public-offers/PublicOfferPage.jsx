@@ -163,10 +163,10 @@ export function PublicOfferPage({ token }) {
                 )}
                 <PublicOfferCompensation
                   offeredPay={offer.offeredPay}
-                  recipientTranslation={offer.offeredPay ? { language, translate } : undefined}
-                  amount={offer.offeredCompensation !== undefined
-                    ? offer.offeredCompensation
-                    : offer.cleanerPayout}
+                  offeredFirstSlotExtraCents={offer.offeredFirstSlotExtraCents}
+                  offeredPayEstimated={offer.offeredPayEstimated}
+                  recipientTranslation={{ language, translate }}
+                  amount={offer.offeredCompensation}
                 />
                 <DetailItem
                   label={translate("publicOffer.status")}

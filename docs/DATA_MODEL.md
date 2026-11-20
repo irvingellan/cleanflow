@@ -269,6 +269,26 @@ financial subtotal. Client-approved time is independent of each cleaner's
 payable time. The fixed team payout and the eligibility of single-cleaner
 legacy Jobs follow the existing payout model.
 
+### Fixed offers and individual payout evidence
+
+New fixed offers store the individual base amount in `offeredCompensation`.
+When there is a fractional-cent remainder after division, the first assigned
+slot receives that remainder. House-rate offers retain their original split
+terms internally. The public offer and the Hub expose only the recipient's
+terms. Rotating a link leaves a recorded agreement intact. Team-size rates
+selected from a Property become individual Job prices. Changing only the
+number of slots preserves that agreement, while a house total is divided
+among the new number of slots.
+
+For team Jobs, `payoutIdsByCleaner` links each paid cleaner to her own
+receipt. New receipts freeze each Job's individual amount in
+`jobAmountsCents`. The payment transaction checks the selected roster
+member's entitlement and prior receipt before writing either document.
+Legacy receipts and single-cleaner Job markers retain their original meaning.
+The weekly close reconciles per-cleaner proof with the Job; one member's
+receipt covers only her share. Upcoming offers, registered payments and
+historical Jobs do not require a backfill.
+
 ### Client pricing
 
 A Job may be priced as:

@@ -78,6 +78,26 @@ describe("CleanerHubApp (live data boundary)", () => {
     if (entry.kind === "OFFER") expect(screen.getByText(/Você informa suas horas no final do serviço/)).toBeVisible();
   });
 
+  it("shows only the cleaner's share, then replaces the conditional extra with her confirmed amount", async () => {
+    const { service, handlers } = fakeService();
+    const offer = { ...entries[1], offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1, offeredPayEstimated: true,
+      cleanerPayout: 100, clientPrice: 290 };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [offer], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    const card = screen.getByRole("button", { name: /33,33/ });
+    expect(card).toHaveTextContent(/0,01 se a primeira vaga for sua/);
+    expect(card).toHaveTextContent("Estimativa com base no tamanho previsto da equipe");
+    await userEvent.click(card);
+    const main = screen.getByRole("main");
+    expect(main).toHaveTextContent(/33,33.*0,01 se a primeira vaga for sua/);
+    const assigned = { ...entries[0], jobId: offer.jobId, propertyName: offer.propertyName,
+      offeredCompensation: 33.34, cleanerPayout: 100, clientPrice: 290 };
+    act(() => handlers.agenda({ entries: [assigned], fromCache: false }));
+    expect(main).toHaveTextContent(/33,34/);
+    expect(main).not.toHaveTextContent(/primeira vaga|33,33|100|290/);
+  });
+
   it("identifies a removed service using its last confirmed details and discards its private fields", async () => {
     const { service, handlers } = fakeService();
     const entry = { ...entries[0], notes: "Synthetic checklist instructions", offeredCompensation: 132.75 };

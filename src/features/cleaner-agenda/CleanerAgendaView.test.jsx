@@ -49,6 +49,22 @@ describe("CleanerAgendaView", () => {
     expect(onOpenJob).toHaveBeenCalledWith(expect.objectContaining({ id: expect.stringMatching(/^j[13]$/) }));
   });
 
+  it("labels the actual receipt separately from the other cleaner's current share", async () => {
+    loadCleanerAgenda.mockImplementationOnce(async period => {
+      const source = { period, jobs: [{ id: "shared", operationalStatus: "COMPLETED", schemaVersion: 2,
+        assignedCleanerIds: ["first", "second"], cleanerPayout: 90, propertyName: "Example",
+        scheduledDate: period.start, payoutIdsByCleaner: { first: "receipt" } }],
+        cleaners: [{ id: "first", name: "Example First" }, { id: "second", name: "Example Second" }],
+        receiptAmounts: new Map([[JSON.stringify(["first", "shared"]), 7219]]), properties: [], clients: [] };
+      return { ...buildCleanerAgenda(source), source, coverage: {}, jobsById: new Map() };
+    });
+    render(<TranslationProvider><CleanerAgendaView onBack={() => {}} onOpenJob={() => {}} /></TranslationProvider>);
+    await screen.findByRole("article", { name: "Example First" });
+    fireEvent.click(screen.getByRole("button", { name: /completed|concluídas/i }));
+    expect(within(screen.getByRole("article", { name: "Example First" })).getByText(/(?:Paid|Pago).*72[.,]19/i)).toBeVisible();
+    expect(within(screen.getByRole("article", { name: "Example Second" })).queryByText(/(?:Paid|Pago)/i)).toBeNull();
+  });
+
   it("lists services without a cleaner and completed services with payouts", async () => {
     render(<TranslationProvider><CleanerAgendaView onBack={() => {}} onOpenJob={() => {}} /></TranslationProvider>);
     await screen.findByRole("article", { name: "Ana Example" });

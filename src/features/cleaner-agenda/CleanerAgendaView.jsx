@@ -271,8 +271,8 @@ export function CleanerAgendaView({ onBack, onOpenJob, copiedSchedules: sessionS
                     <ServiceRow key={entry.jobId} entry={entry} language={language} translate={translate} t={t} onOpen={openService}>
                       {tab === "schedule" && <span className="cleaner-agenda__badge">{agendaStatus(language, entry.status)}</span>}
                       {tab === "completed" && (entry.payout === null
-                        ? <small>{entry.shared ? t("shared") : t("payoutUnknown")}</small>
-                        : <strong className="cleaner-agenda__payout">{money(entry.payout)}</strong>)}
+                        ? <small>{t("payoutUnknown")}</small>
+                        : <strong className="cleaner-agenda__payout">{entry.paid && `${t("paid")} · `}{money(entry.payout)}</strong>)}
                     </ServiceRow>
                   ))}
                 </ul>

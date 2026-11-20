@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAllCleaners } from "../cleaners/cleanerService.js";
 import { getPayoutProofUrl, uploadPayoutProof } from "./payoutProofService.js";
-import { needsHoursReview } from "../pricing/hourlyReview.js";
+import { missingAgreementReview, payoutNeedsHoursReview } from "./payoutShares.js";
 import { groupUnpaidJobsByCleaner } from "./payoutGrouping.js";
 import {
   getRecentPayouts,
@@ -16,6 +16,7 @@ import {
 export function usePayoutsController({ view }) {
   const [payoutGroups, setPayoutGroups] = useState([]);
   const [pendingHoursJobs, setPendingHoursJobs] = useState([]);
+  const [missingAgreementJobs, setMissingAgreementJobs] = useState([]);
   const [recentPayouts, setRecentPayouts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -33,7 +34,8 @@ export function usePayoutsController({ view }) {
         getRecentPayouts(),
       ]);
       setPayoutGroups(groupUnpaidJobsByCleaner(unpaidJobs, cleaners));
-      setPendingHoursJobs(unpaidJobs.filter(needsHoursReview));
+      setPendingHoursJobs(unpaidJobs.filter(payoutNeedsHoursReview));
+      setMissingAgreementJobs(unpaidJobs.filter(job => !payoutNeedsHoursReview(job) && missingAgreementReview(job)));
       setRecentPayouts(payouts);
     } catch {
       setHasError(true);
@@ -73,7 +75,7 @@ export function usePayoutsController({ view }) {
   return {
     directory: {
       payoutGroups,
-      pendingHoursJobs,
+      pendingHoursJobs, missingAgreementJobs,
       recentPayouts,
       isLoading,
       hasError,
