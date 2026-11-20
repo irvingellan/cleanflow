@@ -113,11 +113,8 @@ const runStatuses = ["NONE", "DRAFT", "READY_FOR_REVIEW", "ABANDONED"];
 /**
  * Cleaner-facing checklist situation for an assigned agenda entry.
  *
- * Reads the optional server-written `entry.checklist` summary proposed in
- * docs/PILOT_FEEDBACK_UX_V1.md ({status, started}). The current projection does
- * not write it yet, so the honest answer is "unknown": the screen then offers
- * the existing "Abrir checklist" path, where the server decides. Nothing here
- * creates, starts or submits a Run, and saving answers is never "sent".
+ * Existing Runs report their progress. A missing Run or older projection has
+ * no saved progress to show; the Hub can still open the checklist on demand.
  *
  * @returns {{state: "unknown"|"none"|"available"|"started"|"submitted"|"closed", pending: boolean}}
  */

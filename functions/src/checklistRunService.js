@@ -1,7 +1,8 @@
+import { isDeepStrictEqual } from "node:util";
 import { FieldValue } from "firebase-admin/firestore";
 import { applyManagerCorrections, managerCorrection } from "./checklistManagerCorrection.js";
 import { HttpsError } from "firebase-functions/v2/https";
-import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
+import { buildChecklistRunSnapshot, normalizePropertyChecklistSettings } from "./checklistRunDefinition.js";
 import { checklistDraftReviewRequirements, projectChecklistDraftForRead } from "./checklistDraftService.js";
 import { checklistRunDefinitionVersion, validChecklistInventoryQuantity } from "./checklistInventory.js";
 import { createChecklistEvidencePolicy, isPilotChecklistPhotoRequirement, pilotChecklistPhotoRequirementId, projectChecklistEvidence, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
@@ -143,6 +144,41 @@ export async function getChecklistRunForManager(database, { organizationId, jobI
     : null;
 }
 
+/** Compare source inputs, not a newer template release or capability rotation. */
+export function checklistSnapshotNeedsRefresh(run, current) {
+  return run.propertySnapshot?.propertyId !== current.propertySnapshot.propertyId
+    || run.propertySnapshot?.propertyName !== current.propertySnapshot.propertyName
+    || normalizeServiceType(run.jobSnapshot?.serviceType) !== current.jobSnapshot.serviceType
+    || !isDeepStrictEqual(normalizePropertyChecklistSettings(run.propertyChecklistSettingsSnapshot),
+      current.propertyChecklistSettingsSnapshot);
+}
+
+export async function loadChecklistRunSnapshot(transaction, database, { organizationId, job }) {
+  if (job.archivedAt || job.operationalStatus === "COMPLETED") {
+    throw new HttpsError("failed-precondition", "Checklist cannot be started on an archived or completed Job.");
+  }
+  if (!validChecklistRunJobId(job.propertyId) || job.propertyId === "." || job.propertyId === "..") {
+    throw new HttpsError("failed-precondition", "Job needs a canonical Property before creating a checklist.");
+  }
+  const propertyRef = database.doc(`organizations/${organizationId}/properties/${job.propertyId}`);
+  const propertySnapshot = await transaction.get(propertyRef);
+  const property = propertySnapshot.data();
+  if (!property || (property.organizationId != null && property.organizationId !== organizationId)) {
+    throw new HttpsError("failed-precondition", "Job Property was not found.");
+  }
+  return buildChecklistRunSnapshot({ job, property: { ...property, id: propertySnapshot.id } });
+}
+
+export function newChecklistRun(snapshot, { organizationId, jobId, actorUid, createdBy, evidencePolicy }) {
+  return {
+    ...snapshot, organizationId, jobId, status: "DRAFT",
+    evidencePolicy: createChecklistEvidencePolicy(evidencePolicy),
+    createdByUid: actorUid,
+    ...(createdBy ? { createdBy } : {}),
+    createdAt: FieldValue.serverTimestamp(),
+  };
+}
+
 export async function createChecklistRunForManager(database, { organizationId, jobId, actorUid, evidencePolicy }) {
   const jobReference = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
   const runReference = jobReference.collection("checklistRuns").doc(initialChecklistRunId);
@@ -162,30 +198,8 @@ export async function createChecklistRunForManager(database, { organizationId, j
       return { runId: run.id, created: false, status: run.status, run };
     }
 
-    const job = { id: jobSnapshot.id, ...jobSnapshot.data() };
-    if (job.archivedAt || job.operationalStatus === "COMPLETED") {
-      throw new HttpsError("failed-precondition", "Checklist cannot be started on an archived or completed Job.");
-    }
-    if (!validChecklistRunJobId(job.propertyId)) {
-      throw new HttpsError("failed-precondition", "Job needs a canonical Property before creating a checklist.");
-    }
-
-    const propertyReference = database.doc(`organizations/${organizationId}/properties/${job.propertyId}`);
-    const propertySnapshot = await transaction.get(propertyReference);
-    if (!propertySnapshot.exists) {
-      throw new HttpsError("failed-precondition", "Job Property was not found.");
-    }
-
-    const property = { id: propertySnapshot.id, ...propertySnapshot.data() };
-    const runData = {
-      organizationId,
-      jobId,
-      status: "DRAFT",
-      evidencePolicy: createChecklistEvidencePolicy(evidencePolicy),
-      createdByUid: actorUid,
-      createdAt: FieldValue.serverTimestamp(),
-      ...buildChecklistRunSnapshot({ job, property }),
-    };
+    const snapshot = await loadChecklistRunSnapshot(transaction, database, { organizationId, job: jobSnapshot.data() });
+    const runData = newChecklistRun(snapshot, { organizationId, jobId, actorUid, evidencePolicy });
     transaction.create(runReference, runData);
 
     const run = projectChecklistRunForManager(runData, runReference.id);

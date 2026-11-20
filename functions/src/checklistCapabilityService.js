@@ -104,6 +104,20 @@ function assertEligible(job, run, cleanerId) {
   }
 }
 
+/** Both authenticated Hub and manager issuance rotate the same capability. */
+export function buildChecklistCapability({ organizationId, jobId, runId, cleanerId, actorUid, tokenHash, job, run, previous, now }) {
+  assertEligible(job, run, cleanerId);
+  return {
+    organizationId, jobId, runId, cleanerId, tokenHash,
+    contextRevision: currentRevision(job),
+    status: "ACTIVE",
+    rotation: (Number.isInteger(previous?.rotation) ? previous.rotation : 0) + 1,
+    issuedByUid: actorUid,
+    issuedAt: FieldValue.serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(now.getTime() + checklistCapabilityLifetimeMilliseconds),
+  };
+}
+
 export async function issueChecklistCapabilityForManager(database, {
   organizationId,
   jobId,
@@ -121,7 +135,6 @@ export async function issueChecklistCapabilityForManager(database, {
   const jobRef = jobReference(database, organizationId, jobId);
   const runRef = runReference(database, organizationId, jobId, runId);
   const capabilityRef = capabilityReference(database, organizationId, jobId, runId);
-  const expiresAt = Timestamp.fromMillis(now.getTime() + checklistCapabilityLifetimeMilliseconds);
 
   await database.runTransaction(async (transaction) => {
     const [jobSnapshot, runSnapshot, capabilitySnapshot] = await Promise.all([
@@ -129,24 +142,12 @@ export async function issueChecklistCapabilityForManager(database, {
     ]);
     const job = jobSnapshot.exists ? jobSnapshot.data() : null;
     const run = runSnapshot.exists ? runSnapshot.data() : null;
-    assertEligible(job, run, cleanerId);
-    await beforeIssue?.({ transaction, job, run, capability: capabilitySnapshot.data(), expiresAt });
-    const previousRotation = Number.isInteger(capabilitySnapshot.data()?.rotation)
-      ? capabilitySnapshot.data().rotation
-      : 0;
-    transaction.set(capabilityRef, {
-      organizationId,
-      jobId,
-      runId,
-      cleanerId,
-      tokenHash,
-      contextRevision: currentRevision(job),
-      status: "ACTIVE",
-      rotation: previousRotation + 1,
-      issuedByUid: actorUid,
-      issuedAt: FieldValue.serverTimestamp(),
-      expiresAt,
+    const previous = capabilitySnapshot.data();
+    const capability = buildChecklistCapability({
+      organizationId, jobId, runId, cleanerId, actorUid, tokenHash, job, run, previous, now,
     });
+    await beforeIssue?.({ transaction, job, run, capability: previous, expiresAt: capability.expiresAt });
+    transaction.set(capabilityRef, capability);
   });
 
   return { token, capability: await getChecklistCapabilityForManager(database, { organizationId, jobId, runId }) };

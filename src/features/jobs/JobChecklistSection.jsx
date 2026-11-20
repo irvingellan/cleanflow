@@ -1,3 +1,4 @@
+import { checklistFirstOpenHint } from "./checklistMessages.js";
 import { JobDetailSection } from "./JobDetailSection.jsx";
 import { OperationalIcon } from "../../components/OperationalIcon.jsx";
 import { StateCard } from "../../components/UiPrimitives.jsx";
@@ -7,6 +8,7 @@ import { ChecklistCapabilityControls } from "../checklists/ChecklistCapabilityCo
 export function JobChecklistSection({
   job,
   translate,
+  language,
   checklistSectionRef,
   isLoadingChecklistRun,
   checklistRun,
@@ -40,6 +42,7 @@ export function JobChecklistSection({
   startCleaning,
   hasStartCleaningError,
 }) {
+  const canOpenInHub = !job.archivedAt && job.propertyId && ["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus);
   return (
     <JobDetailSection jobId={job.id} title={translate("jobs.section.checklist")}>
     <section ref={checklistSectionRef} tabIndex={-1} className="job-checklist" aria-labelledby="job-checklist-title">
@@ -80,7 +83,9 @@ export function JobChecklistSection({
         </>
       )}
       {!isLoadingChecklistRun && !hasChecklistRunError && !checklistRun && (
-        <p className="job-checklist__summary">{translate("checklists.noRun")}</p>
+        <p className="job-checklist__summary">
+          {canOpenInHub ? checklistFirstOpenHint[language] : translate("checklists.noRun")}
+        </p>
       )}
       {!isLoadingChecklistRun && !hasChecklistRunError && checklistRun && (
         <p className="job-checklist__summary">{translate(

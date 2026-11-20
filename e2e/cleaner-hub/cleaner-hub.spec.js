@@ -248,13 +248,15 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await expect(interestEvents).toHaveCount(2);
   });
 
-  await test.step("12. Cleaner A opens the existing checklist for her own Job", async () => {
-    await managerCall(fixture, "createChecklistRun", { jobId: mapleRef.id });
+  await test.step("12. Cleaner A starts her own checklist from the Hub", async () => {
+    const run = mapleRef.collection("checklistRuns").doc("initial");
+    expect((await run.get()).exists).toBe(false);
     await pageA.locator(`[data-job-id="${mapleRef.id}"]`).click();
     await pageA.getByRole("button", { name: /^(Abrir|Começar|Continuar) checklist$/ }).click();
     await pageA.waitForURL(/\/checklist\?t=/);
     await expect(pageA.locator("h1, h2").first()).toBeVisible();
-    const capability = (await mapleRef.collection("checklistRuns").doc("initial").collection("checklistCapabilities").doc("active").get()).data();
+    expect((await run.get()).get("createdBy")).toBe("CLEANER_HUB");
+    const capability = (await run.collection("checklistCapabilities").doc("active").get()).data();
     expect(capability.cleanerId).toBe(fixture.cleanerAId);
   });
 
@@ -468,7 +470,6 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     const autoReceipt = pageA.getByRole("heading", { name: "Serviço confirmado pelo seu aceite" });
     await expect(autoReceipt).toHaveCount(1);
     await evidence(pageA, "85-03-cleaner-confirmation-inbox");
-    await managerCall(fixture, "createChecklistRun", { jobId: job.id });
     await pageA.getByRole("listitem").filter({ has: autoReceipt }).getByRole("button", { name: "Ver serviço", exact: true }).click();
     await pageA.getByRole("button", { name: /^(Abrir|Começar|Continuar) checklist$/ }).click();
     await pageA.waitForURL(/\/checklist\?t=/);
