@@ -228,6 +228,20 @@ cleaner's offered amount.
 
 ## Pricing, hours, and compensation
 
+Properties may define `serviceRates` keyed by service type. Each entry may
+contain a `client` and a `cleaner` rate, independently. A rate stores
+`mode` (`FIXED` or `HOURLY`) and integer USD `amountCents`. A cleaner rate
+may also specify `byCleanerCount`, keyed by team size. A matching value is
+the amount for **each cleaner**, in the same mode as the base rate. A missing
+team-size entry uses the base. A missing side means its price needs review.
+Empty service rows are omitted. Only a missing `STANDARD` row falls back to
+`defaultClientPrice` and `defaultCleanerPrice`, which remain dollar amounts.
+
+Property rates supply defaults when selecting a service. A stored Job owns
+its recorded price, even if it is missing. Later changes to Property rates
+never fill in or recalculate recorded Jobs, Offers or Payouts. A known hourly
+rate is distinct from an approved amount for the work.
+
 ### Client pricing
 
 A Job may be priced as:

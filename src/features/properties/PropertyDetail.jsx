@@ -13,6 +13,7 @@ import {
 import { getPropertyJobHistory } from "../jobs/jobService.js";
 import { PropertyChecklistEditor } from "./PropertyChecklistEditor.jsx";
 import { PropertyCleanerAccess } from "./PropertyCleanerAccess.jsx";
+import { PropertyServiceRates } from "./PropertyServiceRates.jsx";
 
 export function PropertyDetail({
   property,
@@ -101,6 +102,8 @@ export function PropertyDetail({
           {translate("properties.createCleaning")}
         </button>
       </div>
+
+      <PropertyServiceRates property={property} />
 
       {onSaveCleanerAccess && <PropertyCleanerAccess property={property} onSave={onSaveCleanerAccess} />}
       {onSaveChecklistSettings && <PropertyChecklistEditor property={property} onSave={onSaveChecklistSettings} />}
