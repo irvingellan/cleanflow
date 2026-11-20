@@ -47,6 +47,12 @@ function clockMinutes(value) {
  */
 export function billableMinutes(hours, { roundUpToMinutes = 1 } = {}) {
   if (!hours || hours.approved !== true) return null;
+  if (hours.source === "APPROVED_ASSIGNMENTS") {
+    const { approvedMinutes, roster } = hours;
+    return Array.isArray(roster) && roster.length > 0 && roster.length <= 10
+      && Number.isSafeInteger(approvedMinutes) && approvedMinutes >= 0
+      && approvedMinutes <= roster.length * 1440 && approvedMinutes % 5 === 0 ? approvedMinutes : null;
+  }
   let minutes = Number.isSafeInteger(hours.approvedMinutes) ? hours.approvedMinutes : null;
   if (minutes === null) {
     const start = clockMinutes(hours.start);
@@ -57,6 +63,17 @@ export function billableMinutes(hours, { roundUpToMinutes = 1 } = {}) {
   if (minutes <= 0 || minutes > 24 * minutesPerHour) return null;
   const block = Number.isSafeInteger(roundUpToMinutes) && roundUpToMinutes > 0 ? roundUpToMinutes : 1;
   return Math.ceil(minutes / block) * block;
+}
+
+/** The signed-off total belongs to the roster for which the manager approved it. */
+export function billableJobMinutes(job, policy) {
+  const hours = job.billing?.hours;
+  if (hours?.source === "APPROVED_ASSIGNMENTS") {
+    const roster = Array.isArray(job.assignedCleanerIds) ? job.assignedCleanerIds : [job.assignedCleanerId].filter(Boolean);
+    if (!Array.isArray(hours.roster) || roster.length !== hours.roster.length
+      || roster.some(id => !hours.roster.includes(id))) return null;
+  }
+  return billableMinutes(hours, policy);
 }
 
 /** rate (cents per hour) × minutes, rounded half-up to the cent. */
@@ -87,9 +104,9 @@ export function statementLine({ job, property, policy = {} }) {
   if (mode === PRICING_HOURLY) {
     rateCents = validCents(billing.hourlyRateCents ?? centsFromDollars(property?.defaultHourlyRate));
     if (rateCents === null) return { pending: "hourly_rate_missing", ...base };
-    minutes = billableMinutes(billing.hours, policy);
+    minutes = billableJobMinutes(job, policy);
     if (minutes === null) return { pending: "hours_not_approved", ...base };
-    baseCents = hourlyAmountCents(rateCents, minutes);
+    baseCents = calculateHourlyAmount(rateCents, minutes);
   } else {
     baseCents = centsFromDollars(job.clientPrice);
     if (baseCents === null) return { pending: "price_missing", ...base };
