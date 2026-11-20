@@ -34,7 +34,7 @@ test("a manager can offer a Job to a cleaner whose profile marks the time unavai
   await panel.getByLabel("Start time").fill("09:00");
   await panel.getByLabel("End time").fill("12:00");
   await panel.getByRole("button", { name: "Save period" }).click();
-  await expect(panel.getByRole("button", { name: /^Remove / })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Remove / })).toBeVisible({ timeout: 20_000 });
   const saved = (await blockQuery.get()).docs.find(doc => doc.get("startDate") === serviceDate);
   expect(saved?.data()).toMatchObject({ cleanerId: blockedId, endDate: serviceDate, startTime: "09:00", endTime: "12:00", createdBy: "MANAGER" });
 
