@@ -15,6 +15,7 @@ const { setRequiredCleanerCount } = vi.hoisted(() => ({ setRequiredCleanerCount:
 vi.mock("./assignmentService.js", () => ({ setRequiredCleanerCount }));
 
 import { OfferCleaners } from "./JobWorkflowViews.jsx";
+import * as jobService from "./jobService.js";
 
 beforeEach(() => {
   createJobOffers.mockReset().mockResolvedValue({ id: "job-1" });
@@ -200,6 +201,32 @@ describe("offer amount, cleaner count and send to more (Nov 19 feedback)", () =>
     await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
     expect(setRequiredCleanerCount).toHaveBeenCalledWith("job-1", 2);
     expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], automatic: true });
+  });
+
+  it("does not add a blocked recipient to an extended automatic batch until the manager reveals and checks her", async () => {
+    vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
+    const read = vi.spyOn(jobService, "getCleanerSelectionContext").mockResolvedValue({
+      byCleanerId: { bia: { sameDayStarts: [], unavailability: { state: "blocked", periods: [] } } },
+    });
+    try {
+      render2({
+        schemaVersion: 2, operationalStatus: "ASSIGNED", assignedCleanerIds: ["ana"], requiredCleanerCount: 2,
+        scheduledDate: "2026-11-20", offerDistributionMode: "FIRST_ACCEPT_WINS", checklistContextRevision: 1,
+        automaticOfferBatch: { version: 2, capacity: 2, openingContextRevision: 0, currentContextRevision: 1 },
+      }, { existingOfferCleanerIds: ["ana"] });
+      const reveal = await screen.findByRole("button", { name: "Show 1 unavailable cleaner" });
+      const send = screen.getByRole("button", { name: "Create offers" });
+      expect(screen.queryByRole("checkbox", { name: "Bia" })).toBeNull();
+      expect(screen.getByRole("checkbox", { name: /Ana · Already offered/ })).toBeDisabled();
+      expect(send).toBeDisabled();
+      await userEvent.click(reveal);
+      expect(send).toBeDisabled();
+      await userEvent.click(screen.getByRole("checkbox", { name: "Bia" }));
+      expect(screen.getByText("You selected Bia for an unavailable period.")).toBeVisible();
+      await userEvent.click(send);
+      expect(createJobOffers).toHaveBeenCalledExactlyOnceWith({ jobId: "job-1", cleaners: [cleaners[1]], automatic: true });
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally { read.mockRestore(); }
   });
 
   it("adds cleaners to an open automatic batch and blocks those already offered", async () => {

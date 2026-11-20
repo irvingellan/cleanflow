@@ -54,6 +54,11 @@ test("a manager can offer a Job to a cleaner whose profile marks the time unavai
   const options = picker.locator(".cleaner-list").getByRole("checkbox");
   const blocked = picker.getByRole("checkbox", { name: blockedName, exact: true });
   const available = picker.getByRole("checkbox", { name: availableName, exact: true });
+  const showUnavailable = picker.getByRole("button", { name: /show 1 unavailable cleaner/i });
+  await expect(showUnavailable).toBeVisible();
+  await expect(blocked).toHaveCount(0);
+  await expect(available).toBeVisible();
+  await showUnavailable.click();
   await expect(blocked).toHaveAccessibleDescription(/Unavailable this day.*9:00.*12:00/i);
   await expect(blocked).toBeEnabled();
   await expect(blocked).not.toBeChecked();

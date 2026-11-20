@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import {
   formatCreatedAt,
@@ -8,6 +8,7 @@ import {
   formatStatus,
 } from "../../lib/presentation.js";
 import { useTranslation } from "../../i18n/translations.js";
+import { cleanerSelectionMessage } from "../../i18n/cleanerSelectionMessages.js";
 import { createIssue } from "../issues/issueService.js";
 import { createJobOffers, respondToJobOffer } from "./jobOfferService.js";
 import { automaticOfferOptInLabel, canExtendAutomaticOfferJob, canOptIntoAutomaticOffers } from "./automaticOffers.js";
@@ -29,7 +30,11 @@ export function OfferCleaners({
   onSent,
 }) {
   const { language, translate } = useTranslation();
-  const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
+  const [choices, setChoices] = useState(new Map());
+  const [revealedSchedule, setRevealedSchedule] = useState(null);
+  const cleanerListId = useId();
+  const scheduleKey = JSON.stringify([job.id, job.scheduledDate, job.scheduledStart, job.scheduleRevision]);
+  const showBlocked = revealedSchedule === scheduleKey;
   const [cleanerSearch, setCleanerSearch] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [distribution, setDistribution] = useState(null);
@@ -44,34 +49,52 @@ export function OfferCleaners({
   const canChooseCleanerCount = isFirstSend && isAssignmentAwareJob(job)
     && ["UNASSIGNED", "OFFERED"].includes(job.operationalStatus) && !(job.assignedCleanerIds?.length);
   const [cleanerCount, setCleanerCount] = useState(requiredCleanerCount(job));
-  const unavailableCleanerIds = new Set([...existingOfferCleanerIds, ...(job.assignedCleanerIds || [])]);
+  const alreadyOfferedOrAssigned = new Set([...existingOfferCleanerIds, ...(job.assignedCleanerIds || [])]);
   // The amount every new Offer carries: the Job pay, else the Property default.
   const offerAmount = optionalJobPrice(job.cleanerPayout) ?? optionalJobPrice(property?.defaultCleanerPrice) ?? null;
   const [hasSendError, setHasSendError] = useState(false);
   const context = useCleanerSelectionContext(job, !isLoading && !hasError && cleaners.length > 0);
-  const visibleCleaners = sortCleanerOptions(filterCleanersByName(cleaners, cleanerSearch), context.result);
+  const checkingAvailability = Boolean(job.scheduledDate) && context.status === "loading";
+  const blockedIds = new Set(cleaners.filter(cleaner => context.result.byCleanerId[cleaner.id]?.unavailability?.state === "blocked")
+    .map(cleaner => cleaner.id));
+  const matches = filterCleanersByName(cleaners, cleanerSearch);
+  const visibleCleaners = sortCleanerOptions(showBlocked ? matches : matches.filter(cleaner => !blockedIds.has(cleaner.id)), context.result);
+  // A click made before a block was known cannot authorize sending to that cleaner.
+  function isSelected(id) {
+    if (checkingAvailability || alreadyOfferedOrAssigned.has(id) || !choices.has(id)) return false;
+    const override = choices.get(id);
+    if (blockedIds.has(id)) return showBlocked && override === scheduleKey;
+    return override === null || override === scheduleKey;
+  }
+  const selectedCleaners = cleaners.filter(cleaner => isSelected(cleaner.id));
+
+  function toggleBlocked() {
+    if (showBlocked) {
+      setChoices(current => new Map([...current].filter(([id]) => !blockedIds.has(id))));
+      setRevealedSchedule(null);
+    } else {
+      setRevealedSchedule(scheduleKey);
+    }
+  }
 
   function toggleCleaner(cleanerId) {
-    if (unavailableCleanerIds.has(cleanerId)) return;
+    const blocked = blockedIds.has(cleanerId);
+    if (checkingAvailability || alreadyOfferedOrAssigned.has(cleanerId) || (blocked && !showBlocked)) return;
     if (currentDistribution === null) {
       setDistribution({ jobId: job.id, mode: canOptIn ? "automatic" : "manual" });
     }
-    setSelectedCleanerIds((currentIds) =>
-      currentIds.includes(cleanerId)
-        ? currentIds.filter((id) => id !== cleanerId)
-        : [...currentIds, cleanerId],
-    );
+    const checked = isSelected(cleanerId);
+    setChoices(previous => {
+      const next = new Map(previous);
+      if (checked) next.delete(cleanerId);
+      else next.set(cleanerId, blocked ? scheduleKey : null);
+      return next;
+    });
   }
 
   async function sendOffers(event) {
     event.preventDefault();
-    const selectedCleaners = cleaners.filter((cleaner) =>
-      selectedCleanerIds.includes(cleaner.id),
-    );
-
-    if (selectedCleaners.length === 0 || unavailableAutomatic) {
-      return;
-    }
+    if (!selectedCleaners.length || isSending || unavailableAutomatic) return;
 
     setIsSending(true);
     setHasSendError(false);
@@ -136,24 +159,30 @@ export function OfferCleaners({
           </div>
 
           <CleanerSelectionStatus {...context} language={language} />
-          {visibleCleaners.length === 0 ? (
-            <StateCard message={translate("offers.searchNoCleaners")} />
-          ) : (
-            <div className="cleaner-list">
+          {blockedIds.size > 0 && (
+            <button type="button" className="button button--text cleaner-selection-toggle" aria-expanded={showBlocked}
+              aria-controls={cleanerListId} disabled={isSending} onClick={toggleBlocked}>
+              {cleanerSelectionMessage(language, "cleanerSelection." + (showBlocked ? "hide" : "show")
+                + (blockedIds.size === 1 ? "BlockedOne" : "BlockedMany"), { count: blockedIds.size })}
+            </button>
+          )}
+          <div id={cleanerListId}>
+            {!checkingAvailability && matches.length === 0 && <StateCard message={translate("offers.searchNoCleaners")} />}
+            {!checkingAvailability && visibleCleaners.length > 0 && <div className="cleaner-list">
               {visibleCleaners.map((cleaner) => (
                 <CleanerSelectionOption key={cleaner.id} className="cleaner-option"
-                  cleanerId={cleaner.id} name={unavailableCleanerIds.has(cleaner.id)
+                  cleanerId={cleaner.id} name={alreadyOfferedOrAssigned.has(cleaner.id)
                     ? `${cleaner.name || translate("common.notProvided")} · ${translate("offers.alreadyOffered")}`
                     : cleaner.name || translate("common.notProvided")}
                   context={context.result} language={language} type="checkbox"
-                  checked={selectedCleanerIds.includes(cleaner.id)}
-                  disabled={unavailableCleanerIds.has(cleaner.id)}
+                  checked={isSelected(cleaner.id)}
+                  disabled={isSending || alreadyOfferedOrAssigned.has(cleaner.id)}
                   onChange={() => toggleCleaner(cleaner.id)} />
               ))}
-            </div>
-          )}
+            </div>}
+          </div>
 
-          <CleanerAvailabilityConfirmation selected={cleaners.filter(cleaner => selectedCleanerIds.includes(cleaner.id))}
+          <CleanerAvailabilityConfirmation selected={selectedCleaners}
             context={context.result} language={language} />
           {canChooseCleanerCount && (
             <div className="offer-spots" data-testid="offer-cleaner-count">
@@ -200,7 +229,7 @@ export function OfferCleaners({
             <button
               className="button button--primary"
               type="submit"
-              disabled={selectedCleanerIds.length === 0 || isSending || unavailableAutomatic}
+              disabled={selectedCleaners.length === 0 || isSending || unavailableAutomatic}
             >
               {isSending ? translate("offers.sending") : translate("offers.send")}
             </button>

@@ -40,3 +40,5 @@
 .cleaner-selection-confirmation p, .cleaner-selection-status p { margin: 0; }
 
 .cleaner-selection-time { white-space: nowrap; }
+
+.cleaner-selection-toggle { width: fit-content; min-height: 44px; justify-self: start; }
