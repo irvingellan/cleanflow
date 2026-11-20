@@ -994,7 +994,9 @@ describe("PublicChecklistPage", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Cleaning checklist" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Send checklist for review" }));
+    const submit = screen.getByRole("button", { name: "Send checklist for review" });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Send checklist for review" }));
     expect(await screen.findByText("Could not send for review. Try again.")).toBeVisible();
     expect(screen.queryByText(/Checklist submitted\./)).not.toBeInTheDocument();

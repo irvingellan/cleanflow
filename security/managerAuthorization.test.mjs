@@ -1408,7 +1408,7 @@ test("Checklist Run creation snapshots the service type and Property fields acro
   const runRef = admin.doc(`${root}/jobs/job/checklistRuns/initial`);
   const run = (await runRef.get()).data();
   assert.equal(run.jobSnapshot.serviceType, "POST_CONSTRUCTION");
-  assert.equal(run.resolvedDefinition.sections.at(-1).id, "service-type-post-construction");
+  assert.equal(run.resolvedDefinition.sections.some(section => section.id === "service-type-post-construction"), false);
   const retried = await createChecklistRun.run(request("manager", { jobId: "job" }));
   assert.equal(retried.created, false);
   assert.equal(retried.run.serviceType, "POST_CONSTRUCTION");

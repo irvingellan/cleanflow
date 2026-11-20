@@ -8,6 +8,15 @@ const property = { id: "property-a", name: "Sample property" };
 const original = buildChecklistRunSnapshot({ job, property });
 
 describe("current checklist source context", () => {
+  it("recognizes a customized house draft that still carries a superseded service section", () => {
+    const current = buildChecklistRunSnapshot({ job: { ...job, serviceType: "DEEP_CLEANING" },
+      property: { ...property, checklistSettings: { cleanerInstructions: "Use the property guide." } } });
+    const before = { ...current, resolvedDefinition: { ...current.resolvedDefinition,
+      sections: [...current.resolvedDefinition.sections, { id: "service-type-deep-cleaning", items: [] }] } };
+    expect(checklistSnapshotNeedsRefresh(before, current)).toBe(true);
+    expect(checklistSnapshotNeedsRefresh(current, current)).toBe(false);
+  });
+
   it.each([
     ["service type", { ...job, serviceType: "POST_CONSTRUCTION" }, property],
     ["property", job, { ...property, id: "property-b" }],

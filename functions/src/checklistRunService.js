@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { FieldValue } from "firebase-admin/firestore";
 import { applyManagerCorrections, managerCorrection } from "./checklistManagerCorrection.js";
 import { HttpsError } from "firebase-functions/v2/https";
-import { buildChecklistRunSnapshot, normalizePropertyChecklistSettings } from "./checklistRunDefinition.js";
+import { buildChecklistRunSnapshot, hasPropertyChecklist, normalizePropertyChecklistSettings } from "./checklistRunDefinition.js";
 import { checklistDraftReviewRequirements, projectChecklistDraftForRead } from "./checklistDraftService.js";
 import { checklistRunDefinitionVersion, validChecklistInventoryQuantity } from "./checklistInventory.js";
 import { createChecklistEvidencePolicy, isPilotChecklistPhotoRequirement, pilotChecklistPhotoRequirementId, projectChecklistEvidence, projectChecklistEvidenceGallery } from "./checklistEvidenceDefinition.js";
@@ -146,7 +146,10 @@ export async function getChecklistRunForManager(database, { organizationId, jobI
 
 /** Compare source inputs, not a newer template release or capability rotation. */
 export function checklistSnapshotNeedsRefresh(run, current) {
-  return run.propertySnapshot?.propertyId !== current.propertySnapshot.propertyId
+  // Older snapshots could append a service section even after the house had its own checklist.
+  const includesRetiredFallback = hasPropertyChecklist(current.propertyChecklistSettingsSnapshot)
+    && run.resolvedDefinition?.sections?.some(section => section.id?.startsWith("service-type-"));
+  return Boolean(includesRetiredFallback) || run.propertySnapshot?.propertyId !== current.propertySnapshot.propertyId
     || run.propertySnapshot?.propertyName !== current.propertySnapshot.propertyName
     || normalizeServiceType(run.jobSnapshot?.serviceType) !== current.jobSnapshot.serviceType
     || !isDeepStrictEqual(normalizePropertyChecklistSettings(run.propertyChecklistSettingsSnapshot),
