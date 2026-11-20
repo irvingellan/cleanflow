@@ -183,3 +183,7 @@ export async function signOutCleaner(session) {
     // Memory-only cache or another tab still open: the reload below clears memory.
   }
 }
+
+export function reportMyWorkedTime(jobId, minutes) {
+  return callAvailability("reportMyWorkedTime", { jobId, minutes });
+}

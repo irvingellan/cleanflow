@@ -531,3 +531,15 @@ internal document records the last change time and is inaccessible from browsers
 Identical periods share a block. Limits are 366 calendar days per block
 and 30 current or future blocks per cleaner. Existing assignments and offers
 are independent of these records.
+
+### Approved hourly work
+
+An active Assignment can store server-owned `reportedWork` (rounded minutes and
+server timestamp), `approvedWork` (rounded minutes, manager UID and server
+timestamp), and `payoutCents` for a confirmed hourly cleaner rate. The cleaner can
+correct her report until approval. The manager may adjust the duration during
+approval. The approved amount uses the Assignment or Offer terms when present.
+An already paid Assignment cannot be changed. A Job billed hourly receives
+`billing.hours` with source `APPROVED_ASSIGNMENTS` after all people on its roster
+are approved. Its minutes sum each person's approved time. A rounded zero is a
+valid approved duration. A missing approval remains pending.
