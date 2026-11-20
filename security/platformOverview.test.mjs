@@ -35,7 +35,7 @@ const cleaner = cleanerAccountUid(orgs[0].ref.id, "crew");
 const signIns = new Map();
 
 async function createSignedInAccount(uid) {
-  const email = [randomUUID(), "example.invalid"].join("@");
+  const email = ["fixture" + randomUUID(), "example.invalid"].join("@");
   const password = randomUUID();
   await auth.createUser({ uid, email, password });
   authIds.push(uid);
@@ -53,18 +53,26 @@ function seedOrganization({ ref, color }, first) {
   const put = (path, data) => batch.set(ref.firestore.doc(`${ref.path}/${path}`), data);
   // Older organizations consist of subcollections without a root document.
   if (first) batch.set(ref, { displayName: `Test ${color}`, createdAt: timestamp(-60), notes: privateMarker });
-  put(`members/${first ? manager : randomUUID()}`, { role: "MANAGER", active: true, displayName: `Manager ${color}` });
+  put(`members/${first ? manager : randomUUID()}`, { role: "MANAGER", active: true, ...(first ? {} : { displayName: `Manager ${color}` }) });
   put(`members/${randomUUID()}`, { role: "CLIENT", active: true, displayName: privateMarker });
   put("cleaners/crew", { name: `Crew ${color}`, active: true, phone: privateMarker });
   put("clients/current", { active: true, name: privateMarker, address: privateMarker, email: [privateMarker, "example.invalid"].join("@") });
   put("properties/current", { active: true, name: privateMarker, doorCode: privateMarker, garageCode: privateMarker });
   put("jobs/old", { operationalStatus: "COMPLETED", scheduledDate: date(-32), createdAt: timestamp(-36),
     updatedAt: timestamp(-32), completedAt: timestamp(-32), notes: privateMarker });
+  const accountId = cleanerAccountUid(ref.id, "crew");
+  put("cleanerHubAccess/crew", { linkedAt: timestamp(-8), updatedAt: timestamp(0), sessionId: privateMarker });
+  put(`cleanerPushAccounts/${accountId}/devices/one`, { lastSeenAt: timestamp(first ? -4 : -0.1), cleanerId: "crew", token: privateMarker });
+  put("jobs/old/assignments/confirmation", { organizationId: ref.id, cleanerId: "crew", cleanerAcknowledgedAt: timestamp(-3) });
+  put("jobs/old/checklistRuns/review", { organizationId: ref.id, readyForReviewCleanerId: "crew", readyForReviewAt: timestamp(first ? -2 : -0.2) });
+  put("jobs/old/checklistRuns/review/draftMutations/update", { cleanerId: "crew", createdAt: timestamp(first ? -1 : -4) });
   put("managerPageLoadEvents/old", { createdAt: timestamp(-9), page: "jobs", durationMs: 51 });
   if (first) {
     put(`members/${cleaner}`, { role: "CLEANER", active: true, displayName: `Crew ${color}`, cleanerId: "crew" });
     put(`members/${randomUUID()}`, { role: "CLEANER", active: true, cleanerId: "removed", displayName: "Removed crew" });
     put("cleaners/legacy", { name: "Legacy crew" });
+    put("jobs/old/assignments/legacy", { cleanerId: "legacy", cleanerAcknowledgedAt: timestamp(-5) });
+    put("cleanerHubAccess/retired", { linkedAt: timestamp(-30), updatedAt: timestamp(-1), active: false });
     put("clients/legacy", { name: privateMarker });
     put("properties/legacy", { name: privateMarker });
     put("cleaners/retired", { active: false, archivedAt: timestamp(-5), name: "Archived crew" });
@@ -105,7 +113,8 @@ const forbiddenKey = /address|accesscode|doorcode|lockcode|garage|alarm|phone|em
 function assertPrivateFieldsAbsent(node) {
   if (typeof node === "string") {
     assert.ok(!node.includes(privateMarker), "a private fixture value escaped projection");
-    assert.doesNotMatch(node, /@|(?:https?|gs):\/\//i);
+    if (node.includes("@")) assert.match(node, /^[\p{L}\p{N}]{0,2}•••@$/u);
+    assert.doesNotMatch(node, /(?:https?|gs):\/\/|(?:\+?\d[ .()-]*){9,}\d/i);
   } else if (node && typeof node === "object") {
     for (const [key, value] of Object.entries(node)) {
       assert.doesNotMatch(key, forbiddenKey);
@@ -149,7 +158,7 @@ after(async () => {
 
 test("the privacy check rejects nested keys, private values, links and contact strings", () => {
   for (const value of [{ lockCode: "x" }, { displayName: privateMarker }, { label: ["fixture", "example.invalid"].join("@") },
-    { displayName: "https://example.invalid" }]) {
+    { displayName: "https://example.invalid" }, { displayName: ["111", "222", "3333"].join(" ") }]) {
     assert.throws(() => assertPrivateFieldsAbsent({ nested: [{ value }] }));
   }
 });
@@ -181,7 +190,7 @@ test("the developer sees per-organization counts and only that organization's pe
   assert.deepEqual(amber.jobs, { total: 4, created30d: 1, scheduled7d: 1, completed30d: 1 });
   assert.deepEqual(amber.attention, { openIssues: 1, waitingOffers: 1 });
   assert.equal(amber.lastActivityAt, timestamp(-1).toDate().toISOString());
-  assert.deepEqual(amber.health, { status: "errors", pageLoads: 4, failedPageLoads: 1, medianMs: 200, p95Ms: 500, failedOperations: { issues: 1 } });
+  assert.deepEqual(amber.health, { status: "no-data", pageLoads: 4, failedPageLoads: 1, pageFailureRate: 0.25, timedLoads: 3, medianMs: 200, p95Ms: 500, failedOperations: { issues: 1 }, operationAttempts: { issues: 2 }, operationFailureRates: { issues: 0.5 } });
   assert.equal((await orgs[1].ref.get()).exists, false);
   assert.equal(teal.displayName, null);
   assert.equal(teal.createdAt, null);
@@ -189,20 +198,23 @@ test("the developer sees per-organization counts and only that organization's pe
   assert.deepEqual(teal.jobs, { total: 2, created30d: 1, scheduled7d: 0, completed30d: 0 });
   assert.equal(teal.lastActivityAt, timestamp(-1).toDate().toISOString());
   assert.deepEqual(teal.attention, { openIssues: 0, waitingOffers: 0 });
-  assert.deepEqual(teal.health, { status: "errors", pageLoads: 101, failedPageLoads: 1, medianMs: null, p95Ms: null, failedOperations: {} });
+  assert.deepEqual(teal.health, { status: "ok", pageLoads: 101, failedPageLoads: 1, pageFailureRate: 1/101, timedLoads: 0, medianMs: null, p95Ms: null, failedOperations: {}, operationAttempts: {}, operationFailureRates: {} });
 
   const detail = await call({ organizationId: amber.id }, developer);
   assertPrivateFieldsAbsent(detail);
   const byName = (a, b) => a.displayName.localeCompare(b.displayName);
   assert.deepEqual([...detail.people].sort(byName), [
-    { displayName: "Archived crew", role: "CLEANER", active: false, lastSignInAt: null },
-    { displayName: "Crew Amber", role: "CLEANER", active: true, lastSignInAt: signIns.get(cleaner) },
-    { displayName: "Legacy crew", role: "CLEANER", active: true, lastSignInAt: null },
-    { displayName: "Removed crew", role: "CLEANER", active: false, lastSignInAt: null },
-    { displayName: "Manager Amber", role: "MANAGER", active: true, lastSignInAt: signIns.get(manager) },
+    { displayName: "Archived crew", role: "CLEANER", active: false, lastSignInAt: null, lastActivityAt: timestamp(-30).toDate().toISOString(), activitySource: "agenda" },
+    { displayName: "Crew Amber", role: "CLEANER", active: true, lastSignInAt: null, lastActivityAt: timestamp(-1).toDate().toISOString(), activitySource: "checklist" },
+    { displayName: "Legacy crew", role: "CLEANER", active: true, lastSignInAt: null, lastActivityAt: timestamp(-5).toDate().toISOString(), activitySource: "agenda" },
+    { displayName: "Removed crew", role: "CLEANER", active: false, lastSignInAt: null, lastActivityAt: null, activitySource: null },
+    { displayName: "fi•••@", role: "MANAGER", active: true, lastSignInAt: signIns.get(manager), lastActivityAt: signIns.get(manager), activitySource: "signIn" },
   ].sort(byName));
   const other = await call({ organizationId: teal.id }, developer);
   assertPrivateFieldsAbsent(other);
+  const otherCleaner = other.people.find(person => person.role === "CLEANER");
+  assert.equal(otherCleaner.lastActivityAt, timestamp(-0.1).toDate().toISOString());
+  assert.equal(otherCleaner.activitySource, "notifications");
   assert.deepEqual(other.people.map(({ displayName }) => displayName).sort(), ["Crew Teal", "Manager Teal"]);
   assert.deepEqual(await databaseVersions(), before);
 });

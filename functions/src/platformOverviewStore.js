@@ -1,3 +1,4 @@
+import { readCleanerActivity } from "./platformCleanerActivity.js";
 import { FieldPath } from "firebase-admin/firestore";
 import { automaticOfferState, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import { isManualReplacementOfferId, currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
@@ -106,13 +107,20 @@ async function pageTimings(loads) {
 
 async function readHealth(org, { since7, now }) {
   const loads = between(org.collection("managerPageLoadEvents"), "createdAt", since7, now);
-  const failures = between(org.collection("managerOperationEvents"), "createdAt", since7, now).where("result", "==", "error");
-  const [pageLoads, { durations, failedPageLoads }, byOperation] = await Promise.all([
-    count(loads),
+  const operations = between(org.collection("managerOperationEvents"), "createdAt", since7, now);
+  const [{ durations, failedPageLoads }, operationsByKind] = await Promise.all([
     pageTimings(loads),
-    Promise.all(operationKinds.map(async (kind) => [kind, await count(failures.where("operation", "==", kind))])),
+    Promise.all(operationKinds.map(async (kind) => {
+      const query = operations.where("operation", "==", kind);
+      const [failed, succeeded] = await Promise.all([
+        count(query.where("result", "==", "error")), count(query.where("result", "==", "success")),
+      ]);
+      return { kind, failed, attempts: failed + succeeded };
+    })),
   ]);
-  return summarizeHealth(pageLoads, durations, Object.fromEntries(byOperation), failedPageLoads);
+  return summarizeHealth(durations.length, durations,
+    Object.fromEntries(operationsByKind.map(({ kind, failed }) => [kind, failed])), failedPageLoads,
+    Object.fromEntries(operationsByKind.map(({ kind, attempts }) => [kind, attempts])));
 }
 
 async function upcomingJobs(jobs, window) {
@@ -176,15 +184,23 @@ export async function readPeople(org, auth) {
     .map((doc) => [doc.get("cleanerId"), doc]));
   const people = members.filter((doc) => doc.get("role") === "MANAGER")
     .map((doc) => directoryPerson("MANAGER", doc.data(), accounts.get(doc.id)));
-  for (const doc of cleaners) {
+  const cleanerProfiles = cleaners.map((doc) => {
     const member = linked.get(doc.id);
-    people.push(directoryPerson("CLEANER", doc.data(), accounts.get(member?.id)));
     linked.delete(doc.id);
+    return { cleanerId: doc.id, profile: doc.data(), member };
+  });
+  // A residual membership is still visible, but cannot use the Hub without
+  // its active cleaner profile. Never interpret an Auth sign-in as Hub usage.
+  for (const [cleanerId, member] of linked) {
+    if (typeof cleanerId !== "string" || cleanerId.includes("/")) continue;
+    cleanerProfiles.push({ cleanerId, profile: { ...member.data(), active: false }, member });
   }
-  // A residual membership is still visible in the audit directory, but
-  // cannot use the Hub without the matching active cleaner profile.
-  for (const member of linked.values()) {
-    people.push(directoryPerson("CLEANER", { ...member.data(), active: false }, accounts.get(member.id)));
+  for (let start = 0; start < cleanerProfiles.length; start += 4) {
+    const group = cleanerProfiles.slice(start, start + 4);
+    people.push(...await Promise.all(group.map(async ({ cleanerId, profile, member }) => {
+      const activity = await readCleanerActivity(org, cleanerId, member?.id);
+      return directoryPerson("CLEANER", profile, accounts.get(member?.id), activity);
+    })));
   }
   return { people };
 }

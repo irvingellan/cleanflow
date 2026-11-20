@@ -35,26 +35,58 @@ export function reportingWindow(now) {
     today, endDate: addCalendarDays(today, 7) };
 }
 
+export const platformHealthThresholds = Object.freeze({
+  failureRate: 0.05, minimumPageLoads: 20, minimumOperationAttempts: 10, slowP95Ms: 3000,
+});
+
 // Match Manager Page Load Diagnostics: capped visits are background tabs,
 // median averages the middle pair, and p95 uses the nearest rank.
-export function summarizeHealth(pageLoads, timings, failures, failedPageLoads = 0) {
+export function summarizeHealth(pageLoads, timings, failures, failedPageLoads = 0, attempts = {}) {
   const durations = timings.filter((n) => Number.isFinite(n) && n >= 0 && n < 600_000).sort((a, b) => a - b);
-  const n = durations.length;
-  const medianMs = n ? Math.round((durations[Math.floor((n - 1) / 2)] + durations[Math.floor(n / 2)]) / 2) : null;
-  const p95Ms = n ? durations[Math.ceil(n * 0.95) - 1] : null;
-  const failedOperations = Object.fromEntries(operationKinds.filter((key) => failures[key] > 0)
-    .map((key) => [key, failures[key]]));
-  let status = "unknown";
-  if (failedPageLoads || Object.keys(failedOperations).length) status = "errors";
-  else if (p95Ms !== null) status = p95Ms > 3000 ? "slow" : "ok";
-  return { pageLoads, failedPageLoads, medianMs, p95Ms, failedOperations, status };
+  const timedLoads = durations.length;
+  const middle = Math.floor(timedLoads / 2);
+  const medianMs = timedLoads ? Math.round((durations[Math.floor((timedLoads - 1) / 2)] + durations[middle]) / 2) : null;
+  const p95Ms = timedLoads ? durations[Math.ceil(timedLoads * 0.95) - 1] : null;
+  const failedOperations = {}, operationAttempts = {}, operationFailureRates = {};
+  const pageFailureRate = pageLoads ? failedPageLoads / pageLoads : null;
+  const rules = platformHealthThresholds;
+  let hasSample = pageLoads >= rules.minimumPageLoads;
+  let hasErrors = hasSample && pageFailureRate >= rules.failureRate;
+  for (const kind of operationKinds) {
+    if (!(attempts[kind] > 0)) continue;
+    const failed = failures[kind] || 0;
+    if (failed) failedOperations[kind] = failed;
+    operationAttempts[kind] = attempts[kind];
+    operationFailureRates[kind] = failed / attempts[kind];
+    if (attempts[kind] >= rules.minimumOperationAttempts) {
+      hasSample = true;
+      if (operationFailureRates[kind] >= rules.failureRate) hasErrors = true;
+    }
+  }
+  let status = hasSample ? "ok" : "no-data";
+  if (hasErrors) status = "errors";
+  else if (timedLoads >= rules.minimumPageLoads && p95Ms > rules.slowP95Ms) status = "slow";
+  return { pageLoads, timedLoads, failedPageLoads, pageFailureRate, medianMs, p95Ms,
+    failedOperations, operationAttempts, operationFailureRates, status };
 }
 
-export function directoryPerson(role, profile, account) {
+export function maskedManagerLabel(email) {
+  if (typeof email !== "string" || !/^[^@\s]+@[^@\s]+$/.test(email)) return null;
+  const local = email.split("@")[0];
+  const prefix = local.match(/^[\p{L}\p{N}]{1,2}/u)?.[0] || "";
+  return prefix + "•••@";
+}
+
+export function directoryPerson(role, profile, account, activity = {}) {
+  const manager = role === "MANAGER";
+  const name = displayLabel(profile.displayName) ?? displayLabel(profile.name) ?? displayLabel(account?.displayName);
+  const lastSignInAt = manager ? isoDate(account?.metadata?.lastSignInTime) : null;
   return {
-    displayName: displayLabel(profile.displayName) ?? displayLabel(profile.name) ?? displayLabel(account?.displayName),
+    displayName: name ?? (manager ? maskedManagerLabel(account?.email) : null),
     role,
-    active: role === "MANAGER" ? profile.active === true : profile.active !== false && !profile.archivedAt,
-    lastSignInAt: isoDate(account?.metadata?.lastSignInTime),
+    active: manager ? profile.active === true : profile.active !== false && !profile.archivedAt,
+    lastSignInAt,
+    lastActivityAt: manager ? lastSignInAt : activity.lastActivityAt ?? null,
+    activitySource: manager ? (lastSignInAt ? "signIn" : null) : activity.activitySource ?? null,
   };
 }
