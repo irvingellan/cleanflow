@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { hoursReviewLabel } from "../pricing/pricingMessages.js";
 import { formatDate, formatPrice } from "../../lib/presentation.js";
 import { loadWeeklyCloseJob } from "./weeklyCloseService.js";
 import "./weeklyCloseMoneyReview.css";
@@ -37,8 +38,8 @@ export function WeeklyCloseMoneyReview({ jobs, t, translate, language, onOpenJob
         <div>
           <strong>{property}</strong>
           <small>{[date, job.clientName].filter(Boolean).join(" · ")}</small>
-          {job.attentionReasons.filter((reason) => /^(missing|invalid)_(client_price|cleaner_payout)$/.test(reason))
-            .map((reason) => <p key={reason} className="weekly-money-missing">{translate(`weeklyClose.reason.${reason}`)}</p>)}
+          {job.attentionReasons.filter((reason) => reason === "hours_review" || /^(missing|invalid)_(client_price|cleaner_payout)$/.test(reason))
+            .map((reason) => <p key={reason} className="weekly-money-missing">{reason === "hours_review" ? hoursReviewLabel(language) : translate(`weeklyClose.reason.${reason}`)}</p>)}
           {job.clientCharge !== null && <small>{translate("weeklyClose.clientCharge")} · {formatPrice(job.clientCharge, translate, language)}</small>}
           {job.cleanerPayout !== null && <small>{translate("weeklyClose.cleanerPayout")} · {formatPrice(job.cleanerPayout, translate, language)}</small>}
         </div>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWhatsAppChatUrl,
   buildWhatsAppHandoffUrl,
   normalizeWhatsAppPhone,
 } from "./whatsappHandoff.js";
@@ -19,8 +20,13 @@ describe("WhatsApp handoff URL", () => {
     (phone) => expect(normalizeWhatsAppPhone(phone)).toBeNull(),
   );
 
-  it("encodes the exact message into the standard wa.me click-to-chat URL", () => {
-    const message = "Hi Ana!\nCompensation: $125.00 & details ✓";
+  it("opens offer chats without private text or capability tokens", () => {
+    expect(buildWhatsAppChatUrl("+1 (949) 555-1234")).toBe("https://wa.me/19495551234");
+    expect(buildWhatsAppChatUrl("")).toBeNull();
+  });
+
+  it("encodes an operational reminder into the standard wa.me click-to-chat URL", () => {
+    const message = "Hi!\nStart time: 9:00 & details ✓";
     const url = buildWhatsAppHandoffUrl("+1 (949) 555-1234", message);
     const parsed = new URL(url);
 

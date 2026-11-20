@@ -66,6 +66,38 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.getByText(entry.notes)).toBeVisible();
   });
 
+  it.each([["Ofertas", entries[1]], ["Agendadas", entries[0]]])("shows the agreed hourly rate on the %s card and detail", async (tab, original) => {
+    const { service, handlers } = fakeService();
+    const entry = { ...original, offeredCompensation: undefined, offeredPay: { mode: "HOURLY", rateCents: 3125 } };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [entry], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: new RegExp(`^${tab}`) }));
+    const card = screen.getByRole("button", { name: /31,25 por hora/ });
+    await userEvent.click(card);
+    expect(screen.getByText(/31,25 por hora/)).toBeVisible();
+    if (entry.kind === "OFFER") expect(screen.getByText(/Você informa suas horas no final do serviço/)).toBeVisible();
+  });
+
+  it("shows only the cleaner's share, then replaces the conditional extra with her confirmed amount", async () => {
+    const { service, handlers } = fakeService();
+    const offer = { ...entries[1], offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1, offeredPayEstimated: true,
+      cleanerPayout: 100, clientPrice: 290 };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [offer], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^Ofertas/ }));
+    const card = screen.getByRole("button", { name: /33,33/ });
+    expect(card).toHaveTextContent(/0,01 se a primeira vaga for sua/);
+    expect(card).toHaveTextContent("Estimativa com base no tamanho previsto da equipe");
+    await userEvent.click(card);
+    const main = screen.getByRole("main");
+    expect(main).toHaveTextContent(/33,33.*0,01 se a primeira vaga for sua/);
+    const assigned = { ...entries[0], jobId: offer.jobId, propertyName: offer.propertyName,
+      offeredCompensation: 33.34, cleanerPayout: 100, clientPrice: 290 };
+    act(() => handlers.agenda({ entries: [assigned], fromCache: false }));
+    expect(main).toHaveTextContent(/33,34/);
+    expect(main).not.toHaveTextContent(/primeira vaga|33,33|100|290/);
+  });
+
   it("identifies a removed service using its last confirmed details and discards its private fields", async () => {
     const { service, handlers } = fakeService();
     const entry = { ...entries[0], notes: "Synthetic checklist instructions", offeredCompensation: 132.75 };

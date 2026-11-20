@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { hoursReviewLabel } from "../pricing/pricingMessages.js";
 import { Icon } from "../../components/Icon.jsx";
 import { ScrollToTopButton } from "../../components/ScrollToTopButton.jsx";
 import { useTranslation } from "../../i18n/translations.js";
+import { formatDate as formatServiceDate } from "../../lib/presentation.js";
 import { validatePayoutProofFile } from "./payoutProofService.js";
 
 const paymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
@@ -64,6 +66,8 @@ function PayoutProofSourcePicker({ disabled, onSelect, compact = false }) {
 
 export function PayoutDirectory({
   payoutGroups,
+  pendingHoursJobs = [],
+  missingAgreementJobs = [],
   recentPayouts,
   isLoading,
   hasError,
@@ -76,7 +80,7 @@ export function PayoutDirectory({
   formatPrice,
   formatCreatedAt,
 }) {
-  const { translate } = useTranslation();
+  const { translate, language } = useTranslation();
 
   return (
     <section aria-labelledby="payouts-title">
@@ -116,7 +120,22 @@ export function PayoutDirectory({
         </p>
       )}
 
-      {!isLoading && !hasError && payoutGroups.length === 0 && (
+      {!isLoading && !hasError && pendingHoursJobs.length > 0 && (
+        <section aria-labelledby="pending-hours-title">
+          <h3 id="pending-hours-title">{hoursReviewLabel(language)}</h3>
+          <ul>{pendingHoursJobs.map((job) => (
+            <li key={job.id}>{job.propertyName || translate("properties.unnamed")}{job.scheduledDate && ` · ${formatServiceDate(job.scheduledDate, translate, language)}`}</li>
+          ))}</ul>
+        </section>
+      )}
+
+      {!isLoading && !hasError && missingAgreementJobs.length > 0 && <section aria-labelledby="missing-payout-agreement-title">
+        <h3 id="missing-payout-agreement-title">{translate("weeklyClose.reason.missing_cleaner_payout")}</h3>
+        <ul>{missingAgreementJobs.map(job => <li key={job.id}>{job.propertyName || translate("properties.unnamed")}
+          {job.scheduledDate && ` · ${formatServiceDate(job.scheduledDate, translate, language)}`}</li>)}</ul>
+      </section>}
+
+      {!isLoading && !hasError && payoutGroups.length === 0 && pendingHoursJobs.length === 0 && missingAgreementJobs.length === 0 && (
         <p className="property-history-state">{translate("payouts.empty")}</p>
       )}
 
@@ -277,7 +296,7 @@ export function PayoutReview({
     () => jobs.filter((job) => selectedJobIds.has(job.id)),
     [jobs, selectedJobIds],
   );
-  const total = selectedJobs.reduce((sum, job) => sum + job.cleanerPayout, 0);
+  const total = selectedJobs.reduce((sum, job) => sum + (job.payoutShareCents ?? Math.round(job.cleanerPayout * 100)), 0) / 100;
 
   function toggleJob(jobId) {
     setSelectedJobIds((currentJobIds) => {
@@ -409,7 +428,7 @@ export function PayoutReview({
                     {completedAt || formatDate(job.scheduledDate)}
                   </span>
                 </span>
-                <strong>{formatPrice(job.cleanerPayout)}</strong>
+                <strong>{formatPrice(job.payoutShareCents == null ? job.cleanerPayout : job.payoutShareCents / 100)}</strong>
               </label>
             );
           })}

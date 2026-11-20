@@ -1,3 +1,5 @@
+import { offerPayNote, pricingMessage } from "../pricing/pricingMessages.js";
+import { hourlyOfferSnapshot, newOfferPay } from "../../../functions/src/offerPay.js";
 import { formatDate, formatPrice, hasValue } from "../../lib/presentation.js";
 import { optionalJobPrice } from "./jobCompatibility.js";
 
@@ -6,6 +8,10 @@ import { optionalJobPrice } from "./jobCompatibility.js";
  * an amount for the manager to confirm or edit before issuing that Offer's link.
  */
 export function getOfferCompensationSuggestion(job, offer) {
+  const hourly = hourlyOfferSnapshot(offer?.offeredPay);
+  if (hourly) {
+    return { value: hourly.offeredPay ? String(hourly.offeredPay.rateCents / 100) : "", source: "offer", mode: "HOURLY" };
+  }
   if (Object.prototype.hasOwnProperty.call(offer || {}, "offeredCompensation")) {
     const amount = optionalJobPrice(offer.offeredCompensation);
     return {
@@ -14,7 +20,7 @@ export function getOfferCompensationSuggestion(job, offer) {
     };
   }
 
-  const amount = optionalJobPrice(job?.cleanerPayout);
+  const amount = newOfferPay(job ?? {}).offeredCompensation;
   if (amount !== undefined && amount !== null) {
     return { value: String(amount), source: "job" };
   }
@@ -30,12 +36,27 @@ export function parseOfferCompensationInput(value) {
   return amount ?? null;
 }
 
+export function formatOfferCompensation(offer, translate, language) {
+  const { offeredPay, offeredCompensation } = offer;
+  const hourly = hourlyOfferSnapshot(offeredPay);
+  if (hourly?.offeredPay) {
+    return pricingMessage(language, "perHour", { value: formatPrice(hourly.offeredPay.rateCents / 100, translate, language) });
+  }
+  if (hourly || !hasValue(offeredCompensation)) return translate("publicOffer.amountNotSet");
+  const base = formatPrice(offeredCompensation, translate, language);
+  const extra = offerPayNote(offer, language);
+  return extra ? `${base} · ${extra}` : base;
+}
+
 export function buildCleanerOfferMessage({
   cleanerName,
   propertyName,
   scheduledDate,
   scheduledStart,
   offeredCompensation,
+  offeredFirstSlotExtraCents,
+  offeredPayEstimated,
+  offeredPay,
   publicUrl,
   language,
   translate,
@@ -55,10 +76,9 @@ export function buildCleanerOfferMessage({
 
   lines.push(
     translate("offers.messageCompensation", {
-      amount: hasValue(offeredCompensation)
-        ? formatPrice(offeredCompensation, translate, language)
-        : translate("publicOffer.amountNotSet"),
+      amount: formatOfferCompensation({ offeredPay, offeredCompensation, offeredFirstSlotExtraCents, offeredPayEstimated }, translate, language),
     }),
+    ...(hourlyOfferSnapshot(offeredPay)?.offeredPay ? [pricingMessage(language, "reportHours")] : []),
     "",
     translate("offers.messageLink", { url: publicUrl }),
   );

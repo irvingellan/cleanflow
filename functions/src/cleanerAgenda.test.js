@@ -80,6 +80,20 @@ describe("cleaner agenda projection", () => {
     expect(sameEntry(entries.get("bia"), { ...entries.get("bia"), offerExpiresAtMs: future.toMillis() + 1 })).toBe(false);
   });
 
+  it("refreshes only a recipient's rate and keeps client and other pay fields out of the projection", () => {
+    const offeredPay = { mode: "HOURLY", rateCents: 3125 };
+    const input = { organizationId: "o", jobId: "j", now,
+      job: job({ operationalStatus: "OFFERED", assignedCleanerIds: [], pay: { mode: "HOURLY", rateCents: 8080 } }),
+      offers: [{ cleanerId: "first", status: "PENDING", publicOfferExpiresAt: future, offeredPay: { ...offeredPay, private: true } },
+        { cleanerId: "second", status: "PENDING", publicOfferExpiresAt: future, offeredPay: { ...offeredPay, rateCents: 2525 } }] };
+    const entries = computeAgendaEntries(input);
+    expect(entries.get("first").offeredPay).toEqual(offeredPay);
+    expect(entries.get("second").offeredPay.rateCents).toBe(2525);
+    expect(entries.get("first")).not.toHaveProperty("offeredCompensation");
+    expect(sameEntry(entries.get("first"), structuredClone(entries.get("first")))).toBe(true);
+    expect(sameEntry(entries.get("first"), { ...entries.get("first"), offeredPay: { ...offeredPay, rateCents: 4000 } })).toBe(false);
+  });
+
   it("refreshes type, address and job instructions for current offer and assignment holders", () => {
     const input = {
       organizationId: "o", jobId: "j", now,
@@ -147,6 +161,23 @@ describe("cleaner agenda projection", () => {
     expect(project({ sourceOfferId: "current", organizationId: "other-org" })).toBeNull();
     expect(project({})).toBeNull();
     expect(project({ sourceOfferId: "current" }, [{ ...offers[1], organizationId: "other-org" }])).toBeNull();
+  });
+
+  it("shows only the active holder's frozen offer or direct agreement and resolves the actual first slot", () => {
+    const quote = { offeredCompensation: 3.33, offeredFirstSlotExtraCents: 1 };
+    const input = {
+      organizationId: "o", jobId: "j", now,
+      job: job({ requiredCleanerCount: 3, assignedCleanerIds: ["second-invite", "first-invite", "direct"], cleanerPayout: 900 }),
+      offers: ["first-invite", "second-invite"].map(id => ({ cleanerId: id, offerReferenceId: id, status: "ACCEPTED", ...quote })),
+      assignments: ["first-invite", "second-invite"].map(id => ({ cleanerId: id, sourceOfferId: id, isActive: true })),
+    };
+    input.assignments.push({ cleanerId: "direct", source: "MANAGER_DIRECT", isActive: true, paySnapshot: { ...quote, internal: "private" } });
+    const entries = computeAgendaEntries(input);
+    expect(entries.get("second-invite").offeredCompensation).toBe(3.34);
+    expect(entries.get("first-invite").offeredCompensation).toBe(3.33);
+    expect(entries.get("direct").offeredCompensation).toBe(3.33);
+    expect(JSON.stringify([...entries.values()])).not.toMatch(/900|offeredFirstSlotExtraCents|private/);
+    expect(sameEntry(entries.get("direct"), { ...entries.get("direct"), offeredFirstSlotExtraCents: 1 })).toBe(false);
   });
 
   it("uses the legacy holder's interested offer before the single-cleaner payout", () => {

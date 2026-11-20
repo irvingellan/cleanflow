@@ -625,3 +625,4 @@
 .hb-jobs li > .hb-reschedule, .hb-jobs li > .hb-reschedule-result { margin-top: 4px; }
 .hb-root .cf-notice:has(.hb-reschedule) { grid-template-columns: auto minmax(0,1fr); align-items: start; }
 .hb-root .cf-notice:has(.hb-reschedule) .cf-notice__actions { grid-column: 1 / -1; flex-flow: row wrap; min-width: 0; }
+.hb-facts dd { white-space: pre-line; }

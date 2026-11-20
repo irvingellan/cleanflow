@@ -247,6 +247,34 @@ test("a real Inbox event fans out only to authorized current sessions through an
 });
 
 
+test("an extended automatic invitation keeps frozen personal and house terms out of push and lockscreen content", async () => {
+  const account = await link(cleanerB);
+  const registration = await register(account, installationB);
+  const job = await createJob("synthetic-fixed-extension");
+  await job.update({ requiredCleanerCount: 2, cleanerPayout: 243.57 });
+  await createAutomaticJobOffers.run(manager({ jobId: job.id, cleanerIds: [cleanerA] }));
+  await createAutomaticJobOffers.run(manager({ jobId: job.id, cleanerIds: [cleanerB] }));
+  const after = await job.collection("offers").doc(cleanerB).get();
+  assert.deepEqual([after.get("offeredCompensation"), after.get("offeredFirstSlotExtraCents"), after.get("fixedHousePay")],
+    [121.78, 1, { totalCents: 24357, teamSize: 2 }]);
+  const args = { organizationId, jobId: job.id, offerId: cleanerB, after };
+  assert.equal(await recordCleanerOfferInboxEvent(functionDatabase, args), 1);
+  assert.equal(await recordCleanerOfferInboxEvent(functionDatabase, args), 0);
+  const [event] = (await inboxReference(cleanerB).where("type", "==", "NEW_OFFER").get()).docs;
+  const sent = [];
+  const result = await dispatch(cleanerB, event.id, async messages => {
+    sent.push(...messages);
+    return { responses: messages.map(() => ({ success: true, messageId: "synthetic-extension-accepted" })),
+      successCount: messages.length, failureCount: 0 };
+  });
+  assert.equal(result.deliveryStatus, "FCM_ACCEPTED");
+  assert.equal(sent.length, 1);
+  const display = cleanerPushDisplay(sent[0], { bindingId: registration.bindingId, language: "en" });
+  assert.ok(display);
+  assert.doesNotMatch(JSON.stringify([event.data(), sent[0].data, display, (await receiptReference(event.id).get()).data()]),
+    /offeredCompensation|offeredFirstSlotExtraCents|fixedHousePay|offeredPayEstimated|teamSize|totalCents|syncExtendedBatchAgenda|243[.,]57|121[.,]7[89]/);
+});
+
 test("two overlapping automatic offer batches survive partial provider outcomes and only the current recipient can open", async () => {
   const primary = await link(cleanerA);
   const secondary = await link(cleanerA, true);
@@ -256,6 +284,7 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
 
   const jobIds = ["synthetic-auto-offer-a", "synthetic-auto-offer-b"];
   const jobs = await Promise.all(jobIds.map(createJob));
+  await jobs[0].update({ pay: { mode: "HOURLY", rateCents: 317923 } });
   await Promise.all(jobIds.map((jobId) => createAutomaticJobOffers.run(manager({ jobId, cleanerIds: [cleanerA, cleanerB] }))));
   const beforeAward = await Promise.all(jobs.map((job) => job.get()));
   for (const job of jobs) {
@@ -269,6 +298,7 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
   const offers = (await inboxReference(cleanerA).where("type", "==", "NEW_OFFER").get()).docs;
   assert.equal(offers.length, 2);
   const event = offers.find((item) => item.data().jobId === jobs[0].id);
+  assert.doesNotMatch(JSON.stringify(event.data()), /offeredPay|rateCents|317923/);
   const attempts = [];
   const partialProvider = async (messages) => {
     attempts.push(messages);
@@ -298,6 +328,7 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
   assert.equal(cleanerPushDisplay({ data: messageA.data }, { bindingId: second.bindingId }), null);
   const simulatedDisplay = cleanerPushDisplay({ data: messageA.data }, { bindingId: first.bindingId, language: "pt" });
   assert.equal(simulatedDisplay.options.tag, `cleanflow-cleaner-${event.id}`);
+  assert.doesNotMatch(JSON.stringify([messageA.data, messageB.data, simulatedDisplay]), /offeredPay|rateCents|317923|3179[.,]23/);
   assert.doesNotMatch(JSON.stringify(simulatedDisplay), /Synthetic property marker|synthetic-auto-offer|synthetic-cleaner/);
   assert.deepEqual(await open(other, event.id), { state: "unavailable", destination: null });
   assert.deepEqual(await open(primary, event.id), { state: "opened", destination: { kind: "OFFER", jobId: jobs[0].id } });

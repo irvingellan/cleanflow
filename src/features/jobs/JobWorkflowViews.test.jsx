@@ -187,6 +187,47 @@ describe("offer amount, cleaner count and send to more (Nov 19 feedback)", () =>
     expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], offeredCompensation: 95 });
   });
 
+  it("shows and sends the snapshotted hourly rate without using a property total", async () => {
+    const pay = { mode: "HOURLY", rateCents: 3125 };
+    render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], requiredCleanerCount: 3, pay },
+      { property: { defaultCleanerPrice: 95 } });
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("$31.25 per hour");
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("You report your hours at the end.");
+    await userEvent.click(screen.getByLabelText("Ana"));
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], offeredPay: pay });
+  });
+
+  it("splits a house total by the number of spots, regardless of how many people are invited", async () => {
+    render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], cleanerPayout: 100 });
+    const addSpot = screen.getByRole("button", { name: "One more cleaner" });
+    await userEvent.click(addSpot);
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("$50.00");
+    await userEvent.click(addSpot);
+    await userEvent.click(screen.getByLabelText("Ana"));
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("$33.33 · +$0.01 if you get the first spot");
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]],
+      offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1 });
+  });
+
+  it("uses the Job's individual override and keeps it independent of invitee count", async () => {
+    render2({ schemaVersion: 2, operationalStatus: "OFFERED", assignedCleanerIds: [], requiredCleanerCount: 3,
+      pay: { mode: "FIXED", perCleanerCents: 4525 }, cleanerPayout: 135.75 }, { existingOfferCleanerIds: ["bia"] });
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("$45.25");
+    expect(screen.getByTestId("offer-amount")).not.toHaveTextContent(/135.75|first spot/);
+    await userEvent.click(screen.getByLabelText("Ana"));
+    await userEvent.click(screen.getByRole("button", { name: "Create offers" }));
+    expect(createJobOffers).toHaveBeenCalledWith({ jobId: "job-1", cleaners: [cleaners[0]], offeredCompensation: 45.25 });
+  });
+
+  it("omits the conditional extra from the preview when the first spot is filled", () => {
+    render2({ schemaVersion: 2, operationalStatus: "ASSIGNED", assignedCleanerIds: ["bia"], requiredCleanerCount: 3,
+      cleanerPayout: 100 });
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("$33.33");
+    expect(screen.getByTestId("offer-amount")).not.toHaveTextContent(/first spot|100.00/);
+  });
+
   it("warns before sending an offer with no amount", () => {
     render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [] });
     expect(screen.getByTestId("offer-amount-missing")).toBeInTheDocument();
@@ -196,6 +237,7 @@ describe("offer amount, cleaner count and send to more (Nov 19 feedback)", () =>
     vi.stubEnv("VITE_AUTOMATIC_OFFERS_MODE", "enabled");
     render2({ schemaVersion: 2, operationalStatus: "UNASSIGNED", assignedCleanerIds: [], cleanerPayout: 120 });
     await userEvent.click(screen.getByRole("button", { name: "One more cleaner" }));
+    expect(screen.getByTestId("offer-amount")).toHaveTextContent("$60.00");
     expect(screen.getByRole("checkbox", { name: "Assign the available spots to the first cleaners who accept" })).toBeChecked();
     await userEvent.click(screen.getByLabelText("Ana"));
     await userEvent.click(screen.getByRole("button", { name: "Create offers" }));

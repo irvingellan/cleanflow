@@ -14,6 +14,12 @@ export function normalizeWhatsAppPhone(phone) {
   return digits;
 }
 
+/** Open the chat without putting a private message into the URL. */
+export function buildWhatsAppChatUrl(phone) {
+  const digits = normalizeWhatsAppPhone(phone);
+  return digits ? `https://wa.me/${digits}` : null;
+}
+
 export function buildWhatsAppHandoffUrl(phone, message) {
   const digits = normalizeWhatsAppPhone(phone);
   if (!digits || typeof message !== "string" || !message.trim()) return null;

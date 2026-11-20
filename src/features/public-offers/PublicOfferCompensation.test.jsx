@@ -28,6 +28,16 @@ describe("PublicOfferCompensation", () => {
     expect(screen.queryByText("Your payment")).not.toBeInTheDocument();
   });
 
+  it("shows the hourly amount and explains reporting in the recipient's language", () => {
+    window.localStorage.setItem("cleanflow-language", "es");
+    const { container } = render(<TranslationProvider><dl>
+      <PublicOfferCompensation offeredPay={{ mode: "HOURLY", rateCents: 3125 }} />
+    </dl></TranslationProvider>);
+    expect(container.querySelector("dd")).toHaveTextContent(/31,25.*por hora/);
+    expect(container.querySelector("dd")).toHaveTextContent("Al terminar el servicio, indicas las horas trabajadas.");
+    window.localStorage.removeItem("cleanflow-language");
+  });
+
   it("explicitly shows an unset amount rather than zero", () => {
     render(<TranslationProvider><dl><PublicOfferCompensation amount={null} /></dl></TranslationProvider>);
 

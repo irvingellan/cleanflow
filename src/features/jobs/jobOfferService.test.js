@@ -30,7 +30,7 @@ vi.mock("firebase/firestore", () => ({
 }));
 vi.mock("../../services/firebase/client.js", () => ({ db: { testDatabase: true }, functions: {} }));
 
-const { createPublicOfferLink } = await import("./jobOfferService.js");
+const { createJobOffers, createPublicOfferLink } = await import("./jobOfferService.js");
 
 describe("createPublicOfferLink compensation snapshot", () => {
   beforeEach(() => {
@@ -79,6 +79,37 @@ describe("createPublicOfferLink compensation snapshot", () => {
     });
   });
 
+  it.each([125, 0, null])("keeps a saved fixed amount (%s) when a manager rotates the link", async saved => {
+    mocks.runTransaction.mockImplementationOnce(async (_db, callback) => callback({
+      get: async ref => ({ exists: () => true, data: () => ref.path.endsWith("jobs/job-1")
+        ? { schemaVersion: 2, operationalStatus: "OFFERED", cleanerPayout: 800 }
+        : { status: "PENDING", offeredCompensation: saved } }),
+      update: mocks.transactionUpdate,
+    }));
+    const link = await createPublicOfferLink({ jobId: "job-1", cleanerId: "cleaner-1", offeredCompensation: 100 });
+    expect(link.offeredCompensation).toBe(saved);
+    expect(mocks.transactionUpdate.mock.calls[0][1]).not.toHaveProperty("offeredCompensation");
+  });
+
+  it("rotates the public link without changing an hourly snapshot or putting it in the URL", async () => {
+    const offeredPay = { mode: "HOURLY", rateCents: 3125 };
+    mocks.runTransaction.mockImplementationOnce(async (_database, callback) => callback({
+      get: async reference => ({
+        exists: () => true,
+        data: () => reference.path.endsWith("jobs/job-1")
+          ? { schemaVersion: 2, operationalStatus: "OFFERED" }
+          : { status: "PENDING", offeredPay },
+      }),
+      update: mocks.transactionUpdate,
+    }));
+    const link = await createPublicOfferLink({ jobId: "job-1", cleanerId: "cleaner-1", offeredCompensation: null });
+    expect(link.offeredPay).toEqual(offeredPay);
+    expect(link).not.toHaveProperty("offeredCompensation");
+    expect(link.url).not.toMatch(/3125|hour|[?]/);
+    expect(mocks.transactionUpdate.mock.calls[0][1]).not.toHaveProperty("offeredCompensation");
+    expect(mocks.transactionUpdate.mock.calls[0][1]).not.toHaveProperty("offeredPay");
+  });
+
   it("persists an explicit null for a manager-confirmed unset amount", async () => {
     const result = await createPublicOfferLink({
       jobId: "job-1",
@@ -125,5 +156,52 @@ describe("createPublicOfferLink compensation snapshot", () => {
     })).rejects.toMatchObject({ code: "invalid-offered-compensation" });
 
     expect(mocks.runTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("manual hourly offers", () => {
+  const offeredPay = { mode: "HOURLY", rateCents: 3167 };
+  const job = { schemaVersion: 2, operationalStatus: "OFFERED", assignedCleanerIds: [], pay: offeredPay };
+  const send = () => createJobOffers({ jobId: "hourly-job", cleaners: [{ id: "cleaner", name: "Cleaner" }], offeredPay });
+  function transactionWithOffer(existing, currentJob = job) {
+    const set = vi.fn();
+    const jobSnapshot = { exists: () => true, data: () => currentJob };
+    mocks.getDoc.mockResolvedValue(jobSnapshot);
+    mocks.runTransaction.mockImplementationOnce(async (_db, callback) => callback({
+      get: async ref => ref.path.endsWith("/jobs/hourly-job") ? jobSnapshot : { exists: () => existing },
+      set,
+    }));
+    return set;
+  }
+  it("uses Job slots rather than invited-recipient count and rejects a stale fixed quote", async () => {
+    const fixed = { schemaVersion: 2, operationalStatus: "OFFERED", assignedCleanerIds: [], requiredCleanerCount: 3, cleanerPayout: 100 };
+    const cleaners = ["a", "b", "c", "d", "e"].map(id => ({ id, name: id }));
+    const input = { jobId: "hourly-job", cleaners, offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1 };
+    const set = transactionWithOffer(false, fixed);
+    await createJobOffers(input);
+    expect(set).toHaveBeenCalledTimes(cleaners.length);
+    for (const [, offer] of set.mock.calls) expect(offer).toMatchObject({ offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1 });
+    const stale = transactionWithOffer(false, { ...fixed, cleanerPayout: 99.99 });
+    await expect(createJobOffers(input)).rejects.toThrow("rate changed");
+    expect(stale).not.toHaveBeenCalled();
+  });
+
+  it("saves only the agreed hourly rate and makes the new Hub invitation visible", async () => {
+    const set = transactionWithOffer(false);
+    await send();
+    expect(set.mock.calls[0][1]).toMatchObject({ offeredPay, publicOfferExpiresAt: { millis: expect.any(Number) } });
+    expect(set.mock.calls[0][1]).not.toHaveProperty("offeredCompensation");
+  });
+  it("preserves prior offers and refuses stale displayed rates", async () => {
+    const existing = transactionWithOffer(true);
+    await expect(send()).rejects.toThrow("already has an offer");
+    expect(existing).not.toHaveBeenCalled();
+    const changedMode = transactionWithOffer(false);
+    await expect(createJobOffers({ jobId: "hourly-job", cleaners: [{ id: "cleaner" }], offeredCompensation: 80 }))
+      .rejects.toThrow("rate changed");
+    expect(changedMode).not.toHaveBeenCalled();
+    const stale = transactionWithOffer(false, { ...job, pay: { ...offeredPay, rateCents: 1000 } });
+    await expect(send()).rejects.toThrow("rate changed");
+    expect(stale).not.toHaveBeenCalled();
   });
 });

@@ -250,6 +250,45 @@ its recorded price, even if it is missing. Later changes to Property rates
 never fill in or recalculate recorded Jobs, Offers or Payouts. A known hourly
 rate is distinct from an approved amount for the work.
 
+Job creation and service-type changes on a saved Job copy the selected
+Property rates. Fixed snapshots use `clientPrice` and `cleanerPayout`
+in dollars. An hourly side uses `billing.mode` and `billing.hourlyRateCents`
+for the client or `pay.mode` and `pay.rateCents` for the cleaner. The manager
+can edit the Job snapshot. A recorded payout or approved billing hours locks
+that edit. For a Property with no service table, switching the type in the
+legacy creation form keeps amounts already entered and prompts for review.
+
+An hourly Offer stores the recipient's own `offeredPay` with `mode: "HOURLY"`
+and `rateCents`. A later Job edit leaves the issued Offer intact. The
+authenticated cleaner agenda and the manual public offer use this snapshot.
+Automatic public invitations continue to direct the cleaner to the Hub.
+
+A completed service awaiting hours appears for review in weekly close and
+payouts. Neither its hourly rate nor a stale fixed amount contributes to a
+financial subtotal. Client-approved time is independent of each cleaner's
+payable time. The fixed team payout and the eligibility of single-cleaner
+legacy Jobs follow the existing payout model.
+
+### Fixed offers and individual payout evidence
+
+New fixed offers store the individual base amount in `offeredCompensation`.
+When there is a fractional-cent remainder after division, the first assigned
+slot receives that remainder. House-rate offers retain their original split
+terms internally. The public offer and the Hub expose only the recipient's
+terms. Rotating a link leaves a recorded agreement intact. Team-size rates
+selected from a Property become individual Job prices. Changing only the
+number of slots preserves that agreement, while a house total is divided
+among the new number of slots.
+
+For team Jobs, `payoutIdsByCleaner` links each paid cleaner to her own
+receipt. New receipts freeze each Job's individual amount in
+`jobAmountsCents`. The payment transaction checks the selected roster
+member's entitlement and prior receipt before writing either document.
+Legacy receipts and single-cleaner Job markers retain their original meaning.
+The weekly close reconciles per-cleaner proof with the Job; one member's
+receipt covers only her share. Upcoming offers, registered payments and
+historical Jobs do not require a backfill.
+
 ### Client pricing
 
 A Job may be priced as:

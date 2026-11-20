@@ -79,6 +79,27 @@ describe("public offer projection", () => {
     });
   });
 
+  it("projects just the recipient's conditional or assigned cents for a frozen fixed offer", () => {
+    const offer = { ...availableOffer(), cleanerId: "b", offeredCompensation: 9.99, offeredFirstSlotExtraCents: 2 };
+    const job = { schemaVersion: 2, operationalStatus: "OFFERED", requiredCleanerCount: 3, cleanerPayout: 900, clientPrice: 1200 };
+    expect(publicOfferResult(offer, job).offer).toMatchObject({ offeredCompensation: 9.99, offeredFirstSlotExtraCents: 2 });
+    const assigned = publicOfferResult({ ...offer, status: "INTERESTED" }, { ...job, operationalStatus: "ASSIGNED", assignedCleanerIds: ["b", "c"] }).offer;
+    expect(assigned.offeredCompensation).toBe(10.01);
+    for (const field of ["offeredFirstSlotExtraCents", "cleanerPayout", "clientPrice", "assignedCleanerIds"]) expect(assigned).not.toHaveProperty(field);
+    expect(publicOfferResult(offer, { ...job, assignedCleanerIds: ["a"] }).offer).not.toHaveProperty("offeredFirstSlotExtraCents");
+  });
+
+  it("projects only the recipient's snapshotted hourly rate", () => {
+    const job = { schemaVersion: 2, operationalStatus: "OFFERED", pay: { mode: "HOURLY", rateCents: 9999 } };
+    const offer = { ...availableOffer(), offeredPay: { mode: "HOURLY", rateCents: 3125, internal: "private" } };
+    const result = publicOfferResult(offer, job);
+    expect(result.offer.offeredPay).toEqual({ mode: "HOURLY", rateCents: 3125 });
+    expect(result.offer).not.toHaveProperty("offeredCompensation");
+    expect(result.offer).not.toHaveProperty("pay");
+    expect(publicOfferResult({ ...offer, offeredPay: { mode: "HOURLY", rateCents: -1 } }, job).offer)
+      .toMatchObject({ offeredCompensation: null });
+  });
+
   it("uses the v2 per-Offer snapshot and excludes Job prices, margin, and team fields", () => {
     const snapshotted = publicOfferResult({
       ...availableOffer(),

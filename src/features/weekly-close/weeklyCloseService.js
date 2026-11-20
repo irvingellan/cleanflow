@@ -1,3 +1,4 @@
+import { enrichPayoutAgreements } from "../payouts/payoutAgreements.js";
 import { getJobById, getServicePeriodJobs } from "../jobs/jobService.js";
 import { getAssignedCleanerIds } from "../jobs/jobCompatibility.js";
 import { getPayoutEvidenceForJobs, isEligibleForLegacyPayout } from "../payouts/payoutService.js";
@@ -51,16 +52,21 @@ export async function loadWeeklyClose(period, { signal } = {}) {
   const cleanerIds = completedJobs.flatMap((job) => [
     ...getAssignedCleanerIds(job), job.assignedCleanerId,
   ]).filter(Boolean);
-  const [payouts, cleaners, clients, properties] = await Promise.all([
+  const [payouts, cleaners, clients, properties, agreed] = await Promise.all([
     readWeeklySource(() => getPayoutEvidenceForJobs(completedJobs), signal),
     readContext(cleanerIds, (ids) => getServerRecordsById(organizationId, "cleaners", ids), signal),
     readContext(completedJobs.map((job) => job.clientId), getClientSummariesById, signal),
     readContext(completedJobs.map((job) => job.propertyId), getPropertySummariesById, signal),
+    readWeeklySource(() => enrichPayoutAgreements(completedJobs, { organizationId, signal }), signal),
   ]);
   signal?.throwIfAborted();
+  const agreements = new Map(completedJobs.map((job, i) => [job, agreed[i]]));
   return buildWeeklyClose({
     period: dates, coverage, organizationId,
-    jobs: jobs.map((job) => ({ ...job, legacyPayoutEligible: isEligibleForLegacyPayout(job) })),
+    jobs: jobs.map(source => {
+      const job = agreements.get(source) ?? source;
+      return { ...job, legacyPayoutEligible: isEligibleForLegacyPayout(job) };
+    }),
     payouts, clients, properties,
     cleanerNamesById: Object.fromEntries(cleaners.map((cleaner) => [cleaner.id, cleaner.data().name])),
   });

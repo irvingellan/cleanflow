@@ -29,6 +29,10 @@ import {
   normalizeJobRecord,
   optionalJobPrice,
 } from "./jobCompatibility.js";
+import { jobPricesLocked, jobPriceSnapshot, snapshotFromResolvedPricing } from "./jobPricingForm.js";
+import { resolveJobPricing } from "../pricing/pricingModel.js";
+import { requiredCleanerCount as cleanerCountForJob } from "./offerSlots.js";
+import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { buildChecklistContextRevisionUpdate } from "./checklistContextRevision.js";
 import {
   cleanerSelectionHistoryLimit, cleanerSelectionScheduleLimit, committedCleanerStatuses,
@@ -615,6 +619,8 @@ export async function createJob({
   scheduledStart,
   clientPrice,
   cleanerPayout,
+  billing,
+  pay,
   notes,
   guestName,
   serviceType,
@@ -630,6 +636,8 @@ export async function createJob({
     scheduledStart,
     clientPrice,
     cleanerPayout,
+    billing,
+    pay,
     notes,
     guestName,
     serviceType,
@@ -646,22 +654,44 @@ export async function createJob({
   return normalizeJobRecord(job, jobDocument.id);
 }
 
-export async function updateJobPrices(jobId, { clientPrice, cleanerPayout }) {
+// Update only pricing keys: the billing map may also contain fees or hours.
+function priceUpdates(job, snapshot, resolved) {
+  if (jobPricesLocked(job)) throw new Error("Recorded Job prices are read-only.");
+  const changes = {};
+  // An explicit price edit may clear a field. An absent rate on retyping a Job
+  // leaves that side of its existing agreement, including recorded hours, intact.
+  if (!resolved || resolved.client.state === "ready") {
+    changes.clientPrice = snapshot.clientPrice ?? deleteField();
+    if (snapshot.billing) {
+      changes["billing.mode"] = snapshot.billing.mode;
+      changes["billing.hourlyRateCents"] = snapshot.billing.hourlyRateCents;
+    } else if (job.billing?.mode && job.billing.mode !== "FIXED") {
+      changes["billing.mode"] = "FIXED";
+      changes["billing.hourlyRateCents"] = deleteField();
+    }
+    if (job.billing?.hours && (resolved || !snapshot.billing)) changes["billing.hours"] = deleteField();
+  }
+  if (!resolved || resolved.cleaner.state === "ready") {
+    changes.cleanerPayout = snapshot.cleanerPayout ?? deleteField();
+    if (snapshot.pay) changes.pay = snapshot.pay;
+    else if (job.pay) changes.pay = deleteField();
+  }
+  return changes;
+}
+
+export async function updateJobPrices(jobId, { clientPrice, cleanerPayout, billing, pay }) {
   const normalizedClientPrice = optionalJobPrice(clientPrice);
   const normalizedCleanerPayout = optionalJobPrice(cleanerPayout);
-
   if (normalizedClientPrice === null || normalizedCleanerPayout === null) {
-    const error = new Error("Job prices must be non-negative numbers.");
-    error.code = "invalid-job-price";
-    throw error;
+    throw new Error("Job prices must be non-negative numbers.");
   }
-
+  const pricing = jobPriceSnapshot({ clientPrice: normalizedClientPrice, cleanerPayout: normalizedCleanerPayout, billing, pay });
   const reference = jobDocument(jobId);
-  await updateDoc(reference, {
-    clientPrice: normalizedClientPrice === undefined ? deleteField() : normalizedClientPrice,
-    cleanerPayout: normalizedCleanerPayout === undefined ? deleteField() : normalizedCleanerPayout,
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("Job not found.");
+    transaction.update(reference, priceUpdates(snapshot.data(), pricing));
   });
-
   return jobFromSnapshot(await getDoc(reference));
 }
 
@@ -672,13 +702,24 @@ export async function updateJobDetails(jobId, details) {
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(reference);
     if (!snapshot.exists()) throw new Error("Job not found.");
-    if (!canEditJobDetails(snapshot.data())) {
+    const job = snapshot.data();
+    if (!canEditJobDetails(job)) {
       const error = new Error("Completed or archived Job details are read-only.");
       error.code = "job-details-edit-not-allowed";
       throw error;
     }
+    let prices = {};
+    if (updates.serviceType && updates.serviceType !== normalizeServiceType(job.serviceType)) {
+      const property = await transaction.get(doc(db, "organizations", organizationId, "properties", job.propertyId));
+      if (!property.exists()) throw new Error("Property not found.");
+      const pricing = resolveJobPricing({ serviceType: updates.serviceType }, {
+        property: property.data(), cleanerCount: cleanerCountForJob(job),
+      });
+      prices = priceUpdates(job, snapshotFromResolvedPricing(pricing), pricing);
+    }
     transaction.update(reference, {
       ...updates,
+      ...prices,
       guestName: guestName ?? deleteField(),
       notes: notes ?? deleteField(),
     });

@@ -12,6 +12,9 @@ import { db } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
+import { enrichPayoutAgreements, jobWithPayoutAgreementsInTransaction } from "./payoutAgreements.js";
+import { missingAgreementReview, payoutNeedsHoursReview, unpaidPayoutShares } from "./payoutShares.js";
+
 const organizationId = "cleanflow-demo";
 const allowedPaymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 const maximumJobsPerPayout = 100;
@@ -38,14 +41,7 @@ function completionSortValue(job) {
 }
 
 export function isEligibleForLegacyPayout(job) {
-  return (
-    !isAssignmentAwareJob(job) &&
-    job.operationalStatus === "COMPLETED" &&
-    Boolean(job.assignedCleanerId) &&
-    Number.isFinite(job.cleanerPayout) &&
-    job.cleanerPayout > 0 &&
-    !job.payoutId
-  );
+  return !isAssignmentAwareJob(job) && job.operationalStatus === "COMPLETED" && unpaidPayoutShares(job).length > 0;
 }
 
 function payoutError(code, message) {
@@ -56,7 +52,7 @@ function payoutError(code, message) {
 
 // One-shot server read with a deadline: a full-SDK read on a stalled realtime
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
-export async function getUnpaidCompletedJobs() {
+export async function getUnpaidCompletedJobs({ includePendingHours = false } = {}) {
   const snapshot = await withReadDeadline(getServerDocs(serverQuery(
     serverCollection(serverFirestore(), "organizations", organizationId, "jobs"),
     serverWhere("operationalStatus", "==", "COMPLETED"),
@@ -64,9 +60,10 @@ export async function getUnpaidCompletedJobs() {
 
   // Legacy Jobs have no payout marker. Keep them eligible until a manager explicitly
   // records a payout; some also have no completedAt, so do not order them out of the query.
-  return snapshot.docs
-    .map(jobFromSnapshot)
-    .filter(isEligibleForLegacyPayout)
+  const candidates = snapshot.docs.map(jobFromSnapshot).filter(job => !job.archivedAt && !job.payoutId && !job.payoutPaidAt);
+  const jobs = await enrichPayoutAgreements(candidates, { organizationId });
+  return jobs.filter(job => job.operationalStatus === "COMPLETED" &&
+    (unpaidPayoutShares(job).length > 0 || (includePendingHours && (payoutNeedsHoursReview(job) || missingAgreementReview(job)))))
     .sort((firstJob, secondJob) => completionSortValue(secondJob) - completionSortValue(firstJob));
 }
 
@@ -83,7 +80,7 @@ export async function getRecentPayouts() {
 /** Read all reciprocal payment proof, without the recent-payments directory cap. */
 export async function getPayoutEvidenceForJobs(jobs) {
   const jobIds = [...new Set(jobs.map(job => job.id).filter(Boolean))];
-  const payoutIds = [...new Set(jobs.map(job => job.payoutId).filter(id => typeof id === "string" && id.trim()))];
+  const payoutIds = [...new Set(jobs.flatMap(job => [job.payoutId, ...Object.values(job.payoutIdsByCleaner ?? {})]).filter(id => typeof id === "string" && id.trim()))];
   if (jobIds.length === 0 && payoutIds.length === 0) return [];
   const payouts = serverCollection(serverFirestore(), "organizations", organizationId, "payouts");
   const reads = [];
@@ -132,23 +129,25 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     const snapshots = await Promise.all(
       jobReferences.map((jobReference) => transaction.get(jobReference)),
     );
-    const jobs = snapshots.map(jobFromSnapshot);
+    const jobs = await Promise.all(snapshots.map((snapshot, index) =>
+      jobWithPayoutAgreementsInTransaction(transaction, jobReferences[index], jobFromSnapshot(snapshot), cleaner.id)));
 
-    for (const job of jobs) {
-      if (!isEligibleForLegacyPayout(job) || job.assignedCleanerId !== cleaner.id) {
-        // Re-reading every selected Job inside the transaction prevents a completed Job
-        // from being included in two payouts when two manager sessions overlap.
+    const allocations = jobs.map(job => {
+      const share = unpaidPayoutShares(job).find(({ cleanerId }) => cleanerId === cleaner.id);
+      if (job.operationalStatus !== "COMPLETED" || !share) {
         throw payoutError("job-not-payable", "One or more jobs are no longer payable.");
       }
-    }
-
-    const amount = jobs.reduce((total, job) => total + job.cleanerPayout, 0);
+      return [job.id, share.cents];
+    });
+    const jobAmountsCents = Object.fromEntries(allocations);
+    const amount = allocations.reduce((sum, [, cents]) => sum + cents, 0) / 100;
     recordedAmount = amount;
     const payout = {
       organizationId,
       cleanerId: cleaner.id,
       cleanerNameSnapshot: cleaner.name || "",
       jobIds: uniqueJobIds,
+      jobAmountsCents,
       amount,
       paymentMethod,
       status: "PAID",
@@ -162,7 +161,14 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     }
 
     transaction.set(payoutReference, payout);
-    jobReferences.forEach((jobReference) => {
+    jobReferences.forEach((jobReference, index) => {
+      const job = jobs[index];
+      if (isAssignmentAwareJob(job)) {
+        transaction.update(jobReference, {
+          payoutIdsByCleaner: { ...job.payoutIdsByCleaner, [cleaner.id]: payoutReference.id },
+        });
+        return;
+      }
       transaction.update(jobReference, {
         payoutId: payoutReference.id,
         payoutPaidAt: serverTimestamp(),

@@ -2,6 +2,10 @@ import { formatPrice } from "../../lib/presentation.js";
 
 const messages = {
   en: {
+    offerEstimate: "Estimate based on the planned team size",
+    firstSlotExtra: "+{amount} if you get the first spot",
+    reportHours: "You report your hours at the end.",
+    copyBeforeWhatsApp: "Copy the offer message, then open WhatsApp and paste it into the chat.",
     title: "Prices by service type", client: "Client price", cleaner: "Cleaner pay",
     cleanerHouseAmount: "Total cleaner pay for the house, split across the team (USD)", cleanerHourlyRate: "Hourly rate per cleaner (USD)",
     clientHourlyRate: "Hourly client rate (USD)", houseSummary: "{value} for the house", cleanerHourlySummary: "{value} per cleaner",
@@ -15,6 +19,10 @@ const messages = {
     baseRequired: "Enter the base cleaner pay when setting pay by team size.",
   },
   pt: {
+    offerEstimate: "Estimativa com base no tamanho previsto da equipe",
+    firstSlotExtra: "+{amount} se a primeira vaga for sua",
+    reportHours: "Você informa suas horas no final do serviço.",
+    copyBeforeWhatsApp: "Copie a mensagem da oferta, abra o WhatsApp e cole na conversa.",
     title: "Preços por tipo de serviço", client: "Preço do cliente", cleaner: "Repasse às profissionais",
     cleanerHouseAmount: "Repasse total da casa, dividido entre as profissionais (USD)", cleanerHourlyRate: "Valor por hora de cada profissional (USD)",
     clientHourlyRate: "Preço por hora para o cliente (USD)", houseSummary: "{value} pela casa", cleanerHourlySummary: "{value} por profissional",
@@ -28,6 +36,10 @@ const messages = {
     baseRequired: "Informe o repasse base para definir valores por tamanho da equipe.",
   },
   es: {
+    offerEstimate: "Estimación según el tamaño previsto del equipo",
+    firstSlotExtra: "+{amount} si te asignan la primera plaza",
+    reportHours: "Al terminar el servicio, indicas las horas trabajadas.",
+    copyBeforeWhatsApp: "Copia el mensaje de la oferta, abre WhatsApp y pégalo en el chat.",
     title: "Precios por tipo de servicio", client: "Precio al cliente", cleaner: "Pago a las profesionales",
     cleanerHouseAmount: "Pago total de la casa, repartido entre las profesionales (USD)", cleanerHourlyRate: "Tarifa por hora de cada profesional (USD)",
     clientHourlyRate: "Precio por hora para el cliente (USD)", houseSummary: "{value} por la casa", cleanerHourlySummary: "{value} por profesional",
@@ -46,9 +58,27 @@ export function pricingMessage(language, key, values = {}) {
   return (messages[language] || messages.en)[key].replace(/\{(\w+)\}/g, (_, field) => values[field]);
 }
 
+export function offerPayNote(offer, language, format = (amount) => formatPrice(amount, null, language)) {
+  const cents = offer.offeredFirstSlotExtraCents;
+  if (offer.offeredPay || !Number.isFinite(offer.offeredCompensation)) return "";
+  const extra = Number.isSafeInteger(cents) && cents > 0 && pricingMessage(language, "firstSlotExtra", { amount: format(cents / 100) });
+  const estimate = offer.offeredPayEstimated === true && pricingMessage(language, "offerEstimate");
+  return [extra, estimate].filter(Boolean).join(" · ");
+}
+
 export function formatPricingRate(rate, language, translate) {
   if (rate.state !== "ready") return pricingMessage(language, "notSet");
   const hourly = rate.mode === "HOURLY";
   const value = formatPrice((hourly ? rate.rateCents : rate.amountCents) / 100, translate, language);
   return hourly ? pricingMessage(language, "perHour", { value }) : value;
+}
+
+const hoursReviewCopy = {
+  en: "Needs review: hours",
+  pt: "Precisa de revisão: horas",
+  es: "Requiere revisión: horas",
+};
+
+export function hoursReviewLabel(language) {
+  return hoursReviewCopy[language] || hoursReviewCopy.en;
 }

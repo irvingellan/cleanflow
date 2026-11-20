@@ -321,6 +321,53 @@ describe("CreateCleaningForm", () => {
     );
   });
 
+  it("copies independent service rates, applies team pay, and saves the manager's override", async () => {
+    createJob.mockResolvedValue({ id: "new-job" });
+    const property = { id: "p", name: "Sample property", defaultClientPrice: 80, defaultCleanerPrice: 40,
+      serviceRates: { DEEP_CLEANING: {
+        client: { mode: "HOURLY", amountCents: 4500 },
+        cleaner: { mode: "FIXED", amountCents: 3500, byCleanerCount: { "2": 2800 } },
+      } } };
+    render(<TranslationProvider><CreateCleaningForm property={property} onCreated={vi.fn()} /></TranslationProvider>);
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "DEEP_CLEANING" } });
+    expect(screen.getByLabelText("Client price per hour")).toHaveValue(45);
+    expect(screen.getByLabelText("Cleaner payout")).toHaveValue(35);
+    fireEvent.change(screen.getByLabelText("Client price per hour"), { target: { value: "52.25" } });
+    fireEvent.change(screen.getByLabelText("Cleaners needed"), { target: { value: "2" } });
+    expect(screen.getByLabelText("Amount per cleaner (USD)")).toHaveValue(28);
+    expect(screen.getByLabelText("Client price per hour")).toHaveValue(52.25);
+    fireEvent.change(screen.getByLabelText("Cleaner pay method"), { target: { value: "HOURLY" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+    await waitFor(() => expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
+      billing: { mode: "HOURLY", hourlyRateCents: 5225 }, pay: { mode: "HOURLY", rateCents: 2800 },
+      requiredCleanerCount: 2, clientPrice: undefined, cleanerPayout: undefined,
+    })));
+  });
+
+  it("clears the previous type's rates and warns when a configured property has an empty row", () => {
+    const property = { id: "p", name: "Sample property", serviceRates: { STANDARD: {
+      cleaner: { mode: "HOURLY", amountCents: 2000 }, client: { mode: "FIXED", amountCents: 5000 },
+    } } };
+    render(<TranslationProvider><CreateCleaningForm property={property} /></TranslationProvider>);
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "MOVE_IN_OUT" } });
+    expect(screen.getByText(/price is missing for this service type/i)).toBeVisible();
+    expect(screen.getByLabelText("Client price")).toHaveValue(null);
+    expect(screen.getByLabelText("Cleaner payout")).toHaveValue(null);
+    fireEvent.change(screen.getByLabelText("Cleaner pay method"), { target: { value: "HOURLY" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+    expect(screen.getByRole("alert")).toBeVisible();
+    expect(createJob).not.toHaveBeenCalled();
+  });
+
+  it("asks for review of already entered amounts on a property with legacy defaults only", () => {
+    const property = { id: "p", name: "Sample property", defaultClientPrice: 80, defaultCleanerPrice: 40 };
+    render(<TranslationProvider><CreateCleaningForm property={property} /></TranslationProvider>);
+    fireEvent.change(screen.getByLabelText("Client price"), { target: { value: "72" } });
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "MOVE_IN_OUT" } });
+    expect(screen.getByText(/review the amounts already entered/i)).toBeVisible();
+    expect(screen.getByLabelText("Client price")).toHaveValue(72);
+  });
+
   it("keeps blank price defaults absent instead of converting them to zero", async () => {
     createJob.mockResolvedValue({ id: "job-blank", scheduledDate: "2026-09-01" });
 

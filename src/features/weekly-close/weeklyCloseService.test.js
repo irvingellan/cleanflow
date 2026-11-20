@@ -6,6 +6,7 @@ import { getPropertySummariesById } from "../properties/propertyService.js";
 import { getServerRecordsById } from "../../services/firebase/serverReads.js";
 import { getPayoutEvidenceForJobs } from "../payouts/payoutService.js";
 
+vi.mock("../payouts/payoutAgreements.js", () => ({ enrichPayoutAgreements: vi.fn(async jobs => jobs) }));
 vi.mock("../jobs/jobService.js", () => ({ getJobById: vi.fn(), getServicePeriodJobs: vi.fn() }));
 vi.mock("../clients/clientService.js", () => ({ getClientSummariesById: vi.fn() }));
 vi.mock("../properties/propertyService.js", () => ({ getPropertySummariesById: vi.fn() }));

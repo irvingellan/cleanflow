@@ -7,12 +7,12 @@ import {
   formatDate,
   formatOperationalStatus,
   formatPrice,
-  hasValue,
 } from "../../lib/presentation.js";
 import { AvailabilityPanel } from "../availability/AvailabilityPanel.jsx";
 import { availabilityMessage } from "../availability/availabilityMessages.js";
 import { managerAvailabilityForCleaner } from "../availability/managerAvailabilityService.js";
 import { localDateKey } from "../cleaner-hub/cleanerAgendaModel.js";
+import { cleanerHistoryPay } from "../jobs/jobCompatibility.js";
 import { getCleanerJobHistory } from "../jobs/jobService.js";
 import {
   cleanerTeamTypeLabel,
@@ -129,6 +129,7 @@ export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataPr
       <CleanerHubAccessPanel cleaner={cleaner} />
 
       <CleanerOperationalHistory
+        cleanerId={cleaner.id}
         history={history}
         hasError={hasHistoryError}
         onOpenJob={onOpenJob}
@@ -137,7 +138,7 @@ export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataPr
   );
 }
 
-function CleanerOperationalHistory({ history, hasError, onOpenJob }) {
+function CleanerOperationalHistory({ cleanerId, history, hasError, onOpenJob }) {
   const { translate } = useTranslation();
 
   return (
@@ -162,7 +163,7 @@ function CleanerOperationalHistory({ history, hasError, onOpenJob }) {
         {history && history.upcomingJobs.length > 0 && (
           <div className="property-history-list">
             {history.upcomingJobs.map((job) => (
-              <CleanerHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
+              <CleanerHistoryJob key={job.id} cleanerId={cleanerId} job={job} onOpen={onOpenJob} />
             ))}
           </div>
         )}
@@ -178,7 +179,7 @@ function CleanerOperationalHistory({ history, hasError, onOpenJob }) {
         {history && history.recentJobs.length > 0 && (
           <div className="property-history-list">
             {history.recentJobs.map((job) => (
-              <CleanerHistoryJob key={job.id} job={job} onOpen={onOpenJob} />
+              <CleanerHistoryJob key={job.id} cleanerId={cleanerId} job={job} onOpen={onOpenJob} />
             ))}
           </div>
         )}
@@ -187,7 +188,8 @@ function CleanerOperationalHistory({ history, hasError, onOpenJob }) {
   );
 }
 
-function CleanerHistoryJob({ job, onOpen }) {
+function CleanerHistoryJob({ job, cleanerId, onOpen }) {
+  const pay = cleanerHistoryPay(job, cleanerId);
   const { language, translate } = useTranslation();
   const scheduledService = [
     formatDate(job.scheduledDate, translate, language),
@@ -205,9 +207,9 @@ function CleanerHistoryJob({ job, onOpen }) {
       <span className="status-badge">
         {formatOperationalStatus(job.operationalStatus, translate)}
       </span>
-      {hasValue(job.cleanerPayout) && (
+      {pay !== null && (
         <span className="property-history-job__payout">
-          {translate("jobs.cleanerPayout")}: {formatPrice(job.cleanerPayout, translate, language)}
+          {translate("jobs.cleanerPayout")}: {formatPrice(pay, translate, language)}
         </span>
       )}
       <button className="button" type="button" onClick={() => onOpen(job)}>

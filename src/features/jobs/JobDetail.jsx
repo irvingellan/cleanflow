@@ -1,3 +1,4 @@
+import { offerPayForRecipient } from "../../../functions/src/offerPay.js";
 import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
 import { JobIntentLayer } from "./JobIntentLayer.jsx";
@@ -680,7 +681,7 @@ export function JobDetail({
 
   function openOfferLinkForm(offer) {
     const offerWithRecentSnapshot = publicOfferLink?.offerId === offer.id
-      ? { ...offer, offeredCompensation: publicOfferLink.offeredCompensation ?? null }
+      ? publicOfferLink
       : offer;
     const suggestion = getOfferCompensationSuggestion(job, offerWithRecentSnapshot);
     setOfferCompensationInput(suggestion.value);
@@ -694,7 +695,7 @@ export function JobDetail({
 
     let offeredCompensation;
     try {
-      offeredCompensation = automaticOfferJob ? null : parseOfferCompensationInput(offerCompensationInput);
+      offeredCompensation = automaticOfferJob || offer.offeredPay ? null : parseOfferCompensationInput(offerCompensationInput);
     } catch {
       setOfferCompensationErrorFor(offer.id);
       return;
@@ -735,7 +736,7 @@ export function JobDetail({
       propertyName: job.propertyName || translate("properties.unnamed"),
       scheduledDate: job.scheduledDate,
       scheduledStart: job.scheduledStart,
-      offeredCompensation: publicOfferLink.offeredCompensation ?? null,
+      ...offerPayForRecipient({ offeredCompensation: null, ...publicOfferLink }, job, offer.cleanerId),
       publicUrl: publicOfferLink.url,
       language: cleanerLanguageFor(offer.cleanerId),
       translate: (key, replacements) => translateInLanguage(
@@ -879,6 +880,7 @@ export function JobDetail({
         />
       )}
       <JobDetailsSection
+        property={property}
         job={job}
         translate={translate}
         language={language}

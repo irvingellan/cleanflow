@@ -26,7 +26,7 @@ async function loginManager(page, fixture) {
   await expect(page.getByRole("heading", { name: "Operations dashboard" })).toBeVisible();
 }
 
-async function createService(page, fixture, { propertyId, propertyName, scheduledDate, scheduledStart }) {
+async function createService(page, fixture, { propertyId, propertyName, scheduledDate, scheduledStart, cleanerCount, houseTotal, clientPrice }) {
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Jobs" }).click();
   await expect(page.getByRole("heading", { name: "Cleaning jobs" })).toBeVisible();
   await page.getByRole("region", { name: "Cleaning jobs" }).getByRole("button", { name: "New service" }).click();
@@ -34,6 +34,9 @@ async function createService(page, fixture, { propertyId, propertyName, schedule
   await form.getByRole("searchbox").fill(propertyName);
   await form.getByRole("combobox", { name: "Property" }).selectOption(propertyId);
   await expect(form.getByRole("spinbutton", { name: "Client price" })).toHaveValue("250");
+  if (cleanerCount) await form.getByLabel("Cleaners needed").selectOption(cleanerCount);
+  if (houseTotal) await form.getByRole("spinbutton", { name: "Cleaner payout" }).fill(houseTotal);
+  if (clientPrice) await form.getByRole("spinbutton", { name: "Client price" }).fill(clientPrice);
   await form.getByRole("textbox", { name: "Date" }).fill(scheduledDate);
   await form.getByRole("textbox", { name: "Scheduled time" }).fill(scheduledStart);
   await form.getByRole("textbox", { name: "Notes" }).fill(`private-note-marker ${fixture.run}`);
@@ -92,7 +95,8 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
   let mapleRef;
   await test.step("1. Manager creates a real Job and assigns Cleaner A with the existing screens", async () => {
     await loginManager(page, fixture);
-    mapleRef = await createService(page, fixture, { propertyId: fixture.mapleId, propertyName: fixture.mapleName, scheduledDate: firstDate, scheduledStart: "10:30" });
+    mapleRef = await createService(page, fixture, { propertyId: fixture.mapleId, propertyName: fixture.mapleName, scheduledDate: firstDate, scheduledStart: "10:30",
+      cleanerCount: "2", houseTotal: "153.75", clientPrice: "287.39" });
     await page.locator(".job-intents__secondary > summary").click();
     await page.locator(".job-intents__actions").getByRole("button", { name: /Assign \/ change cleaner/ }).click();
     await page.getByLabel(fixture.cleanerAName).check();
@@ -117,7 +121,9 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await expect(pageA.locator(".hb-fresh")).toContainText("Atualizada");
     await evidence(pageA, "01-agenda-upcoming");
     const text = await pageA.locator("body").innerText();
-    for (const secret of ["250", "150", "private-", "Synthetic Client", "Bia"]) expect(text).not.toContain(secret);
+    await expect(card).toContainText(/US\$\s*76,88/);
+    expect(text).not.toMatch(/153[.,]75|287[.,]39/);
+    for (const secret of ["private-", "Synthetic Client", "Bia"]) expect(text).not.toContain(secret);
   });
 
   await test.step("4-5. Cleaner B is isolated from Cleaner A", async () => {
@@ -407,6 +413,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await loginManager(page, fixture);
     const job = await createService(page, fixture, {
       propertyId: fixture.mapleId, propertyName: fixture.mapleName, scheduledDate: dateKey(3), scheduledStart: "11:15",
+      houseTotal: "68.24", clientPrice: "379.56",
     });
     await page.locator("details.job-detail-section > summary", { hasText: "Offers" }).click();
     await page.locator(".offers-section").getByRole("button", { name: "Offer cleaning to cleaners" }).click();
@@ -417,6 +424,14 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await page.getByRole("button", { name: "Create offers" }).click();
     await expect(page.locator(".offers-section__success")).toContainText("Automatic offers created (2)");
     expect((await job.get()).data().offerDistributionMode).toBe("FIRST_ACCEPT_WINS");
+    // A later edit of the Job total must never replace the terms already offered.
+    await page.locator("details.job-detail-section > summary", { hasText: "Financial" }).click();
+    const pricing = page.getByRole("region", { name: "Edit prices" });
+    await pricing.getByRole("button", { name: "Edit prices" }).click();
+    await pricing.getByRole("spinbutton", { name: "Cleaner payout" }).fill("153.57");
+    await pricing.getByRole("button", { name: "Save prices" }).click();
+    await expect(pricing.getByText("Job prices updated.")).toBeVisible();
+    expect((await job.get()).get("cleanerPayout")).toBe(153.57);
 
     const otherOffer = page.locator(".offer-status-item").filter({ hasText: fixture.cleanerBName });
     await expect(otherOffer).toContainText("Waiting for acceptance");
@@ -426,6 +441,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await publicPage.goto(await publicLink.getAttribute("href"));
     await expect(publicPage.getByRole("link", { name: /schedule/i })).toHaveAttribute("href", "/agenda");
     await expect(publicPage.getByRole("button", { name: /accept|interested|confirm/i })).toHaveCount(0);
+    await expect(publicPage.locator("body")).not.toContainText(/68[.,]24|153[.,]57|379[.,]56/);
 
     const scenarios = [
       { target: pageA, cleanerId: fixture.cleanerAId, lang: "pt", accept: "Aceitar serviço", interest: "Tenho interesse" },
@@ -447,6 +463,8 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
       }
       await inboxOffer.getByRole("button", { name: lang === "pt" ? "Ver oferta" : "View offer", exact: true }).click();
       await expect(target.getByRole("button", { name: accept })).toBeEnabled();
+      await expect(target.locator(".hb-facts")).toContainText(lang === "pt" ? /68,24/ : /68\.24/);
+      await expect(target.locator("body")).not.toContainText(/153[.,]57|379[.,]56/);
       await expect(target.getByRole("button", { name: interest })).toHaveCount(0);
     }
     await evidence(pageA, "86-01-automatic-offer");
@@ -468,6 +486,7 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await evidence(pageA, "86-02-server-confirmed");
     const unavailable = "Unavailable — this job has already been filled.";
     await expect(pageB.getByText(unavailable)).toBeVisible();
+    await expect(pageB.locator("body")).not.toContainText(/68[.,]24|153[.,]57|379[.,]56/);
     await expect(pageB.getByRole("button", { name: "Accept job" })).toHaveCount(0);
     await expect(pageB.locator("body")).not.toContainText(fixture.cleanerAName);
     await evidence(pageB, "86-03-other-invitee-unavailable");
@@ -476,6 +495,8 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await expect(pageA.getByRole("button", { name: /^Agendadas/ })).toBeVisible();
     await pageA.getByRole("button", { name: /^Agendadas/ }).click();
     await expect(pageA.locator(`[data-job-id="${job.id}"]`)).toContainText("Vaga atribuída a você");
+    await expect(pageA.locator(`[data-job-id="${job.id}"]`)).toContainText(/68,24/);
+    await expect(pageA.locator("body")).not.toContainText(/153[.,]57|379[.,]56/);
     await evidence(pageA, "86-04-confirmed-agenda-after-reload");
     await pageB.goto("/agenda");
     await expect(pageB.getByRole("button", { name: /^Scheduled/ })).toBeVisible();
