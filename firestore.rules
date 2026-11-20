@@ -320,6 +320,12 @@ service cloud.firestore {
           && resource.data.cleanerId == get(memberPath(orgId)).data.cleanerId;
       }
 
+      // Cleaners manage their own blocks through authenticated callables.
+      match /cleanerUnavailability/{blockId} {
+        allow read: if activeManager(orgId)
+          && get(memberPath(orgId)).data.get('organizationId', orgId) == orgId;
+      }
+
       // Server-written link status for the manager's Cleaner detail; never holds codes.
       match /cleanerHubAccess/{cleanerId} {
         allow read: if activeManager(orgId);

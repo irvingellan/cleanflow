@@ -23,6 +23,7 @@ const publicOfferHandlers = () => import("./handlers/publicOffer.js");
 const publicChecklistHandlers = () => import("./handlers/publicChecklist.js");
 const publicReports = () => import("./handlers/publicReports.js");
 const cleanerHub = () => import("./handlers/cleanerHub.js");
+const unavailability = () => import("./handlers/unavailability.js");
 const notificationInbox = () => import("./handlers/notificationInbox.js");
 const cleanerPush = () => import("./handlers/cleanerPush.js");
 const cleanerAgendaTriggers = () => import("./handlers/cleanerAgendaTriggers.js");
@@ -291,6 +292,12 @@ export const respondToMyReschedule = onCall(
   { region: "us-central1" },
   lazyHandler(cleanerHub, "respondToMyReschedule"),
 );
+
+export const listMyUnavailability = onCall({ region: "us-central1" }, lazyHandler(unavailability, "listMyUnavailability"));
+export const setMyUnavailability = onCall({ region: "us-central1" }, lazyHandler(unavailability, "setMyUnavailability"));
+export const removeMyUnavailability = onCall({ region: "us-central1" }, lazyHandler(unavailability, "removeMyUnavailability"));
+export const setCleanerUnavailability = onCall({ region: "us-central1" }, lazyHandler(unavailability, "setCleanerUnavailability"));
+export const removeCleanerUnavailability = onCall({ region: "us-central1" }, lazyHandler(unavailability, "removeCleanerUnavailability"));
 
 export const listNotificationInbox = onCall(
   { region: "us-central1" },

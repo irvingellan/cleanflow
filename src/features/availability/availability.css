@@ -1,0 +1,47 @@
+.av-panel, .av-form, .av-form fieldset { display: grid; gap: 16px; min-width: 0; }
+.av-panel { color: var(--cf-text); }
+.av-panel h2, .av-panel h3, .av-panel p { margin: 0; }
+.av-panel h2 { line-height: 1.2; }
+.av-add { justify-self: start; }
+.av-panel .button { min-height: 44px; }
+.av-form, .av-list, .av-empty, .av-error-box {
+  padding: 16px;
+  border: 1px solid var(--cf-border);
+  border-radius: 14px;
+  background: var(--cf-surface);
+}
+.av-form fieldset { padding: 0; margin: 0; border: 0; }
+.av-form h3 { font-size: 1rem; }
+.av-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.av-fields label { min-width: 0; display: grid; gap: 5px; font-size: .875rem; font-weight: 650; }
+.av-fields input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 8px;
+  color: var(--cf-text);
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-text-secondary);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 1rem;
+}
+.av-partial { display: flex; align-items: center; gap: 9px; min-height: 44px; font-weight: 600; }
+.av-partial input { width: 18px; height: 18px; accent-color: var(--cf-brand); }
+.av-actions, .av-receipt, .av-conflict { display: flex; align-items: center; gap: 8px; }
+.av-actions { flex-wrap: wrap; }
+.av-actions .button { flex: 1 1 auto; }
+.av-panel .av-conflict, .av-panel .av-receipt { padding: 10px 12px; border-radius: 10px; font-size: .9375rem; }
+.av-conflict { align-items: flex-start; background: var(--cf-attention-bg); color: var(--cf-attention-text); }
+.av-conflict svg, .av-receipt svg { flex: none; margin-top: 2px; }
+.av-receipt { color: var(--cf-success-text); background: var(--cf-success-bg); }
+.av-error, .av-error-box { color: var(--cf-risk-text); }
+.av-error-box .button { margin-top: 10px; }
+.av-empty, .av-list li span { color: var(--cf-text-secondary); }
+.av-list { padding: 0 14px; margin: 0; list-style: none; }
+.av-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; }
+.av-list li + li { border-top: 1px solid var(--cf-border); }
+.av-list li > div { display: grid; gap: 3px; min-width: 0; }
+.av-list li strong { line-height: 1.4; }
+.av-list li span { font-size: .875rem; }
+.av-list li .button { flex: none; }

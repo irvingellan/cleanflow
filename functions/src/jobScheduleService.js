@@ -6,24 +6,12 @@ import {
 } from "./firstAcceptWins.js";
 import { currentManualReplacementOffer, isManualReplacementOfferId } from "./managerManualReplacementOfferService.js";
 import { jobScheduleRevision, readScheduleRoster } from "./rescheduleConfirmations.js";
+import { isValidScheduledDate } from "./unavailabilityPeriod.js";
+
+export { isValidScheduledDate };
 
 const reschedulableStatuses = new Set(["UNASSIGNED", "OFFERED", "ASSIGNED"]);
-const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const timePattern = /^(\d{2}):(\d{2})$/;
-
-export function isValidScheduledDate(value) {
-  if (typeof value !== "string") return false;
-  const match = datePattern.exec(value);
-  if (!match) return false;
-  const [, yearText, monthText, dayText] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  if (year < 1 || month < 1 || month > 12) return false;
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return day >= 1 && day <= daysInMonth[month - 1];
-}
 
 export function normalizeRescheduleInput({ jobId, scheduledDate, scheduledStart }) {
   if (typeof jobId !== "string" || !jobId.trim() || jobId.length > 256 || jobId.includes("/")) {

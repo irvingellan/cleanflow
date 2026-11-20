@@ -132,6 +132,37 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     // Direct rule-level denial of A's entries for B is covered in security/cleanerHub.test.mjs.
   });
 
+  await test.step("6. Cleaner adds and removes unavailable dates while the assigned service stays on the schedule", async () => {
+    const openAvailability = async () => {
+      await pageA.getByRole("button", { name: "Conta", exact: true }).click();
+      await pageA.getByRole("button", { name: "Dias em que não posso trabalhar" }).click();
+      await expect(pageA.getByRole("heading", { name: "Dias em que não posso trabalhar" })).toBeVisible();
+    };
+    const blocks = orgRef.collection("cleanerUnavailability").where("cleanerId", "==", fixture.cleanerAId);
+    const warning = "Você tem 1 serviço neste período. Fale com a gerente.";
+    await openAvailability();
+    await pageA.getByRole("button", { name: "Adicionar período" }).click();
+    await pageA.getByLabel("De", { exact: true }).fill(firstDate);
+    await pageA.getByLabel("Até", { exact: true }).fill(dateKey(4));
+    await expect(pageA.getByText(warning)).toBeVisible();
+    await pageA.getByRole("button", { name: "Salvar período" }).click();
+    const remove = pageA.getByRole("button", { name: /^Remover/ });
+    await expect(remove).toBeVisible();
+    await expect(pageA.getByText(warning)).toBeVisible();
+    const saved = (await blocks.get()).docs;
+    expect(saved).toHaveLength(1);
+    expect(saved[0].data()).toMatchObject({ startDate: firstDate, endDate: dateKey(4), createdBy: "CLEANER" });
+    expect((await mapleRef.get()).data().assignedCleanerIds).toEqual([fixture.cleanerAId]);
+    await pageA.getByRole("button", { name: "Agenda", exact: true }).click();
+    await openAvailability();
+    await remove.click();
+    await expect(pageA.getByText("Nenhum período adicionado.")).toBeVisible();
+    expect((await blocks.get()).empty).toBe(true);
+    await pageA.getByRole("button", { name: "Agenda", exact: true }).click();
+    await pageA.getByRole("button", { name: /^Agendadas/ }).click();
+    await expect(pageA.locator(`[data-job-id="${mapleRef.id}"]`)).toContainText(fixture.mapleName);
+  });
+
   await test.step("7. Manager reschedules; Cleaner A's open screen updates without reload", async () => {
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Jobs" }).click();
     await page.getByRole("button", { name: new RegExp(fixture.mapleName) }).first().click();

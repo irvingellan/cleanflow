@@ -22,6 +22,8 @@ import {
   normalizeJobAccess,
 } from "./cleanerAgendaModel.js";
 import { detectHubLanguage, hubLanguages, hubMoney, hubTranslate } from "./cleanerHubMessages.js";
+import { AvailabilityPanel } from "../availability/AvailabilityPanel.jsx";
+import { availabilityMessage } from "../availability/availabilityMessages.js";
 import { RescheduleResponse } from "./RescheduleResponse.jsx";
 import { useCleanerHub } from "./useCleanerHub.js";
 import "./cleanerHub.css";
@@ -674,9 +676,10 @@ function Account({ t, name, setLang, appearance, go, onSignOut, signingOut, push
   return (
     <div className="hb-screen">
       <header className="hb-profile"><span className="mw-avatar is-large">{(name || "CF").slice(0, 2).toUpperCase()}</span><div><h2>{name || t("hb.helloNoName")}</h2><p className="mw-sec">{t("hb.acc.role")}</p></div></header>
-      {!installed && <ul className="hb-menu">
-        <li><button type="button" onClick={() => go({ type: "install" })}><HubIcon name="phone" size={18} /><span className="mw-grow">{t("hb.acc.install")}</span><HubIcon name="arrowR" size={16} /></button></li>
-      </ul>}
+      <ul className="hb-menu">
+        <li><button type="button" onClick={() => go({ type: "availability" })}><HubIcon name="calendar" size={18} /><span className="mw-grow">{availabilityMessage(t.lang, "title")}</span><HubIcon name="arrowR" size={16} /></button></li>
+        {!installed && <li><button type="button" onClick={() => go({ type: "install" })}><HubIcon name="phone" size={18} /><span className="mw-grow">{t("hb.acc.install")}</span><HubIcon name="arrowR" size={16} /></button></li>}
+      </ul>
       <CleanerPushSettings t={t} push={push} go={go} />
       <div className="mw-setgroup">
         <h4>{t("hb.acc.language")}</h4>
@@ -951,6 +954,7 @@ export function CleanerHubApp({ hubOptions, initialCode = "" }) {
   } else if (view.type === "job" || view.type === "offer") {
     body = <AgendaDetail key={`${sessionScope}:${view.jobId}`} t={t} hub={hub} view={view} today={today} />;
   } else if (notificationInboxEnabled() && view.type === "inbox") body = <div className="hb-screen"><NotificationInbox inbox={inbox} language={t.lang} onOpen={openInboxTarget} /></div>;
+  else if (view.type === "availability") body = <div className="hb-screen"><AvailabilityPanel key={sessionScope} language={t.lang} today={today} service={hub.availabilityService} entries={hub.entries} /></div>;
   else if (view.type === "install") body = <div className="hb-screen"><InstallGuide t={t} platform={platform} displayMode={displayMode} installPrompt={installPrompt} onSkip={() => go({ type: "tab" })} /></div>;
   else if (view.tab === "offers") body = <Offers t={t} hub={hub} go={go} />;
   else if (view.tab === "account") body = <Account t={t} name={name} setLang={setLang} appearance={appearance} go={go} onSignOut={signOut} signingOut={signingOut} push={push} installed={displayMode === "standalone"} />;

@@ -159,6 +159,18 @@ export async function respondToMyOffer(jobId, status, current = {}) {
   return data;
 }
 
+async function callAvailability(name, fields) {
+  const { functions } = cleanerHubFirebase();
+  const { data } = await httpsCallable(functions, name, { timeout: 15_000 })(fields);
+  return data;
+}
+
+export const availability = {
+  list: () => callAvailability("listMyUnavailability", {}),
+  set: period => callAvailability("setMyUnavailability", period),
+  remove: fields => callAvailability("removeMyUnavailability", fields),
+};
+
 /** Signs out and wipes this device's cached agenda before the page reloads. */
 export async function signOutCleaner(session) {
   const { auth, db } = cleanerHubFirebase();
