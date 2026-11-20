@@ -14,6 +14,10 @@ import { managerDecisionOf } from "../jobs/offerSlots.js";
 const organizationId = "cleanflow-demo";
 const activeOperationalStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
 const maxConcurrentDashboardReads = 4;
+// The dashboard shows the 5 most recent completed services. Read a small
+// buffer, not the whole history: some recent ones may be hidden (archived or
+// on an inactive property) and are filtered out after the read.
+export const recentlyCompletedReadLimit = 25;
 
 export function createDashboardRead(isActive) {
   const pending = new Set();
@@ -77,6 +81,7 @@ export function getDashboardCore({ today, endDate, weekStartDate, weekEndDate, w
         jobs,
         where("operationalStatus", "==", "COMPLETED"),
         orderBy("completedAt", "desc"),
+        limit(recentlyCompletedReadLimit),
       ),
     ),
     read(

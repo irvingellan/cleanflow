@@ -12,7 +12,7 @@ const services = vi.hoisted(() => ({
 vi.mock("firebase/firestore", () => ({ getDocs: services.getDocs }));
 vi.mock("firebase/firestore/lite", () => ({
   setLogLevel: vi.fn(),
-  collection: vi.fn(), orderBy: vi.fn(), query: vi.fn(), where: vi.fn(),
+  collection: vi.fn(), orderBy: vi.fn(), query: vi.fn(), where: vi.fn(), limit: vi.fn((count) => ({ limit: count })),
   getFirestore: vi.fn(), getDocs: services.readServer,
   Timestamp: { fromDate: vi.fn((date) => date) },
 }));
@@ -161,6 +161,16 @@ describe("Dashboard cleaner names across Job schemas", () => {
     expect(services.getCleanerNamesById).toHaveBeenCalledTimes(1);
     expect(services.getCleanerNamesById).toHaveBeenCalledWith(expect.arrayContaining(["cleaner-a"]), expect.any(Function));
     expect(services.readServer).toHaveBeenCalledTimes(7);
+  });
+
+  it("reads only a bounded buffer of completed services, never the whole history", async () => {
+    const { limit } = await import("firebase/firestore/lite");
+    const { recentlyCompletedReadLimit } = await import("./dashboardReads.js");
+    limit.mockClear();
+    await loadDashboard({ upcoming: [], names: {} });
+    expect(recentlyCompletedReadLimit).toBe(25);
+    expect(limit).toHaveBeenCalledTimes(1);
+    expect(limit).toHaveBeenCalledWith(25);
   });
 
   it("renders current multi-cleaner roster names once each using existing presentation", async () => {
