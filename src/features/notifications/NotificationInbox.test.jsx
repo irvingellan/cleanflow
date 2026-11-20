@@ -31,6 +31,7 @@ describe("Notification Inbox", () => {
     expect(notice).toHaveTextContent("Synthetic Studio");
     expect(notice).toHaveTextContent(/15.*(?:02|fev)/i);
     expect(notice).toHaveTextContent("14:45");
+    expect(within(notice).getByText(/^Data do serviço: .*15.*14:45/)).toBeVisible();
     expect(notice).not.toHaveTextContent("Este item não está mais disponível.");
     expect(within(notice).queryByRole("button", { name: "Abrir" })).not.toBeInTheDocument();
   });

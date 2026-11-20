@@ -838,6 +838,19 @@ button.summary-card:hover {
   white-space: nowrap;
 }
 
+.cf-notice__when {
+  margin: 2px 0 0;
+  color: var(--cf-text-primary, inherit);
+  font-size: var(--cf-text-sm);
+  font-weight: 650;
+}
+
+.cf-notice__service--full {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .cf-notice__unavailable {
   margin: 4px 0 0;
   color: var(--cf-text-muted);

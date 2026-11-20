@@ -41,6 +41,8 @@ import {
 
 const jobWorklistLimit = 100;
 const upcomingSummaryLimit = 3;
+// A cleaner rarely has more than a few weeks booked; the manager sees them all.
+const cleanerUpcomingLimit = 30;
 const activeOperationalStatuses = [
   "UNASSIGNED",
   "OFFERED",
@@ -395,7 +397,7 @@ export async function getCleanerJobHistory(cleanerId) {
         serverWhere("operationalStatus", "in", ["ASSIGNED", "IN_PROGRESS"]),
         serverWhere("scheduledDate", ">=", today),
         serverOrderBy("scheduledDate", "asc"),
-        serverLimit(5),
+        serverLimit(cleanerUpcomingLimit + 1),
       ),
     ),
     getServerDocs(
@@ -418,17 +420,19 @@ export async function getCleanerJobHistory(cleanerId) {
     ),
   ])));
 
-  // Keep the existing bounded summary after merging the additive legacy/roster
-  // queries. Firestore orders equal scheduled dates by document ID.
+  // The manager's list mirrors the cleaner's Hub agenda: every upcoming
+  // assigned service, never a cancelled (archived) one. Firestore orders equal
+  // scheduled dates by document ID.
   const upcomingJobs = uniqueJobs(
     [snapshots[0], snapshots[3]].flatMap((snapshot) => snapshot.docs.map(jobFromSnapshot)),
-  ).sort((firstJob, secondJob) =>
+  ).filter((job) => !job.archivedAt).sort((firstJob, secondJob) =>
     firstJob.scheduledDate.localeCompare(secondJob.scheduledDate)
       || (firstJob.id < secondJob.id ? -1 : firstJob.id > secondJob.id ? 1 : 0),
-  ).slice(0, 5);
+  );
 
   return {
-    upcomingJobs,
+    upcomingJobs: upcomingJobs.slice(0, cleanerUpcomingLimit),
+    hasMoreUpcoming: upcomingJobs.length > cleanerUpcomingLimit,
     recentJobs: recentJobsFromSnapshots([
       snapshots[1],
       snapshots[2],

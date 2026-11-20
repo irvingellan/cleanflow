@@ -145,6 +145,7 @@ function CleanerOperationalHistory({ cleanerId, history, hasError, onOpenJob }) 
     <div className="property-history">
       <section className="property-history-section" aria-labelledby="cleaner-upcoming-services-title">
         <h3 id="cleaner-upcoming-services-title">{translate("cleaners.upcomingServices")}</h3>
+        <p className="property-history-state">{translate("cleaners.upcomingMirrorsHub")}</p>
 
         {!history && !hasError && (
           <p className="property-history-state">{translate("cleaners.historyLoading")}</p>
