@@ -361,7 +361,7 @@ test("expired codes and codes for deactivated cleaners never link", async () => 
 });
 
 test("assignment through the real manager callable appears only in that cleaner's agenda, without private fields", async () => {
-  await createJob("job-a");
+  await createJob("job-a", { requiredCleanerCount: 2, cleanerPayout: 153.75 });
   await createJob("job-b", { propertyName: "Birch Example Flat", scheduledStart: "14:00" });
   await link("cleaner-a");
   await link("cleaner-b");
@@ -379,12 +379,14 @@ test("assignment through the real manager callable appears only in that cleaner'
     { jobId: "job-a", propertyName: "Maple Example House", scheduledDate: dateKey(3), scheduledStart: "10:30", jobStatus: "ASSIGNED" },
   );
   const serialized = JSON.stringify(mine.docs.map((doc) => doc.data()));
-  for (const secret of ["clientPrice", "cleanerPayout", "private-", "Synthetic Client", "Bia", "cleaner-b", "Birch"]) {
+  for (const secret of ["clientPrice", "cleanerPayout", "fixedHousePay", "totalCents", "153.75", "private-", "Synthetic Client", "Bia", "cleaner-b", "Birch"]) {
     assert.ok(!serialized.includes(secret), `agenda must not expose ${secret}`);
   }
 
   assert.equal(entries[0].notes, "synthetic-job-instructions");
-  assert.equal(entries[0].offeredCompensation, null);
+  assert.equal(entries[0].offeredCompensation, 76.88);
+  assert.equal(entries[0].offeredPayEstimated, true);
+  assert.equal(entries[0].offeredFirstSlotExtraCents, undefined);
 
   // Cleaner B cannot list or read A's entries; neither can query without the filter.
   const dbB = cleanerDb(uidB);
@@ -1247,8 +1249,10 @@ test("a partial versioned batch keeps active invitations private and allows only
   await sync(job.id);
   const [pending] = await agendaFor("cleaner-b");
   assert.deepEqual([pending.kind, pending.offerStatus, pending.jobStatus, pending.offeredCompensation], ["OFFER", "PENDING", "OFFERED", 75]);
-  const [first] = await agendaFor("cleaner-a");
+  const first = (await agendaFor("cleaner-a")).find(entry => entry.jobId === job.id && entry.kind === "ASSIGNED");
+  assert.ok(first, "the first accepted cleaner has a personal assignment");
   assert.equal(first.offeredCompensation, 75.01);
+  assert.equal(first.fixedHousePay, undefined);
   assert.equal(pending.offeredFirstSlotExtraCents, undefined);
   assert.equal(pending.offeredPayEstimated, true);
   assert.equal(pending.fixedHousePay, undefined);

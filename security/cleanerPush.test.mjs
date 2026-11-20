@@ -264,7 +264,8 @@ test("an extended automatic invitation keeps frozen personal and house terms out
   const sent = [];
   const result = await dispatch(cleanerB, event.id, async messages => {
     sent.push(...messages);
-    return { responses: messages.map(() => ({ success: true })), successCount: messages.length, failureCount: 0 };
+    return { responses: messages.map(() => ({ success: true, messageId: "synthetic-extension-accepted" })),
+      successCount: messages.length, failureCount: 0 };
   });
   assert.equal(result.deliveryStatus, "FCM_ACCEPTED");
   assert.equal(sent.length, 1);
