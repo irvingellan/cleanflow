@@ -452,3 +452,21 @@ registration belongs to one active session and installation. Its token and
 binding are server-only. Provider attempts have a distinct receipt and an
 unknown state when acceptance cannot be established. See the
 [notification model](NOTIFICATIONS_V1_85.md).
+
+
+## Cleaner unavailability
+
+An organization stores each block in `cleanerUnavailability/{blockId}`. The
+document contains only `organizationId`, `cleanerId`, `startDate`, `endDate`,
+`createdBy` (`CLEANER` or `MANAGER`) and `createdAt`. A timed block also has
+`startTime` and `endTime`. Dates are local calendar days, both inclusive.
+Times use 24-hour local time and are available for single-day blocks.
+
+The authenticated cleaner can list and maintain her own current and future
+blocks. Active organization managers can read them and use the manager
+callables to maintain them on a cleaner’s behalf. The server serializes
+changes for a cleaner using `cleanerUnavailabilityState/{cleanerId}`. This
+internal document records the last change time and is inaccessible from browsers.
+Identical periods share a block. Limits are 366 calendar days per block
+and 30 current or future blocks per cleaner. Existing assignments and offers
+are independent of these records.

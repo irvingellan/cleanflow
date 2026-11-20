@@ -31,6 +31,11 @@ const {
   issueChecklistCapability,
   issueCleanerAccessCode,
   listNotificationInbox,
+  listMyUnavailability,
+  setMyUnavailability,
+  removeMyUnavailability,
+  setCleanerUnavailability,
+  removeCleanerUnavailability,
   openMyChecklist,
   redeemCleanerAccessCode,
   removeAutomaticCleanerAssignment,
@@ -180,6 +185,114 @@ beforeEach(async () => {
     operationalStatus: "ASSIGNED", assignedCleanerIds: ["cleaner-a"],
   });
   await batch.commit();
+});
+
+test("cleaners and managers maintain availability blocks without changing assigned Jobs", async () => {
+  await link("cleaner-a");
+  await link("cleaner-b");
+  const jobId = "blocked-date-job";
+  await createJob(jobId);
+  await assignCleanerDirectly.run(managerRequest({ jobId, cleanerId: "cleaner-a" }));
+  const job = admin.doc(`${root}/jobs/${jobId}`);
+  const before = (await job.get()).data();
+  const blocks = admin.collection(`${root}/cleanerUnavailability`);
+  const days = { startDate: dateKey(3), endDate: dateKey(5) };
+  const timed = { startDate: dateKey(6), endDate: dateKey(6), startTime: "08:30", endTime: "11:15" };
+  const { block: own } = await setMyUnavailability.run(cleanerRequest(uidA, days));
+  assert.deepEqual(own, { ...days, id: own.id, createdBy: "CLEANER" });
+  assert.match(own.id, /^[a-f0-9]{64}$/);
+  const stored = (await blocks.doc(own.id).get()).data();
+  assert.deepEqual(Object.keys(stored).sort(), ["cleanerId", "createdAt", "createdBy", "endDate", "organizationId", "startDate"]);
+  assert.deepEqual([stored.cleanerId, stored.organizationId, stored.createdBy], ["cleaner-a", org, "CLEANER"]);
+  assert.ok(stored.createdAt.toMillis() > 0);
+  assert.deepEqual(await setCleanerUnavailability.run(managerRequest({ ...days, cleanerId: "cleaner-a" })), { block: own });
+  const { block: managed } = await setCleanerUnavailability.run(managerRequest({ ...timed, cleanerId: "cleaner-a" }));
+  assert.deepEqual(managed, { ...timed, id: managed.id, createdBy: "MANAGER" });
+  const storedTimed = (await blocks.doc(managed.id).get()).data();
+  assert.deepEqual(Object.keys(storedTimed).sort(), ["cleanerId", "createdAt", "createdBy", "endDate", "endTime", "organizationId", "startDate", "startTime"]);
+  const listed = await listMyUnavailability.run(cleanerRequest(uidA, {}));
+  assert.deepEqual(listed.blocks, [own, managed]);
+  assert.deepEqual(await listMyUnavailability.run(cleanerRequest(uidB, {})), { blocks: [] });
+  await assertFails(cleanerDb(uidA).doc(blocks.doc(own.id).path).get());
+  await assertFails(cleanerDb(uidB).doc(blocks.doc(own.id).path).get());
+  assert.deepEqual(await removeMyUnavailability.run(cleanerRequest(uidB, { blockId: own.id })), { removed: false });
+  assert.deepEqual(await removeCleanerUnavailability.run(managerRequest({ cleanerId: "cleaner-b", blockId: own.id })), { removed: false });
+  assert.deepEqual((await blocks.doc(own.id).get()).data(), stored);
+  assert.deepEqual(await removeCleanerUnavailability.run(managerRequest({ cleanerId: "cleaner-a", blockId: own.id })), { removed: true });
+  assert.deepEqual(await removeMyUnavailability.run(cleanerRequest(uidA, { blockId: managed.id })), { removed: true });
+  assert.deepEqual(await listMyUnavailability.run(cleanerRequest(uidA, {})), { blocks: [] });
+  assert.deepEqual((await job.get()).data(), before);
+  assert.equal((await job.collection("assignments").where("isActive", "==", true).get()).size, 1);
+});
+
+test("availability calls enforce organization, session and exact input fields", async () => {
+  await link("cleaner-a");
+  const days = { startDate: dateKey(2), endDate: dateKey(2) };
+  const forManager = { ...days, cleanerId: "cleaner-a" };
+  const foreignManager = { ...managerRequest(forManager), auth: { uid: "other-manager", token: managerRequest().auth.token } };
+  await assert.rejects(setCleanerUnavailability.run(foreignManager), { code: "permission-denied" });
+  await admin.doc("organizations/other-org/cleaners/foreign-only").set({ organizationId: "other-org", active: true });
+  await assert.rejects(setCleanerUnavailability.run(managerRequest({ ...days, cleanerId: "foreign-only" })), { code: "permission-denied" });
+  await assert.rejects(setCleanerUnavailability.run(cleanerRequest(uidA, forManager)), { code: "permission-denied" });
+  await assert.rejects(setMyUnavailability.run(cleanerRequest(uidA, days, { ...hubClaimsByUid.get(uidA), organizationId: "other-org" })),
+    { code: "permission-denied" });
+  await assert.rejects(listMyUnavailability.run({ data: {} }), { code: "unauthenticated" });
+  for (const target of [listMyUnavailability, setMyUnavailability]) {
+    await assert.rejects(target.run(cleanerRequest(uidA, { ...(target === setMyUnavailability ? days : {}), cleanerId: "cleaner-b" })),
+      { code: "invalid-argument" });
+  }
+  await assert.rejects(setMyUnavailability.run(cleanerRequest(uidA, { ...days, reason: "synthetic" })), { code: "invalid-argument" });
+  await assert.rejects(setCleanerUnavailability.run(managerRequest({ ...forManager, note: "synthetic" })), { code: "invalid-argument" });
+  for (const invalid of [
+    { startDate: "2101-02-29", endDate: "2101-03-01" },
+    { startDate: dateKey(2), endDate: dateKey(1) },
+    { startDate: dateKey(-3), endDate: dateKey(-1) },
+    { startDate: dateKey(1), endDate: dateKey(367) },
+    { startDate: dateKey(2), endDate: dateKey(3), startTime: "08:00", endTime: "09:00" },
+    { ...days, startTime: "08:00" }, { ...days, startTime: "12:00", endTime: "09:00" },
+  ]) {
+    await assert.rejects(setMyUnavailability.run(cleanerRequest(uidA, invalid)), { code: "invalid-argument" });
+  }
+  assert.deepEqual(await listMyUnavailability.run(cleanerRequest(uidA, {})), { blocks: [] });
+  const { block } = await setMyUnavailability.run(cleanerRequest(uidA, days));
+  const remove = { blockId: block.id };
+  await assert.rejects(removeMyUnavailability.run(cleanerRequest(uidA, { ...remove, cleanerId: "cleaner-b" })), { code: "invalid-argument" });
+  await assert.rejects(removeCleanerUnavailability.run(managerRequest({ ...remove, cleanerId: "cleaner-a", reason: "synthetic" })),
+    { code: "invalid-argument" });
+  await assert.rejects(removeMyUnavailability.run(cleanerRequest(uidA, { ...remove, reason: "synthetic" })), { code: "invalid-argument" });
+  await assert.rejects(removeCleanerUnavailability.run({ ...foreignManager, data: { ...remove, cleanerId: "cleaner-a" } }),
+    { code: "permission-denied" });
+  await revokeCleanerHubAccess.run(managerRequest({ cleanerId: "cleaner-a" }));
+  for (const [action, payload] of [[listMyUnavailability, {}], [setMyUnavailability, days], [removeMyUnavailability, remove]]) {
+    await assert.rejects(action.run(cleanerRequest(uidA, payload)), { code: "permission-denied" });
+  }
+  assert.equal((await admin.doc(`${root}/cleanerUnavailability/${block.id}`).get()).exists, true);
+});
+
+test("concurrent cleaner and manager writes cannot exceed the thirty-block limit", async () => {
+  await link("cleaner-a");
+  const period = day => ({ startDate: dateKey(day), endDate: dateKey(day) });
+  const add = day => setMyUnavailability.run(cleanerRequest(uidA, period(day)));
+  await admin.doc(`${root}/cleanerUnavailability/expired`).set({
+    organizationId: org, cleanerId: "cleaner-a", ...period(-2), createdBy: "CLEANER", createdAt: Timestamp.now(),
+  });
+  await admin.doc(`${root}/cleanerUnavailability/mismatched-organization`).set({
+    organizationId: "other-org", cleanerId: "cleaner-a", ...period(1), createdBy: "MANAGER", createdAt: Timestamp.now(),
+  });
+  for (let day = 1; day <= 29; day += 1) await add(day);
+  const results = await Promise.allSettled([
+    add(30), setCleanerUnavailability.run(managerRequest({ cleanerId: "cleaner-a", ...period(31) })),
+  ]);
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+  assert.deepEqual(results.filter(result => result.status === "rejected").map(result => result.reason.code), ["resource-exhausted"]);
+  const { blocks } = await listMyUnavailability.run(cleanerRequest(uidA, {}));
+  assert.equal(blocks.length, 30);
+  assert.ok(!blocks.some(block => ["expired", "mismatched-organization"].includes(block.id)));
+  const first = blocks.find(block => block.startDate === dateKey(1));
+  assert.deepEqual(await add(1), { block: first });
+  await removeMyUnavailability.run(cleanerRequest(uidA, { blockId: first.id }));
+  await add(32);
+  assert.equal((await listMyUnavailability.run(cleanerRequest(uidA, {}))).blocks.length, 30);
 });
 
 test("manager-issued code links one CLEANER account once; code is hashed and single-use", async () => {

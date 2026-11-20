@@ -352,6 +352,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "listMyUnavailability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "listNotificationInbox",
     {
       "callableTrigger": {},
@@ -599,6 +611,30 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "removeCleanerUnavailability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "removeMyUnavailability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "reportManagerNotificationHealth",
     {
       "callableTrigger": {},
@@ -742,6 +778,30 @@ exports[`Functions export surface > keeps the name, trigger and options of every
         "schedule": "0 19 * * *",
         "timeZone": "America/Los_Angeles",
       },
+    },
+  ],
+  [
+    "setCleanerUnavailability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "setMyUnavailability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
     },
   ],
   [

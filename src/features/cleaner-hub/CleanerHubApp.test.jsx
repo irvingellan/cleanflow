@@ -584,6 +584,34 @@ describe("CleanerHubApp (live data boundary)", () => {
   });
 });
 
+describe("availability in the cleaner account", () => {
+  it("loads on opening, discards the last cleaner's in-flight save and keeps the new session's agenda intact", async () => {
+    const { service, handlers } = fakeService();
+    let finish;
+    service.availability = {
+      list: vi.fn().mockResolvedValue({ blocks: [] }),
+      set: vi.fn(() => new Promise(resolve => { finish = resolve; })),
+    };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries, fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: "Conta" }));
+    expect(service.availability.list).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Dias em que não posso trabalhar" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Adicionar período" }));
+    fireEvent.change(screen.getByLabelText("De", { exact: true }), { target: { value: tomorrow } });
+    await userEvent.click(screen.getByRole("button", { name: "Salvar período" }));
+    expect(service.availability.set).toHaveBeenCalledExactlyOnceWith({ startDate: tomorrow, endDate: tomorrow });
+    act(() => handlers.session({ status: "signed-in", uid: "u1", organizationId: "other-org", cleanerId: "other-cleaner", sessionId: "session-b" }));
+    act(() => handlers.agenda({ entries: [entries[0]], fromCache: false }));
+    await act(() => finish({ block: { id: "prior", createdBy: "CLEANER", startDate: tomorrow, endDate: tomorrow } }));
+    expect(await screen.findByText("Nenhum período adicionado.")).toBeVisible();
+    expect(screen.queryByText("Período adicionado.")).toBeNull();
+    expect(service.availability.list).toHaveBeenCalledTimes(2);
+    await userEvent.click(screen.getByRole("button", { name: "Agenda", exact: true }));
+    expect(document.querySelector('[data-job-id="j1"]')).toBeInTheDocument();
+  });
+});
+
 describe("cleaner schedule decisions", () => {
   const pending = {
     ...entries[0], scheduleRevision: 4,

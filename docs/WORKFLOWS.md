@@ -318,6 +318,14 @@ is received.
 PDF generation, email/WhatsApp delivery, bank-transfer reconciliation, and
 payment processing are not currently implemented.
 
+## Recording unavailable days
+
+An active cleaner can add or remove a period from Account in My Schedule.
+The form accepts inclusive dates and an optional time range on one day. The
+Hub warns about assigned or in-progress work in that period. Jobs with an
+unknown start time may overlap a partial-day block. Recording a block leaves
+the Job, its roster, its offers and its notifications unchanged.
+
 ## Rescheduling workflow
 
 **CURRENT deployed pilot flow:**

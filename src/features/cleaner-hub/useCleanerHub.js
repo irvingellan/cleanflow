@@ -371,6 +371,7 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     answerReschedule: reschedules.answer,
     scheduleFeedback: reschedules.feedback,
     scheduleResponses: reschedules,
+    availabilityService: service.availability,
     // Release A does not authorize private Property fields or an access window.
     // Keep the prepared UI disconnected until that server contract is approved.
     loadJobAccess: service.getMyJobAccess || null,

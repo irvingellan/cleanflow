@@ -118,6 +118,33 @@ beforeEach(async () => {
   });
 });
 
+test("only active same-organization managers read availability and every browser is read-only", async () => {
+  const collection = `${root}/cleanerUnavailability`;
+  const path = `${collection}/synthetic-block`;
+  const data = { organizationId: org, cleanerId: "cleaner", startDate: "2099-12-10", endDate: "2099-12-11",
+    createdBy: "CLEANER", createdAt: Timestamp.now() };
+  await admin.doc(path).set(data);
+  const manager = account("manager").firestore();
+  await assertSucceeds(manager.doc(path).get());
+  const listed = await assertSucceeds(manager.collection(collection).where("endDate", ">=", "2099-12-10").get());
+  assert.equal(listed.size, 1);
+  const others = [account("other-manager"), account("inactive"), account("cleaner"), environment.unauthenticatedContext()];
+  for (const actor of others) {
+    const db = actor.firestore();
+    await assertFails(db.doc(path).get());
+    await assertFails(db.collection(collection).get());
+  }
+  for (const db of [manager, account("other-manager").firestore(), account("cleaner").firestore()]) {
+    await assertFails(db.doc(`${collection}/new`).set({ organizationId: org, cleanerId: "cleaner" }));
+    await assertFails(db.doc(path).update({ startDate: "2099-12-09" }));
+    await assertFails(db.doc(path).delete());
+  }
+  const internalPath = `${root}/cleanerUnavailabilityState/cleaner`;
+  await assertFails(manager.doc(internalPath).get());
+  await assertFails(manager.doc(internalPath).set({ count: 0 }));
+  assert.deepEqual((await admin.doc(path).get()).data(), data);
+});
+
 test("active manager can read/query/create/update only supported operational documents", async () => {
   const db = account("manager").firestore();
   for (const path of paths) {
