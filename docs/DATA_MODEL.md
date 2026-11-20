@@ -237,6 +237,14 @@ team-size entry uses the base. A missing side means its price needs review.
 Empty service rows are omitted. Only a missing `STANDARD` row falls back to
 `defaultClientPrice` and `defaultCleanerPrice`, which remain dollar amounts.
 
+A fixed cleaner base rate and the legacy dollar fields `defaultCleanerPrice`
+and `cleanerPayout` represent the total for the house. Divide that total in
+whole cents across the team and give the entire remainder to its first slot.
+A matching fixed `byCleanerCount` rate is already per cleaner. A Job may
+freeze that rate in `pay: { mode: "FIXED", perCleanerCents }`. This marker
+takes precedence over the legacy total. Hourly rates apply to each person's
+work. The client charge is independent of the size and order of the team.
+
 Property rates supply defaults when selecting a service. A stored Job owns
 its recorded price, even if it is missing. Later changes to Property rates
 never fill in or recalculate recorded Jobs, Offers or Payouts. A known hourly

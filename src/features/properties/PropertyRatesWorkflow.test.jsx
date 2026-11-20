@@ -22,6 +22,7 @@ const save = () => fireEvent.click(screen.getByRole("button", { name: "Save prop
 describe("Property service rate workflows", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.setItem("cleanflow-language", "en");
     getActiveClients.mockResolvedValue([client]);
     getPropertyJobHistory.mockResolvedValue({ upcomingJobs: [], recentJobs: [] });
   });
@@ -34,13 +35,13 @@ describe("Property service rate workflows", () => {
     const clientInputs = within(screen.getByRole("group", { name: "Client price" }));
     const cleanerInputs = within(screen.getByRole("group", { name: "Cleaner pay" }));
     change(clientInputs.getByLabelText("Pricing"), "HOURLY");
-    change(clientInputs.getByLabelText("Amount (USD)"), "45.101");
+    change(clientInputs.getByLabelText("Hourly client rate (USD)"), "45.101");
     save();
     expect(await screen.findByRole("alert")).toHaveTextContent("Deep cleaning");
     expect(onSaved).not.toHaveBeenCalled();
-    change(clientInputs.getByLabelText("Amount (USD)"), "45.10");
-    change(cleanerInputs.getByLabelText("Amount (USD)"), "39");
-    fireEvent.click(cleanerInputs.getByText("Pay by team size"));
+    change(clientInputs.getByLabelText("Hourly client rate (USD)"), "45.10");
+    change(cleanerInputs.getByLabelText("Total cleaner pay for the house, split across the team (USD)"), "39");
+    fireEvent.click(cleanerInputs.getByText("Override pay by team size"));
     change(cleanerInputs.getByLabelText("Amount per cleaner (USD)"), "26");
     save();
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({
@@ -55,15 +56,40 @@ describe("Property service rate workflows", () => {
     edit();
     const clientInputs = within(screen.getByRole("group", { name: "Client price" }));
     const cleanerInputs = within(screen.getByRole("group", { name: "Cleaner pay" }));
-    change(clientInputs.getByLabelText("Amount (USD)"), "");
-    change(cleanerInputs.getByLabelText("Amount (USD)"), "");
-    fireEvent.click(cleanerInputs.getByText("Pay by team size"));
+    change(clientInputs.getByLabelText("Hourly client rate (USD)"), "");
+    change(cleanerInputs.getByLabelText("Total cleaner pay for the house, split across the team (USD)"), "");
+    fireEvent.click(cleanerInputs.getByText("Override pay by team size"));
     change(cleanerInputs.getByLabelText("Amount per cleaner (USD)"), "");
     save();
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({
       serviceRates: { STANDARD: other }, changedRateTypes: ["DEEP_CLEANING"],
     })));
   });
+
+  it.each([
+    ["en", "Edit prices · Deep cleaning", "Cleaner pay", "Total cleaner pay for the house, split across the team (USD)", "Pricing",
+      "Hourly rate per cleaner (USD)", "Override pay by team size", "Amount per cleaner (USD)", "Hourly rate per cleaner for this team size (USD)", /for the house/, /per hour per cleaner/],
+    ["pt", "Editar preços · Limpeza pesada", "Repasse às profissionais", "Repasse total da casa, dividido entre as profissionais (USD)", "Cobrança",
+      "Valor por hora de cada profissional (USD)", "Definir repasse específico por tamanho da equipe", "Valor por profissional (USD)", "Valor por hora de cada profissional nesta equipe (USD)", /pela casa/, /por hora por profissional/],
+    ["es", "Editar precios · Limpieza profunda", "Pago a las profesionales", "Pago total de la casa, repartido entre las profesionales (USD)", "Modalidad",
+      "Tarifa por hora de cada profesional (USD)", "Definir un pago específico por tamaño del equipo", "Importe por profesional (USD)", "Tarifa por hora de cada profesional de este equipo (USD)", /por la casa/, /por hora por profesional/],
+  ])("distinguishes the house total, each team member's override and individual hourly pay in %s",
+    async (language, open, legend, house, mode, hourly, team, person, teamHour, houseSummary, hourSummary) => {
+      window.localStorage.setItem("cleanflow-language", language);
+      show(<PropertyEditForm property={{ ...property, serviceRates: { DEEP_CLEANING: configured } }} onSaved={vi.fn()} />);
+      const table = within(screen.getByRole("table"));
+      expect(table.getByText(houseSummary)).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: open }));
+      const cleaner = within(screen.getByRole("group", { name: legend }));
+      expect(cleaner.getByLabelText(house)).toHaveValue("39");
+      fireEvent.click(cleaner.getByText(team));
+      expect(cleaner.getByLabelText(person)).toHaveValue("26");
+      change(cleaner.getByLabelText(mode), "HOURLY");
+      expect(cleaner.getByLabelText(hourly)).toHaveValue("39");
+      expect(cleaner.getByLabelText(teamHour)).toHaveValue("26");
+      expect(table.getByText(hourSummary)).toBeVisible();
+    },
+  );
 
   it("retains an empty rate table during client loading and on a client read error", async () => {
     let rejectClients;
@@ -83,6 +109,7 @@ describe("Property service rate workflows", () => {
     const table = within(screen.getByRole("table", { name: "Prices by service type" }));
     expect(table.getByText("$195.00")).toBeVisible();
     expect(table.getByText("$45.10 per hour")).toBeVisible();
+    expect(table.getByText("$39.00 for the house")).toBeVisible();
     expect(table.getByText("Team of 2: $26.00 each")).toBeVisible();
     expect(table.getAllByText("Not set").length).toBeGreaterThan(0);
     rejectHistory(new Error("offline"));

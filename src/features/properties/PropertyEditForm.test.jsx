@@ -25,7 +25,7 @@ describe("PropertyEditForm", () => {
 
     fireEvent.change(screen.getByLabelText("Property or address name"), { target: { value: "Updated Property" } });
     fireEvent.change(screen.getByLabelText("Default client price"), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText("Default cleaner payout"), { target: { value: "125" } });
+    fireEvent.change(screen.getByLabelText("Default cleaner pay for the house (split across the team)"), { target: { value: "125" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Main St" } });
     fireEvent.change(screen.getByLabelText("Garage / parking"), { target: { value: "Garage 4" } });
     fireEvent.change(screen.getByLabelText("Cleaner instructions"), { target: { value: "Use side entrance" } });
@@ -65,7 +65,7 @@ describe("PropertyEditForm", () => {
     fireEvent.change(screen.getByLabelText("Property or address name"), { target: { value: "New Property" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "456 Palm Ave" } });
     fireEvent.change(screen.getByLabelText("Default client price"), { target: { value: "300" } });
-    fireEvent.change(screen.getByLabelText("Default cleaner payout"), { target: { value: "150" } });
+    fireEvent.change(screen.getByLabelText("Default cleaner pay for the house (split across the team)"), { target: { value: "150" } });
     fireEvent.change(screen.getByLabelText("Garage / parking"), { target: { value: "Street parking" } });
     fireEvent.change(screen.getByLabelText("Cleaner instructions"), { target: { value: "Call before arrival" } });
     fireEvent.change(screen.getByLabelText("Additional notes"), { target: { value: "Gate is blue" } });

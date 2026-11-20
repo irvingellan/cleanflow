@@ -21,6 +21,7 @@ export function PropertyServiceRates({ property, drafts = {}, onChange }) {
     <section className="property-rates" aria-labelledby={region}>
       <h3 id={region}>{msg("title")}</h3>
       {onChange && <p>{msg("defaults")}</p>}
+      <p>{msg("splitRule")}</p>
       <table aria-labelledby={region}>
         <thead><tr>
           <th scope="col">{serviceTypeMessage(language, "field")}</th>
@@ -47,7 +48,9 @@ export function PropertyServiceRates({ property, drafts = {}, onChange }) {
                       onClick={() => setEditing(open ? null : type)}>{msg(open ? "close" : "edit")}</button>}
                   </th>
                   <td>{format(pricing.client)}</td>
-                  <td>{format(pricing.cleaner)}
+                  <td>{pricing.cleaner.state === "ready"
+                    ? msg(pricing.cleaner.mode === "FIXED" ? "houseSummary" : "cleanerHourlySummary", { value: format(pricing.cleaner) })
+                    : format(pricing.cleaner)}
                     {Object.keys(rates[type]?.cleaner?.byCleanerCount ?? {}).map((count) => (
                       <small key={count}>{msg("teamSummary", { count, value: format(resolveJobPricing(
                         { serviceType: type }, { ...options, cleanerCount: Number(count) },
@@ -83,7 +86,9 @@ function RateEditor({ draft, msg, onChange }) {
               <option value="FIXED">{msg("fixed")}</option><option value="HOURLY">{msg("hourly")}</option>
             </select>
           </label>
-          <label>{msg("amount")}
+          <label>{msg(side === "cleaner"
+            ? draft.cleaner.mode === "HOURLY" ? "cleanerHourlyRate" : "cleanerHouseAmount"
+            : draft.client.mode === "HOURLY" ? "clientHourlyRate" : "amount")}
             <input inputMode="decimal" value={draft[side].amount}
               onChange={(event) => update(side, { amount: event.target.value })} />
           </label>
@@ -94,7 +99,7 @@ function RateEditor({ draft, msg, onChange }) {
                 {teamSizes.map((count) => <option key={count} value={count}>{count}</option>)}
               </select>
             </label>
-            <label>{msg("teamAmount")}
+            <label>{msg(draft.cleaner.mode === "HOURLY" ? "teamHourlyRate" : "teamAmount")}
               <input inputMode="decimal" value={draft.cleaner.byCleanerCount[size] ?? ""}
                 onChange={(event) => update(side, { byCleanerCount: { ...draft.cleaner.byCleanerCount, [size]: event.target.value } })} />
             </label>
