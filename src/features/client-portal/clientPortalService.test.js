@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getPublicClientPortal, getPublicClientPortalReport } from "./clientPortalService.js";
 
 vi.mock("firebase/functions", () => ({ httpsCallable: vi.fn(() => vi.fn()) }));
-vi.mock("../../services/firebase/client.js", () => ({ functions: {} }));
+vi.mock("../../services/firebase/functionsClient.js", () => ({ functions: {} }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("portal reads across network suspension", () => {

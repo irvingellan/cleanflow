@@ -1,5 +1,5 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "../../services/firebase/client.js";
+import { functions } from "../../services/firebase/functionsClient.js";
 
 const createChecklistRunCall = httpsCallable(functions, "createChecklistRun");
 const getChecklistRunCall = httpsCallable(functions, "getChecklistRun");
