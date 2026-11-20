@@ -335,6 +335,30 @@ describe("fixed team payout evidence", () => {
     expect(hourly.attentionReasons).toContain("hours_review");
   });
 
+  it("counts a verified fixed receipt while a teammate's hourly balance awaits review", () => {
+    const mixedJob = { ...team, assignedCleanerIds: ["z", "a"], cleanerPayout: 104,
+      payoutIdsByCleaner: { z: "receipt" },
+      payoutAgreementsByCleaner: { a: { offeredPay: { mode: "HOURLY", rateCents: 2900 } } },
+    };
+    const options = { cleanerNamesById: names, payouts: [line("receipt", "z", 5200)] };
+    for (const housePayout of [104, 160]) {
+      const result = close([{ ...mixedJob, cleanerPayout: housePayout }], options);
+      expect(result.jobs[0]).toMatchObject({
+        paidAmount: 52, cleanerPayout: null, outstandingAmount: null, payoutStatus: "UNKNOWN",
+        cleanerShares: [{ name: "Example Z", paidAmount: 52 }, { name: "Example A", amount: null, paidAmount: null }],
+      });
+      expect(result.jobs[0].attentionReasons).toContain("hours_review");
+      expect(result.jobs[0].attentionReasons.includes("payout_amount_mismatch")).toBe(housePayout === 160);
+      for (const summary of [result.overall, result.clients[0]]) {
+        expect(summary).toMatchObject({ knownCleanerPaidTotal: 52, cleanerPaidTotal: null,
+          knownCleanerOutstandingTotal: null, cleanerOutstandingTotal: null, cleanerPayoutTotal: null });
+      }
+    }
+    const unverified = close([mixedJob], { ...options, payouts: [line("receipt", "a", 5200)] });
+    expect(unverified.overall.knownCleanerPaidTotal).toBeNull();
+    expect(unverified.jobs[0].attentionReasons).toContain("payout_evidence_invalid");
+  });
+
   it("reconciles one or all individual receipts, including grouped payments, with explicit reciprocal links", () => {
     const first = line("one", "z", 3334);
     const afterFirst = { ...team, payoutIdsByCleaner: { z: "one" } };

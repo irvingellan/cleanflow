@@ -186,7 +186,7 @@ function payoutEvidence(job, payoutCents, index, organizationId, complete) {
 function totals(rows, truncated = false) {
   const onlyPendingHours = rows.length > 0 && rows.every((row) => row.attentionReasons.includes("hours_review"));
   const sum = (field) => {
-    if (onlyPendingHours) return null;
+    if (onlyPendingHours && rows.every((row) => row[field] === null)) return null;
     const total = rows.reduce((value, row) => value + (row[field] ?? 0), 0);
     return Number.isSafeInteger(total) ? total : null;
   };
@@ -286,10 +286,14 @@ export function buildWeeklyClose({
     else if (!pendingHours && job.pay?.mode === "FIXED" && Object.hasOwn(job.pay, "perCleanerCents")) {
       payout = { cents: null, state: "invalid" };
     }
-    const evidence = pendingHours
-      ? { status: "UNKNOWN", paidCents: null, outstandingCents: null, reason: "hours_review" }
-      : isAssignmentAwareJob(job) ? teamPayoutEvidence(job, shares, index, organizationId, payoutLookupComplete)
-      : payoutEvidence(job, payout.cents, index, organizationId, payoutLookupComplete);
+    let evidence;
+    if (isAssignmentAwareJob(job) && (!pendingHours || job.payoutIdsByCleaner || index.byJob.has(id))) {
+      evidence = teamPayoutEvidence(job, shares, index, organizationId, payoutLookupComplete);
+    } else if (pendingHours) {
+      evidence = unknown();
+    } else {
+      evidence = payoutEvidence(job, payout.cents, index, organizationId, payoutLookupComplete);
+    }
     const cleanerIds = isAssignmentAwareJob(job) ? getAssignedCleanerIds(job)
       : [text(job.assignedCleanerId)].filter(Boolean);
     const cleanerNames = cleanerIds.map((cleanerId) => text(cleanerNamesById[cleanerId])
@@ -310,6 +314,7 @@ export function buildWeeklyClose({
     if (cleanerNames.length < cleanerIds.length || cleanerIds.length === 0) {
       attentionReasons.push("missing_cleaner_name");
     }
+    if (pendingHours) attentionReasons.push("hours_review");
     if (evidence.reason) attentionReasons.push(evidence.reason);
     rows.push({
       id, clientId, clientName, propertyName, serviceDate: job.scheduledDate, cleanerNames, cleanerShares,
