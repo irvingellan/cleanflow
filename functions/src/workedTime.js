@@ -100,7 +100,8 @@ export async function recordWorkedTime(database, { organizationId, uid, cleanerI
       || (rate.hourly && hourlyAmountCents(rate.rate, 0) === null)) {
       throw new HttpsError("failed-precondition", "Eligible hourly pricing is required.");
     }
-    if (assignment.approvedWork) {
+    // A manager may correct an approval until that cleaner is paid; a cleaner cannot change it.
+    if (assignment.approvedWork && !manager) {
       throw new HttpsError("failed-precondition", "Worked time is already approved.");
     }
     const minutes = manager && input.minutes === undefined && input.start === undefined && input.end === undefined

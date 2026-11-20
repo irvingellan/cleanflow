@@ -2192,7 +2192,7 @@ test("an automatic offer falls back to the Property cleaner price when the Job h
   }
 });
 
-test("worked time follows the roster, freezes an approval, and exposes only personal time", async () => {
+test("worked time follows the roster, lets only the manager correct an unpaid approval, and exposes only personal time", async () => {
   const { reportMyWorkedTime, approveWorkedTime } = functionsIndex;
   const jobId = "synthetic-hourly-job";
   await link("cleaner-a");
@@ -2236,6 +2236,14 @@ test("worked time follows the roster, freezes an approval, and exposes only pers
   assert.deepEqual((await job.get()).data().billing.hours, {
     source: "APPROVED_ASSIGNMENTS", approved: true, approvedMinutes: 120, roster: ["cleaner-a", "cleaner-b"],
   });
+  // A manager correction before payment recomputes the pay and the client hours.
+  assert.deepEqual(await approveWorkedTime.run(managerRequest({ ...approval, minutes: 148 })), { minutes: 150, payoutCents: 6003 });
+  assert.equal((await job.get()).data().billing.hours.approvedMinutes, 150);
+  await job.update({ payoutIdsByCleaner: { "cleaner-a": "synthetic-existing-receipt" } });
+  await assert.rejects(approveWorkedTime.run(managerRequest(approval)), { code: "failed-precondition" });
+  await job.update({ payoutIdsByCleaner: {} });
+  assert.deepEqual(await approveWorkedTime.run(managerRequest(approval)), { minutes: 120, payoutCents: 4802 });
+  assert.equal((await job.get()).data().billing.hours.approvedMinutes, 120);
   await assertFails(manager.doc(job.path).update({ "billing.hours.approvedMinutes": 500 }));
   await sync(jobId);
   const ownEntry = (await agendaFor("cleaner-a")).find(item => item.kind === "ASSIGNED");

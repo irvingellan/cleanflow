@@ -563,11 +563,13 @@ test("reports and approves worked time in the signed-in experiences", async ({ p
     await cleaner.getByRole("button", { name: /^Agendadas/ }).click();
     await cleaner.locator(`[data-job-id="${job.id}"]`).click();
     await expect(cleaner.getByRole("heading", { name: "Informar minhas horas" })).toBeVisible();
-    await expect(cleaner.getByLabel("Minutos trabalhados")).toHaveValue("120");
+    await expect(cleaner.getByLabel("Horas", { exact: true })).toHaveValue("2");
+    await expect(cleaner.getByLabel("Minutos", { exact: true })).toHaveValue("0");
     await evidence(cleaner, "stage-b-report-light");
-    await cleaner.getByLabel("Minutos trabalhados").fill("118");
+    await cleaner.getByLabel("Horas", { exact: true }).fill("1");
+    await cleaner.getByLabel("Minutos", { exact: true }).fill("58");
     await cleaner.getByRole("button", { name: "Salvar horas" }).click();
-    await expect(cleaner.getByText("Aguardando aprovação · 120 min")).toBeVisible();
+    await expect(cleaner.getByText("Aguardando aprovação · 2 h")).toBeVisible();
     await cleaner.emulateMedia({ colorScheme: "dark" });
     await evidence(cleaner, "stage-b-waiting-dark");
 
@@ -576,12 +578,20 @@ test("reports and approves worked time in the signed-in experiences", async ({ p
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Jobs" }).click();
     await page.getByText(fixture.cedarName, { exact: true }).first().click();
     await expect(page.getByRole("heading", { name: "Hours to approve" })).toBeVisible();
-    await page.getByLabel("Minutes worked").fill("115");
+    await page.getByLabel("Hours", { exact: true }).fill("1");
+    await page.getByLabel("Minutes", { exact: true }).fill("55");
     await page.getByRole("heading", { name: "Hours to approve" }).scrollIntoViewIfNeeded();
     await evidence(page, "stage-b-manager-approval");
     await page.getByRole("button", { name: "Approve hours" }).click();
-    await expect(page.getByText(/Approved · 115 min/)).toBeVisible();
-    await expect(cleaner.getByText(/Aprovadas · 115 min/)).toBeVisible();
+    await expect(page.getByText(/Approved · 1 h 55 min/)).toBeVisible();
+    await expect(cleaner.getByText(/Aprovadas · 1 h 55 min/)).toBeVisible();
+    // The manager can correct an approval until that cleaner is paid.
+    await page.getByRole("button", { name: "Correct hours" }).click();
+    await page.getByLabel("Hours", { exact: true }).fill("2");
+    await page.getByLabel("Minutes", { exact: true }).fill("10");
+    await page.getByRole("button", { name: "Approve hours" }).click();
+    await expect(page.getByText(/Approved · 2 h 10 min/)).toBeVisible();
+    await expect(cleaner.getByText(/Aprovadas · 2 h 10 min/)).toBeVisible();
     await evidence(cleaner, "stage-b-approved-dark");
   } finally {
     await context.close();
