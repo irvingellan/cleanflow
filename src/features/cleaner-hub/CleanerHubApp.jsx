@@ -1,3 +1,6 @@
+import { WorkedTimeForm } from "../pricing/WorkedTimeForm.jsx";
+import { workedTimeMessages } from "../pricing/workedTimeMessages.js";
+import { reportMyWorkedTime } from "./cleanerHubService.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatDate, formatServiceTime, removedServiceLabel } from "../../lib/presentation.js";
 import { FIRST_ACCEPT_WINS } from "../jobs/automaticOffers.js";
@@ -544,6 +547,13 @@ function JobView({ t, hub, entry, jobId, today, removedLabel }) {
           </>
         ) : <p className="mw-hint">{t(entry.jobStatus === "COMPLETED" ? "hb.job.checklistDone" : "hb.job.checklistLater")}</p>}
       </section>
+      {entry.workedTime && <section className="hb-checkcard">
+        <h3>{workedTimeMessages(t.lang).report}</h3>
+        <WorkedTimeForm key={entry.jobId} language={t.lang} work={entry.workedTime}
+          allowSave={["IN_PROGRESS", "COMPLETED"].includes(entry.jobStatus) || ["READY_FOR_REVIEW", "APPROVED", "LOCKED", "FINALIZED"].includes(entry.checklistStatus)}
+          touchUp={entry.serviceType === "AIRBNB_TOUCH_UP"}
+          onSave={minutes => reportMyWorkedTime(entry.jobId, minutes)} />
+      </section>}
       <AccessSection t={t} hub={hub} entry={entry} />
       {/* FB01: status and acknowledgment stay recorded; they are only moved out of the way. */}
       <details className="hb-record">
