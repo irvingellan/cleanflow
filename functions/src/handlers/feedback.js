@@ -1,7 +1,9 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireOrganizationManager } from "../managerAuthorization.js";
-import { db, organizationId } from "../runtime/firebase.js";
+import { db } from "../runtime/firebase.js";
+import { defaultOrganizationId, organizationIdForRequest } from "../runtime/organization.js";
 import { githubFeedbackToken } from "../runtime/params.js";
 
 const githubFeedbackRepository = "irvingellan/cleanflow";
@@ -51,6 +53,7 @@ function feedbackIssueBody({ type, message, appVersion, screen, viewport, report
 }
 
 export async function submitFeedback(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   const type = request.data?.type;
@@ -67,6 +70,14 @@ export async function submitFeedback(request) {
   const appVersion = optionalContextValue(request.data?.appVersion, 32);
   const screen = optionalContextValue(request.data?.screen, 80);
   const viewport = normalizedViewport(request.data?.viewport);
+  if (organizationId !== defaultOrganizationId) {
+    await db.collection("organizations").doc(organizationId).collection("feedbackReports").add({
+      message, screen, appVersion, viewport, createdByUid: request.auth.uid,
+      createdAt: FieldValue.serverTimestamp(), status: "NEW",
+    });
+    return { submitted: true };
+  }
+
   const reporter = request.auth.token.email || request.auth.uid;
   const submittedAt = new Date().toISOString();
   const repositoryToken = githubFeedbackToken.value();

@@ -23,14 +23,17 @@ import { requireOrganizationManager } from "../managerAuthorization.js";
 import { listNotificationInboxForRequest } from "../notificationInbox.js";
 import { eligibleManagerPushDevices } from "../managerFcmDelivery.js";
 import { allowedDeveloperUids, devCenterEnvironmentOptions } from "../runtime/devCenter.js";
-import { db, liveMessaging, organizationId, organizationReference } from "../runtime/firebase.js";
+import { db, liveMessaging, organizationReference } from "../runtime/firebase.js";
+// Developer tools are deliberately pinned to the default organization: they must
+// never read, seed or clear another company's data, whatever the caller's claim says.
+import { defaultOrganizationId as devCenterOrganizationId, organizationIdForRequest } from "../runtime/organization.js";
 
 function devCenterEnvironment() {
   return resolveDevCenterEnvironment(devCenterEnvironmentOptions());
 }
 
 async function demoJobCount() {
-  const snapshot = await organizationReference()
+  const snapshot = await organizationReference(devCenterOrganizationId)
     .collection("jobs")
     .where("demoSeed", "==", true)
     .count()
@@ -40,7 +43,7 @@ async function demoJobCount() {
 }
 
 async function clearDemoData({ requireComplete = false } = {}) {
-  const organization = organizationReference();
+  const organization = organizationReference(devCenterOrganizationId);
   const records = [];
   for (const kind of ["jobs", "payouts", "properties", "cleaners", "clients"]) {
     const collection = organization.collection(kind);
@@ -135,26 +138,26 @@ export async function getManagerNotificationDiagnostics(request) {
 
   const deviceSampleLimit = 100;
   const [devicesSnapshot, deliveriesSnapshot] = await Promise.all([
-    db.collection("managerPushDevices").where("organizationId", "==", organizationId).limit(deviceSampleLimit).get(),
-    organizationReference()
+    db.collection("managerPushDevices").where("organizationId", "==", devCenterOrganizationId).limit(deviceSampleLimit).get(),
+    organizationReference(devCenterOrganizationId)
       .collection("managerReminderDeliveries")
       .orderBy("attemptedAt", "desc")
       .limit(20)
       .get(),
   ]);
   const [healthSnapshot, reviewSnapshot, developerTestsSnapshot, currentDeviceTestsSnapshot, cleanerDeliveries] = await Promise.all([
-    organizationReference().collection("managerNotificationDeviceHealth").limit(100).get(),
+    organizationReference(devCenterOrganizationId).collection("managerNotificationDeviceHealth").limit(100).get(),
     // The pilot has a small bounded outbox. Avoid a new collection-group index
     // solely for a developer diagnostic; filter to this organization below.
     db.collectionGroup("managerNotificationDeliveries").limit(100).get(),
-    organizationReference()
+    organizationReference(devCenterOrganizationId)
       .collection("developerNotificationTests")
       .orderBy("attemptedAt", "desc")
       .limit(20)
       .get(),
-    organizationReference().collection("currentDeviceNotificationTests")
+    organizationReference(devCenterOrganizationId).collection("currentDeviceNotificationTests")
       .orderBy("attemptedAt", "desc").limit(20).get(),
-    organizationReference().collection("cleanerNotificationDeliveries")
+    organizationReference(devCenterOrganizationId).collection("cleanerNotificationDeliveries")
       .orderBy("recordedAt", "desc").limit(20).get(),
   ]);
   const devices = devicesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, data: snapshot.data() }));
@@ -164,9 +167,9 @@ export async function getManagerNotificationDiagnostics(request) {
     .filter((uid) => typeof uid === "string" && uid.length > 0 && uid.length <= 128 && !uid.includes("/"));
   const [emailsByUserId, eligibleRegistrationIds, latestInbox] = await Promise.all([
     managerEmailsByUserId(userIds),
-    eligibleManagerPushDevices(db, organizationId, devicesSnapshot.docs)
+    eligibleManagerPushDevices(db, devCenterOrganizationId, devicesSnapshot.docs)
       .then((entries) => new Set(entries.map((entry) => entry.id))).catch(() => null),
-    listNotificationInboxForRequest(db, { organizationId, request: { auth: request.auth,
+    listNotificationInboxForRequest(db, { organizationId: devCenterOrganizationId, request: { auth: request.auth,
       data: { role: "MANAGER", pageSize: 1 } } }).then(({ items }) => ({
         state: items.length ? "available" : "empty", item: items[0],
       })).catch(() => ({ state: "unavailable" })),
@@ -177,7 +180,7 @@ export async function getManagerNotificationDiagnostics(request) {
     deliveries: deliveriesSnapshot.docs.map((snapshot) => ({ data: snapshot.data() })),
     healthReports,
     reviewDeliveries: reviewSnapshot.docs
-      .filter((snapshot) => snapshot.ref.path.startsWith(`organizations/${organizationId}/jobs/`))
+      .filter((snapshot) => snapshot.ref.path.startsWith(`organizations/${devCenterOrganizationId}/jobs/`))
       .map((snapshot) => ({ data: snapshot.data() }))
       .sort((a, b) => (b.data.createdAt?.toMillis?.() || 0) - (a.data.createdAt?.toMillis?.() || 0))
       .slice(0, 20),
@@ -189,7 +192,7 @@ export async function getManagerNotificationDiagnostics(request) {
       healthReports: { readCount: healthSnapshot.size, returnedCount: healthReports.length, readCap: 100, ordering: "unordered" },
       deliveries: { readCount: deliveriesSnapshot.size, returnedCount: deliveriesSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
       reviewDeliveries: { readCount: reviewSnapshot.size,
-        returnedCount: Math.min(20, reviewSnapshot.docs.filter((snapshot) => snapshot.ref.path.startsWith(`organizations/${organizationId}/jobs/`)).length),
+        returnedCount: Math.min(20, reviewSnapshot.docs.filter((snapshot) => snapshot.ref.path.startsWith(`organizations/${devCenterOrganizationId}/jobs/`)).length),
         readCap: 100, ordering: "unordered-global-sample" },
       developerTests: { readCount: developerTestsSnapshot.size, returnedCount: developerTestsSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
       currentDeviceTests: { readCount: currentDeviceTestsSnapshot.size, returnedCount: currentDeviceTestsSnapshot.size, readCap: 20, ordering: "attemptedAt-desc" },
@@ -202,6 +205,7 @@ export async function getManagerNotificationDiagnostics(request) {
 }
 
 export async function reportManagerNotificationHealth(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   return reportManagerDeviceHealth({
     database: db,
@@ -213,7 +217,7 @@ export async function reportManagerNotificationHealth(request) {
 
 export async function sendDeveloperTestNotification(request) {
   requireAuthorizedDeveloper(request, allowedDeveloperUids());
-  await requireOrganizationManager(db, request, organizationId);
+  await requireOrganizationManager(db, request, devCenterOrganizationId);
   const data = request.data;
   if (!data || typeof data !== "object" || Array.isArray(data)
     || Object.keys(data).sort().join(",") !== "confirm,targetRegistrationId") {
@@ -221,7 +225,7 @@ export async function sendDeveloperTestNotification(request) {
   }
   return dispatchDeveloperTestNotification({
     database: db,
-    organizationId,
+    organizationId: devCenterOrganizationId,
     developerUid: request.auth.uid,
     targetRegistrationId: data.targetRegistrationId,
     confirm: data.confirm,
@@ -232,12 +236,12 @@ export async function sendDeveloperTestNotification(request) {
 
 export async function sendCurrentManagerTestNotification(request) {
   return dispatchCurrentManagerTestNotification({
-  database: db,
-  organizationId,
-  request,
-  sendFcm: (message) => liveMessaging().send(message),
-  logger,
-});
+    database: db,
+    organizationId: organizationIdForRequest(request),
+    request,
+    sendFcm: (message) => liveMessaging().send(message),
+    logger,
+  });
 }
 
 export async function generateDevCenterScenario(request) {
@@ -265,7 +269,7 @@ export async function generateDevCenterScenario(request) {
     await clearDemoData({ requireComplete: true });
   }
 
-  const organization = organizationReference();
+  const organization = organizationReference(devCenterOrganizationId);
   const writeBatch = db.batch();
   (records.clients || [records.client]).forEach((client) => {
     writeBatch.set(organization.collection("clients").doc(client.id), client.data);

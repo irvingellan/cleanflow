@@ -2,6 +2,8 @@ import { useState } from "react";
 import { ManagerAccessBoundary } from "../auth/ManagerAccessBoundary.jsx";
 import { AuthenticationLoading, ManagerLogin } from "../auth/ManagerSignIn.jsx";
 import { signOutManager } from "../auth/authService.js";
+import { useOrganizationScope } from "../auth/useOrganizationScope.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { useInitialManagerSession } from "../auth/useInitialManagerSession.js";
 import { abortManagerPushSignOut, prepareManagerPushSignOut } from "../notifications/notificationService.js";
 import { clearOneSignalUser } from "../notifications/oneSignalService.js";
@@ -12,6 +14,8 @@ import { ManagerApplication } from "./ManagerApplication.jsx";
 /** The manager entry: session restore, sign-in, and the signed-in application. */
 export function ManagerRoot() {
   const { authUser, status: authStatus, retry: retryAuth } = useInitialManagerSession(true);
+  const platformRoute = ["/platform", "/platform/"].includes(window.location.pathname);
+  const organization = useOrganizationScope(platformRoute ? null : authUser);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [hasSignOutError, setHasSignOutError] = useState(false);
 
@@ -41,7 +45,7 @@ export function ManagerRoot() {
   }
 
   // Platform access belongs to the developer account, independently of membership.
-  if (["/platform", "/platform/"].includes(window.location.pathname)) {
+  if (platformRoute) {
     return (
       <ThemeProvider>
         <PlatformPage key={authUser.uid} onSignOut={handleSignOut}
@@ -50,10 +54,14 @@ export function ManagerRoot() {
     );
   }
 
+  if (!organization.ready) {
+    return <ThemeProvider><AuthenticationLoading status={organization.status || "loading"} onRetry={organization.retry} /></ThemeProvider>;
+  }
+
   return (
     <ThemeProvider>
       <ManagerAccessBoundary
-        key={authUser.uid}
+        key={`${authUser.uid}:${currentOrganizationId()}`}
         user={authUser}
         onSignOut={handleSignOut}
         isSigningOut={isSigningOut}

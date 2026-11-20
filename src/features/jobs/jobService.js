@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore/lite";
 import { db } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { buildDataProvenanceUpdate } from "../../lib/dataProvenance.js";
 import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from "../../lib/archiveState.js";
 import {
@@ -33,7 +34,6 @@ import {
   projectCleanerSelectionContext,
 } from "./cleanerSelectionContext.js";
 
-const organizationId = "cleanflow-demo";
 const jobWorklistLimit = 100;
 const upcomingSummaryLimit = 3;
 const activeOperationalStatuses = [
@@ -44,11 +44,11 @@ const activeOperationalStatuses = [
 ];
 
 function jobsCollection() {
-  return collection(db, "organizations", organizationId, "jobs");
+  return collection(db, "organizations", currentOrganizationId(), "jobs");
 }
 
 function jobDocument(jobId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId);
 }
 
 function jobFromSnapshot(snapshot) {
@@ -80,7 +80,7 @@ const maxServicePeriodJobs = 200;
 /** Both reads use the existing organization-scoped manager Job Rules. */
 export async function getCleanerSelectionContext(target, { signal } = {}) {
   signal?.throwIfAborted();
-  const records = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const records = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
   const { propertyId, scheduledDate } = target;
   const [schedule, history] = await Promise.all([
     scheduledDate ? getServerDocs(serverQuery(records,
@@ -100,7 +100,7 @@ export async function getCleanerSelectionContext(target, { signal } = {}) {
 
 /** Cursor includes the document ID, so jobs on the same date cannot be skipped. */
 export async function getServicePeriodJobs({ start, end }, { signal } = {}) {
-  const records = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const records = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
   const jobs = [];
   let cursor;
   for (let offset = 0; offset < maxServicePeriodJobs; offset += servicePeriodPageSize) {
@@ -247,7 +247,7 @@ function completedAtConstraints(datePreset) {
 // channel (seen on iPhone Safari) could hold the Jobs list for 30 s or more.
 function pagedJobQuery(constraints, cursor) {
   return serverQuery(
-    serverCollection(serverFirestore(), "organizations", organizationId, "jobs"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs"),
     ...constraints,
     ...(cursor ? [serverStartAfter(cursor)] : []),
     serverLimit(jobWorklistLimit + 1),
@@ -317,7 +317,7 @@ export async function getJobs(
 // The history summaries below are one-shot server reads with a deadline, like the Jobs list.
 export async function getPropertyJobHistory(propertyId) {
   const today = currentLocalDate();
-  const jobs = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const jobs = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
   const [upcomingSnapshot, scheduledHistorySnapshot, completedHistorySnapshot] = await withReadDeadline(Promise.all([
     getServerDocs(
       serverQuery(
@@ -369,7 +369,7 @@ export async function getPropertyJobHistory(propertyId) {
 
 export async function getCleanerJobHistory(cleanerId) {
   const today = currentLocalDate();
-  const jobs = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const jobs = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
   const snapshots = await withReadDeadline(Promise.all([
     serverWhere("assignedCleanerId", "==", cleanerId),
     serverWhere("assignedCleanerIds", "array-contains", cleanerId),
@@ -426,7 +426,7 @@ export async function getCleanerJobHistory(cleanerId) {
 
 export async function getClientJobHistory(clientId, propertyIds) {
   const today = currentLocalDate();
-  const jobs = serverCollection(serverFirestore(), "organizations", organizationId, "jobs");
+  const jobs = serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs");
   const activeStatuses = ["UNASSIGNED", "OFFERED", "ASSIGNED", "IN_PROGRESS"];
   const propertyIdGroups = propertyIdsInGroups(propertyIds);
   const upcomingQueries = [
@@ -611,7 +611,7 @@ export async function createJob({
   requiredCleanerCount,
 }) {
   const job = buildCurrentJobCreateData({
-    organizationId,
+    organizationId: currentOrganizationId(),
     propertyId,
     propertyName,
     clientId,

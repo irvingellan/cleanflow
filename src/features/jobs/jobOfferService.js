@@ -11,6 +11,7 @@ import { collection as serverCollection, getDocs as getServerDocs } from "fireba
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import { automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
 import { managerDecisionOf, offerManagerDecisions, rosterCleanerIds } from "./offerSlots.js";
 import {
@@ -19,7 +20,6 @@ import {
   normalizeJobRecord,
 } from "./jobCompatibility.js";
 
-const organizationId = "cleanflow-demo";
 const publicOfferTokenLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
 
 function createPublicOfferToken() {
@@ -42,7 +42,7 @@ function offerDocument(jobId, cleanerId) {
   return doc(
     db,
     "organizations",
-    organizationId,
+    currentOrganizationId(),
     "jobs",
     jobId,
     "offers",
@@ -51,7 +51,7 @@ function offerDocument(jobId, cleanerId) {
 }
 
 function jobDocument(jobId) {
-  return doc(db, "organizations", organizationId, "jobs", jobId);
+  return doc(db, "organizations", currentOrganizationId(), "jobs", jobId);
 }
 
 function jobFromSnapshot(snapshot) {
@@ -72,7 +72,7 @@ function canCreatePublicOfferLinkForJob(job) {
 // channel (seen on iPhone Safari) could hold the screen for 30 s or more.
 export async function getJobOffers(jobId) {
   const snapshot = await withReadDeadline(getServerDocs(
-    serverCollection(serverFirestore(), "organizations", organizationId, "jobs", jobId, "offers"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "jobs", jobId, "offers"),
   ));
 
   return snapshot.docs.map((offerDocumentSnapshot) => ({
@@ -109,6 +109,7 @@ export async function createJobOffers({ jobId, cleaners, automatic = false, offe
     return jobFromSnapshot(await getDoc(reference));
   }
 
+  const invitations = cleaners.map(cleaner => ({ cleaner, reference: offerDocument(jobId, cleaner.id) }));
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(reference);
 
@@ -125,9 +126,9 @@ export async function createJobOffers({ jobId, cleaners, automatic = false, offe
       throw error;
     }
 
-    for (const cleaner of cleaners) {
+    for (const { cleaner, reference: invitation } of invitations) {
       transaction.set(
-        offerDocument(jobId, cleaner.id),
+        invitation,
         {
           jobId,
           cleanerId: cleaner.id,
@@ -165,11 +166,16 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
     throw error;
   }
 
-  const token = createPublicOfferToken();
-  const tokenHash = await hashPublicOfferToken(token);
-  const legacyExpiresAtMs = Date.now() + publicOfferTokenLifetimeMilliseconds;
+  const organizationId = currentOrganizationId();
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, cleanerId);
+  const token = createPublicOfferToken();
+  const tokenHash = await hashPublicOfferToken(token);
+  const assertOriginalCompany = () => {
+    if (currentOrganizationId() !== organizationId) throw offerDecisionError("organization-changed", "The active company changed.");
+  };
+  assertOriginalCompany();
+  const legacyExpiresAtMs = Date.now() + publicOfferTokenLifetimeMilliseconds;
 
   const result = await runTransaction(db, async (transaction) => {
     const [jobSnapshot, offerSnapshot] = await Promise.all([
@@ -195,6 +201,7 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
       throw error;
     }
 
+    assertOriginalCompany();
     const expiresAtMs = automatic ? offer.publicOfferExpiresAt.toMillis() : legacyExpiresAtMs;
     transaction.update(offerReference, {
       publicOfferTokenHash: tokenHash,
@@ -206,6 +213,7 @@ export async function createPublicOfferLink({ jobId, cleanerId, offeredCompensat
     return { expiresAtMs, offeredCompensation: automatic ? offer.offeredCompensation ?? null : offeredCompensation };
   });
 
+  assertOriginalCompany();
   return {
     url: new URL(`/offer/${token}`, window.location.origin).toString(),
     ...result,
