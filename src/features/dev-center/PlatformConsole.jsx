@@ -3,31 +3,39 @@ import { Icon } from "../../components/Icon.jsx";
 import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { getPlatformOverview } from "./devCenterService.js";
+import { PlatformReleases, RecentFailures, SnapshotBar } from "./PlatformOwnerTools.jsx";
+import { AttentionList, UsageDetails } from "./PlatformUsage.jsx";
+import { HealthBadge, HealthDetails } from "./PlatformHealth.jsx";
 import "./platformConsole.css";
 
 function usePlatformRead(organizationId, onAccessDenied) {
   const [read, setRead] = useState({ status: "loading" });
-  const [attempt, setAttempt] = useState(0);
+  const [request, setRequest] = useState({ force: false });
   useEffect(() => {
     let current = true;
     // A StrictMode remount can retire this effect before the read starts.
-    Promise.resolve().then(() => current && getPlatformOverview(organizationId)).then(data => {
+    Promise.resolve().then(() => {
+      if (!current) return;
+      return request.force ? getPlatformOverview(organizationId, { refresh: true }) : getPlatformOverview(organizationId);
+    }).then(data => {
       if (current) setRead({ status: "ready", data });
     }).catch(error => {
       if (!current) return;
       if (["functions/permission-denied", "functions/unauthenticated"].includes(error?.code)) {
         onAccessDenied(true);
       } else {
-        setRead({ status: "error" });
+        setRead(previous => previous.data
+          ? { ...previous, refreshing: false, refreshFailed: true } : { status: "error" });
       }
     });
     return () => { current = false; };
-  }, [organizationId, attempt, onAccessDenied]);
-  function retry() {
-    setRead({ status: "loading" });
-    setAttempt(value => value + 1);
+  }, [organizationId, request, onAccessDenied]);
+  function reload(force) {
+    setRead(previous => previous.data
+      ? { ...previous, refreshing: true, refreshFailed: false } : { status: "loading" });
+    setRequest({ force });
   }
-  return { ...read, retry };
+  return { ...read, retry: () => reload(false), refresh: () => reload(true) };
 }
 
 function ReadStatus({ read, detail = false }) {
@@ -48,13 +56,9 @@ function DateValue({ value, withTime = false }) {
   return <time dateTime={value}>{new Intl.DateTimeFormat(language, options).format(new Date(value))}</time>;
 }
 
-function HealthBadge({ status }) {
+function CompanyName({ org }) {
   const { translate } = useTranslation();
-  const tones = { ok: "success", errors: "risk", slow: "warning", unknown: "neutral" };
-  const icons = { ok: "checkCircle", errors: "alert", slow: "clock", unknown: "info" };
-  return <span className={`cf-tone--${tones[status]}`}>
-    <span className="cf-state"><Icon name={icons[status]} size={13} />{translate(`platform.${status}`)}</span>
-  </span>;
+  return org.displayName || <span className="platform-org-id">{translate("platform.idLabel", { id: org.id })}</span>;
 }
 
 function Summary({ organizations }) {
@@ -115,7 +119,7 @@ function CompanyTable({ organizations, ascending, onSort, onOpen, restoreFocus }
         </th>
         <th scope="col">{translate("platform.health")}</th>
       </tr></thead>
-      <tbody>{[...organizations].sort((a, b) => byActivity(a, b, ascending)).map(org =>
+      <tbody>{organizations.map(org =>
         <tr key={org.id} onClick={() => onOpen(org)}>
           <th scope="row">
             <button type="button" className="platform-company" ref={node => {
@@ -124,46 +128,19 @@ function CompanyTable({ organizations, ascending, onSort, onOpen, restoreFocus }
                 restoreFocus.current = null;
               }
             }} onClick={event => { event.stopPropagation(); onOpen(org); }}>
-              {org.displayName || org.id}<Icon name="chevronR" size={15} />
+              <CompanyName org={org} /><Icon name="chevronR" size={15} />
             </button>
-            {org.displayName && <small className="platform-org-id">{org.id}</small>}
           </th>
           {operationMetrics(org).map(([key, entries]) => <td className="platform-wide" key={key}><Metrics entries={entries} /></td>)}
           <td><DateValue value={org.lastActivityAt} withTime /></td>
-          <td><HealthBadge status={org.health.status} /></td>
+          <td><HealthBadge health={org.health} /></td>
         </tr>
       )}</tbody>
     </table>
   </section>;
 }
 
-function HealthDetails({ health }) {
-  const { language, translate } = useTranslation();
-  const format = new Intl.NumberFormat(language);
-  const duration = ms => Number.isFinite(ms) ? `${format.format(ms)} ms` : translate("platform.unavailable");
-  const failures = Object.entries(health.failedOperations);
-  return <section className="cf-block platform-panel" aria-labelledby="platform-health">
-    <div className="cf-block__header">
-      <h3 id="platform-health">{translate("platform.health7d")}</h3>
-      <HealthBadge status={health.status} />
-    </div>
-    <dl className="platform-health-facts">
-      <DetailItem label={translate("platform.pageLoads")} value={format.format(health.pageLoads)} />
-      <DetailItem label={translate("platform.failedPageLoads")} value={Number.isFinite(health.failedPageLoads)
-        ? format.format(health.failedPageLoads) : translate("platform.unavailable")} />
-      <DetailItem label={translate("platform.median")} value={duration(health.medianMs)} />
-      <DetailItem label={translate("platform.p95")} value={duration(health.p95Ms)} />
-    </dl>
-    <div className="platform-failures">
-      <h4>{translate("platform.failed")}</h4>
-      {failures.length ? <dl className="platform-metrics">{failures.map(([kind, count]) =>
-        <DetailItem key={kind} label={translate(`loadDiagnostics.operations.${kind}`)} value={format.format(count)} />
-      )}</dl> : <p>{translate("platform.noFailures")}</p>}
-    </div>
-  </section>;
-}
-
-function CompanyDetail({ org, onBack, onAccessDenied }) {
+function CompanyDetail({ org, overview, onBack, onAccessDenied }) {
   const { translate } = useTranslation();
   const read = usePlatformRead(org.id, onAccessDenied);
   const heading = useRef(null);
@@ -171,22 +148,33 @@ function CompanyDetail({ org, onBack, onAccessDenied }) {
   return <div className="platform-detail">
     <div className="platform-detail-heading">
       <BackButton onClick={onBack} />
-      <h3 ref={heading} tabIndex={-1}>{org.displayName || org.id}</h3>
-      <p>{org.displayName && <>{org.id} · </>}{translate("platform.created")} <DateValue value={org.createdAt} /></p>
+      <h3 ref={heading} tabIndex={-1}><CompanyName org={org} /></h3>
+      <p>{translate("platform.created")} <DateValue value={org.createdAt} /></p>
     </div>
+    {read.status === "ready" && <SnapshotBar
+      updatedAt={[overview.data.updatedAt, read.data.updatedAt].filter(Boolean).sort()[0]}
+      refreshing={overview.refreshing || read.refreshing} refreshFailed={overview.refreshFailed || read.refreshFailed}
+      onRefresh={() => { overview.refresh(); read.refresh(); }} />}
     <HealthDetails health={org.health} />
+    {read.data?.recentFailures && <RecentFailures rows={read.data.recentFailures} />}
+    {read.status === "ready" && <UsageDetails usage={read.data.usage} />}
     <section className="cf-block platform-panel" aria-labelledby="platform-members">
       <div className="cf-block__header"><h3 id="platform-members">{translate("platform.members")}</h3></div>
       {read.status !== "ready" ? <ReadStatus read={read} detail /> : read.data.people.length ? (
         <table className="platform-table platform-people" aria-labelledby="platform-members">
-          <thead><tr>{["name", "role", "state", "lastSignIn"].map(key =>
+          <thead><tr>{["name", "role", "state", "lastAccess"].map(key =>
             <th scope="col" key={key}>{translate(`platform.${key}`)}</th>
           )}</tr></thead>
           <tbody>{read.data.people.map((member, index) => <tr key={index}>
             <th scope="row">{member.displayName || translate("platform.unnamed")}</th>
             <td>{translate(`platform.${member.role}`)}</td>
             <td>{translate(member.active ? "platform.active" : "platform.inactive")}</td>
-            <td><DateValue value={member.lastSignInAt} withTime /></td>
+            <td>
+              <DateValue value={member.lastActivityAt ?? (member.role === "MANAGER" ? member.lastSignInAt : null)} withTime />
+              {member.activitySource && <small className="platform-activity-source">
+                {translate(`platform.source.${member.activitySource}`)}
+              </small>}
+            </td>
           </tr>)}</tbody>
         </table>
       ) : <StateCard status="status" message={translate("platform.noMembers")} />}
@@ -204,20 +192,33 @@ export function PlatformConsole({ children }) {
   const { translate } = useTranslation();
   const [denied, setDenied] = useState(false);
   const read = usePlatformRead(undefined, setDenied);
-  const [selected, setSelected] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("company"));
   const [ascending, setAscending] = useState(false);
   const restoreFocus = useRef(null);
+  const attentionFocus = useRef(null);
   if (denied) return <StateCard isError status="alert" message={translate("platform.denied")} />;
   if (read.status !== "ready") return <ReadStatus read={read} />;
-  if (selected) return <><CompanyDetail key={selected.id} org={selected} onAccessDenied={setDenied} onBack={() => {
-    restoreFocus.current = selected.id;
-    setSelected(null);
-  }} />{children}</>;
   const { organizations } = read.data;
+  const selected = organizations.find(org => org.id === selectedId);
+  const footer = <>{children}<PlatformReleases /></>;
+  if (selected) return <><CompanyDetail key={selected.id} org={selected} overview={read} onAccessDenied={setDenied} onBack={() => {
+    if (!attentionFocus.current) restoreFocus.current = selected.id;
+    if (new URLSearchParams(window.location.hash.slice(1)).has("company")) {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    }
+    setSelectedId(null);
+  }} />{footer}</>;
+  const sorted = [...organizations].sort((a, b) => byActivity(a, b, ascending));
   return <><div className="platform-overview">
+    <SnapshotBar updatedAt={read.data.updatedAt} refreshing={read.refreshing} refreshFailed={read.refreshFailed}
+      onRefresh={read.refresh} organizations={sorted} />
+    <AttentionList organizations={organizations} restoreFocus={attentionFocus} onOpen={(org, key) => {
+      attentionFocus.current = key;
+      setSelectedId(org.id);
+    }} />
     <Summary organizations={organizations} />
-    {organizations.length ? <CompanyTable organizations={organizations} ascending={ascending}
-      onSort={() => setAscending(value => !value)} onOpen={setSelected} restoreFocus={restoreFocus} /> :
+    {organizations.length ? <CompanyTable organizations={sorted} ascending={ascending}
+      onSort={() => setAscending(value => !value)} onOpen={org => setSelectedId(org.id)} restoreFocus={restoreFocus} /> :
       <StateCard status="status" message={translate("platform.empty")} />}
-  </div>{children}</>;
+  </div>{footer}</>;
 }

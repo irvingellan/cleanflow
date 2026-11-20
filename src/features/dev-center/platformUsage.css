@@ -1,0 +1,45 @@
+.platform-attention ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.platform-attention li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--cf-divider);
+  font-size: var(--cf-text-sm);
+}
+.platform-attention li > span { flex: 1 1 200px; }
+.platform-attention p { margin: 0; padding: 4px 18px 16px; color: var(--cf-text-secondary); }
+.platform-attention a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--cf-brand-text);
+  overflow-wrap: anywhere;
+}
+.platform-attention a.platform-org-id { color: var(--cf-text-secondary); }
+.platform-attention a:focus-visible { outline: 2px solid var(--cf-focus); outline-offset: 2px; }
+.platform-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+.platform-usage-grid > section { min-width: 0; }
+.platform-funnel, .platform-trend { list-style: none; padding: 4px 18px 16px; margin: 0; }
+.platform-funnel li + li { margin-top: 10px; }
+.platform-funnel li > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.platform-funnel li, .platform-trend li { font-size: var(--cf-text-sm); }
+.platform-funnel strong, .platform-trend strong { font-variant-numeric: tabular-nums; }
+.platform-funnel__track { display: block; height: 4px; background: var(--cf-surface-subtle); margin-top: 5px; }
+.platform-funnel__track span, .platform-trend__track span { display: block; background: var(--cf-brand-text); border-radius: 3px; }
+.platform-funnel__track span { height: 100%; }
+.platform-trend { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.platform-trend li { display: grid; gap: 5px; text-align: center; }
+.platform-trend__track { display: flex; height: 62px; justify-content: center; align-items: flex-end; border-bottom: 1px solid var(--cf-divider); }
+.platform-trend__track span { width: min(70%, 30px); border-radius: 3px 3px 0 0; }
+.platform-trend time { color: var(--cf-text-secondary); font-size: var(--cf-text-xs); white-space: nowrap; }

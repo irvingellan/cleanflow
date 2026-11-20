@@ -3,7 +3,7 @@ import {
   directoryPerson, displayLabel, isoDate, operationKinds, organizationKey, reportingWindow, summarizeHealth,
 } from "./platformOverview.js";
 import {
-  backgroundDurationCapMs, durationSeverity, managerOperationNames, summarizeManagerPageLoadEvents,
+  backgroundDurationCapMs, managerOperationNames, summarizeManagerPageLoadEvents,
 } from "../../src/features/telemetry/managerPageLoadDiagnosticsService.js";
 
 vi.mock("../../src/services/firebase/serverReads.js", () => ({}));
@@ -34,32 +34,44 @@ describe("platform overview projections", () => {
     expect([health.medianMs, health.p95Ms]).toEqual([existing.medianMs, existing.p95Ms]);
   });
 
-  it("reports failures ahead of latency and keeps missing timing distinct from healthy", () => {
+  it("applies minimum samples and error-rate boundaries per kind", () => {
     expect(operationKinds).toEqual(managerOperationNames);
-    expect(summarizeHealth(0, [], {})).toMatchObject({ status: "unknown" });
-    for (const value of [0, 3000, 3001]) {
-      expect(summarizeHealth(1, [value], {}).status).toBe(durationSeverity(value) === "slow" ? "slow" : "ok");
-    }
-    expect(summarizeHealth(1, [3500], { offers: 2, "private-canary": 7 })).toMatchObject({
-      status: "errors", failedOperations: { offers: 2 },
+    expect(summarizeHealth(19, [], { offers: 9 }, 19, { offers: 9 }).status).toBe("no-data");
+    expect(summarizeHealth(20, [], {}, 1).status).toBe("errors");
+    expect(summarizeHealth(220, [], {}, 1)).toMatchObject({ status: "ok", pageFailureRate: 1 / 220 });
+    expect(summarizeHealth(0, [], { offers: 1 }, 0, { offers: 10, issues: 100 })).toMatchObject({
+      status: "errors", operationFailureRates: { offers: 0.1, issues: 0 },
     });
-    expect(summarizeHealth(1, [-1], {}).medianMs).toBeNull();
-    expect(summarizeHealth(1, [100], {}, 1)).toEqual({
-      pageLoads: 1, failedPageLoads: 1, medianMs: 100, p95Ms: 100, failedOperations: {}, status: "errors",
+    expect(summarizeHealth(0, [], { offers: 1 }, 0, { offers: 21 }).status).toBe("ok");
+    expect(summarizeHealth(0, [], { offers: 1 }, 0, { offers: 20 }).status).toBe("errors");
+    expect(summarizeHealth(0, [], {}, 0, { "private-canary": 20 })).toMatchObject({
+      status: "no-data", operationAttempts: {}, pageFailureRate: null,
     });
   });
 
-  it("returns only approved person fields and never substitutes a contact or account identifier", () => {
+  it("only marks slow after 20 usable foreground timings and strictly above three seconds", () => {
+    const timings = new Array(19).fill(3001);
+    expect(summarizeHealth(20, [...timings, 600_000], {}).status).toBe("ok");
+    expect(summarizeHealth(20, new Array(20).fill(3000), {}).status).toBe("ok");
+    expect(summarizeHealth(20, [...timings, 3001], {}).status).toBe("slow");
+    expect(summarizeHealth(20, [...timings, 3001], {}, 1).status).toBe("errors");
+  });
+
+  it("prefers safe membership names, then Auth display names and finally a masked manager hint", () => {
     const email = ["private-canary", "invalid.test"].join("@");
     const privateData = { email, phone: "private-canary", notes: "private-canary", accessCode: "private-canary" };
-    const profile = { ...privateData, name: "Synthetic Cleaner", active: true, archivedAt: new Date() };
-    const account = { ...privateData, displayName: email, metadata: { lastSignInTime: "2026-01-01T00:00:00Z" } };
-    const detail = { people: [directoryPerson("CLEANER", profile, account), directoryPerson("MANAGER", { active: true }, account)] };
-    expect(detail.people).toEqual([
-      { role: "CLEANER", displayName: "Synthetic Cleaner", active: false, lastSignInAt: "2026-01-01T00:00:00.000Z" },
-      { role: "MANAGER", displayName: null, active: true, lastSignInAt: "2026-01-01T00:00:00.000Z" },
-    ]);
-    checkProjection(detail);
+    const account = { ...privateData, displayName: "Auth manager", metadata: { lastSignInTime: "2026-01-01T00:00:00Z" } };
+    expect(directoryPerson("MANAGER", { displayName: "Member", name: "Second" }, account).displayName).toBe("Member");
+    expect(directoryPerson("MANAGER", { displayName: email, name: "Second" }, account).displayName).toBe("Second");
+    expect(directoryPerson("MANAGER", {}, account).displayName).toBe("Auth manager");
+    expect(directoryPerson("MANAGER", {}, { ...account, displayName: email })).toMatchObject({
+      displayName: "pr•••@", activitySource: "signIn", lastActivityAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(directoryPerson("MANAGER", {}, { email: "malformed" }).displayName).toBeNull();
+    const cleaner = directoryPerson("CLEANER", { ...privateData, name: "Synthetic Cleaner", archivedAt: new Date() }, account);
+    expect(cleaner).toEqual({ role: "CLEANER", displayName: "Synthetic Cleaner", active: false, lastSignInAt: null,
+      lastActivityAt: null, activitySource: null });
+    checkProjection(cleaner);
     expect(organizationKey(email)).toMatch(/^org-ref-[a-f0-9]{64}$/);
     expect(organizationKey(organizationKey(email))).not.toBe(organizationKey(email));
     expect(organizationKey("synthetic-a")).toBe("synthetic-a");

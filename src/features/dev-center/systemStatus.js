@@ -1,5 +1,5 @@
 // Pure helpers for the Dev Center "System status" panel.
-const repositoryUrl = "https://github.com/irvingellan/cleanflow";
+export const repositoryUrl = "https://github.com/irvingellan/cleanflow";
 
 export const measuredFunctions = ["getChecklistRun", "getChecklistCapability", "getJobPhotoCounts", "getChecklistEvidence"];
 
