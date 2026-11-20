@@ -326,6 +326,15 @@ Hub warns about assigned or in-progress work in that period. Jobs with an
 unknown start time may overlap a partial-day block. Recording a block leaves
 the Job, its roster, its offers and its notifications unchanged.
 
+An active manager can also add or remove periods from the cleaner's profile.
+This includes inactive profiles and never grants Hub access. When the manager
+opens a picker, the app reads current and future periods for that Job date
+once. A known start time is compared with each partial-day period. With no
+start time, the picker shows the possible conflict and its hours. The bulk offer picker initially hides confirmed conflicts. The manager can
+reveal the unavailable cleaners and explicitly select one with a warning.
+Possible conflicts stay visible, as does property experience. Individual
+assignment and replacement remain available to the manager.
+
 ## Rescheduling workflow
 
 **CURRENT deployed pilot flow:**

@@ -1,4 +1,7 @@
 import { useId, useState } from "react";
+import {
+  CleanerAvailabilityConfirmation, CleanerSelectionStatus, cleanerReplacementOption, sortCleanerOptions, useCleanerSelectionContext,
+} from "./CleanerSelectionContext.jsx";
 import { copyCleanerReminderMessage } from "./cleanerReminderMessage.js";
 import { buildWhatsAppHandoffUrl } from "./whatsappHandoff.js";
 import {
@@ -26,6 +29,7 @@ export function JobScheduleConfirmation({
   });
   const whatsappUrl = draft ? buildWhatsAppHandoffUrl(cleanerPhone(draftCleanerId), draft) : null;
   const replacementBusy = replacementState === "working";
+  const context = useCleanerSelectionContext(job, canOfferReplacement && replacementCandidates.length > 0);
 
   async function copyDraft() {
     setCopyState("working");
@@ -103,13 +107,18 @@ export function JobScheduleConfirmation({
             void updateReplacement(() => onOfferReplacement(replacementCleanerId, currentScheduleRevision(job)));
           }
         }}>
+          <CleanerSelectionStatus {...context} language={language} />
           <label>
             {message("replacementCleaner")}
             <select value={replacementCleanerId} onChange={(event) => setReplacementCleanerId(event.target.value)}>
               <option value="">{translate("common.notProvided")}</option>
-              {replacementCandidates.map(({ id }) => <option key={id} value={id}>{cleanerName(id, null)}</option>)}
+              {sortCleanerOptions(replacementCandidates, context.result).map(({ id }) => <option key={id} value={id}>
+                {cleanerReplacementOption(cleanerName(id, null), id, context.result, language)}
+              </option>)}
             </select>
           </label>
+          <CleanerAvailabilityConfirmation selected={replacementCleanerId ? [{ id: replacementCleanerId, name: cleanerName(replacementCleanerId, null) }] : []}
+            context={context.result} language={language} />
           <button type="submit" className="button" disabled={!replacementCleanerId || replacementBusy}>
             {message("replacementPrompt")}
           </button>

@@ -1,4 +1,5 @@
 const messages = {
+  managerTitle: ["Dias indisponíveis", "Unavailable days", "Días no disponibles"],
   title: ["Dias em que não posso trabalhar", "Days I cannot work", "Días en los que no puedo trabajar"],
   add: ["Adicionar período", "Add a period", "Añadir período"],
   save: ["Salvar período", "Save period", "Guardar período"],

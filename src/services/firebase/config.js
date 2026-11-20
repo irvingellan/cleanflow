@@ -1,3 +1,5 @@
+export const managerOrganizationId = "cleanflow-demo";
+
 export function createFirebaseConfig(environment) {
   return {
     apiKey: environment.VITE_FIREBASE_API_KEY,

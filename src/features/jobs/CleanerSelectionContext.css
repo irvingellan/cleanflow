@@ -21,3 +21,24 @@
   color: var(--color-warning-text);
   font-weight: 650;
 }
+
+.cleaner-selection-option__unavailability {
+  justify-self: start;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: var(--cf-attention-text);
+  background: var(--cf-attention-bg);
+  font-weight: 650;
+}
+.cleaner-selection-confirmation {
+  padding: 10px 12px;
+  border-inline-start: 3px solid var(--cf-attention-text);
+  border-radius: 4px;
+  background: var(--cf-attention-bg);
+  color: var(--cf-attention-text);
+}
+.cleaner-selection-confirmation p, .cleaner-selection-status p { margin: 0; }
+
+.cleaner-selection-time { white-space: nowrap; }
+
+.cleaner-selection-toggle { width: fit-content; min-height: 44px; justify-self: start; }

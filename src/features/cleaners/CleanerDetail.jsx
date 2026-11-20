@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BackButton, DetailItem } from "../../components/UiPrimitives.jsx";
 import { DataProvenanceReview } from "../../components/DataProvenanceReview.jsx";
 import { RecordArchiveControl } from "../../components/RecordArchiveControl.jsx";
@@ -9,6 +9,10 @@ import {
   formatPrice,
   hasValue,
 } from "../../lib/presentation.js";
+import { AvailabilityPanel } from "../availability/AvailabilityPanel.jsx";
+import { availabilityMessage } from "../availability/availabilityMessages.js";
+import { managerAvailabilityForCleaner } from "../availability/managerAvailabilityService.js";
+import { localDateKey } from "../cleaner-hub/cleanerAgendaModel.js";
 import { getCleanerJobHistory } from "../jobs/jobService.js";
 import {
   cleanerTeamTypeLabel,
@@ -18,7 +22,8 @@ import {
 import { CleanerHubAccessPanel } from "./CleanerHubAccessPanel.jsx";
 
 export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataProvenance, onArchive, onRestore, canRestore }) {
-  const { translate } = useTranslation();
+  const { language, translate } = useTranslation();
+  const availability = useMemo(() => managerAvailabilityForCleaner(cleaner.id), [cleaner.id]);
   const [history, setHistory] = useState(null);
   const [hasHistoryError, setHasHistoryError] = useState(false);
   const cleanerName = cleaner.name || translate("common.notProvided");
@@ -112,6 +117,14 @@ export function CleanerDetail({ cleaner, onBack, onEdit, onOpenJob, onSaveDataPr
           {translate("cleaners.edit", { cleaner: cleanerName })}
         </button>
       </div>
+
+      <AvailabilityPanel
+        key={cleaner.id}
+        service={availability}
+        language={language}
+        title={availabilityMessage(language, "managerTitle")}
+        today={localDateKey()}
+      />
 
       <CleanerHubAccessPanel cleaner={cleaner} />
 

@@ -1,3 +1,4 @@
+import { blockAtScheduledStart } from "../availability/availabilityModel.js";
 import { getAssignedCleanerIds, isAssignmentAwareJob } from "./jobCompatibility.js";
 
 export const cleanerSelectionHistoryLimit = 40;
@@ -22,7 +23,7 @@ function assignedIds(job) {
 }
 
 /** Expose only the context needed by the manager picker. */
-export function projectCleanerSelectionContext(target, scheduleRows, historyRows) {
+export function projectCleanerSelectionContext(target, scheduleRows, historyRows, blocks = []) {
   const context = new Map();
   const factsFor = (cleanerId) => {
     if (!context.has(cleanerId)) {
@@ -52,7 +53,26 @@ export function projectCleanerSelectionContext(target, scheduleRows, historyRows
       }
     }
   }
-  for (const facts of context.values()) facts.sameDayStarts.sort((a, b) => (a ?? "24:00").localeCompare(b ?? "24:00"));
+  for (const block of blocks) {
+    const state = blockAtScheduledStart(block, target.scheduledDate, target.scheduledStart);
+    if (state === "clear") continue;
+    const facts = factsFor(block.cleanerId);
+    if (!block.startTime) {
+      facts.unavailability = { state: "blocked", periods: [] };
+    } else {
+      // A full-day block takes precedence regardless of the query's ordering.
+      if (facts.unavailability?.periods.length === 0) continue;
+      facts.unavailability ??= { state, periods: [] };
+      const { periods } = facts.unavailability;
+      if (!periods.some(({ startTime, endTime }) => startTime === block.startTime && endTime === block.endTime)) {
+        periods.push({ startTime: block.startTime, endTime: block.endTime });
+      }
+    }
+  }
+  for (const facts of context.values()) {
+    facts.sameDayStarts.sort((a, b) => (a ?? "24:00").localeCompare(b ?? "24:00"));
+    facts.unavailability?.periods.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime));
+  }
   return {
     byCleanerId: Object.fromEntries(context),
     historyPartial: historyRows.length > cleanerSelectionHistoryLimit,

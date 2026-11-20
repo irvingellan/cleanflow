@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { JobDetail } from "./JobDetail.jsx";
+import * as jobService from "./jobService.js";
 
 const cleanerService = vi.hoisted(() => ({ getCleanerContactsById: vi.fn().mockResolvedValue({}) }));
 
@@ -79,7 +80,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         onAssignCleaner={noOp}
         onAssignCleanerDirectly={callbacks.onAssignCleanerDirectly || noOp}
         onRemoveAssignment={noOp}
-        onReplaceAssignment={noOp}
+        onReplaceAssignment={callbacks.onReplaceAssignment || noOp}
         onStartCleaning={noOp}
         onCompleteCleaning={callbacks.onCompleteCleaning || noOp}
         onUpdatePrices={callbacks.onUpdatePrices || noOp}
@@ -128,6 +129,47 @@ describe("JobDetail lifecycle actions", () => {
     expect(assign).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm assignment" }));
     await waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith("ingrid-demo"));
+  });
+  it("keeps a cleaner available for direct assignment after displaying her blocked hours", async () => {
+    const read = vi.spyOn(jobService, "getCleanerSelectionContext").mockResolvedValue({
+      byCleanerId: { "ingrid-demo": { sameDayStarts: [], completedHereCount: 2, unavailability: { state: "blocked", periods: [] } } },
+    });
+    try {
+      const assign = vi.fn().mockResolvedValue({});
+      renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [], scheduledDate: "2026-11-22", scheduledStart: "10:30" },
+        { onAssignCleanerDirectly: assign }, { availableCleaners: pickerCleaners });
+      fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
+      const blocked = await screen.findByRole("radio", { name: "Ingrid Demo", description: /Unavailable this day/ });
+      expect(screen.getAllByRole("radio").map(el => el.value)).toEqual(["karina-demo", "ingrid-demo"]);
+      fireEvent.click(blocked);
+      expect(screen.getByText("You selected Ingrid Demo for an unavailable period.")).toBeVisible();
+      expect(assign).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Confirm assignment" }));
+      await waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith("ingrid-demo"));
+      fireEvent.click(screen.getByRole("button", { name: "Choose intention: Assign / change cleaner" }));
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    } finally { read.mockRestore(); }
+  });
+
+  it("ranks and warns on a partial-day replacement without blocking its confirmation", async () => {
+    const read = vi.spyOn(jobService, "getCleanerSelectionContext").mockResolvedValue({
+      byCleanerId: { "ingrid-demo": { sameDayStarts: [], unavailability: { state: "unknown", periods: [{ startTime: "14:00", endTime: "16:00" }] } } },
+    });
+    try {
+      const replace = vi.fn().mockResolvedValue({});
+      const offers = pickerCleaners.slice(0, 2).map(cleaner => ({ id: "offer-" + cleaner.id, cleanerId: cleaner.id, status: "INTERESTED", cleanerName: cleaner.name }));
+      renderJobDetail("ASSIGNED", { schemaVersion: 2, assignedCleanerIds: ["assigned"], offers, scheduledDate: "2026-11-22" },
+        { onReplaceAssignment: replace }, { knownCleaners: pickerCleaners, availableCleaners: pickerCleaners,
+          assignments: [{ id: "roster", cleanerId: "assigned", isActive: true, executionStatus: "ASSIGNED", cleanerNameSnapshot: "Example Team" }] });
+      fireEvent.click(screen.getByRole("button", { name: "Replace", exact: true }));
+      const select = screen.getByRole("combobox", { name: "Replacement cleaner" });
+      const option = await within(select).findByRole("option", { name: /Ingrid Demo · Possible time conflict · 2:00 PM–4:00 PM/ });
+      expect(option).toBe(select.lastElementChild);
+      fireEvent.change(select, { target: { value: option.value } });
+      expect(screen.getByText("Check the time with Ingrid Demo before confirming.")).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "Confirm replacement" }));
+      await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("roster", "offer-ingrid-demo"));
+    } finally { read.mockRestore(); }
   });
   it("cancel clears search and selection on reopening; no matches are explicit", () => {
     renderJobDetail("UNASSIGNED", { schemaVersion: 2, assignedCleanerIds: [] }, {}, { availableCleaners: pickerCleaners });
