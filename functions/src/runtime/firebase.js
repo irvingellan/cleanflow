@@ -27,8 +27,7 @@ export function liveMessaging() {
   }
   return getMessaging();
 }
-export const organizationId = "cleanflow-demo";
 
-export function organizationReference() {
+export function organizationReference(organizationId) {
   return db.collection("organizations").doc(organizationId);
 }

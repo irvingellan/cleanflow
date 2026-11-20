@@ -6,9 +6,11 @@ import { rescheduleJobForManager } from "../jobScheduleService.js";
 import { createAutomaticJobOffersForManager } from "../managerAutomaticOffers.js";
 import { createManualReplacementOfferForManager } from "../managerManualReplacementOfferService.js";
 import { assignCleanerDirectlyForManager, removeAutomaticCleanerAssignmentForManager } from "../managerDirectAssignmentService.js";
-import { db, organizationId } from "../runtime/firebase.js";
+import { db } from "../runtime/firebase.js";
+import { organizationIdForRequest } from "../runtime/organization.js";
 
 export async function createAutomaticJobOffers(request) {
+  const organizationId = organizationIdForRequest(request);
   if (!request.auth?.uid || request.auth.token?.firebase?.sign_in_provider === "anonymous") {
     throw new HttpsError("unauthenticated", "A non-anonymous account is required.");
   }
@@ -24,6 +26,7 @@ export async function createAutomaticJobOffers(request) {
 }
 
 export async function assignCleanerDirectly(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   const jobId = request.data?.jobId;
@@ -42,6 +45,7 @@ export async function assignCleanerDirectly(request) {
 }
 
 export async function createManualReplacementOffer(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   return createManualReplacementOfferForManager(db, {
     organizationId, actorUid: request.auth.uid, jobId: request.data?.jobId,
@@ -50,6 +54,7 @@ export async function createManualReplacementOffer(request) {
 }
 
 export async function removeAutomaticCleanerAssignment(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
 
   return removeAutomaticCleanerAssignmentForManager(db, {
@@ -61,6 +66,7 @@ export async function removeAutomaticCleanerAssignment(request) {
 }
 
 export async function rescheduleJob(request) {
+  const organizationId = organizationIdForRequest(request);
   await requireOrganizationManager(db, request, organizationId);
   return rescheduleJobForManager(db, {
     organizationId,

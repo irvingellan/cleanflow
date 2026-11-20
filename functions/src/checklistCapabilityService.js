@@ -180,17 +180,24 @@ export async function revokeChecklistCapabilityForManager(database, { organizati
   return getChecklistCapabilityForManager(database, { organizationId, jobId, runId });
 }
 
-function capabilityDocumentFromPath(document, organizationId) {
+// A bearer link belongs to the organization its capability lives in. Only the
+// path shape is validated here; no organization is assumed.
+function capabilityDocumentFromPath(document) {
   const path = document.path.split("/");
   if (
-    path.length !== 8 || path[0] !== "organizations" || path[1] !== organizationId
+    path.length !== 8 || path[0] !== "organizations" || !path[1]
     || path[2] !== "jobs" || path[4] !== "checklistRuns" || path[6] !== "checklistCapabilities"
     || path[7] !== initialChecklistCapabilityId
   ) return null;
-  return { jobId: path[3], runId: path[5] };
+  return { organizationId: path[1], jobId: path[3], runId: path[5] };
 }
 
-export async function loadPublicChecklistCapability(database, { organizationId, tokenHash, now = new Date() }) {
+/** A capability that stores its organization must store the one of its own path. */
+function storedOrganizationMatches(capability, organizationId) {
+  return capability.organizationId == null || capability.organizationId === organizationId;
+}
+
+export async function loadPublicChecklistCapability(database, { tokenHash, now = new Date() }) {
   const resolutionStartedAt = Date.now();
   const matches = await database.collectionGroup("checklistCapabilities")
     .where("tokenHash", "==", tokenHash).limit(2).get();
@@ -206,7 +213,7 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
     };
   }
   const capabilityRef = matches.docs[0].ref;
-  const location = capabilityDocumentFromPath(capabilityRef, organizationId);
+  const location = capabilityDocumentFromPath(capabilityRef);
   if (!location) {
     return {
       state: "not-found",
@@ -218,6 +225,7 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
       },
     };
   }
+  const { organizationId } = location;
 
   let draftLoadMs = null;
   const jobRef = jobReference(database, organizationId, location.jobId);
@@ -236,7 +244,7 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
     ]);
     if (!capabilitySnapshot.exists || !jobSnapshot.exists || !runSnapshot.exists) return { state: "not-found" };
     const capability = capabilitySnapshot.data();
-    if (capability.tokenHash !== tokenHash) return { state: "not-found" };
+    if (capability.tokenHash !== tokenHash || !storedOrganizationMatches(capability, organizationId)) return { state: "not-found" };
     const job = jobSnapshot.data();
     const state = checklistCapabilityState(capability, job, runSnapshot.data(), now);
     if (state !== "ACTIVE") return { state: state.toLowerCase() };
@@ -289,7 +297,6 @@ export async function loadPublicChecklistCapability(database, { organizationId, 
  * an old success response.
  */
 export async function savePublicChecklistDraft(database, {
-  organizationId,
   tokenHash,
   request,
   now = new Date(),
@@ -298,8 +305,9 @@ export async function savePublicChecklistDraft(database, {
     .where("tokenHash", "==", tokenHash).limit(2).get();
   if (matches.size !== 1) throw new HttpsError("not-found", "Checklist capability not found.");
   const capabilityRef = matches.docs[0].ref;
-  const location = capabilityDocumentFromPath(capabilityRef, organizationId);
+  const location = capabilityDocumentFromPath(capabilityRef);
   if (!location) throw new HttpsError("not-found", "Checklist capability not found.");
+  const { organizationId } = location;
   const runRef = runReference(database, organizationId, location.jobId, location.runId);
   const jobRef = jobReference(database, organizationId, location.jobId);
   const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
@@ -312,7 +320,8 @@ export async function savePublicChecklistDraft(database, {
       throw new HttpsError("not-found", "Checklist capability not found.");
     }
     const capability = capabilitySnapshot.data();
-    if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, jobSnapshot.data(), runSnapshot.data(), now) !== "ACTIVE") {
+    if (capability.tokenHash !== tokenHash || !storedOrganizationMatches(capability, organizationId)
+      || checklistCapabilityState(capability, jobSnapshot.data(), runSnapshot.data(), now) !== "ACTIVE") {
       throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
     }
     if (runSnapshot.data().status !== "DRAFT") {
@@ -365,7 +374,6 @@ export async function savePublicChecklistDraft(database, {
  * a lost response while refusing a different handoff or any post-review edit.
  */
 export async function readyPublicChecklistForReview(database, {
-  organizationId,
   tokenHash,
   request,
   now = new Date(),
@@ -375,8 +383,9 @@ export async function readyPublicChecklistForReview(database, {
     .where("tokenHash", "==", tokenHash).limit(2).get();
   if (matches.size !== 1) throw new HttpsError("not-found", "Checklist capability not found.");
   const capabilityRef = matches.docs[0].ref;
-  const location = capabilityDocumentFromPath(capabilityRef, organizationId);
+  const location = capabilityDocumentFromPath(capabilityRef);
   if (!location) throw new HttpsError("not-found", "Checklist capability not found.");
+  const { organizationId } = location;
   const runRef = runReference(database, organizationId, location.jobId, location.runId);
   const jobRef = jobReference(database, organizationId, location.jobId);
   const draftRef = draftReference(database, organizationId, location.jobId, location.runId);
@@ -402,7 +411,8 @@ export async function readyPublicChecklistForReview(database, {
     }
     const capability = capabilitySnapshot.data();
     const run = runSnapshot.data();
-    if (capability.tokenHash !== tokenHash || checklistCapabilityState(capability, jobSnapshot.data(), run, now) !== "ACTIVE") {
+    if (capability.tokenHash !== tokenHash || !storedOrganizationMatches(capability, organizationId)
+      || checklistCapabilityState(capability, jobSnapshot.data(), run, now) !== "ACTIVE") {
       throw new HttpsError("failed-precondition", "Checklist capability is no longer available.");
     }
     const identity = {

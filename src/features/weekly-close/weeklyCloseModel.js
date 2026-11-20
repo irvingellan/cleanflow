@@ -1,5 +1,6 @@
 import { normalizeDataProvenance } from "../../lib/dataProvenance.js";
 import { getAssignedCleanerIds, isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
+import { defaultOrganizationId } from "../../services/organization/currentOrganization.js";
 
 const dayMilliseconds = 86_400_000;
 export const maxServicePeriodDays = 31;
@@ -190,7 +191,7 @@ function publicRow(row) {
 /** A read-only, allowlisted reconciliation view; it never infers client payments. */
 export function buildWeeklyClose({
   weekStart, period = serviceWeekForDate(weekStart), jobs = [], payouts = [], clients, properties = [], cleanerNamesById = {},
-  organizationId = "cleanflow-demo", payoutLookupComplete = true, coverage,
+  organizationId = defaultOrganizationId, payoutLookupComplete = true, coverage,
 }) {
   const dates = servicePeriod(period);
   const clientsById = new Map((clients || []).map((client) => [client.id, client]));

@@ -9,8 +9,8 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db, storage } from "../../services/firebase/client.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const proofUploadTimeoutMs = 60_000;
 const proofMetadataTimeoutMs = 20_000;
 export const maximumPayoutProofSizeBytes = 10 * 1024 * 1024;
@@ -26,10 +26,6 @@ function proofError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
-}
-
-function proofStoragePath(payoutId) {
-  return `organizations/${organizationId}/payouts/${payoutId}/proof/payment-proof`;
 }
 
 function logProofUpload(stage, details = {}) {
@@ -80,7 +76,8 @@ export async function uploadPayoutProof({ payoutId, file, onProgress }) {
     throw validationError;
   }
 
-  const storagePath = proofStoragePath(payoutId);
+  const organizationId = currentOrganizationId();
+  const storagePath = `organizations/${organizationId}/payouts/${payoutId}/proof/payment-proof`;
   const uploadTask = uploadBytesResumable(ref(storage, storagePath), file, {
     contentType: file.type,
   });

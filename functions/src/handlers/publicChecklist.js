@@ -17,7 +17,7 @@ import {
   uploadPublicChecklistEvidence,
 } from "../checklistEvidenceService.js";
 import { removePublicChecklistEvidence } from "../checklistMultiPhotoService.js";
-import { db, organizationId } from "../runtime/firebase.js";
+import { db } from "../runtime/firebase.js";
 import { configureResponse, hashToken, sendPublicError, validToken } from "../runtime/publicHttp.js";
 
 function publicChecklistPhotoErrorCategory(error, stage) {
@@ -111,7 +111,7 @@ export async function publicChecklist(request, response) {
       if (action === "REMOVE_EVIDENCE") {
         requestStage = "evidence-remove";
         const result = await removePublicChecklistEvidence(db, {
-          organizationId, tokenHash: hashToken(token), evidenceId: request.body?.evidenceId, mutationId: request.body?.mutationId,
+          tokenHash: hashToken(token), evidenceId: request.body?.evidenceId, mutationId: request.body?.mutationId,
         });
         configureResponse(response);
         response.status(200).json(result);
@@ -126,7 +126,6 @@ export async function publicChecklist(request, response) {
         ? readyPublicChecklistForReview
         : savePublicChecklistDraft;
       const result = await operation(db, {
-        organizationId,
         tokenHash: hashToken(token),
         request: action === "READY_FOR_REVIEW"
           ? { submissionId: request.body?.submissionId, baseRevision: request.body?.baseRevision }
@@ -142,7 +141,6 @@ export async function publicChecklist(request, response) {
     }
     if (request.method === "PUT") {
       const result = await uploadPublicChecklistEvidence(db, {
-        organizationId,
         tokenHash: hashToken(token),
         requirementId: request.get("X-CleanFlow-Checklist-Item"),
         contentType: request.get("Content-Type")?.split(";")[0]?.trim().toLowerCase(),
@@ -163,7 +161,6 @@ export async function publicChecklist(request, response) {
     if ((typeof evidenceItem === "string" && evidenceItem) || evidenceId !== undefined) {
       requestStage = "evidence-download";
       const evidence = await downloadPublicChecklistEvidence(db, {
-        organizationId,
         tokenHash: hashToken(token),
         requirementId: evidenceItem,
         evidenceId,
@@ -176,7 +173,6 @@ export async function publicChecklist(request, response) {
     requestStage = "capability-resolution";
     capabilityStartedAt = Date.now();
     const result = await loadPublicChecklistCapability(db, {
-      organizationId,
       tokenHash: hashToken(token),
     });
     capabilityDiagnostics = result.diagnostics || null;
@@ -184,7 +180,6 @@ export async function publicChecklist(request, response) {
       requestStage = "evidence-load";
       const evidenceStartedAt = Date.now();
       const evidenceView = await loadPublicChecklistEvidenceView(db, {
-        organizationId,
         tokenHash: hashToken(token),
       });
       const diagnostics = {

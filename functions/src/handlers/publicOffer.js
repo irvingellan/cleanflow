@@ -7,7 +7,7 @@ import {
   assignmentAcknowledgmentStates,
   loadPublicOfferAssignmentAcknowledgment,
 } from "../publicOfferAssignmentAcknowledgment.js";
-import { db, organizationId } from "../runtime/firebase.js";
+import { db } from "../runtime/firebase.js";
 import { configureResponse, hashToken, sendPublicError, validToken } from "../runtime/publicHttp.js";
 
 const supportedCleanerLanguages = new Set(["en", "pt", "es"]);
@@ -16,20 +16,30 @@ function isAssignmentAwareJobData(jobData) {
   return Number.isInteger(jobData?.schemaVersion) && jobData.schemaVersion >= 2;
 }
 
-function jobReferenceFromOffer(offerDocument) {
+// A bearer link belongs to the organization its Offer lives in. Only the path
+// shape is validated here; no organization is assumed.
+function offerPathSegments(offerDocument) {
   const path = offerDocument.path.split("/");
 
   if (
     path.length !== 6 ||
     path[0] !== "organizations" ||
-    path[1] !== organizationId ||
+    !path[1] ||
     path[2] !== "jobs" ||
     path[4] !== "offers"
   ) {
     return null;
   }
 
-  return offerDocument.parent.parent;
+  return path;
+}
+
+function jobReferenceFromOffer(offerDocument) {
+  return offerPathSegments(offerDocument) ? offerDocument.parent.parent : null;
+}
+
+function organizationIdFromOffer(offerDocument) {
+  return offerPathSegments(offerDocument)[1];
 }
 
 async function offerReferenceForTokenHash(tokenHash) {
@@ -134,6 +144,7 @@ async function loadPublicOffer(token) {
   }
 
   const jobData = jobSnapshot.data();
+  const organizationId = organizationIdFromOffer(offerDocument);
   const cleanerReference = validChecklistCleanerId(offerData.cleanerId)
     ? db.collection("organizations").doc(organizationId).collection("cleaners").doc(offerData.cleanerId)
     : null;
@@ -207,6 +218,7 @@ export async function publicOffer(request, response) {
       sendPublicError(response, 404, "offer_not_found");
       return;
     }
+    const organizationId = organizationIdFromOffer(offerDocument);
 
     if (isAssignmentAcknowledgment) {
       const result = await acknowledgePublicOfferAssignment(db, {

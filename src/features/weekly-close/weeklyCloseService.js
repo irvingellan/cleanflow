@@ -5,8 +5,8 @@ import { getClientSummariesById } from "../clients/clientService.js";
 import { getPropertySummariesById } from "../properties/propertyService.js";
 import { getServerRecordsById, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { buildWeeklyClose, servicePeriod } from "./weeklyCloseModel.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 
-const organizationId = "cleanflow-demo";
 const contextBatchSize = 30;
 
 // A reload can drop a Firestore Lite request before it receives an HTTP
@@ -46,20 +46,20 @@ export async function loadWeeklyClose(period, { signal } = {}) {
   const { jobs, coverage } = await readWeeklySource(() => getServicePeriodJobs(dates, { signal }), signal);
   signal?.throwIfAborted();
   const completedJobs = jobs.filter((job) => job.operationalStatus === "COMPLETED"
-    && (!job.organizationId || job.organizationId === organizationId)
+    && (!job.organizationId || job.organizationId === currentOrganizationId())
     && !job.archivedAt && job.dataProvenance === "REAL");
   const cleanerIds = completedJobs.flatMap((job) => [
     ...getAssignedCleanerIds(job), job.assignedCleanerId,
   ]).filter(Boolean);
   const [payouts, cleaners, clients, properties] = await Promise.all([
     readWeeklySource(() => getPayoutEvidenceForJobs(completedJobs), signal),
-    readContext(cleanerIds, (ids) => getServerRecordsById(organizationId, "cleaners", ids), signal),
+    readContext(cleanerIds, (ids) => getServerRecordsById(currentOrganizationId(), "cleaners", ids), signal),
     readContext(completedJobs.map((job) => job.clientId), getClientSummariesById, signal),
     readContext(completedJobs.map((job) => job.propertyId), getPropertySummariesById, signal),
   ]);
   signal?.throwIfAborted();
   return buildWeeklyClose({
-    period: dates, coverage, organizationId,
+    period: dates, coverage, organizationId: currentOrganizationId(),
     jobs: jobs.map((job) => ({ ...job, legacyPayoutEligible: isEligibleForLegacyPayout(job) })),
     payouts, clients, properties,
     cleanerNamesById: Object.fromEntries(cleaners.map((cleaner) => [cleaner.id, cleaner.data().name])),
