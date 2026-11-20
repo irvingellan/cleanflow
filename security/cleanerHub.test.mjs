@@ -46,6 +46,7 @@ const {
   revokeCleanerHubAccess,
   submitChecklistRunForReview,
 } = functionsIndex;
+const { addCalendarDays, localDateKey } = await import("../functions/src/managerReminders.js");
 const { syncCleanerAgendaForJob } = await import("../functions/src/cleanerAgenda.js");
 const { recordCleanerJobInboxEvents } = await import("../functions/src/cleanerNotificationEvents.js");
 const { cleanerAccountUid, hashCleanerAccessCode } = await import("../functions/src/cleanerHubAccess.js");
@@ -119,10 +120,7 @@ async function requestPublicOffer(method, token, data) {
   return response;
 }
 function dateKey(days) {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + days);
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+  return addCalendarDays(localDateKey(new Date()), days);
 }
 async function sync(jobId, orgId = org) {
   // Stands in for the three Firestore triggers; the E2E suite runs the real ones.
