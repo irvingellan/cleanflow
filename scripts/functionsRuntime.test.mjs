@@ -48,7 +48,7 @@ test("candidate declarations produce explicit20 in actual CLI JSON and update ma
     "listNotificationInbox", "markNotificationRead", "openNotificationInboxItem",
     "registerCleanerPushDevice", "deactivateCleanerPushDevice", "getCleanerPushDeviceStatus", "notifyCleanerInboxEvent", "cleanerPushTest", "syncCleanerAgendaOnChecklistRunWrite", "syncCleanerAgendaOnChecklistStart", "getMyJobAccess", "submitChecklistRunForReview", "setReportPhotoVisibility", "getJobPhotoCounts",
     "clientPortalAccess", "publicClientPortal", "correctChecklistAnswer", "getPlatformOverview",
-    "listMyUnavailability", "setMyUnavailability", "removeMyUnavailability",
+    "approveWorkedTime", "reportMyWorkedTime", "listMyUnavailability", "setMyUnavailability", "removeMyUnavailability",
     "setCleanerUnavailability", "removeCleanerUnavailability", "setJobCleanerSpots"].sort();
   const resolved = await build.resolveBackend({ build: candidate, firebaseConfig: { projectId: "demo-cleanflow" }, userEnvs: { DEV_CENTER_SANDBOX_PROJECT_ID: "", MANAGER_REMINDER_PROVIDER: "fcm" }, nonInteractive: true, isEmulator: true });
   const endpoints = Object.values(resolved.backend.endpoints).flatMap(region => Object.values(region));
