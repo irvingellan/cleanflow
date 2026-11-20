@@ -12,6 +12,7 @@ import { db } from "../../services/firebase/client.js";
 import {
   getServerCollection, getServerRecordsById, serverFirestore, withReadDeadline,
 } from "../../services/firebase/serverReads.js";
+import { currentOrganizationId } from "../../services/organization/currentOrganization.js";
 import {
   buildDataProvenanceUpdate,
   withNormalizedDataProvenance,
@@ -20,16 +21,15 @@ import { buildArchiveUpdate, buildRestoreUpdate, filterArchivedRecords } from ".
 
 import { cleanerLookupBatches } from "./cleanerLookupBatches.js";
 
-const organizationId = "cleanflow-demo";
 export const supportedCleanerTeamTypes = ["", "SOLO", "COUPLE", "TEAM"];
 export const supportedPaymentMethods = ["", "ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
 
 function cleanersCollection() {
-  return collection(db, "organizations", organizationId, "cleaners");
+  return collection(db, "organizations", currentOrganizationId(), "cleaners");
 }
 
 function cleanerDocument(cleanerId) {
-  return doc(db, "organizations", organizationId, "cleaners", cleanerId);
+  return doc(db, "organizations", currentOrganizationId(), "cleaners", cleanerId);
 }
 
 function assertValidProfileEnums({ teamType, preferredPaymentMethod }) {
@@ -46,7 +46,7 @@ export async function getCleanerContactsById(cleanerIds) {
   const cleanerIdBatches = cleanerLookupBatches(cleanerIds);
   // One-shot server reads with a deadline (see getAllCleaners).
   const batches = await withReadDeadline(Promise.all(
-    cleanerIdBatches.map((cleanerIdsBatch) => getServerRecordsById(organizationId, "cleaners", cleanerIdsBatch)),
+    cleanerIdBatches.map((cleanerIdsBatch) => getServerRecordsById(currentOrganizationId(), "cleaners", cleanerIdsBatch)),
   ));
 
   return Object.fromEntries(
@@ -73,7 +73,7 @@ export async function getCleanerNamesById(cleanerIds) {
 export async function getCleaners() {
   // One-shot server read with a deadline (see getAllCleaners).
   const snapshot = await withReadDeadline(getServerDocs(serverQuery(
-    serverCollection(serverFirestore(), "organizations", organizationId, "cleaners"),
+    serverCollection(serverFirestore(), "organizations", currentOrganizationId(), "cleaners"),
     serverWhere("active", "==", true),
   )));
 
@@ -86,7 +86,7 @@ export async function getCleaners() {
 // A one-shot server read with a deadline: the realtime channel can stall and
 // leave the Cleaners, Jobs and Payouts screens loading forever.
 export async function getAllCleaners({ includeArchived = false } = {}) {
-  const documents = await withReadDeadline(getServerCollection(organizationId, "cleaners"));
+  const documents = await withReadDeadline(getServerCollection(currentOrganizationId(), "cleaners"));
 
   return filterArchivedRecords(documents.map((cleanerDocumentSnapshot) => withNormalizedDataProvenance({
     ...cleanerDocumentSnapshot.data(),
@@ -117,7 +117,7 @@ export async function createCleaner({
     internalNotes,
     preferredPaymentMethod,
     paymentContact,
-    organizationId,
+    organizationId: currentOrganizationId(),
     dataProvenance: "REAL",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
