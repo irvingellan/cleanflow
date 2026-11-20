@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   cleanerAccountUid,
   formatCleanerAccessCode,
@@ -7,6 +7,7 @@ import {
   isActiveCleanerSession,
   newCleanerAccessCode,
   normalizeCleanerAccessCode,
+  openChecklistForCleaner,
 } from "./cleanerHubAccess.js";
 
 describe("cleaner access codes", () => {
@@ -52,5 +53,58 @@ describe("cleaner access codes", () => {
     expect(isActiveCleanerSession(member, { ...claims, sessionId: "retired" })).toBe(false);
     expect(isActiveCleanerSession(member, { ...claims, organizationId: "other" })).toBe(false);
     expect(isActiveCleanerSession(member, { ...claims, cleanerId: "other" })).toBe(false);
+  });
+});
+
+describe("opening a Hub checklist with unusable grant state", () => {
+  const now = new Date("2026-11-21T12:00:00Z");
+  const identity = { organizationId: "sample", cleanerId: "worker", uid: "account", sessionId: "current" };
+  const root = "organizations/sample";
+
+  function attempt({ grants, active = true }) {
+    const records = {
+      [root + "/jobs/job"]: { operationalStatus: "ASSIGNED", assignedCleanerIds: ["worker"], propertyId: "property" },
+      [root + "/properties/property"]: { organizationId: "sample", name: "Sample property" },
+      [root + "/members/account"]: { ...identity, role: "CLEANER", active },
+      [root + "/cleaners/worker"]: { active: true },
+      [root + "/cleanerHubChecklistGrants/worker"]: { grants },
+    };
+    function reference(path) {
+      return {
+        path, id: path.split("/").at(-1),
+        get parent() { return reference(path.slice(0, path.lastIndexOf("/"))); },
+        collection: name => reference(path + "/" + name),
+        doc: id => reference(path + "/" + id),
+      };
+    }
+    const write = vi.fn();
+    const transaction = {
+      get: async ref => ({ id: ref.id, exists: Object.hasOwn(records, ref.path), data: () => records[ref.path] }),
+      set: write, create: write, update: write,
+    };
+    const database = { doc: reference, runTransaction: async body => body(transaction) };
+    const opened = openChecklistForCleaner(database, {
+      ...identity, jobId: "job", runId: "initial", newToken: () => "sample", hashToken: () => "sample-hash", now,
+    });
+    return { opened, write };
+  }
+
+  it("returns unavailable for a malformed grants record before staging any writes", async () => {
+    const { opened, write } = attempt({ grants: {} });
+    await expect(opened).resolves.toEqual({ state: "unavailable" });
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("keeps the error for a full grant list", async () => {
+    const grants = Array.from({ length: 32 }, (_, index) => ({ jobId: String(index), expiresAtMs: now.getTime() + 1000 }));
+    const { opened, write } = attempt({ grants });
+    await expect(opened).rejects.toMatchObject({ code: "resource-exhausted" });
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("keeps the error for an inactive session", async () => {
+    const { opened, write } = attempt({ grants: {}, active: false });
+    await expect(opened).rejects.toMatchObject({ code: "permission-denied" });
+    expect(write).not.toHaveBeenCalled();
   });
 });

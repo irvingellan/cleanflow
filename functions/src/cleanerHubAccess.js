@@ -3,7 +3,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { rebuildCleanerAgenda } from "./cleanerAgenda.js";
-import { checklistCapabilityState, issueChecklistCapabilityForManager } from "./checklistCapabilityService.js";
+import { buildChecklistCapability, checklistCapabilityState } from "./checklistCapabilityService.js";
+import { checklistSnapshotNeedsRefresh, loadChecklistRunSnapshot, newChecklistRun } from "./checklistRunService.js";
+import { checklistWorkStarted } from "./checklistWork.js";
 import { readHubChecklistGrants, recordHubChecklistGrant, revokeHubChecklistGrants } from "./cleanerHubChecklistAccess.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
 import { respondToAuthenticatedOffer } from "./publicOfferResponseService.js";
@@ -326,43 +328,58 @@ export async function openChecklistForCleaner(database, {
   const jobRef = database.doc(`organizations/${organizationId}/jobs/${jobId}`);
   const runRef = jobRef.collection("checklistRuns").doc(runId);
   const capabilityRef = runRef.collection("checklistCapabilities").doc("active");
-  const [job, run, capability] = await Promise.all([jobRef.get(), runRef.get(), capabilityRef.get()]);
-  const jobData = job.exists ? job.data() : null;
-  if (!rosterIncludes(jobData, cleanerId)) return { state: "unavailable" };
-  if (!["ASSIGNED", "IN_PROGRESS"].includes(jobData.operationalStatus)) {
-    return { state: jobData.operationalStatus === "COMPLETED" ? "done" : "unavailable" };
-  }
-  const runData = run.exists ? run.data() : null;
-  if (!runData) return { state: "not-ready" };
-  if (runData.status === "READY_FOR_REVIEW") return { state: "submitted" };
-  if (runData.status !== "DRAFT") return { state: "done" };
-  const capabilityData = capability.exists ? capability.data() : null;
-  if (capabilityData && capabilityData.cleanerId !== cleanerId
-    && checklistCapabilityState(capabilityData, jobData, runData, now) === "ACTIVE") {
-    return { state: "teammate" };
-  }
-  const token = newToken();
-  const tokenHash = hashToken(token);
   const accessRef = database.doc(`organizations/${organizationId}/${cleanerHubAccessCollection}/${cleanerId}`);
-  try {
-    const result = await issueChecklistCapabilityForManager(database, {
-      organizationId, jobId, runId, cleanerId, actorUid: uid, token, tokenHash, now,
-      beforeIssue: async ({ transaction, job, run, capability, expiresAt }) => {
-        await assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId });
-        if (capability && capability.cleanerId !== cleanerId
-          && checklistCapabilityState(capability, job, run, now) === "ACTIVE") {
-          throw new HttpsError("failed-precondition", "A teammate already has the checklist link.", { reason: "hub-teammate" });
-        }
-        await recordHubChecklistGrant(transaction, accessRef, { jobId, runId, tokenHash, expiresAtMs: expiresAt.toMillis() }, now);
-      },
-    });
-    return { state: "ready", token: result.token };
-  } catch (error) {
-    if (error instanceof HttpsError && error.code === "failed-precondition") {
-      return { state: error.details?.reason === "hub-teammate" ? "teammate" : "unavailable" };
+  const identity = { organizationId, cleanerId, uid, sessionId };
+  return database.runTransaction(async (transaction) => {
+    const [, jobSnapshot, runSnapshot, capabilitySnapshot] = await Promise.all([
+      assertSessionForMutation(transaction, database, identity),
+      transaction.get(jobRef), transaction.get(runRef), transaction.get(capabilityRef),
+    ]);
+    const job = jobSnapshot.data();
+    if (!rosterIncludes(job, cleanerId) || (job.organizationId != null && job.organizationId !== organizationId)) {
+      return { state: "unavailable" };
     }
+    if (!["ASSIGNED", "IN_PROGRESS"].includes(job.operationalStatus)) {
+      return { state: job.operationalStatus === "COMPLETED" ? "done" : "unavailable" };
+    }
+    const run = runSnapshot.data();
+    if ((run?.organizationId != null && run.organizationId !== organizationId)
+      || (run?.jobId != null && run.jobId !== jobId)) return { state: "unavailable" };
+    if (run?.status === "READY_FOR_REVIEW") return { state: "submitted" };
+    if (run && run.status !== "DRAFT") return { state: "done" };
+    const previous = capabilitySnapshot.data();
+    if (previous && previous.cleanerId !== cleanerId && checklistCapabilityState(previous, job, run, now) === "ACTIVE") {
+      return { state: "teammate" };
+    }
+
+    let snapshot;
+    try {
+      snapshot = await loadChecklistRunSnapshot(transaction, database, { organizationId, job });
+    } catch (error) {
+      if (!(error instanceof HttpsError && error.code === "failed-precondition")) throw error;
+      if (!run) return { state: "not-ready" };
+      // Existing frozen Runs can still be opened if their Property has since disappeared.
+    }
+    const refresh = run && snapshot && checklistSnapshotNeedsRefresh(run, snapshot)
+      && !await checklistWorkStarted(transaction, runRef, run);
+    const draft = run || newChecklistRun(snapshot, { organizationId, jobId, actorUid: uid, createdBy: "CLEANER_HUB" });
+    const token = newToken();
+    const tokenHash = hashToken(token);
+    const capability = buildChecklistCapability({
+      organizationId, jobId, runId, cleanerId, actorUid: uid, tokenHash, job, run: draft, previous, now,
+    });
+    // This reads existing grants before staging the first write. Every write,
+    // including creation/refresh of the single Run, commits with the new grant.
+    await recordHubChecklistGrant(transaction, accessRef, { jobId, runId, tokenHash, expiresAtMs: capability.expiresAt.toMillis() }, now);
+    if (!run) transaction.create(runRef, draft);
+    else if (refresh) transaction.update(runRef, snapshot);
+    transaction.set(capabilityRef, capability);
+    return { state: "ready", token };
+  }).catch(error => {
+    // Translate stale grant state after Firestore has discarded the transaction.
+    if (error instanceof HttpsError && error.code === "failed-precondition") return { state: "unavailable" };
     throw error;
-  }
+  });
 }
 
 /** Answers only the Offer addressed to this authenticated, active Cleaner. */

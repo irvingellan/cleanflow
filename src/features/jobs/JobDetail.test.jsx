@@ -778,6 +778,23 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.queryByText(/Must not be included/)).not.toBeInTheDocument();
   });
 
+  it("explains first open in the Hub and preserves the optional manager creation path", () => {
+    const create = vi.fn();
+    renderJobDetail("ASSIGNED", { propertyId: "property-demo", assignedCleanerId: "cleaner-demo" }, { onCreateChecklistRun: create });
+    expect(screen.getByText(/The assigned cleaner can open the checklist in the Hub/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create checklist" })).toBeEnabled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: "COMPLETED", checklist: {} },
+    { status: "ASSIGNED", checklist: { isLoading: true } },
+    { status: "ASSIGNED", checklist: { hasLoadError: true } },
+  ])("does not promise first open on an unavailable or unverified Job: %j", ({ status, checklist }) => {
+    renderJobDetail(status, { propertyId: "property-demo" }, {}, checklist);
+    expect(screen.queryByText(/The assigned cleaner can open the checklist in the Hub/)).not.toBeInTheDocument();
+  });
+
   it("shows a manager Create checklist action and prevents another click while creation is pending", () => {
     const onCreateChecklistRun = vi.fn();
     const { rerender } = renderJobDetail(

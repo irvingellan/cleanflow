@@ -115,6 +115,7 @@ describe("FB04 — checklist situation from the server summary", () => {
     ["j1", "Começar checklist", "available"],
     ["j2", "Continuar e enviar", "started"],
     ["j4", "Abrir checklist", "unknown"],
+    ["j5", "Abrir checklist", "none"],
   ])("Job %s offers %s through the existing server path", async (jobId, label, state) => {
     const { service, handlers } = fakeService();
     render(<CleanerHubApp hubOptions={{ service }} />);
@@ -124,6 +125,20 @@ describe("FB04 — checklist situation from the server summary", () => {
     expect(document.querySelector(".hb-checkcard").getAttribute("data-checklist-state")).toBe(state);
     await userEvent.click(screen.getByRole("button", { name: label }));
     expect(service.openMyChecklist).toHaveBeenCalledWith(jobId);
+  });
+
+  it("keeps first open retryable after a network error", async () => {
+    const { service, handlers } = fakeService();
+    service.openMyChecklist.mockRejectedValueOnce(new Error("offline"));
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [entries[4]], fromCache: false }));
+    await userEvent.click(document.querySelector('[data-job-id="j5"]'));
+    const open = screen.getByRole("button", { name: "Abrir checklist" });
+    await userEvent.click(open);
+    expect(screen.getByText("Não conseguimos abrir o checklist. Verifique a internet e tente de novo.")).toHaveAttribute("role", "status");
+    await userEvent.click(open);
+    expect(service.openMyChecklist).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("O checklist não está disponível para este serviço.")).toBeVisible();
   });
 
   it("a submitted checklist is not a pending task and has no fill-in action", async () => {

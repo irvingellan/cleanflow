@@ -393,7 +393,12 @@ export function AccessSection({ t, hub, entry }) {
   );
 }
 
-const checklistActionStates = { available: "hb.clst.available.action", started: "hb.clst.started.action", unknown: "hb.job.openChecklist" };
+const checklistActionStates = {
+  none: "hb.job.openChecklist",
+  unknown: "hb.job.openChecklist",
+  available: "hb.clst.available.action",
+  started: "hb.clst.started.action",
+};
 
 function JobInstructions({ t, notes }) {
   if (!notes) return null;
@@ -450,6 +455,7 @@ function JobView({ t, hub, entry, jobId, today, removedLabel }) {
   const status = assignedStatusKey(entry);
   const situation = checklistSituation(entry);
   const actionKey = checklistActionStates[situation.state];
+  const hasRunStatus = situation.state !== "none" && situation.state !== "unknown";
 
   async function openChecklist() {
     const attempt = ++checklistAttempt.current;
@@ -484,11 +490,11 @@ function JobView({ t, hub, entry, jobId, today, removedLabel }) {
       <section className={`hb-checkcard is-${situation.state}`} data-checklist-state={situation.state} aria-labelledby="hb-checklist-title">
         <div className="hb-checkhead">
           <h3 id="hb-checklist-title">{t("hb.job.checklist")}</h3>
-          {situation.state !== "unknown" && <span className={`hb-clchip is-${situation.state}`}>{t(`hb.clst.${situation.state}.chip`)}</span>}
+          {hasRunStatus && <span className={`hb-clchip is-${situation.state}`}>{t(`hb.clst.${situation.state}.chip`)}</span>}
         </div>
         {canTryChecklist ? (
           <>
-            <p className="mw-sec">{t(`hb.clst.${situation.state}.body`)}</p>
+            {hasRunStatus && <p className="mw-sec">{t(`hb.clst.${situation.state}.body`)}</p>}
             {actionKey && (
               <button type="button" className="cfv2-button cfv2-button-primary mw-btn mw-btn-block" onClick={openChecklist} disabled={checklist.state === "opening"}>
                 <HubIcon name="clipCheck" size={17} />{t(checklist.state === "opening" ? "hb.job.opening" : actionKey)}

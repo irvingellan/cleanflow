@@ -1008,6 +1008,7 @@ export function JobDetail({
       </JobDetailSection>
 
       <JobChecklistSection
+        language={language}
         job={job}
         translate={translate}
         checklistSectionRef={checklistSectionRef}

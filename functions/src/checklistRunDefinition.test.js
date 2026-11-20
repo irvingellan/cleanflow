@@ -162,9 +162,9 @@ describe("service types in Checklist Runs", () => {
     ["DEEP_CLEANING", "DEEP_CLEANING", "service-type-deep-cleaning", 4],
     ["MOVE_IN_OUT", "MOVE_IN_OUT", "service-type-move-in-out", 3],
     ["POST_CONSTRUCTION", "POST_CONSTRUCTION", "service-type-post-construction", 5],
-  ])("resolves %s from the Property and appends the selected template", (input, type, sectionId, itemCount) => {
-    const propertyDefinition = resolveChecklistDefinition(property);
-    const snapshot = buildChecklistRunSnapshot({ job: { serviceType: input }, property });
+  ])("uses the %s fallback when the property has no checklist", (input, type, sectionId, itemCount) => {
+    const propertyDefinition = resolveChecklistDefinition({});
+    const snapshot = buildChecklistRunSnapshot({ job: { serviceType: input }, property: {} });
     const { sections, ...details } = snapshot.resolvedDefinition;
 
     expect(snapshot.jobSnapshot.serviceType).toBe(type);
@@ -180,6 +180,12 @@ describe("service types in Checklist Runs", () => {
     }
   });
 
+  it("uses the entire customized property definition without appending the service template", () => {
+    const snapshot = buildChecklistRunSnapshot({ job: { serviceType: "DEEP_CLEANING" }, property });
+    expect(snapshot.resolvedDefinition).toEqual(resolveChecklistDefinition(property));
+    expect(snapshot.jobSnapshot.serviceType).toBe("DEEP_CLEANING");
+  });
+
   it("preserves existing Property items when their IDs collide with a type template", () => {
     const id = "service-type-post-construction-fine-dust";
     const source = { checklistSettings: { additionalChecklistItems: [
@@ -191,16 +197,16 @@ describe("service types in Checklist Runs", () => {
     expect(items).toEqual(expect.arrayContaining([
       { id, label: "Existing Property item" },
       { id: `${id}-2`, label: "Another Property item" },
-      expect.objectContaining({ id: `${id}-3`, labelKey: "serviceTypeChecklist.post-construction.fine-dust" }),
     ]));
+    expect(items.some(item => item.id === `${id}-3`)).toBe(false);
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
   });
 
   it("projects the stored type and definition after the Job changes, and leaves legacy sections intact", () => {
     const job = { serviceType: "POST_CONSTRUCTION" };
-    const frozenRun = buildChecklistRunSnapshot({ job, property });
+    const frozenRun = buildChecklistRunSnapshot({ job, property: {} });
     job.serviceType = "MOVE_IN_OUT";
-    const nextRun = buildChecklistRunSnapshot({ job, property });
+    const nextRun = buildChecklistRunSnapshot({ job, property: {} });
 
     expect(projectChecklistRunForCleaner(frozenRun)).toMatchObject({
       serviceType: "POST_CONSTRUCTION", sections: frozenRun.resolvedDefinition.sections,

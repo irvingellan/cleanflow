@@ -166,8 +166,10 @@ within that set does not advance the revision. Pricing, payout, payment, notes,
 provenance, and checklist answers are outside this revision boundary.
 
 In [Service types V1](SERVICE_TYPES_V1.md), the selected Job type supplies
-extra tasks for a new Run. Later type edits affect future snapshots and do not
-advance the access revision, so an existing Run keeps its type and tasks.
+extra tasks for a new Run. Type edits do not advance the access revision.
+When an assigned cleaner next opens an untouched draft in the Hub, its snapshot
+can refresh to use the current service type, Property and checklist settings.
+A Run with saved work keeps the definition under which the work started.
 
 ## Checklist photo evidence
 

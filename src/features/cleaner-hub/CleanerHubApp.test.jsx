@@ -139,7 +139,7 @@ describe("CleanerHubApp (live data boundary)", () => {
     act(() => handlers.agenda({ entries, fromCache: false }));
     expect(screen.getByRole("button", { name: "Abrir checklist" })).toBeEnabled();
     await act(() => completeOldRequest({ state: "not-ready" }));
-    expect(screen.queryByText("A gerente ainda não liberou o checklist deste serviço.")).toBeNull();
+    expect(screen.queryByText("O checklist não está disponível para este serviço.")).toBeNull();
   });
 
   it("drops the previous account's Job detail while a different cleaner signs in", async () => {
@@ -148,10 +148,10 @@ describe("CleanerHubApp (live data boundary)", () => {
     act(() => handlers.agenda({ entries, fromCache: false }));
     await userEvent.click(document.querySelector('[data-job-id="j1"]'));
     await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
-    expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();
+    expect(await screen.findByText("O checklist não está disponível para este serviço.")).toBeInTheDocument();
     act(() => handlers.session({ status: "signed-in", uid: "u2", organizationId: "other-org", cleanerId: "bia", sessionId: "session-c" }));
     expect(screen.queryByText("Maple Example House")).toBeNull();
-    expect(screen.queryByText("A gerente ainda não liberou o checklist deste serviço.")).toBeNull();
+    expect(screen.queryByText("O checklist não está disponível para este serviço.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Abrir checklist" })).toBeNull();
   });
 
@@ -166,11 +166,11 @@ describe("CleanerHubApp (live data boundary)", () => {
     act(() => handlers.agenda({ entries: [...entries, second], fromCache: false }));
     await userEvent.click(document.querySelector('[data-job-id="j1"]'));
     await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
-    expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();
+    expect(await screen.findByText("O checklist não está disponível para este serviço.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Caixa de entrada/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Abrir" }));
     expect(screen.getByRole("heading", { name: second.propertyName })).toBeInTheDocument();
-    expect(screen.queryByText("A gerente ainda não liberou o checklist deste serviço.")).toBeNull();
+    expect(screen.queryByText("O checklist não está disponível para este serviço.")).toBeNull();
   });
 
   it("keeps the agenda active and ignores an Inbox deep link on the rollback build", () => {
@@ -570,7 +570,7 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(service.signOutCleaner).toHaveBeenCalled();
   });
 
-  it("opens a Job and reports when the checklist is not released yet", async () => {
+  it("opens a Job and explains when its checklist cannot be prepared", async () => {
     const { service, handlers } = fakeService();
     render(<CleanerHubApp hubOptions={{ service }} />);
     act(() => handlers.agenda({ entries, fromCache: false }));
@@ -579,7 +579,7 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(screen.getByText("Endereço, códigos e instruções da casa continuam vindo da gerente por enquanto.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
     expect(service.openMyChecklist).toHaveBeenCalledWith("j1");
-    expect(await screen.findByText("A gerente ainda não liberou o checklist deste serviço.")).toBeInTheDocument();
+    expect(await screen.findByText("O checklist não está disponível para este serviço.")).toBeInTheDocument();
   });
 });
 

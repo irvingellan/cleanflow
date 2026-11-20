@@ -162,13 +162,19 @@ export function resolveChecklistDefinition(property) {
   };
 }
 
+export function hasPropertyChecklist(settings) {
+  return Object.values(settings).some(value => value.length > 0);
+}
+
 export function buildChecklistRunSnapshot({ job, property }) {
   const propertyChecklistSettingsSnapshot = normalizePropertyChecklistSettings(
     property?.checklistSettings,
   );
   const resolvedDefinition = resolveChecklistDefinition(property);
   const serviceType = normalizeServiceType(job?.serviceType);
-  resolvedDefinition.sections = appendServiceTypeChecklistSections(resolvedDefinition.sections, serviceType);
+  if (!hasPropertyChecklist(propertyChecklistSettingsSnapshot)) {
+    resolvedDefinition.sections = appendServiceTypeChecklistSections(resolvedDefinition.sections, serviceType);
+  }
 
   return {
     definitionVersion: resolvedDefinition.definitionVersion,

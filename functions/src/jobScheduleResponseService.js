@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireMission2Writes } from "./mission2WriteControl.js";
-import { pilotChecklistPhotoRequirementId } from "./checklistEvidenceDefinition.js";
+import { checklistWorkStarted } from "./checklistWork.js";
 import { assertSessionForMutation } from "./cleanerHubAccess.js";
 import {
   automaticOfferBatch, automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob, validRosterId,
@@ -18,14 +18,6 @@ const maxOfferReads = 51;
 
 function staleSchedule() {
   return new HttpsError("failed-precondition", "This schedule is no longer available to answer.", { reason: "stale-schedule" });
-}
-
-function assertNoChecklistWork(run, draft, evidence, legacyPhoto) {
-  if ((run.exists && run.data().status !== "DRAFT")
-    || (draft.data()?.revision ?? 0) > 0 || (evidence.data()?.revision ?? 0) > 0
-    || evidence.data()?.photos?.length > 0 || legacyPhoto.exists) {
-    throw new HttpsError("failed-precondition", "Checklist work has already started.", { reason: "work-started" });
-  }
 }
 
 async function declinePatch(transaction, { jobRef, job, organizationId, cleanerId, roster, now }) {
@@ -126,12 +118,10 @@ export function respondToRescheduleForCleaner(database, {
     let removal = null;
     if (decision === "DECLINED") {
       const runRef = jobRef.collection("checklistRuns").doc("initial");
-      const refs = [
-        runRef, runRef.collection("drafts").doc("current"),
-        runRef.collection("evidenceState").doc("current"), runRef.collection("evidence").doc(pilotChecklistPhotoRequirementId),
-      ];
-      const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
-      assertNoChecklistWork(...snapshots);
+      const run = await transaction.get(runRef);
+      if (await checklistWorkStarted(transaction, runRef, run.data())) {
+        throw new HttpsError("failed-precondition", "Checklist work has already started.", { reason: "work-started" });
+      }
       removal = await declinePatch(transaction, {
         jobRef, job, organizationId, cleanerId, roster, now: now(),
       });

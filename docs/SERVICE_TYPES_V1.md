@@ -27,7 +27,7 @@ O relatório do cliente usa o tipo congelado no Run. O portal lê o tipo atual n
 ## Montagem e congelamento
 
 1. Resolver o checklist e os ajustes da casa com a lógica da DEC-050.
-2. Acrescentar as seções do modelo do tipo, com IDs próprios. Padrão tem zero seções extras. As seções só adicionam tarefas. Estoque, orientação de fotos e evidência obrigatória continuam sob seus contratos atuais.
+2. Use the service-type sections only when the property has no customized checklist. An explicit property configuration takes precedence. Padrão tem zero seções extras. As seções só adicionam tarefas. Estoque, orientação de fotos e evidência obrigatória continuam sob seus contratos atuais.
 3. Gravar `jobSnapshot.serviceType` e as seções em `resolvedDefinition` no mesmo Run e na mesma transação. Uma tentativa repetida devolve o Run existente. Se uma mudança de Job concorrer com a criação, o Run fica com a versão do Job lida pela transação que confirmou a criação.
 
 Os modelos V1 são dados de código, separados do resolvedor. Limpeza pesada cobre áreas de acúmulo. Mudança inclui interiores de armários, gavetas e eletrodomésticos, rodapés e paredes. Pós-obra inclui poeira fina, resíduos de tinta e adesivos, janelas e trilhos, ralos, filtros e respiros. Na V2, o mesmo resolvedor poderá receber modelos da organização antes da criação, manter IDs estáveis e guardar no Run a definição resultante.

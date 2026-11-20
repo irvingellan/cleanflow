@@ -33,8 +33,11 @@ theme preference described below. The pilot release above predates these changes
   the Inbox. Account settings offer light (default), dark and system themes.
 - Answering an Offer (`Tenho interesse` / `Não posso`) through the existing public
   Offer service, including the manager notification it already creates.
-- **Abrir checklist** opens the existing public checklist for an assigned Job, using
-  the existing capability rules; it never takes over a teammate's active link.
+- **Abrir checklist** prepares the shared Run when an assigned cleaner first opens
+  an eligible Job’s checklist. A manager can still prepare it in advance and share
+  a link. An untouched draft follows changes to the Property, its checklist settings
+  and the service type. Once work starts, its definition is frozen. A teammate
+  with an active checklist keeps it.
 - Freshness is explicit: "Atualizada" only after a server-confirmed snapshot;
   offline/cached/failed reads keep the last confirmed list labelled as not confirmed.
 - Install guide (iPhone/Android) and visual structure reuse the approved Cleaner Hub

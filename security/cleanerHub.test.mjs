@@ -627,13 +627,18 @@ test("checklist opens through existing capability rules for the assigned cleaner
   await link("cleaner-a");
   await link("cleaner-b");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-a", cleanerId: "cleaner-a" }));
-  assert.deepEqual(await openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" })), { state: "not-ready" });
+  const runs = admin.collection(`${root}/jobs/job-a/checklistRuns`);
   assert.deepEqual(await openMyChecklist.run(cleanerRequest(uidB, { jobId: "job-a" })), { state: "unavailable" });
-  await createChecklistRun.run(managerRequest({ jobId: "job-a" }));
+  assert.equal((await runs.get()).size, 0);
   const opened = await openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" }));
   assert.equal(opened.state, "ready");
   assert.equal(typeof opened.token, "string");
-  const capability = (await admin.doc(`${root}/jobs/job-a/checklistRuns/initial/checklistCapabilities/active`).get()).data();
+  const run = runs.doc("initial");
+  const created = (await run.get()).data();
+  await assertFails(cleanerDb(uidB).doc(run.path).get());
+  assert.deepEqual([created.createdBy, created.createdByUid, created.status], ["CLEANER_HUB", uidA, "DRAFT"]);
+  assert.equal((await createChecklistRun.run(managerRequest({ jobId: "job-a" }))).created, false);
+  const capability = (await run.collection("checklistCapabilities").doc("active").get()).data();
   assert.deepEqual([capability.cleanerId, capability.status, capability.issuedByUid], ["cleaner-a", "ACTIVE", uidA]);
   const read = await readPublicChecklist(opened.token);
   assert.equal(read.code, 200);
@@ -645,11 +650,101 @@ test("checklist opens through existing capability rules for the assigned cleaner
   assert.deepEqual(await openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" })), { state: "teammate" });
 });
 
+test("a Hub open never initializes an ineligible or foreign Job", async () => {
+  await link("cleaner-a");
+  const foreign = admin.doc("organizations/other-org/jobs/other-job");
+  await foreign.update({ propertyId: "property" });
+  await admin.doc("organizations/other-org/properties/property").set({ organizationId: "other-org", name: "Other example" });
+  assert.deepEqual(await openMyChecklist.run(cleanerRequest(uidA, { jobId: foreign.id })), { state: "unavailable" });
+  const foreignRun = foreign.collection("checklistRuns").doc("initial");
+  assert.equal((await foreignRun.get()).exists, false);
+  const foreignView = cleanerDb(uidA).doc(foreignRun.path);
+  await assertFails(foreignView.get());
+  await assertFails(foreignView.set({ status: "DRAFT" }));
+  assert.equal((await foreignRun.get()).exists, false);
+
+  for (const [id, extra, state] of [
+    ["completed", { operationalStatus: "COMPLETED" }, "done"],
+    ["archived", { archivedAt: Timestamp.now() }, "unavailable"],
+    ["no-property", { propertyId: null }, "not-ready"],
+    ["missing-property", { propertyId: "missing" }, "not-ready"],
+  ]) {
+    await createJob(id, { assignedCleanerIds: ["cleaner-a"], operationalStatus: "ASSIGNED", ...extra });
+    assert.deepEqual(await openMyChecklist.run(cleanerRequest(uidA, { jobId: id })), { state });
+    assert.equal((await admin.collection(`${root}/jobs/${id}/checklistRuns`).get()).size, 0);
+  }
+});
+
+test("a replacement inherits the initial Run and its saved answers; the removed cleaner loses access", async () => {
+  const jobId = "reassigned-checklist";
+  await createJob(jobId);
+  await link("cleaner-a");
+  await link("cleaner-b");
+  await assignCleanerDirectly.run(managerRequest({ jobId, cleanerId: "cleaner-a" }));
+  const opened = await openMyChecklist.run(cleanerRequest(uidA, { jobId }));
+  assert.equal(opened.state, "ready");
+  const job = admin.doc(`${root}/jobs/${jobId}`);
+  const run = job.collection("checklistRuns").doc("initial");
+  const initial = (await run.get()).data();
+  const itemId = initial.resolvedDefinition.sections[0].items[0].id;
+  const draft = { revision: 1, checklistAnswers: { [itemId]: "DONE" } };
+  await run.collection("drafts").doc("current").set(draft);
+  await job.update({ assignedCleanerIds: ["cleaner-b"], checklistContextRevision: FieldValue.increment(1) });
+  assert.deepEqual(await openMyChecklist.run(cleanerRequest(uidA, { jobId })), { state: "unavailable" });
+  assert.equal((await readPublicChecklist(opened.token)).code, 410);
+  const replacement = await openMyChecklist.run(cleanerRequest(uidB, { jobId }));
+  assert.equal(replacement.state, "ready");
+  assert.equal((await readPublicChecklist(replacement.token)).code, 200);
+  const inherited = (await run.get()).data();
+  assert.deepEqual(inherited.createdAt, initial.createdAt);
+  assert.equal(inherited.createdByUid, uidA);
+  assert.deepEqual(inherited.resolvedDefinition, initial.resolvedDefinition);
+  assert.deepEqual((await run.collection("drafts").doc("current").get()).data(), draft);
+});
+
+test("opening an untouched Run refreshes service type, Property and later Property checklist edits", async () => {
+  const jobId = "refresh-checklist";
+  const job = admin.doc(`${root}/jobs/${jobId}`);
+  const run = job.collection("checklistRuns").doc("initial");
+  await createJob(jobId, { operationalStatus: "IN_PROGRESS", assignedCleanerIds: ["cleaner-a"] });
+  await link("cleaner-a");
+  await createChecklistRun.run(managerRequest({ jobId }));
+  const initial = (await run.get()).data();
+  const open = () => openMyChecklist.run(cleanerRequest(uidA, { jobId }));
+  await job.update({ serviceType: "DEEP_CLEANING", checklistContextRevision: FieldValue.increment(1) });
+  assert.equal((await open()).state, "ready");
+  const updated = (await run.get()).data();
+  assert.equal(updated.jobSnapshot.serviceType, "DEEP_CLEANING");
+  assert.notDeepEqual(updated.resolvedDefinition.sections, initial.resolvedDefinition.sections);
+
+  const property = admin.doc(`${root}/properties/second-property`);
+  await property.set({ organizationId: org, name: "Synthetic Second House" });
+  await job.update({ propertyId: property.id, checklistContextRevision: FieldValue.increment(1) });
+  assert.equal((await open()).state, "ready");
+  assert.equal((await run.get()).get("propertySnapshot.propertyId"), property.id);
+  await property.update({ "checklistSettings.inventoryItems": [{ id: "tea", hidden: true }] });
+  assert.equal((await open()).state, "ready");
+  const refreshed = (await run.get()).data();
+  assert.deepEqual(refreshed.propertyChecklistSettingsSnapshot.inventoryItems, [{ id: "tea", hidden: true }]);
+  assert.ok(!refreshed.resolvedDefinition.inventoryItems.some(item => item.id === "tea"));
+  assert.deepEqual(refreshed.createdAt, initial.createdAt);
+  assert.equal(refreshed.createdByUid, initial.createdByUid);
+
+  const draft = run.collection("drafts").doc("current");
+  await draft.set({ revision: 1, inventoryAnswers: { coffee: "YES" } });
+  await job.update({ serviceType: "POST_CONSTRUCTION", checklistContextRevision: FieldValue.increment(1) });
+  await property.update({ "checklistSettings.inventoryItems": [] });
+  assert.equal((await open()).state, "ready");
+  const started = (await run.get()).data();
+  assert.deepEqual(started.jobSnapshot, refreshed.jobSnapshot);
+  assert.deepEqual(started.resolvedDefinition, refreshed.resolvedDefinition);
+  assert.equal((await draft.get()).get("revision"), 1);
+});
+
 test("revocation ends reads and callables; signing in again never restores the old session", async () => {
   await createJob("job-a");
   const { token } = await link("cleaner-a");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-a", cleanerId: "cleaner-a" }));
-  await createChecklistRun.run(managerRequest({ jobId: "job-a" }));
   await sync("job-a");
   const session = await signInWithCodeToken(token);
   const originalClaims = decodeToken(session.idToken).cleanerHub;
@@ -672,6 +767,10 @@ test("revocation ends reads and callables; signing in again never restores the o
   assert.equal((await readPublicChecklist(opened.token)).code, 410);
   assert.equal((await readPublicChecklist(managerCapability.token)).code, 200);
   await assert.rejects(openMyChecklist.run(cleanerRequest(uidA, { jobId: "job-a" }, originalClaims)), { code: "permission-denied" });
+  await createJob("unopened-revoked", { operationalStatus: "ASSIGNED", assignedCleanerIds: ["cleaner-a"] });
+  await assert.rejects(openMyChecklist.run(cleanerRequest(uidA, { jobId: "unopened-revoked" }, originalClaims)),
+    { code: "permission-denied" });
+  assert.equal((await admin.collection(`${root}/jobs/unopened-revoked/checklistRuns`).get()).size, 0);
   const access = (await admin.doc(`${root}/cleanerHubAccess/cleaner-a`).get()).data();
   assert.equal(access.active, false);
 
@@ -787,7 +886,6 @@ test("concurrent checklist opens protect the teammate's link, and device recover
   await createJob("job-team");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-team", cleanerId: "cleaner-a" }));
   await admin.doc(`${root}/jobs/job-team`).update({ assignedCleanerIds: ["cleaner-a", "cleaner-b"] });
-  await createChecklistRun.run(managerRequest({ jobId: "job-team" }));
   await link("cleaner-a");
   await link("cleaner-b");
   const cleaners = [["cleaner-a", uidA], ["cleaner-b", uidB]];
@@ -795,6 +893,9 @@ test("concurrent checklist opens protect the teammate's link, and device recover
   assert.deepEqual(results.map(({ state }) => state).sort(), ["ready", "teammate"]);
   const winner = results.findIndex(({ state }) => state === "ready");
   const [cleanerId, uid] = cleaners[winner];
+  const runs = await admin.collection(`${root}/jobs/job-team/checklistRuns`).get();
+  assert.deepEqual(runs.docs.map(run => run.id), ["initial"]);
+  assert.equal(runs.docs[0].get("createdByUid"), uid);
   const previousClaims = hubClaimsByUid.get(uid);
   const { token } = results[winner];
   assert.equal((await readPublicChecklist(token)).code, 200);
