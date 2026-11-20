@@ -88,6 +88,14 @@ async function respondToOffer(database, {
         now, scheduleRevision, database,
       });
     }
+    // A cleaner can always say no to her own open invitation from the Hub,
+    // even after its public link expired or before one was issued. Saying no
+    // claims nothing, so it needs no spot, link or schedule check.
+    if (identity && !replacement && status === "DECLINED" && offer.status === "PENDING"
+      && !job.archivedAt && !offer.revokedAt) {
+      transaction.update(offerReference, { status, respondedAt: FieldValue.serverTimestamp() });
+      return { state: "answered", status };
+    }
     if (status === "ACCEPTED" || (identity && !replacement && typeof offer.publicOfferTokenHash !== "string")) {
       return { state: "unavailable" };
     }

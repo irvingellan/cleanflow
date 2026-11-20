@@ -42,6 +42,15 @@ export function removedServiceLabel(service, language = "en") {
   return [propertyName, date, time].filter(Boolean).join(" · ");
 }
 
+/** Date first, on its own line, so a long house name never hides which day changed. */
+export function removedServiceParts(service, language = "en") {
+  if (!service) return { when: "", where: "" };
+  const { propertyName, scheduledDate, scheduledStart } = service;
+  const date = scheduledDate && formatDate(scheduledDate, null, language);
+  const time = formatServiceTime(scheduledStart, language);
+  return { when: [date, time].filter(Boolean).join(" · "), where: propertyName || "" };
+}
+
 export function formatServiceTime(value, language = "en") {
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
   const [hour, minute] = value.split(":").map(Number);

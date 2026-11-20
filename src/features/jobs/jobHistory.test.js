@@ -133,7 +133,7 @@ describe("additive Cleaner Job history", () => {
     expect(history.recentJobs.map((job) => job.id)).toEqual(["completed-v2"]);
   });
 
-  it("preserves existing archive semantics rather than deleting or rewriting history", async () => {
+  it("hides cancelled (archived) Jobs from both lists without deleting or rewriting history", async () => {
     const archive = timestamp("2026-09-29T12:00:00Z");
     mockJobs([
       fixture("archived-history", { scheduledDate: "2026-09-25", archivedAt: archive }),
@@ -142,14 +142,14 @@ describe("additive Cleaner Job history", () => {
     ]);
 
     const history = await getCleanerJobHistory("cleaner-a");
-    // Recent summary already excludes archived Jobs. This slice does not change
-    // the legacy upcoming query's existing archive behavior or mutate records.
+    // A cancelled service never appears as upcoming, matching the Jobs list and
+    // the cleaner's Hub agenda. Records are not mutated.
     expect(history.recentJobs.map((job) => job.id)).toEqual(["visible-history"]);
-    expect(history.upcomingJobs.map((job) => job.id)).toEqual(["legacy-archived-upcoming"]);
+    expect(history.upcomingJobs.map((job) => job.id)).toEqual([]);
     expect(firestore.updateDoc).not.toHaveBeenCalled();
   });
 
-  it("keeps the five-upcoming/ten-recent bounds and ordering after merging and deduplication", async () => {
+  it("lists every upcoming Job and keeps the ten-recent bound and ordering after merging and deduplication", async () => {
     const upcoming = Array.from({ length: 14 }, (_, index) => fixture(`next-${String(index).padStart(2, "0")}`, {
       assignedCleanerIds: index % 2 ? undefined : ["cleaner-a"],
       assignedCleanerId: index % 2 ? "cleaner-a" : undefined,
@@ -163,7 +163,8 @@ describe("additive Cleaner Job history", () => {
     mockJobs([...upcoming, ...recent]);
 
     const history = await getCleanerJobHistory("cleaner-a");
-    expect(history.upcomingJobs.map((job) => job.id)).toEqual(upcoming.slice(0, 5).map((job) => job.id));
+    expect(history.upcomingJobs.map((job) => job.id)).toEqual(upcoming.map((job) => job.id));
+    expect(history.hasMoreUpcoming).toBe(false);
     expect(history.recentJobs.map((job) => job.id)).toEqual(recent.slice(-10).reverse().map((job) => job.id));
   });
 

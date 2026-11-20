@@ -542,6 +542,9 @@ test("offers stay separate: interest is recorded through the existing Offer serv
   await link("cleaner-b");
   await assertFails(cleanerDb(uidB).doc(entryPath).get());
   assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidB, { jobId: "job-offer", status: "INTERESTED" })), { state: "expired", status: null });
+  // Saying no always reaches the manager, even when the link expired or was never sent.
+  assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidB, { jobId: "job-offer", status: "DECLINED" })), { state: "answered", status: "DECLINED" });
+  assert.equal((await admin.doc(`${root}/jobs/job-offer/offers/cleaner-b`).get()).data().status, "DECLINED");
   await admin.doc(`${root}/jobs/job-offer/offers/cleaner-b`).delete();
   assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidB, { jobId: "job-offer", status: "INTERESTED" })), { state: "unavailable", status: null });
   assert.equal((await admin.doc(`${root}/jobs/job-offer/offers/cleaner-a`).get()).data().status, "INTERESTED");

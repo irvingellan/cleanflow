@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanerMessagingWorkerPath, cleanerPushReceiptEvent } from "./cleanerPushBinding.js";
 import { Icon } from "../../components/Icon.jsx";
-import { formatDate, removedServiceLabel } from "../../lib/presentation.js";
+import { formatDate, removedServiceLabel, removedServiceParts } from "../../lib/presentation.js";
 import { RescheduleResponse } from "../cleaner-hub/RescheduleResponse.jsx";
 import { inboxMessage } from "./notificationInboxMessages.js";
 import { notificationInboxEnabled } from "./notificationInboxMode.js";
@@ -289,7 +289,7 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
                     {Number.isFinite(item.createdAtMs) && <time dateTime={new Date(item.createdAtMs).toISOString()}>{time.format(item.createdAtMs)}</time>}
                   </div>
                   <h3>{t(`inbox.event.${item.type}`)}</h3>
-                  {removedLabel && <p className="cf-notice__service">{removedLabel}</p>}
+                  {removedLabel && <RemovedServiceLines t={t} service={item.removedService} language={language} />}
                   {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
                   {automatic?.cleanerLabel && <p>{t("inbox.automatic.assignee", { cleaner: automatic.cleanerLabel })}</p>}
                   {schedule && <p className="cf-notice__service">{schedule}</p>}
@@ -335,4 +335,14 @@ const noticeLooks = {
 
 function noticeLook(type) {
   return noticeLooks[type] || { icon: "bell", tone: "neutral", action: "inbox.open" };
+}
+
+function RemovedServiceLines({ t, service, language }) {
+  const { when, where } = removedServiceParts(service, language);
+  return (
+    <>
+      {when && <p className="cf-notice__when">{t("inbox.removedService.when", { when })}</p>}
+      {where && <p className="cf-notice__service cf-notice__service--full">{where}</p>}
+    </>
+  );
 }
