@@ -73,6 +73,23 @@ describe("updateProperty", () => {
     });
   });
 
+  it("persists only edited service rows, and supports clearing a row", async () => {
+    const { createProperty, updateProperty } = await import("./propertyService.js");
+    const row = { cleaner: { mode: "HOURLY", amountCents: 3850 } };
+    firebase.addDoc.mockResolvedValue({ id: "property-1" });
+    await createProperty({ name: "Example", serviceRates: { DEEP_CLEANING: row }, active: true });
+    expect(firebase.addDoc).toHaveBeenCalledWith("properties-collection", expect.objectContaining({
+      serviceRates: { DEEP_CLEANING: row },
+    }));
+    await updateProperty("property-1", {
+      name: "Example", serviceRates: { DEEP_CLEANING: row }, changedRateTypes: ["DEEP_CLEANING", "STANDARD"],
+    });
+    const patch = firebase.updateDoc.mock.calls[0][1];
+    expect(patch["serviceRates.DEEP_CLEANING"]).toEqual(row);
+    expect(patch["serviceRates.STANDARD"]).toEqual("delete-price");
+    expect(patch).not.toHaveProperty("serviceRates");
+  });
+
   it("creates a Property with optional access fields only when provided", async () => {
     const { createProperty } = await import("./propertyService.js");
     firebase.addDoc.mockResolvedValue({ id: "property-1" });

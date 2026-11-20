@@ -68,6 +68,7 @@ export async function createProperty({
   clientName,
   defaultClientPrice,
   defaultCleanerPrice,
+  serviceRates,
   address,
   garageParking,
   cleanerInstructions,
@@ -96,6 +97,8 @@ export async function createProperty({
   if (defaultCleanerPrice !== undefined) {
     property.defaultCleanerPrice = defaultCleanerPrice;
   }
+
+  if (serviceRates && Object.keys(serviceRates).length) property.serviceRates = serviceRates;
 
   addOptionalPropertyFields(property, {
     address,
@@ -142,6 +145,8 @@ export async function updateProperty(propertyId, {
   client,
   defaultClientPrice,
   defaultCleanerPrice,
+  serviceRates,
+  changedRateTypes = Object.keys(serviceRates || {}),
   address,
   garageParking,
   cleanerInstructions,
@@ -161,6 +166,11 @@ export async function updateProperty(propertyId, {
     accessInstructions: accessInstructions === undefined ? deleteField() : accessInstructions,
   };
 
+  // Touch only the service rows the manager edited.
+  for (const type of changedRateTypes) {
+    update[`serviceRates.${type}`] = serviceRates[type] ?? deleteField();
+  }
+
   if (client) {
     update.clientId = client.id;
     update.clientName = client.name;
@@ -172,6 +182,7 @@ export async function updateProperty(propertyId, {
     id: propertyId,
     name,
     ...(client ? { clientId: client.id, clientName: client.name } : {}),
+    ...(serviceRates ? { serviceRates } : {}),
     defaultClientPrice,
     defaultCleanerPrice,
     address,

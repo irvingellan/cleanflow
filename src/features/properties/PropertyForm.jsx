@@ -3,9 +3,14 @@ import { BackButton, DetailItem, StateCard } from "../../components/UiPrimitives
 import { getActiveClients } from "../clients/clientService.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { createEmptyPropertyForm, optionalPrice, optionalText } from "./propertyForm.js";
+import { PropertyServiceRates } from "./PropertyServiceRates.jsx";
+import { propertyRateChanges } from "./propertyRateForm.js";
+import { pricingMessage } from "../pricing/pricingMessages.js";
+import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
 
 export function PropertyForm({ preselectedClient, onBack, onSaved }) {
-  const { translate } = useTranslation();
+  const { language, translate } = useTranslation();
+  const [rateDrafts, setRateDrafts] = useState({});
   const [formValues, setFormValues] = useState(() =>
     createEmptyPropertyForm(preselectedClient),
   );
@@ -44,6 +49,12 @@ export function PropertyForm({ preselectedClient, onBack, onSaved }) {
       return;
     }
 
+    const rateChanges = propertyRateChanges(rateDrafts);
+    if (rateChanges.error) {
+      setFormError(`${serviceTypeLabel(language, rateChanges.type)} · ${pricingMessage(language, rateChanges.error)}`);
+      return;
+    }
+
     setIsSaving(true);
     setFormError("");
 
@@ -53,6 +64,7 @@ export function PropertyForm({ preselectedClient, onBack, onSaved }) {
         clientId: client.id,
         clientName: client.name,
         address: optionalText(formValues.address),
+        ...(Object.keys(rateChanges.fields.serviceRates || {}).length ? { serviceRates: rateChanges.fields.serviceRates } : {}),
         defaultClientPrice,
         defaultCleanerPrice,
         garageParking: optionalText(formValues.garageParking),
@@ -125,6 +137,14 @@ export function PropertyForm({ preselectedClient, onBack, onSaved }) {
           </label>
         </fieldset>
 
+        <PropertyServiceRates
+          property={{ defaultClientPrice: optionalPrice(formValues.defaultClientPrice), defaultCleanerPrice: optionalPrice(formValues.defaultCleanerPrice) }}
+          drafts={rateDrafts}
+          onChange={(type, value) => {
+            setRateDrafts((drafts) => ({ ...drafts, [type]: value }));
+          }}
+        />
+
         <fieldset className="cleaning-form__group">
           <legend>{translate("properties.cleanerInformation")}</legend>
           <label>
@@ -180,7 +200,8 @@ export function PropertyForm({ preselectedClient, onBack, onSaved }) {
 }
 
 export function PropertyEditForm({ property, onBack, onSaved }) {
-  const { translate } = useTranslation();
+  const { language, translate } = useTranslation();
+  const [rateDrafts, setRateDrafts] = useState({});
   const [formValues, setFormValues] = useState(() => propertyToEditForm(property));
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -189,6 +210,7 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
 
   useEffect(() => {
     setFormValues(propertyToEditForm(property));
+    setRateDrafts({});
     setFormError("");
     setIsSaved(false);
     setIsSaving(false);
@@ -217,6 +239,12 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
       return;
     }
 
+    const rateChanges = propertyRateChanges(rateDrafts, property.serviceRates);
+    if (rateChanges.error) {
+      setFormError(`${serviceTypeLabel(language, rateChanges.type)} · ${pricingMessage(language, rateChanges.error)}`);
+      return;
+    }
+
     setIsSaving(true);
     setFormError("");
     setIsSaved(false);
@@ -226,6 +254,7 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
         name,
         client: selectedClient?.id !== property.clientId ? selectedClient : undefined,
         address: optionalText(formValues.address),
+        ...rateChanges.fields,
         defaultClientPrice,
         defaultCleanerPrice,
         garageParking: optionalText(formValues.garageParking),
@@ -279,6 +308,15 @@ export function PropertyEditForm({ property, onBack, onSaved }) {
             <input type="number" name="defaultCleanerPrice" value={formValues.defaultCleanerPrice} min="0" step="0.01" inputMode="decimal" onChange={updateField} />
           </label>
         </fieldset>
+
+        <PropertyServiceRates
+          property={{ ...property, defaultClientPrice: optionalPrice(formValues.defaultClientPrice), defaultCleanerPrice: optionalPrice(formValues.defaultCleanerPrice) }}
+          drafts={rateDrafts}
+          onChange={(type, value) => {
+            setIsSaved(false);
+            setRateDrafts((drafts) => ({ ...drafts, [type]: value }));
+          }}
+        />
 
         <fieldset className="cleaning-form__group">
           <legend>{translate("properties.cleanerInformation")}</legend>
