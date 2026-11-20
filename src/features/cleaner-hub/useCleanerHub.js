@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { recordManagerAccessDiagnostic } from "../auth/managerAccessDiagnostics.js";
 import * as defaultService from "./cleanerHubService.js";
 import { startFunctionWarmup } from "../../services/firebase/functionWarmup.js";
+import { useLegacyAgendaReschedules } from "./useLegacyAgendaReschedules.js";
+import { useAgendaReschedules } from "./useAgendaReschedules.js";
 import { buildCleanerAgenda, freshnessFor } from "./cleanerAgendaModel.js";
 
 const systemClock = () => new Date();
@@ -69,6 +71,7 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
   const [attempt, setAttempt] = useState(0);
   const [, refreshClock] = useState(0);
   const sessionVersion = useRef(0);
+  const reschedules = useAgendaReschedules({ service, sessionVersion, entries: agenda.entries });
   const membershipConfirmed = useRef(false);
   const startupTimes = useRef({});
   const retryCount = useRef(0);
@@ -93,6 +96,7 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
         && current?.sessionId === next.sessionId) return;
       current = next;
       sessionVersion.current += 1;
+      reschedules.reset();
       membershipConfirmed.current = false;
       startupTimes.current = {};
       retryCount.current = 0;
@@ -340,7 +344,11 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     return () => clearInterval(timer);
   }, [freshness.state, online, signedIn, service]);
 
-  const schedule = buildCleanerAgenda(revoked || membership.state !== "active" ? [] : agenda.entries, { now });
+  const liveMember = signedIn && !revoked && membership.state === "active";
+  const hydratedEntries = useLegacyAgendaReschedules({
+    entries: agenda.entries, scope: liveMember ? sessionVersion.current : null, online, service, attempt,
+  });
+  const schedule = buildCleanerAgenda(liveMember ? reschedules.apply(hydratedEntries) : [], { now });
   const redeem = useCallback((code) => service.redeemAccessCode(code), [service]);
   const signOut = useCallback(async () => {
     setAgenda(emptyAgenda);
@@ -360,6 +368,9 @@ export function useCleanerHub({ service = defaultService, clock = systemClock } 
     signOut,
     openChecklist: service.openMyChecklist,
     respondToOffer: service.respondToMyOffer,
+    answerReschedule: reschedules.answer,
+    scheduleFeedback: reschedules.feedback,
+    scheduleResponses: reschedules,
     // Release A does not authorize private Property fields or an access window.
     // Keep the prepared UI disconnected until that server contract is approved.
     loadJobAccess: service.getMyJobAccess || null,

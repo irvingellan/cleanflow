@@ -67,29 +67,33 @@ async function declinePatch(transaction, { jobRef, job, organizationId, cleanerI
   };
 }
 
+async function inboxScheduleJobId(transaction, organization, cleanerId, eventId, scheduleRevision) {
+  const event = (await transaction.get(cleanerInbox(organization, cleanerId).doc(eventId))).data();
+  if (event?.eventId !== eventId || event.organizationId !== organization.id || event.cleanerId !== cleanerId
+    || event.type !== cleanerInboxTypes.rescheduled || event.eventVersion !== inboxEventVersion
+    || event.processingState !== "STORED" || !validRosterId(event.jobId)) {
+    throw new HttpsError("permission-denied", "This Inbox item is unavailable.");
+  }
+  if (event.scheduleRevision !== scheduleRevision) throw staleSchedule();
+  return event.jobId;
+}
+
 export function respondToRescheduleForCleaner(database, {
-  organizationId, cleanerId, uid, sessionId, eventId, scheduleRevision, decision, now = () => new Date(),
+  organizationId, cleanerId, uid, sessionId, eventId, jobId, scheduleRevision, decision, now = () => new Date(),
 }) {
-  if (![organizationId, cleanerId, uid].every(validRosterId) || !isInboxId(eventId)
+  const fromInbox = eventId !== undefined;
+  const validTarget = fromInbox ? isInboxId(eventId) && jobId === undefined : validRosterId(jobId);
+  if (![organizationId, cleanerId, uid].every(validRosterId) || !validTarget
     || !Number.isSafeInteger(scheduleRevision) || scheduleRevision < 1 || !decisions.has(decision)) {
     throw new HttpsError("invalid-argument", "Schedule response is invalid.");
   }
   const organization = database.collection("organizations").doc(organizationId);
-  const eventRef = cleanerInbox(organization, cleanerId).doc(eventId);
   return database.runTransaction(async (transaction) => {
-    const [, eventSnapshot] = await Promise.all([
+    const [, targetId] = await Promise.all([
       assertSessionForMutation(transaction, database, { organizationId, cleanerId, uid, sessionId }),
-      transaction.get(eventRef),
+      fromInbox ? inboxScheduleJobId(transaction, organization, cleanerId, eventId, scheduleRevision) : jobId,
     ]);
-    const event = eventSnapshot.data();
-    if (event?.eventId !== eventId || event.organizationId !== organizationId || event.cleanerId !== cleanerId
-      || event.type !== cleanerInboxTypes.rescheduled || event.eventVersion !== inboxEventVersion
-      || event.processingState !== "STORED" || !validRosterId(event.jobId)) {
-      throw new HttpsError("permission-denied", "This Inbox item is unavailable.");
-    }
-    if (event.scheduleRevision !== scheduleRevision) throw staleSchedule();
-
-    const jobRef = organization.collection("jobs").doc(event.jobId);
+    const jobRef = organization.collection("jobs").doc(targetId);
     const historyRef = jobRef.collection("scheduleHistory").doc(String(scheduleRevision));
     const receiptRef = historyRef.collection("responses").doc(cleanerId);
     const [jobSnapshot, historySnapshot, receiptSnapshot] = await Promise.all([
@@ -99,7 +103,9 @@ export function respondToRescheduleForCleaner(database, {
     const history = historySnapshot.data();
     const entry = currentScheduleConfirmation(job, cleanerId, scheduleRevision);
     if (!entry || job.archivedAt || (job.organizationId != null && job.organizationId !== organizationId)
-      || history?.scheduleRevision !== scheduleRevision || history.newScheduledDate !== job.scheduledDate
+      || history?.scheduleRevision !== scheduleRevision
+      || (history.organizationId != null && history.organizationId !== organizationId)
+      || (history.jobId != null && history.jobId !== jobRef.id) || history.newScheduledDate !== job.scheduledDate
       || history.newScheduledStart !== (job.scheduledStart || null)) throw staleSchedule();
 
     if (entry.state !== "PENDING") {

@@ -14,3 +14,11 @@ export const notificationInboxService = {
   open: (role, id) => callInbox("openNotificationInboxItem", role, { id }),
   respondToReschedule: (role, eventId, fields) => callInbox("respondToMyReschedule", role, { eventId, ...fields }),
 };
+
+export function respondToAgendaReschedule(jobId, fields) {
+  return callInbox("respondToMyReschedule", "CLEANER", { jobId, ...fields });
+}
+
+export function loadAgendaReschedules(agendaRevisions) {
+  return callInbox("listNotificationInbox", "CLEANER", { agendaRevisions });
+}

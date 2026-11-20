@@ -17,6 +17,7 @@ function fakeService({ session = { status: "signed-in", uid: "u1", organizationI
     redeemAccessCode: vi.fn(async () => {}),
     signOutCleaner: vi.fn(async () => {}),
     openMyChecklist: vi.fn(async () => ({ state: "not-ready" })),
+    respondToAgendaReschedule: vi.fn(async (_jobId, { decision, scheduleRevision }) => ({ state: decision, scheduleRevision })),
     respondToMyOffer: vi.fn(async () => ({ state: "answered", status: "INTERESTED" })),
     reconnectAgenda: vi.fn(async () => {}),
   };
@@ -580,6 +581,162 @@ describe("CleanerHubApp (live data boundary)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Abrir checklist" }));
     expect(service.openMyChecklist).toHaveBeenCalledWith("j1");
     expect(await screen.findByText("O checklist não está disponível para este serviço.")).toBeInTheDocument();
+  });
+});
+
+describe("cleaner schedule decisions", () => {
+  const pending = {
+    ...entries[0], scheduleRevision: 4,
+    reschedule: { state: "PENDING", scheduleRevision: 4, scheduledDate: tomorrow, scheduledStart: "14:30",
+      previousScheduledDate: today, previousScheduledStart: "09:15" },
+  };
+  function scheduleInbox() {
+    const notice = { id: "schedule-notice", type: "RESCHEDULED", jobId: "j1", read: false, openable: true,
+      serviceLabel: pending.propertyName, reschedule: pending.reschedule };
+    return {
+      list: vi.fn().mockResolvedValue({ items: [notice], unreadCount: 1 }),
+      respondToReschedule: vi.fn(async (_role, _id, { decision, scheduleRevision }) => ({ state: decision, scheduleRevision })),
+    };
+  }
+
+  it("immediately removes a declined Inbox assignment from a delayed agenda, including legacy projections", async () => {
+    const { service, handlers } = fakeService();
+    const inboxService = scheduleInbox();
+    const assignment = { ...pending, notes: "Synthetic instruction", offeredCompensation: 82.50 };
+    render(<CleanerHubApp hubOptions={{ service, inboxService }} />);
+    act(() => handlers.agenda({ entries: [assignment], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: /Caixa de entrada/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Não posso" }));
+    await userEvent.click(screen.getByRole("button", { name: "Recusar e sair" }));
+    expect(inboxService.respondToReschedule).toHaveBeenCalledExactlyOnceWith("CLEANER", "schedule-notice", { decision: "DECLINED", scheduleRevision: 4 });
+    await userEvent.click(screen.getByRole("button", { name: "Voltar" }));
+    expect(screen.queryByRole("region", { name: /Confirmar a nova data/ })).toBeNull();
+    expect(document.querySelector('[data-job-id="j1"]')).toBeNull();
+    const { reschedule, ...older } = assignment;
+    act(() => handlers.agenda({ entries: [older], fromCache: false }));
+    expect(document.querySelector('[data-job-id="j1"]')).toBeNull();
+    expect(screen.getByRole("main")).not.toHaveTextContent(/Synthetic instruction|82,50/);
+  });
+
+  it.each(["CONFIRMED", "DECLINED"])("keeps a %s agenda answer on a stale Inbox page and forgets it on session change", async decision => {
+    const { service, handlers } = fakeService();
+    const inboxService = scheduleInbox();
+    render(<CleanerHubApp hubOptions={{ service, inboxService }} />);
+    act(() => handlers.agenda({ entries: [pending], fromCache: false }));
+    const band = screen.getByRole("region", { name: /Confirmar a nova data · Maple/ });
+    if (decision === "DECLINED") {
+      await userEvent.click(within(band).getByRole("button", { name: "Não posso" }));
+      await userEvent.click(within(band).getByRole("button", { name: "Recusar e sair" }));
+    } else {
+      await userEvent.click(within(band).getByRole("button", { name: "Posso" }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: /Caixa de entrada/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Atualizar avisos" }));
+    const copy = decision === "CONFIRMED" ? "Novo horário confirmado." : "Você informou que não pode na nova data.";
+    expect(await screen.findByText(copy)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Posso" })).toBeNull();
+    if (decision === "DECLINED") {
+      expect(screen.queryByRole("button", { name: "Ver serviço" })).toBeNull();
+      expect(screen.queryByText(pending.propertyName)).toBeNull();
+    }
+    act(() => handlers.session({ status: "signed-in", uid: "u1", organizationId: "other-org", cleanerId: "other", sessionId: "session-b" }));
+    act(() => handlers.agenda({ entries: [pending], fromCache: false }));
+    expect(await screen.findByRole("button", { name: "Posso" })).toBeVisible();
+    expect(screen.queryByText(copy)).toBeNull();
+  });
+
+  it("answers from the band, blocks duplicate actions, and keeps the confirmed card and detail on a delayed projection", async () => {
+    const { service, handlers } = fakeService();
+    let finish;
+    service.respondToAgendaReschedule.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [pending], fromCache: false }));
+    const banner = screen.getByRole("region", { name: /Confirmar a nova data · Maple/ });
+    expect(banner).toHaveTextContent("9:15");
+    expect(banner).toHaveTextContent("14:30");
+    const card = document.querySelector('[data-job-id="j1"]').closest("li");
+    expect(card.querySelector("button button")).toBeNull();
+    expect(within(card).getByText("Confirmar a nova data")).toBeVisible();
+    await userEvent.click(within(banner).getByRole("button", { name: "Posso" }));
+    expect(within(card).getByRole("button", { name: "Não posso" })).toBeDisabled();
+    expect(service.respondToAgendaReschedule).toHaveBeenCalledExactlyOnceWith("j1", { decision: "CONFIRMED", scheduleRevision: 4 });
+    await act(() => finish({ state: "CONFIRMED", scheduleRevision: 4 }));
+    expect(screen.queryByRole("region", { name: /Confirmar a nova data/ })).toBeNull();
+    act(() => handlers.agenda({ entries: [pending], fromCache: false }));
+    expect(within(card).getByText("Novo horário confirmado.")).toBeVisible();
+    await userEvent.click(card.querySelector("[data-job-id]"));
+    expect(screen.getByText("Novo horário confirmado.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Posso" })).toBeNull();
+  });
+
+  it("confirms a decline explicitly and drops private details before the projection disappears", async () => {
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [{ ...pending, notes: "Synthetic task instruction" }], fromCache: false }));
+    await userEvent.click(document.querySelector('[data-job-id="j1"]'));
+    await userEvent.click(screen.getByRole("button", { name: "Não posso" }));
+    expect(service.respondToAgendaReschedule).not.toHaveBeenCalled();
+    const cancel = screen.getAllByRole("button", { name: "Voltar" }).find(el => el.closest(".hb-reschedule"));
+    expect(cancel).toHaveFocus();
+    await userEvent.click(cancel);
+    expect(screen.getByRole("button", { name: "Não posso" })).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Não posso" }));
+    await userEvent.click(screen.getByRole("button", { name: "Recusar e sair" }));
+    expect(service.respondToAgendaReschedule).toHaveBeenCalledExactlyOnceWith("j1", { decision: "DECLINED", scheduleRevision: 4 });
+    expect(screen.getByText("Você informou que não pode na nova data.").closest('[role="status"]')).toHaveFocus();
+    expect(screen.queryByText("Synthetic task instruction")).toBeNull();
+    act(() => handlers.agenda({ entries: [], fromCache: false }));
+    await userEvent.click(screen.getByRole("button", { name: "Voltar" }));
+    expect(screen.getByRole("main")).toHaveTextContent("Você informou que não pode na nova data.");
+    expect(document.querySelector('[data-job-id="j1"]')).toBeNull();
+  });
+
+
+  it("recovers the current pending change on an older assigned projection and answers from the home band", async () => {
+    const { service, handlers } = fakeService();
+    service.loadAgendaReschedules = vi.fn().mockResolvedValue({
+      confirmations: [{ jobId: "j1", scheduleRevision: 4, reschedule: pending.reschedule }],
+    });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [{ ...entries[0], scheduleRevision: 4 }], fromCache: false }));
+    const banner = await screen.findByRole("region", { name: /Confirmar a nova data · Maple/ });
+    expect(service.loadAgendaReschedules).toHaveBeenCalledExactlyOnceWith([{ jobId: "j1", scheduleRevision: 4 }]);
+    await userEvent.click(within(banner).getByRole("button", { name: "Posso" }));
+    expect(service.respondToAgendaReschedule).toHaveBeenCalledExactlyOnceWith("j1", { decision: "CONFIRMED", scheduleRevision: 4 });
+  });
+
+  it("allows an answer on the current revision while a superseded request is still arriving", async () => {
+    const { service, handlers } = fakeService();
+    let finishPrevious;
+    service.respondToAgendaReschedule.mockImplementationOnce(() => new Promise(resolve => { finishPrevious = resolve; }));
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [pending], fromCache: false }));
+    const banner = screen.getByRole("region", { name: /Confirmar a nova data · Maple/ });
+    await userEvent.click(within(banner).getByRole("button", { name: "Posso" }));
+    const current = { ...pending, scheduleRevision: 5, reschedule: { ...pending.reschedule, scheduleRevision: 5 } };
+    act(() => handlers.agenda({ entries: [current], fromCache: false }));
+    await userEvent.click(within(banner).getByRole("button", { name: "Posso" }));
+    expect(service.respondToAgendaReschedule).toHaveBeenLastCalledWith("j1", { decision: "CONFIRMED", scheduleRevision: 5 });
+    await act(() => finishPrevious({ state: "DECLINED", scheduleRevision: 4 }));
+    expect(screen.getByText("Novo horário confirmado.", { selector: ".hb-reschedule-result" })).toBeVisible();
+    expect(screen.queryByText("Você informou que não pode na nova data.")).toBeNull();
+  });
+
+  it("leaves a newer revision actionable after a stale card decision and omits missing history", async () => {
+    const { service, handlers } = fakeService();
+    service.respondToAgendaReschedule.mockRejectedValueOnce({ details: { reason: "stale-schedule" } });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    const reschedule = { state: "PENDING", scheduleRevision: 4, scheduledDate: tomorrow, scheduledStart: "13:00" };
+    act(() => handlers.agenda({ entries: [{ ...pending, reschedule }], fromCache: false }));
+    const card = document.querySelector('[data-job-id="j1"]').closest("li");
+    expect(within(card).queryByText("Antes")).toBeNull();
+    await userEvent.click(within(card).getByRole("button", { name: "Posso" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("O horário mudou de novo.");
+    expect(service.reconnectAgenda).toHaveBeenCalled();
+    act(() => handlers.agenda({ entries: [{ ...pending, scheduleRevision: 5, reschedule: { ...reschedule, scheduleRevision: 5, scheduledStart: "15:45" } }], fromCache: false }));
+    expect(within(card).getByText(/15:45/)).toBeVisible();
+    await userEvent.click(within(card).getByRole("button", { name: "Posso" }));
+    expect(service.respondToAgendaReschedule).toHaveBeenLastCalledWith("j1", { decision: "CONFIRMED", scheduleRevision: 5 });
   });
 });
 

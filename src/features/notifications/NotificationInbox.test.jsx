@@ -142,7 +142,7 @@ describe("Notification Inbox", () => {
 
   it("sends only the cleaner's notification id and schedule revision and waits for the decision", async () => {
     const notice = { ...items[0], type: "RESCHEDULED", reschedule: {
-      state: "PENDING", scheduleRevision: 4, scheduledDate: "2026-11-16", scheduledStart: "10:30",
+      state: "PENDING", scheduleRevision: 4, previousScheduledDate: "2026-11-15", previousScheduledStart: "08:15", scheduledDate: "2026-11-16", scheduledStart: "10:30",
     } };
     let resolveDecision;
     const service = {
@@ -151,13 +151,19 @@ describe("Notification Inbox", () => {
     };
     render(<Example service={service} />);
     await userEvent.click(await screen.findByRole("button", { name: "Não posso" }));
+    expect(screen.getByText("Antes")).toBeVisible();
+    expect(screen.getByText(/8:15/)).toBeVisible();
+    expect(screen.getByText("Agora")).toBeVisible();
+    expect(screen.getByText("Você será retirada deste serviço.")).toBeVisible();
+    expect(service.respondToReschedule).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Recusar e sair" }));
     expect(service.respondToReschedule).toHaveBeenCalledExactlyOnceWith("CLEANER", "a", {
       scheduleRevision: 4, decision: "DECLINED",
     });
     expect(screen.queryByText(/você informou/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirmar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Recusar e sair" })).toBeDisabled();
     await act(() => resolveDecision({ state: "DECLINED", scheduleRevision: 4 }));
-    expect(await screen.findByText("Você informou que não pode na nova data.")).toBeVisible();
+    expect(await screen.findByText("Você informou que não pode na nova data.")).toHaveFocus();
     expect(screen.queryByText(/10:30|Synthetic Flat/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ver serviço" })).not.toBeInTheDocument();
   });
@@ -173,7 +179,7 @@ describe("Notification Inbox", () => {
       respondToReschedule: vi.fn().mockRejectedValue({ details: { reason: "stale-schedule" } }),
     };
     render(<Example service={service} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Posso" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("O horário mudou de novo.");
     expect(await screen.findByText(/12:00/)).toBeInTheDocument();
     expect(screen.queryByText(/10:30/)).not.toBeInTheDocument();

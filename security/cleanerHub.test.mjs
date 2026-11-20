@@ -1438,6 +1438,15 @@ function answerReschedule(uid, eventId, scheduleRevision, decision, claims) {
   return respondToMyReschedule.run(cleanerRequest(uid, { eventId, scheduleRevision, decision }, claims));
 }
 
+function answerAgendaReschedule(uid, jobId, scheduleRevision, decision, claims) {
+  return respondToMyReschedule.run(cleanerRequest(uid, { jobId, scheduleRevision, decision }, claims));
+}
+
+async function assignedReschedule(cleanerId, jobId) {
+  const snapshot = await admin.doc(`${root}/cleanerAgenda/${cleanerId}__${jobId}`).get();
+  return snapshot.get("reschedule");
+}
+
 test("reschedule confirmation is private and one final response belongs to each active assignment", async () => {
   const job = jobDocument("reschedule-own-confirmation");
   await createJob(job.id, { requiredCleanerCount: 2 });
@@ -1450,13 +1459,23 @@ test("reschedule confirmation is private and one final response belongs to each 
     reschedulePrompt(uidA, moved.scheduleRevision), reschedulePrompt(uidB, moved.scheduleRevision),
   ]);
   assert.notEqual(promptA.id, promptB.id);
+  await sync(job.id);
   for (const prompt of [promptA, promptB]) {
+    assert.equal(prompt.jobId, job.id);
     assert.deepEqual(prompt.reschedule, {
       state: "PENDING", scheduleRevision: moved.scheduleRevision, scheduledDate: moved.scheduledDate, scheduledStart: "12:15",
+      previousScheduledDate: dateKey(3), previousScheduledStart: "10:30",
     });
     assert.doesNotMatch(JSON.stringify(prompt), /private-|synthetic-job-instructions|clientPrice|cleanerPayout|assignmentId|byCleaner|cleaner-[abc]/);
   }
   assert.equal((await listNotificationInbox.run(cleanerRequest(uidC, { role: "CLEANER" }))).items.length, 0);
+  assert.deepEqual(await assignedReschedule("cleaner-a", job.id), promptA.reschedule);
+  assert.deepEqual(await assignedReschedule("cleaner-b", job.id), promptB.reschedule);
+  assert.equal(await assignedReschedule("cleaner-c", job.id), undefined);
+  const agendaPath = `${root}/cleanerAgenda/cleaner-a__${job.id}`;
+  const foreignClaims = { ...hubClaimsByUid.get(uidA), organizationId: "other-org" };
+  await assertFails(cleanerDb(uidC).doc(agendaPath).get());
+  await assertFails(cleanerDb(uidA, foreignClaims).doc(agendaPath).get());
   const before = (await job.get()).data();
   const payload = { eventId: promptA.id, scheduleRevision: moved.scheduleRevision, decision: "CONFIRMED" };
   await assert.rejects(respondToMyReschedule.run({ data: payload }), { code: "unauthenticated" });
@@ -1466,6 +1485,11 @@ test("reschedule confirmation is private and one final response belongs to each 
   await assert.rejects(respondToMyReschedule.run(cleanerRequest(uidA, payload, {
     ...hubClaimsByUid.get(uidA), organizationId: "other-org",
   })), { code: "permission-denied" });
+  await assert.rejects(answerAgendaReschedule(uidC, job.id, moved.scheduleRevision, "DECLINED"));
+  await assert.rejects(answerAgendaReschedule(uidA, job.id, moved.scheduleRevision, "DECLINED", foreignClaims),
+    { code: "permission-denied" });
+  await assert.rejects(respondToMyReschedule.run(cleanerRequest(uidA, { ...payload, jobId: job.id })),
+    { code: "invalid-argument" });
   assert.deepEqual((await job.get()).data(), before);
   const managerDb = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
   await assertFails(managerDb.doc(job.path).update({ "scheduleConfirmation.byCleaner.cleaner-a.state": "CONFIRMED" }));
@@ -1473,7 +1497,8 @@ test("reschedule confirmation is private and one final response belongs to each 
 
   const outcome = { state: "CONFIRMED", scheduleRevision: moved.scheduleRevision };
   const answer = (decision) => answerReschedule(uidA, promptA.id, moved.scheduleRevision, decision);
-  assert.deepEqual(await Promise.all([answer("CONFIRMED"), answer("CONFIRMED")]), [outcome, outcome]);
+  const fromAgenda = () => answerAgendaReschedule(uidA, job.id, moved.scheduleRevision, "CONFIRMED");
+  assert.deepEqual(await Promise.all([fromAgenda(), answer("CONFIRMED")]), [outcome, outcome]);
   const committed = (await job.get()).data();
   const audit = job.collection("scheduleHistory").doc(String(moved.scheduleRevision)).collection("responses");
   const [record] = (await audit.get()).docs;
@@ -1490,11 +1515,90 @@ test("reschedule confirmation is private and one final response belongs to each 
   assert.equal(committed.scheduleConfirmation.byCleaner["cleaner-b"].state, "PENDING");
   assert.deepEqual(committed.assignedCleanerIds, ["cleaner-a", "cleaner-b"]);
   assert.equal((await reschedulePrompt(uidA, moved.scheduleRevision)).reschedule.state, "CONFIRMED");
+  await sync(job.id);
+  assert.deepEqual(await assignedReschedule("cleaner-a", job.id), { ...promptA.reschedule, state: "CONFIRMED" });
+  assert.deepEqual(await assignedReschedule("cleaner-b", job.id), promptB.reschedule);
 
   const claimsB = hubClaimsByUid.get(uidB);
   await revokeCleanerHubAccess.run(managerRequest({ cleanerId: "cleaner-b" }));
   await assert.rejects(answerReschedule(uidB, promptB.id, moved.scheduleRevision, "CONFIRMED", claimsB), { code: "permission-denied" });
   assert.equal((await audit.get()).size, 1);
+});
+
+test("legacy agenda lookups disclose only this cleaner's current revision and leave the projection untouched", async () => {
+  for (const id of ["cleaner-a", "cleaner-b"]) await link(id);
+  const mine = jobDocument("legacy-agenda-mine");
+  const other = jobDocument("legacy-agenda-other");
+  for (const [job, cleanerId] of [[mine, "cleaner-a"], [other, "cleaner-b"]]) {
+    await createJob(job.id);
+    await assignCleanerDirectly.run(managerRequest({ jobId: job.id, cleanerId }));
+    await rescheduleWithInbox(job, 4, "14:30");
+    await sync(job.id);
+  }
+  const revision = (await mine.get()).get("scheduleRevision");
+  const ownEntry = admin.doc(`${root}/cleanerAgenda/cleaner-a__${mine.id}`);
+  const expected = (await ownEntry.get()).get("reschedule");
+  assert.equal(expected.previousScheduledStart, "10:30");
+  await ownEntry.update({ reschedule: FieldValue.delete() });
+  const before = await ownEntry.get();
+  const agendaRevisions = [
+    { jobId: mine.id, scheduleRevision: revision },
+    { jobId: other.id, scheduleRevision: revision },
+    { jobId: "other-job", scheduleRevision: revision },
+  ];
+  const lookup = (uid, requested, claims) => listNotificationInbox.run(
+    cleanerRequest(uid, { role: "CLEANER", agendaRevisions: requested }, claims),
+  );
+  assert.deepEqual(await lookup(uidA, agendaRevisions), {
+    confirmations: [{ jobId: mine.id, scheduleRevision: revision, reschedule: expected }],
+  });
+  assert.deepEqual(await lookup(uidB, [{ jobId: mine.id, scheduleRevision: revision }]), { confirmations: [] });
+  assert.deepEqual(await lookup(uidA, [{ jobId: mine.id, scheduleRevision: revision + 1 }]), { confirmations: [] });
+  await assert.rejects(lookup(uidA, agendaRevisions, { ...hubClaimsByUid.get(uidA), organizationId: "other-org" }),
+    { code: "permission-denied" });
+  await assert.rejects(listNotificationInbox.run(managerRequest({ role: "MANAGER", agendaRevisions })));
+  assert.ok((await ownEntry.get()).updateTime.isEqual(before.updateTime));
+});
+
+test("the cleaner can answer on the agenda before the reschedule Inbox trigger arrives", async () => {
+  const job = jobDocument("schedule-before-inbox");
+  await createJob(job.id);
+  await link("cleaner-a");
+  await assignCleanerDirectly.run(managerRequest({ jobId: job.id, cleanerId: "cleaner-a" }));
+  const target = functionDatabase.doc(job.path);
+  const before = await target.get();
+  const moved = await rescheduleJob.run(managerRequest({ jobId: job.id, scheduledDate: dateKey(6), scheduledStart: "12:30" }));
+  const after = await target.get();
+  await sync(job.id);
+  const agenda = await assignedReschedule("cleaner-a", job.id);
+  assert.equal(agenda.state, "PENDING");
+  const unread = await listNotificationInbox.run(cleanerRequest(uidA, { role: "CLEANER" }));
+  assert.ok(!unread.items.some(({ type }) => type === "RESCHEDULED"));
+  assert.equal((await answerAgendaReschedule(uidA, job.id, agenda.scheduleRevision, "CONFIRMED")).state, "CONFIRMED");
+  await recordCleanerJobInboxEvents(functionDatabase, { organizationId: org, jobId: job.id, before, after, eventId: "delayed-revision" });
+  const delivered = await reschedulePrompt(uidA, moved.scheduleRevision);
+  assert.deepEqual(delivered.reschedule, { ...agenda, state: "CONFIRMED" });
+});
+
+test("a schedule with no previous time or date is still answerable without inventing earlier values", async () => {
+  await link("cleaner-a");
+  for (const previousDate of [dateKey(3), null]) {
+    const job = jobDocument(previousDate ? "previous-date-only" : "previous-unscheduled");
+    await createJob(job.id, { scheduledDate: previousDate, scheduledStart: null });
+    await assignCleanerDirectly.run(managerRequest({ jobId: job.id, cleanerId: "cleaner-a" }));
+    const moved = await rescheduleWithInbox(job, 5, "15:00");
+    const inbox = await listNotificationInbox.run(cleanerRequest(uidA, { role: "CLEANER" }));
+    await sync(job.id);
+    const agenda = await assignedReschedule("cleaner-a", job.id);
+    assert.deepEqual(agenda, {
+      state: "PENDING", scheduleRevision: moved.scheduleRevision, scheduledDate: moved.scheduledDate,
+      scheduledStart: "15:00", ...(previousDate ? { previousScheduledDate: previousDate } : {}),
+    });
+    assert.ok(inbox.items.some(({ reschedule }) => reschedule?.state === "PENDING"
+      && reschedule.scheduledStart === "15:00" && reschedule.previousScheduledDate === (previousDate ?? undefined)
+      && reschedule.previousScheduledStart === undefined));
+    assert.equal((await answerAgendaReschedule(uidA, job.id, moved.scheduleRevision, "CONFIRMED")).state, "CONFIRMED");
+  }
 });
 
 test("reschedule decline removes only that assignment, audits once, and keeps a filled batch closed", async () => {
@@ -1512,8 +1616,8 @@ test("reschedule decline removes only that assignment, audits once, and keeps a 
   const assignmentId = before.scheduleConfirmation.byCleaner["cleaner-a"].assignmentId;
   assert.ok(assignmentId);
   const result = { state: "DECLINED", scheduleRevision: moved.scheduleRevision };
-  const answer = () => answerReschedule(uidA, prompt.id, moved.scheduleRevision, "DECLINED");
-  assert.deepEqual(await Promise.all([answer(), answer()]), [result, result]);
+  assert.deepEqual(await answerAgendaReschedule(uidA, job.id, moved.scheduleRevision, "DECLINED"), result);
+  assert.deepEqual(await answerReschedule(uidA, prompt.id, moved.scheduleRevision, "DECLINED"), result);
 
   const after = (await job.get()).data();
   assert.deepEqual([after.assignedCleanerIds, after.operationalStatus, after.checklistContextRevision],
@@ -1538,8 +1642,13 @@ test("reschedule decline removes only that assignment, audits once, and keeps a 
   const manager = await listNotificationInbox.run(managerRequest({ role: "MANAGER" }));
   assert.equal(manager.items.filter((item) => item.type === "RESCHEDULE_DECLINED").length, 1);
   assert.equal((await reschedulePrompt(uidB, moved.scheduleRevision)).reschedule.state, "PENDING");
+  await sync(job.id);
+  assert.equal(await assignedReschedule("cleaner-a", job.id), undefined);
+  assert.equal((await assignedReschedule("cleaner-b", job.id)).state, "PENDING");
   const former = (await listNotificationInbox.run(cleanerRequest(uidA, { role: "CLEANER" }))).items.find(({ id }) => id === prompt.id);
   assert.equal(former.openable, false);
+  assert.equal(former.jobId, undefined);
+  assert.equal(former.reschedule?.previousScheduledDate, undefined);
   assert.equal(former.serviceLabel, null);
 });
 
@@ -1647,6 +1756,8 @@ test("a response racing a newer reschedule cannot settle the newer generation", 
   await assignCleanerDirectly.run(managerRequest({ jobId: job.id, cleanerId: "cleaner-a" }));
   const prior = await rescheduleWithInbox(job, 4, "12:00");
   const oldPrompt = await reschedulePrompt(uidA, prior.scheduleRevision);
+  await sync(job.id);
+  const firstAgendaRevision = (await assignedReschedule("cleaner-a", job.id)).scheduleRevision;
   const [reply, refreshed] = await Promise.allSettled([
     answerReschedule(uidA, oldPrompt.id, prior.scheduleRevision, "CONFIRMED"),
     rescheduleWithInbox(job, 5, "14:00"),
@@ -1663,7 +1774,12 @@ test("a response racing a newer reschedule cannot settle the newer generation", 
   assert.equal((await read(current.scheduleRevision)).size, 0);
   const currentPrompt = await reschedulePrompt(uidA, current.scheduleRevision);
   assert.equal(currentPrompt.reschedule.state, "PENDING");
+  assert.equal(currentPrompt.reschedule.previousScheduledDate, prior.scheduledDate);
+  assert.equal(currentPrompt.reschedule.previousScheduledStart, prior.scheduledStart);
+  await sync(job.id);
+  assert.deepEqual(await assignedReschedule("cleaner-a", job.id), currentPrompt.reschedule);
   const stale = (error) => error.details?.reason === "stale-schedule";
+  await assert.rejects(answerAgendaReschedule(uidA, job.id, firstAgendaRevision, "DECLINED"), stale);
   await assert.rejects(answerReschedule(uidA, oldPrompt.id, prior.scheduleRevision, "DECLINED"), stale);
   await assert.rejects(answerReschedule(uidA, oldPrompt.id, current.scheduleRevision, "DECLINED"), stale);
   await assert.rejects(answerReschedule(uidA, currentPrompt.id, prior.scheduleRevision, "DECLINED"), stale);

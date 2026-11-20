@@ -37,7 +37,7 @@ describe("cleaner agenda projection", () => {
       organizationId: "org", cleanerId: "ana", jobId: "j1", jobStatus: "ASSIGNED",
       scheduledDate: "2026-11-06", scheduledStart: "10:30", propertyName: "Maple Example House",
       address: null, notes: "Synthetic task A\nSynthetic task B",
-      scheduleRevision: 2, kind: "ASSIGNED", serviceType: "STANDARD", acknowledged: true, offerStatus: null, offeredCompensation: null,
+      scheduleRevision: 2, reschedule: null, kind: "ASSIGNED", serviceType: "STANDARD", acknowledged: true, offerStatus: null, offeredCompensation: null,
       checklist: { status: "NONE", started: false }, checklistStatus: "NONE", checklistStarted: false,
     });
     expect(JSON.stringify([...entries.values()])).not.toMatch(/250|150|private/);
@@ -177,6 +177,49 @@ describe("cleaner agenda projection", () => {
     expect(offeredCompensationFor({}, job())).toBeNull();
     expect(offeredCompensationFor({}, { cleanerPayout: 120 })).toBe(120);
     expect(offeredCompensationFor({ offeredCompensation: -1 }, job())).toBeNull();
+  });
+
+  it("exposes only the current assignment's own reschedule state and the revision's before/after", () => {
+    const organizationId = "org-a", jobId = "job-a";
+    const active = (id, cleanerId) => ({ organizationId, jobId, cleanerId, id, isActive: true });
+    const assignments = [active("active-a", "a"), active("active-b", "b"), active("replacement-c", "c")];
+    const input = {
+      organizationId, jobId, now, assignments, offers: [{ cleanerId: "d", status: "PENDING", publicOfferExpiresAt: future }],
+      job: job({ organizationId, assignedCleanerIds: ["a", "b", "c"], requiredCleanerCount: 4, scheduleRevision: 4,
+        scheduleConfirmation: { revision: 4, byCleaner: { a: { state: "PENDING", assignmentId: "active-a" },
+          b: { state: "CONFIRMED", assignmentId: "active-b" }, c: { state: "PENDING", assignmentId: "old-c" } } } }),
+      scheduleHistory: { scheduleRevision: 4, newScheduledDate: "2026-11-06", newScheduledStart: "10:30",
+        previousScheduledDate: "2026-11-03", previousScheduledStart: "09:00", actorUid: "excluded" },
+    };
+    const entries = computeAgendaEntries(input);
+    const details = { scheduleRevision: 4, scheduledDate: "2026-11-06", scheduledStart: "10:30",
+      previousScheduledDate: "2026-11-03", previousScheduledStart: "09:00" };
+    expect(entries.get("a").reschedule).toEqual({ ...details, state: "PENDING" });
+    expect(entries.get("b").reschedule).toEqual({ ...details, state: "CONFIRMED" });
+    expect(entries.get("c").reschedule).toBeNull();
+    expect(entries.get("d")).not.toHaveProperty("reschedule");
+    const replay = computeAgendaEntries(input).get("a");
+    expect(sameEntry(entries.get("a"), replay)).toBe(true);
+    expect(sameEntry(replay, { ...replay, reschedule: { ...replay.reschedule, state: "CONFIRMED" } })).toBe(false);
+    const later = computeAgendaEntries({ ...input, job: { ...input.job, scheduleRevision: 5 } }).get("a");
+    expect(later.reschedule).toBeNull();
+    expect(sameEntry(replay, later)).toBe(false);
+    // Even if the revision itself is unchanged, losing the active Assignment clears the prompt.
+    const replaced = computeAgendaEntries({ ...input, assignments: [active("new-a", "a")] }).get("a");
+    expect(replaced.reschedule).toBeNull();
+    expect(sameEntry(replay, replaced)).toBe(false);
+  });
+
+  it("distinguishes older projections from a checked revision with no confirmation", () => {
+    const assigned = (scheduleRevision) => computeAgendaEntries({
+      organizationId: "o", jobId: "j", job: job({ scheduleRevision }),
+    }).get("ana");
+    const checked = assigned(2);
+    const { reschedule, ...old } = checked;
+    expect(reschedule).toBeNull();
+    expect(sameEntry(old, checked)).toBe(false);
+    expect(sameEntry(checked, assigned(2))).toBe(true);
+    expect(assigned(0)).not.toHaveProperty("reschedule");
   });
 
   it("plans honest change notices: new, moved, removed and cancelled", () => {

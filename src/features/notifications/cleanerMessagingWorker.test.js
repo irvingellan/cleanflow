@@ -2,7 +2,7 @@
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { cleanerMessagingWorkerSource } from "../../../vite.config.js";
-import { cleanerMessagingConfig, cleanerPushDisplay, isCleanerVapidKey } from "./cleanerPushBinding.js";
+import { cleanerMessagingConfig, cleanerPushBinding, cleanerPushDisplay, isCleanerVapidKey } from "./cleanerPushBinding.js";
 
 const base = { projectId: "demo-cleanflow", messagingSenderId: "1234", appId: "1:1234:web:manager" };
 const cleanerAppId = "1:1234:web:cleaner";
@@ -116,6 +116,36 @@ describe("Isolated Cleaner Hub push worker", () => {
     } });
     expect(fixture.showNotification).toHaveBeenLastCalledWith("CleanFlow", expect.objectContaining({
       body: "Abra o CleanFlow para ver seus avisos.",
+    }));
+  });
+
+  it("upgrades the current installation on Hub open without re-enrolling or adopting another session", async () => {
+    const stored = { sessionId: "a", bindingId, registrationRevision: 3, language: "es" };
+    vi.stubGlobal("indexedDB", storageFixture(stored));
+    try {
+      expect(await cleanerPushBinding("claim", "b")).toBeNull();
+      expect(await cleanerPushBinding("read")).toEqual(stored);
+      expect(await cleanerPushBinding("claim", "a")).toEqual({ ...stored, noticeVersion: 2 });
+      expect(await cleanerPushBinding("read")).toEqual({ ...stored, noticeVersion: 2 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    ["en", "A service changed. Open My Schedule to confirm."],
+    ["pt", "Um serviço mudou de horário. Abra Minha agenda para confirmar."],
+    ["es", "Cambió el horario de un servicio. Abre Mi agenda para confirmar."],
+  ])("uses only fixed schedule copy for a current %s Hub binding", async (language, body) => {
+    const fixture = workerFixture();
+    fixture.indexedDB.set({ sessionId: "a", bindingId, language, noticeVersion: 2 });
+    await fixture.receive({ data: {
+      cleanerBindingId: bindingId, eventId: "schedule", noticeType: "RESCHEDULED",
+      rescheduleDate: "2027-01-01", rescheduleStart: "14:15", body: "ignored private input",
+      link: "/unexpected", propertyName: "ignored", notes: "ignored", amount: "ignored",
+    } });
+    expect(fixture.showNotification).toHaveBeenCalledExactlyOnceWith("CleanFlow", expect.objectContaining({
+      body, data: { cleanerBindingId: bindingId },
     }));
   });
 

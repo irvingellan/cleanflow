@@ -35,16 +35,23 @@ export async function cleanerPushBinding(action, sessionId, bindingId, language,
       read.onsuccess = () => {
         const current = read.result;
         if (action === "read") result = current || null;
-        if (action === "claim" && current?.sessionId === sessionId) result = current;
+        if (action === "claim" && current?.sessionId === sessionId) {
+          result = current;
+          // Upgrade an existing owner's display format when they next open the Hub.
+          if (current.noticeVersion !== 2) {
+            result = { ...current, noticeVersion: 2 };
+            store.put(result, "active");
+          }
+        }
         if (action === "claim" && !current?.sessionId && current?.blockedSessionId !== sessionId) {
-          result = { sessionId };
+          result = { sessionId, noticeVersion: 2 };
           store.put(result, "active");
         }
         if (action === "set" && current?.sessionId === sessionId
           && (registrationRevision > (current.registrationRevision || 0)
             || (registrationRevision === current.registrationRevision && current.bindingId === bindingId))) {
           result = current;
-          store.put({ sessionId, bindingId, language, registrationRevision }, "active");
+          store.put({ sessionId, bindingId, language, registrationRevision, noticeVersion: 2 }, "active");
         }
         if (action === "invalidate" && current?.sessionId === sessionId
           && (registrationRevision == null || current.registrationRevision === registrationRevision)) {
@@ -83,7 +90,12 @@ export function cleanerPushDisplay(payload, currentBinding) {
     pt: "Abra o CleanFlow para ver seus avisos.",
     es: "Abre CleanFlow para ver tus avisos.",
   }[language] || "Open CleanFlow to see your notifications.";
-  if (typeof data.rescheduleDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.rescheduleDate)
+  if (currentBinding.noticeVersion === 2 && data.noticeType === "RESCHEDULED") {
+    body = {
+      pt: "Um serviço mudou de horário. Abra Minha agenda para confirmar.",
+      es: "Cambió el horario de un servicio. Abre Mi agenda para confirmar.",
+    }[language] || "A service changed. Open My Schedule to confirm.";
+  } else if (typeof data.rescheduleDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.rescheduleDate)
     && typeof data.rescheduleStart === "string" && /^(?:(?:[01]\d|2[0-3]):[0-5]\d)?$/.test(data.rescheduleStart)) {
     const date = new Date(data.rescheduleDate + "T00:00:00Z");
     if (date.toJSON()?.slice(0, 10) === data.rescheduleDate) {

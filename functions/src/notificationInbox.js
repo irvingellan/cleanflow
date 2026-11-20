@@ -2,7 +2,7 @@ import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { assertSessionForMutation } from "./cleanerHubAccess.js";
 import { notificationRevision, notificationRoster } from "./cleanerNotificationEvents.js";
-import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
+import { FIRST_ACCEPT_WINS, isAutomaticOfferJob, validRosterId } from "./firstAcceptWins.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
 import {
   automaticOfferNotice, cleanerInbox, cleanerInboxTypes as cleanerTypes, inboxEventVersion, inboxReceipt, isInboxId,
@@ -10,7 +10,7 @@ import {
   safeServiceLabel, validInboxSegment,
 } from "./notificationInboxEvents.js";
 import { publicOfferState } from "./publicOfferResponseService.js";
-import { currentScheduleConfirmation } from "./rescheduleConfirmations.js";
+import { currentScheduleConfirmation, projectCleanerReschedule, rosterScheduleConfirmation } from "./rescheduleConfirmations.js";
 import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
 
 const inboxWindow = 100;
@@ -204,10 +204,74 @@ async function readInboxDocuments(transaction, references) {
   return new Map(snapshots.map((snapshot) => [snapshot.ref.path, snapshot.data()]));
 }
 
+function rescheduleLookup(jobRef, job, scheduleRevision, identity) {
+  const { organizationId, cleanerId } = identity;
+  const decision = rosterScheduleConfirmation(job, cleanerId, scheduleRevision, organizationId);
+  if (!decision) return null;
+  return {
+    job, jobId: jobRef.id, organizationId, cleanerId, scheduleRevision,
+    assignmentRef: decision.assignmentId ? jobRef.collection("assignments").doc(decision.assignmentId) : null,
+    historyRef: jobRef.collection("scheduleHistory").doc(String(scheduleRevision)),
+  };
+}
+
+function rescheduleReferences(lookup) {
+  return lookup ? [lookup.assignmentRef, lookup.historyRef] : [];
+}
+
+function resolveReschedule(lookup, records) {
+  if (!lookup) return null;
+  const { assignmentRef, historyRef } = lookup;
+  const assignment = records.get(assignmentRef?.path);
+  return projectCleanerReschedule({
+    ...lookup,
+    assignment: assignment && { ...assignment, id: assignmentRef.id },
+    history: records.get(historyRef.path),
+  });
+}
+
+function readAgendaRevisionsRequest(data) {
+  const pairs = data.agendaRevisions;
+  const invalid = () => new HttpsError("invalid-argument", "Agenda revisions are invalid.");
+  if (Object.keys(data).some(key => !["role", "agendaRevisions"].includes(key))
+    || !Array.isArray(pairs) || pairs.length < 1 || pairs.length > 25) throw invalid();
+  const seen = new Set();
+  for (const pair of pairs) {
+    if (!pair || typeof pair !== "object" || Array.isArray(pair)
+      || Object.keys(pair).some(key => key !== "jobId" && key !== "scheduleRevision")
+      || !validRosterId(pair.jobId) || !Number.isSafeInteger(pair.scheduleRevision) || pair.scheduleRevision < 1) throw invalid();
+    const key = JSON.stringify([pair.jobId, pair.scheduleRevision]);
+    if (seen.has(key)) throw invalid();
+    seen.add(key);
+  }
+  return pairs;
+}
+
+async function readLegacyAgendaConfirmations(transaction, organization, identity, pairs) {
+  const jobRefs = pairs.map(pair => organization.collection("jobs").doc(pair.jobId));
+  const jobs = await readInboxDocuments(transaction, jobRefs);
+  const lookups = pairs.map((pair, i) => rescheduleLookup(jobRefs[i], jobs.get(jobRefs[i].path), pair.scheduleRevision, identity));
+  const records = await readInboxDocuments(transaction, lookups.flatMap(rescheduleReferences));
+  const confirmations = [];
+  for (const lookup of lookups) {
+    const reschedule = resolveReschedule(lookup, records);
+    if (reschedule) confirmations.push({ jobId: lookup.jobId, scheduleRevision: lookup.scheduleRevision, reschedule });
+  }
+  return { confirmations };
+}
+
 export async function listNotificationInboxForRequest(database, { organizationId, request }) {
   const identity = requestIdentity(request, organizationId);
-  const { pageSize, cursor } = readInboxPageRequest(request.data);
   const organization = database.collection("organizations").doc(organizationId);
+  if (Object.hasOwn(request.data, "agendaRevisions")) {
+    if (identity.role !== cleanerRole) throw new HttpsError("permission-denied", "Active cleaner access is required.");
+    const pairs = readAgendaRevisionsRequest(request.data);
+    return database.runTransaction(async transaction => {
+      await assertInboxAccess(transaction, database, organization, identity);
+      return readLegacyAgendaConfirmations(transaction, organization, identity, pairs);
+    }, { readOnly: true });
+  }
+  const { pageSize, cursor } = readInboxPageRequest(request.data);
   return database.runTransaction(async (transaction) => {
     await assertInboxAccess(transaction, database, organization, identity);
     const feed = inboxCollection(organization, identity);
@@ -229,33 +293,16 @@ export async function listNotificationInboxForRequest(database, { organizationId
     const offerRefs = entries.map(({ event }, index) => (
       targetOfferReference(jobRefs[index], jobs[index], event, organizationId)
     ));
-    const offers = await readInboxDocuments(transaction, offerRefs);
-    const confirmations = entries.map(({ event }, index) => identity.role === cleanerRole
-      && event.type === cleanerTypes.rescheduled && jobs[index]?.operationalStatus === "ASSIGNED"
-      && notificationRoster(jobs[index]).includes(identity.cleanerId)
-      ? currentScheduleConfirmation(jobs[index], identity.cleanerId, event.scheduleRevision) : null);
-    const assignmentRefs = confirmations.map((confirmation, index) => confirmation?.assignmentId
-      ? jobRefs[index].collection("assignments").doc(confirmation.assignmentId) : null);
-    const assignments = await readInboxDocuments(transaction, assignmentRefs);
+    const lookups = entries.map(({ event }, index) => identity.role === cleanerRole && event.type === cleanerTypes.rescheduled
+      ? rescheduleLookup(jobRefs[index], jobs[index], event.scheduleRevision, identity) : null);
+    const details = await readInboxDocuments(transaction, [...offerRefs, ...lookups.flatMap(rescheduleReferences)]);
     const now = new Date();
     const items = entries.map(({ id, event }, index) => {
       const target = projectAuthorizedTarget(organization, event, identity, jobs[index],
-        offers.get(offerRefs[index]?.path), { now });
+        details.get(offerRefs[index]?.path), { now });
       const notice = target && identity.role === managerRole ? automaticOfferNotice(event.type, event.automaticOffer) : null;
       const removedService = identity.role === cleanerRole ? removedServiceNotice(event.type, event.removedService) : null;
-      const job = jobs[index];
-      const decision = confirmations[index];
-      const assignment = assignments.get(assignmentRefs[index]?.path);
-      const currentAssignment = decision?.assignmentId === null ? job?.schemaVersion !== 2
-        : assignment?.isActive === true && assignment.cleanerId === identity.cleanerId
-          && assignment.jobId === event.jobId && assignment.organizationId === organizationId;
-      const reschedule = target && decision && currentAssignment && typeof job.scheduledDate === "string"
-        ? {
-          state: decision.state,
-          scheduleRevision: event.scheduleRevision,
-          scheduledDate: job.scheduledDate,
-          scheduledStart: job.scheduledStart || null,
-        } : null;
+      const reschedule = target && resolveReschedule(lookups[index], details);
       return {
         id,
         type: event.type,
@@ -265,7 +312,8 @@ export async function listNotificationInboxForRequest(database, { organizationId
         openable: Boolean(target),
         serviceLabel: target?.serviceLabel ?? null,
         ...(notice ? { automaticOffer: notice } : {}),
-        ...(reschedule ? { reschedule } : {}),
+        // The Hub can share a decision across its screens only for this current assignment.
+        ...(reschedule ? { jobId: event.jobId, reschedule } : {}),
         ...(removedService ? { removedService } : {}),
       };
     });

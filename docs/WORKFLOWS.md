@@ -340,8 +340,12 @@ cannot update schedule fields directly; a manager-authorized callable writes
 the Job and its `scheduleHistory` record in one transaction.
 
 **Issue #58 candidate:** a confirmed date change requests one response from each
-current Assignment. The Inbox shows the new date privately. Current device
-registrations can display the day and time only and open the authenticated Inbox. The cleaner can confirm or decline. A
+current Assignment. The signed-in cleaner sees her own previous and new schedule
+in the Inbox, agenda and service details, and can confirm or decline there.
+If the earlier schedule is unavailable, only the current one appears. The Hub
+asks for confirmation before a decline. Push uses a fixed localized notice.
+Opening the updated Hub upgrades the local lock-screen display of an existing
+installation. Older workers can still show the previously supported date and time. A
 decline removes only her Assignment, keeps its audit and alerts the manager
 to the vacancy. Pending invitations use the current schedule. A closed
 automatic batch remains closed when a separate manual replacement is offered.

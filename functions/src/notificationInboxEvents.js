@@ -71,7 +71,7 @@ export function safeServiceLabel(job) {
     : null;
 }
 
-function noticeSchedule(value) {
+export function safeScheduleValues(value) {
   const scheduledDate = typeof value?.scheduledDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.scheduledDate)
     && new Date(value.scheduledDate).toJSON()?.slice(0, 10) === value.scheduledDate ? value.scheduledDate : "";
   const scheduledStart = typeof value?.scheduledStart === "string"
@@ -83,7 +83,7 @@ function noticeSchedule(value) {
 export function removedServiceNotice(type, value) {
   if (!value || (type !== cleanerInboxTypes.unassigned && type !== cleanerInboxTypes.cancelled)) return null;
   const propertyName = safeServiceLabel(value);
-  const { scheduledDate, scheduledStart } = noticeSchedule(value);
+  const { scheduledDate, scheduledStart } = safeScheduleValues(value);
   if (!propertyName && !scheduledDate && !scheduledStart) return null;
   return {
     ...(propertyName ? { propertyName } : {}),
@@ -96,7 +96,7 @@ export function automaticOfferNotice(type, value) {
   if (![managerInboxTypes.automatic, managerInboxTypes.automaticBatchFilled, managerInboxTypes.rescheduleDeclined].includes(type)) return null;
   const cleanerLabel = type !== managerInboxTypes.automaticBatchFilled && typeof value?.cleanerLabel === "string"
     ? value.cleanerLabel.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120) : "";
-  const { scheduledDate, scheduledStart } = noticeSchedule(value);
+  const { scheduledDate, scheduledStart } = safeScheduleValues(value);
   if (!cleanerLabel && !scheduledDate) return null;
   return {
     ...(cleanerLabel ? { cleanerLabel } : {}),

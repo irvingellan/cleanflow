@@ -67,7 +67,7 @@ export async function respondToMyOffer(request) {
 export async function respondToMyReschedule(request) {
   const { cleanerId, uid, sessionId } = await requireActiveCleaner(db, request, organizationId);
   return respondToRescheduleForCleaner(db, {
-    organizationId, cleanerId, uid, sessionId, eventId: request.data?.eventId,
+    organizationId, cleanerId, uid, sessionId, eventId: request.data?.eventId, jobId: request.data?.jobId,
     scheduleRevision: request.data?.scheduleRevision, decision: request.data?.decision,
   });
 }

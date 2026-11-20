@@ -145,7 +145,18 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     const card = pageA.locator(`[data-job-id="${mapleRef.id}"]`);
     await expect(card).toContainText("13:00");
     await expect(pageA.getByRole("heading", { name: "Mudanças recentes" })).toHaveCount(0);
+    const banner = pageA.locator(`[data-reschedule-banner="${mapleRef.id}"]`);
+    await expect(banner).toContainText(fixture.mapleName);
+    await expect(banner).toContainText(/Antes.*10:30/);
+    await expect(banner).toContainText(/Agora.*13:00/);
+    await expect(banner.getByRole("button", { name: "Posso", exact: true })).toBeVisible();
     await evidence(pageA, "02-rescheduled-live");
+    await card.click();
+    await expect(pageA.getByRole("main")).toContainText(/Antes.*10:30/);
+    await expect(pageA.getByRole("main")).toContainText(/Agora.*13:00/);
+    await pageA.getByRole("button", { name: "Não posso", exact: true }).click();
+    await expect(pageA.getByText("Você será retirada deste serviço.")).toBeVisible();
+    expect((await mapleRef.get()).get("scheduleConfirmation.byCleaner")[fixture.cleanerAId].state).toBe("PENDING");
 
     const service = page.getByRole("heading", { name: "New date confirmation" });
     await expect(service).toBeVisible();
@@ -153,16 +164,23 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await expect(page.getByText(/https:\/\/clean-flow-prototipo.web.app\/agenda/)).toBeVisible();
     await expect(page.getByText(/Review the draft and send it in WhatsApp/i)).toBeVisible();
 
-    await pageA.goto("/agenda?inbox=1");
-    const prompt = pageA.getByRole("listitem").filter({ hasText: /A data mudou para .*13:00/ });
-    await expect(prompt).toBeVisible();
+    await pageA.getByRole("button", { name: /Caixa de entrada/ }).click();
+    const prompt = pageA.getByRole("listitem").filter({ has: pageA.getByRole("heading", { name: "Data ou horário alterado" }) });
+    await expect(prompt).toContainText(/Antes.*10:30/);
+    await expect(prompt).toContainText(/Agora.*13:00/);
+    await expect(prompt.getByRole("button", { name: "Posso", exact: true })).toBeVisible();
     await evidence(pageA, "58-01-confirm-new-schedule");
-    await prompt.getByRole("button", { name: "Confirmar", exact: true }).click();
-    await expect(pageA.getByText("Novo horário confirmado.")).toBeVisible();
+    await pageA.getByRole("button", { name: "Agenda", exact: true }).click();
+    await banner.getByRole("button", { name: "Posso", exact: true }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(card.locator("..")).toContainText("Novo horário confirmado.");
     await expect.poll(async () => {
       const schedule = (await mapleRef.get()).data().scheduleConfirmation;
       return schedule?.byCleaner[fixture.cleanerAId]?.state;
     }).toBe("CONFIRMED");
+    await pageA.getByRole("button", { name: /Caixa de entrada/ }).click();
+    await expect(prompt).toContainText("Novo horário confirmado.");
+    await expect(prompt.getByRole("button", { name: "Posso", exact: true })).toHaveCount(0);
     await evidence(pageA, "58-02-confirmed");
     await pageA.goto("/agenda");
   });

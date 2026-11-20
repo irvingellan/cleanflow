@@ -20,6 +20,12 @@ const notices = {
   es: "Abre CleanFlow para ver tus avisos.",
 };
 
+const rescheduleNotices = {
+  en: "A service changed. Open My Schedule to confirm.",
+  pt: "Um serviço mudou de horário. Abra Minha agenda para confirmar.",
+  es: "Cambió el horario de un servicio. Abre Mi agenda para confirmar.",
+};
+
 function deviceAudit(snapshot, outcome) {
   const { organizationId, userId, deviceId, registrationRevision } = snapshot.data();
   const installationKey = createHash("sha256").update(JSON.stringify([organizationId, userId, deviceId])).digest("hex");
@@ -28,12 +34,15 @@ function deviceAudit(snapshot, outcome) {
 
 function cleanerFcmMessage(snapshot, eventId, reschedule) {
   const { language, token, bindingId } = snapshot.data();
+  const copy = reschedule ? rescheduleNotices : notices;
   return {
     token,
     data: {
       title: "CleanFlow",
-      body: notices[language] || notices.pt,
+      body: copy[language] || copy.pt,
       ...(reschedule && {
+        noticeType: "RESCHEDULED",
+        // Deployed workers still use these validated fields for their legacy display.
         rescheduleDate: reschedule.scheduledDate,
         rescheduleStart: reschedule.scheduledStart || "",
       }),

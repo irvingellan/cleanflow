@@ -461,6 +461,13 @@ test("only the latest reschedule attempts delivery and cancellation can notify w
     if (index === 0) {
       assert.deepEqual([messages[0].data.rescheduleDate, messages[0].data.rescheduleStart], ["2026-11-19", "14:15"]);
       assert.doesNotMatch(messages[0].data.body, /2026-11-19|14:15|Você pode/);
+      assert.equal(messages[0].data.noticeType, "RESCHEDULED");
+      assert.equal(messages[0].data.body, "Um serviço mudou de horário. Abra Minha agenda para confirmar.");
+      const updatedDisplay = cleanerPushDisplay(messages[0], {
+        bindingId: registration.bindingId, language: "pt", noticeVersion: 2,
+      });
+      assert.equal(updatedDisplay.options.body, "Um serviço mudou de horário. Abra Minha agenda para confirmar.");
+
       const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone: "UTC" })
         .format(new Date("2026-11-19T00:00:00Z"));
       assert.equal(display.options.body, `A data mudou para ${date} · 14:15. Você pode?`);
