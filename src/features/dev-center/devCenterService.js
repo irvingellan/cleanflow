@@ -39,7 +39,9 @@ export async function sendDeveloperTestNotification(targetRegistrationId) {
   return result.data;
 }
 
-export async function getPlatformOverview(organizationId) {
-  const result = await platformOverviewCall(organizationId ? { organizationId } : {});
+export async function getPlatformOverview(organizationId, { refresh = false } = {}) {
+  const request = organizationId ? { organizationId } : {};
+  if (refresh) request.refresh = true;
+  const result = await platformOverviewCall(request);
   return result.data;
 }
