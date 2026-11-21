@@ -399,12 +399,12 @@ service cloud.firestore {
         // Attendance acknowledgment is server-owned, independent of roster edits.
         allow create: if activeManager(orgId) && !automaticOfferJob(orgId, jobId)
           && !request.resource.data.keys()
-            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod',
+            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod', 'confirmationChannel',
               'removalReason', 'removalScheduleRevision', 'replacementOfferId'])
           && assignmentParentRevisionAdvanced(orgId, jobId);
         allow update: if activeManager(orgId)
           && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod',
+            .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod', 'confirmationChannel',
               'removalReason', 'removalScheduleRevision', 'replacementOfferId'])
           && (!automaticOfferJob(orgId, jobId)
             || (!('automaticOfferBatch' in

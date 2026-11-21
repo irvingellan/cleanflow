@@ -1,5 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
-import { requireMission2Writes } from "./mission2WriteControl.js";
+import { hasMission2JobState, requireMission2Writes } from "./mission2WriteControl.js";
 import {
   assignmentAllowsAutomaticAcceptance, automaticOfferBatch, automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob,
   isAutomaticOfferRecord, matchesAutomaticOfferBatch, rosterMatchesActiveAssignments, validRosterId,
@@ -7,7 +7,8 @@ import {
 import { buildManagerDirectAssignmentData } from "./managerDirectAssignmentService.js";
 import { currentManualReplacementOffer, manualReplacementOfferKind } from "./managerManualReplacementOfferService.js";
 import { jobScheduleRevision } from "./rescheduleConfirmations.js";
-import { manualOfferAvailability } from "./offerSlots.js";
+import { canonicalManualRecipient, loadManualConfirmation } from "./manualOfferConfirmation.js";
+import { manualOfferAvailability, requiredCleanerCount } from "./offerSlots.js";
 import {
   createAutomaticOfferConfirmationNotices, createManagerOperationalNotification, managerOfferNotificationGeneration,
   managerOperationalNotificationCollection, managerOperationalNotificationEventId,
@@ -22,9 +23,10 @@ export function canUsePublicOffer(job) {
 }
 
 export function publicOfferState(offer, job, now) {
+  if (offer.archivedAt) return "unavailable";
   if (isAutomaticOfferRecord(offer, job)) return automaticOfferState(offer, job, now);
-  if (!offer.publicOfferExpiresAt?.toMillis || offer.publicOfferExpiresAt.toMillis() <= now.getTime()) return "expired";
-  if (!canUsePublicOffer(job) || !["PENDING", "INTERESTED", "DECLINED"].includes(offer.status)) return "unavailable";
+  if (!Number.isFinite(offer.publicOfferExpiresAt?.toMillis?.()) || offer.publicOfferExpiresAt.toMillis() <= now.getTime()) return "expired";
+  if (offer.revokedAt || !canUsePublicOffer(job) || !["PENDING", "INTERESTED", "DECLINED"].includes(offer.status)) return "unavailable";
   // FB08: once every spot is filled, other recipients see an unavailable
   // opportunity. A manager decision closes one invitation explicitly.
   const availability = manualOfferAvailability(job, offer);
@@ -47,7 +49,7 @@ async function respondToOffer(database, {
   const jobPath = `organizations/${organizationId}/jobs/${jobReference?.id || ""}`;
   if (jobReference?.path !== jobPath
     || offerReference?.path !== `${jobPath}/offers/${offerReference?.id || ""}`
-    || !(identity ? ["INTERESTED", "DECLINED", "ACCEPTED"] : ["INTERESTED", "DECLINED"]).includes(status)) {
+    || !["INTERESTED", "DECLINED", "ACCEPTED"].includes(status)) {
     return { state: "unavailable" };
   }
   const organizationReference = database.doc(`organizations/${organizationId}`);
@@ -69,6 +71,17 @@ async function respondToOffer(database, {
       return { state: "not-found" };
     }
 
+    if (offer.archivedAt || (job.organizationId != null && job.organizationId !== organizationId)
+      || (offer.organizationId != null && offer.organizationId !== organizationId)
+      || (offer.jobId != null && offer.jobId !== jobReference.id)) return { state: "unavailable" };
+    const clock = () => typeof now === "function" ? now() : now;
+    if (!identity && (status === "ACCEPTED" || (status === "DECLINED" && isAutomaticOfferRecord(offer, job)))) {
+      if (!validRosterId(offer.cleanerId) || offerReference.id !== offer.cleanerId) return { state: "unavailable" };
+      const profile = (await transaction.get(organizationReference.collection("cleaners").doc(offer.cleanerId))).data();
+      if (profile?.active !== true || profile.archivedAt || (profile.organizationId != null && profile.organizationId !== organizationId)) {
+        return { state: "unavailable" };
+      }
+    }
     if (replacement) {
       if (!identity || status === "ACCEPTED" || offer.jobId !== jobReference.id
         || !currentManualReplacementOffer(job, offer, offerReference.id, typeof now === "function" ? now() : now)) {
@@ -82,11 +95,44 @@ async function respondToOffer(database, {
         return { state: "unavailable" };
       }
       const state = automaticOfferState(offer, job, typeof now === "function" ? now() : now);
-      if (!identity) return { state: state === "available" ? "hub-required" : state };
+      if (!identity && status === "INTERESTED") return { state: state === "available" ? "hub-required" : state };
       return respondToAutomaticOffer(transaction, {
         organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity,
         now, scheduleRevision, database,
       });
+    }
+    if (!replacement && status === "ACCEPTED") {
+      if (!canonicalManualRecipient(offer, offerReference.id, jobReference.id, organizationId)
+        || !(await loadManualConfirmation(jobReference, job, offer, query => transaction.get(query)))) return { state: "unavailable" };
+      if (!job.archivedAt && !offer.revokedAt && offer.publicOfferExpiresAt?.toMillis?.() > clock().getTime()
+        && await hasConfirmedAssignment(transaction, jobReference, job, offerReference.id, offer, organizationId)) {
+        return { state: "assigned", status };
+      }
+      const currentState = () => publicOfferState(offer, job, clock());
+      const state = currentState();
+      if (state !== "available") return { state };
+      if (!["PENDING", "INTERESTED"].includes(offer.status) || manualOfferAvailability(job, offer) !== "open"
+        || (job.assignedCleanerId != null && job.assignedCleanerId !== "") || job.offerDistributionClosedAt) {
+        return { state: "unavailable" };
+      }
+      const currentSchedule = jobScheduleRevision(job);
+      if (currentSchedule == null || (scheduleRevision ?? 0) !== currentSchedule) return { state: "stale-schedule" };
+      const revision = checklistContextRevision(job);
+      if (revision === null || revision >= Number.MAX_SAFE_INTEGER) return { state: "unavailable" };
+      if (hasMission2JobState(job)) await requireMission2Writes(transaction, database);
+      const capacity = requiredCleanerCount(job);
+      const active = await transaction.get(jobReference.collection("assignments").where("isActive", "==", true).limit(capacity + 1));
+      if (!rosterMatchesActiveAssignments(job, active.docs.map(doc => doc.data()), organizationId, jobReference.id)) {
+        return { state: "unavailable" };
+      }
+      const finalState = currentState();
+      if (finalState !== "available") return { state: finalState };
+      const { assignment, notice, acceptedAt } = createConfirmedAssignment(transaction, { organizationId, jobReference, job, offerReference, offer, identity });
+      transaction.update(jobReference, { assignedCleanerIds: [...job.assignedCleanerIds, offer.cleanerId],
+        operationalStatus: "ASSIGNED", checklistContextRevision: revision + 1 });
+      transaction.update(offerReference, { status, respondedAt: acceptedAt, acceptedAssignmentId: assignment.id });
+      createManagerOperationalNotification(transaction, organizationReference, jobReference, notice);
+      return { state: "assigned", status };
     }
     // A cleaner can always say no to her own open invitation from the Hub,
     // even after its public link expired or before one was issued. Saying no
@@ -126,26 +172,43 @@ async function respondToOffer(database, {
   });
 }
 
+export async function hasConfirmedAssignment(reader, jobRef, job, offerId, offer, organizationId) {
+  if (offer.status !== "ACCEPTED" || !Array.isArray(job.assignedCleanerIds) || !job.assignedCleanerIds.includes(offer.cleanerId)) return false;
+  const claim = job.firstAcceptClaim;
+  const assignmentId = offer.acceptedAssignmentId
+    ?? (claim?.offerId === offerId && claim.cleanerId === offer.cleanerId ? claim.assignmentId : null);
+  if (!validRosterId(assignmentId)) return false;
+  const assignment = (await reader.get(jobRef.collection("assignments").doc(assignmentId))).data();
+  return assignment?.isActive === true && assignment.cleanerId === offer.cleanerId && assignment.organizationId === organizationId
+    && assignment.jobId === jobRef.id && assignment.sourceOfferId === offerId && assignment.assignmentMethod === FIRST_ACCEPT_WINS;
+}
+
+function createConfirmedAssignment(transaction, { organizationId, jobReference, job, offerReference, offer, identity }) {
+  const assignment = jobReference.collection("assignments").doc();
+  const acceptedAt = FieldValue.serverTimestamp();
+  const confirmationChannel = identity ? "CLEANER_HUB" : "WHATSAPP_LINK";
+  transaction.create(assignment, {
+    ...buildManagerDirectAssignmentData(job, { organizationId, jobId: jobReference.id, cleanerId: offer.cleanerId,
+      cleanerName: offer.cleanerName || "", actorUid: identity?.uid ?? null }),
+    source: "OFFER", sourceOfferId: offerReference.id, assignmentMethod: FIRST_ACCEPT_WINS, confirmationChannel,
+    cleanerAcknowledgedAt: acceptedAt, cleanerAcknowledgedOfferId: offerReference.id,
+  });
+  return { assignment, acceptedAt, notice: { organizationId, offerId: offerReference.id, assignmentId: assignment.id,
+    cleanerId: offer.cleanerId, cleanerName: offer.cleanerName || "", propertyName: job.propertyName, confirmationChannel,
+    eventType: managerOperationalNotificationTypes.acknowledgment } };
+}
+
 async function respondToAutomaticOffer(transaction, {
   organizationId, organizationReference, jobReference, job, offerReference, offer, status, state, identity, now, scheduleRevision, database,
 }) {
   const assignments = jobReference.collection("assignments");
-  const claim = job.firstAcceptClaim;
   const batch = automaticOfferBatch(job);
   const isVersioned = Object.hasOwn(job, "automaticOfferBatch") || Object.hasOwn(offer, "automaticOfferBatchVersion");
   if (isVersioned && !matchesAutomaticOfferBatch(offer, batch)) return { state: "unavailable" };
-  const claimedAssignmentId = isVersioned ? offer.acceptedAssignmentId
-    : claim?.offerId === offerReference.id && claim.cleanerId === identity.cleanerId ? claim.assignmentId : null;
-  if (!job.archivedAt && status === "ACCEPTED" && offer.status === "ACCEPTED"
-    && Array.isArray(job.assignedCleanerIds) && job.assignedCleanerIds.includes(identity.cleanerId)
-    && (isVersioned ? validRosterId(claimedAssignmentId)
-      : typeof claimedAssignmentId === "string" && claimedAssignmentId.length > 0 && !claimedAssignmentId.includes("/"))) {
-    const assignment = (await transaction.get(assignments.doc(claimedAssignmentId))).data();
-    if (assignment?.isActive === true && assignment.cleanerId === identity.cleanerId
-      && assignment.organizationId === organizationId && assignment.jobId === jobReference.id
-      && assignment.assignmentMethod === FIRST_ACCEPT_WINS && assignment.sourceOfferId === offerReference.id) {
-      return { state: "assigned", status: "ACCEPTED" };
-    }
+  if (!job.archivedAt && !offer.revokedAt && status === "ACCEPTED"
+    && (identity || offer.publicOfferExpiresAt?.toMillis?.() > (typeof now === "function" ? now() : now).getTime())
+    && await hasConfirmedAssignment(transaction, jobReference, job, offerReference.id, offer, organizationId)) {
+    return { state: "assigned", status: "ACCEPTED" };
   }
 
   if (state !== "available") return { state };
@@ -178,23 +241,12 @@ async function respondToAutomaticOffer(transaction, {
   const currentState = automaticOfferState(offer, job, typeof now === "function" ? now() : now);
   if (currentState !== "available") return { state: currentState };
 
-  const assignment = assignments.doc();
-  transaction.create(assignment, {
-    ...buildManagerDirectAssignmentData(job, {
-      organizationId, jobId: jobReference.id, cleanerId: identity.cleanerId,
-      cleanerName: offer.cleanerName || "", actorUid: identity.uid,
-    }),
-    source: "OFFER",
-    sourceOfferId: offerReference.id,
-    assignmentMethod: FIRST_ACCEPT_WINS,
-    cleanerAcknowledgedAt: acceptedAt,
-    cleanerAcknowledgedOfferId: offerReference.id,
-  });
-  const assignedCleanerIds = [...job.assignedCleanerIds, identity.cleanerId];
+  const { assignment, notice } = createConfirmedAssignment(transaction, { organizationId, jobReference, job, offerReference, offer, identity });
+  const assignedCleanerIds = [...job.assignedCleanerIds, offer.cleanerId];
   const checklistRevision = checklistContextRevision(job) + 1;
   const filled = !isVersioned || assignedCleanerIds.length === batch.capacity;
   const firstAcceptClaim = {
-    cleanerId: identity.cleanerId, offerId: offerReference.id, assignmentId: assignment.id, acceptedAt,
+    cleanerId: offer.cleanerId, offerId: offerReference.id, assignmentId: assignment.id, acceptedAt,
   };
   transaction.update(jobReference, {
     assignedCleanerIds,
@@ -204,24 +256,19 @@ async function respondToAutomaticOffer(transaction, {
     ...((!isVersioned || batch.capacity === 1) ? { firstAcceptClaim } : {}),
     ...(isVersioned ? {
       automaticOfferBatch: { ...batch, currentContextRevision: checklistRevision },
-      lastAutomaticOfferAcceptance: { cleanerId: identity.cleanerId, assignmentId: assignment.id },
+      lastAutomaticOfferAcceptance: { cleanerId: offer.cleanerId, assignmentId: assignment.id },
     } : {}),
   });
   transaction.update(offerReference, {
     status, respondedAt: acceptedAt, ...(isVersioned ? { acceptedAssignmentId: assignment.id } : {}),
   });
-  const notice = {
-    organizationId, automatic: true, offerId: offerReference.id, assignmentId: assignment.id,
-    cleanerId: identity.cleanerId, eventType: managerOperationalNotificationTypes.acknowledgment,
-    propertyName: job.propertyName,
-  };
   if (isVersioned) {
     createAutomaticOfferConfirmationNotices(transaction, organizationReference, jobReference, {
       ...notice, batchId: String(batch.reopenedAtContextRevision ?? batch.openingContextRevision), filled,
       cleanerName: offer.cleanerName, scheduledDate: job.scheduledDate, scheduledStart: job.scheduledStart,
     });
   } else {
-    createManagerOperationalNotification(transaction, organizationReference, jobReference, notice);
+    createManagerOperationalNotification(transaction, organizationReference, jobReference, { ...notice, automatic: true });
   }
   return { state: "assigned", status: "ACCEPTED" };
 }
