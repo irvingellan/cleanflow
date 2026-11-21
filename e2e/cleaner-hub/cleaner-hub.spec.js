@@ -386,6 +386,8 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
       predicate: (frame) => frame === pageB.mainFrame(),
     });
     await pageB.getByRole("button", { name: "Sign out on this phone" }).click();
+    await expect(pageB.getByText("Sign out on this phone?")).toBeVisible();
+    await pageB.getByRole("button", { name: "Yes, sign out" }).click();
     await signedOutNavigation;
     await expect(pageB.getByRole("heading", { name: "Open your schedule" })).toBeVisible();
     await pageB.reload();
