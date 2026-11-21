@@ -8,7 +8,7 @@ const services = vi.hoisted(() => ({
 }));
 vi.mock("firebase/firestore/lite", () => ({
   setLogLevel: vi.fn(),
-  collection: vi.fn(), query: vi.fn(), where: vi.fn(), orderBy: vi.fn(),
+  collection: vi.fn(), query: vi.fn(), where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(),
   getFirestore: vi.fn(), getDocs: services.readServer, Timestamp: { fromDate: (date) => date },
 }));
 vi.mock("../../services/firebase/client.js", () => ({

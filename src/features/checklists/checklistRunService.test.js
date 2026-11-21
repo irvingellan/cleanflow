@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const firebase = vi.hoisted(() => ({ httpsCallable: vi.fn() }));
 
 vi.mock("firebase/functions", () => ({ httpsCallable: firebase.httpsCallable }));
-vi.mock("../../services/firebase/client.js", () => ({ functions: {} }));
+vi.mock("../../services/firebase/functionsClient.js", () => ({ functions: {} }));
 
 describe("checklistRunService", () => {
   beforeEach(() => {

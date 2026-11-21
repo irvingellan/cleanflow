@@ -1,5 +1,5 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "../../services/firebase/client.js";
+import { functions } from "../../services/firebase/functionsClient.js";
 import { ClientReportRequestError, clientReportRequestTimeoutMilliseconds } from "../checklists/clientReportService.js";
 
 const clientPortalAccessCall = httpsCallable(functions, "clientPortalAccess");

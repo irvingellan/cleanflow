@@ -30,6 +30,27 @@ describe("Firebase client binding", () => {
     expect(sdk.connectFunctionsEmulator).toHaveBeenCalledWith(expect.anything(), "127.0.0.1", 5001);
     expect(sdk.connectStorageEmulator).toHaveBeenCalledWith(expect.anything(), "127.0.0.1", 9199);
   });
+  it("lets public pages bind only Functions, with the same checks and no Firestore or Storage", async () => {
+    setEnvironment();
+    await import("./functionsClient.js");
+    expect(sdk.initializeApp).toHaveBeenCalledWith(expect.objectContaining({ projectId: "demo-cleanflow" }));
+    expect(sdk.connectFunctionsEmulator).toHaveBeenCalledWith(expect.anything(), "127.0.0.1", 5001);
+    expect(sdk.connectFirestoreEmulator).not.toHaveBeenCalled();
+    expect(sdk.connectStorageEmulator).not.toHaveBeenCalled();
+  });
+  it("connects the Functions emulator once when both modules load", async () => {
+    setEnvironment();
+    await import("./functionsClient.js");
+    await import("./client.js");
+    expect(sdk.connectFunctionsEmulator).toHaveBeenCalledTimes(1);
+    expect(sdk.initializeApp).toHaveBeenCalledTimes(1);
+  });
+  it("applies the production-binding check on the Functions-only path too", async () => {
+    setEnvironment();
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "clean-flow-prototipo");
+    await expect(import("./functionsClient.js")).rejects.toThrow(/binding/);
+    expect(sdk.initializeApp).not.toHaveBeenCalled();
+  });
   it("rejects an existing differently bound SDK instead of hot-swapping it", async () => {
     setEnvironment();
     sdk.getApps.mockReturnValue([{}]);
