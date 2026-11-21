@@ -1,32 +1,15 @@
+import { cleanerSessionIds, eligibleCleaner, isActiveCleanerMembership } from "./cleanerHubAccess.js";
+import { allRows, count, pages } from "./platformQueries.js";
+import { attentionReasons, offerWaitingTooLong } from "./platformUsage.js";
+import { attentionInputs, readUsage } from "./platformUsageStore.js";
+import { readCleanerActivity } from "./platformCleanerActivity.js";
 import { FieldPath } from "firebase-admin/firestore";
 import { automaticOfferState, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import { isManualReplacementOfferId, currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
 import { manualOfferAvailability } from "./offerSlots.js";
 import { directoryPerson, displayLabel, isoDate, operationKinds, organizationKey, reportingWindow, summarizeHealth } from "./platformOverview.js";
 
-const pageSize = 100;
 const byId = FieldPath.documentId();
-
-async function count(query) {
-  return (await query.count().get()).data().count;
-}
-
-// Each request reads at most one page. Include a document cursor so equal
-// timestamps never drop or repeat records at a page boundary.
-async function* pages(query) {
-  let page = await query.limit(pageSize).get();
-  while (page.size) {
-    yield page.docs;
-    if (page.size < pageSize) return;
-    page = await query.startAfter(page.docs.at(-1)).limit(pageSize).get();
-  }
-}
-
-async function allRows(query) {
-  const items = [];
-  for await (const docs of pages(query)) items.push(...docs);
-  return items;
-}
 
 async function directoryCounts(collection, defaultActive) {
   const marked = collection.where("archivedAt", "!=", null);
@@ -65,13 +48,14 @@ function statusInOrganization(org, collection, status) {
 
 const offerFields = ["status", "cleanerId", "managerDecision", "offerDistributionMode", "publicOfferExpiresAt",
   "offeredChecklistContextRevision", "automaticOfferBatchVersion", "revokedAt", "offerKind", "replacementOfferId",
-  "organizationId", "scheduleRevision"];
+  "organizationId", "scheduleRevision", "createdAt", "managerReopenedAt"];
 const jobOfferFields = ["operationalStatus", "archivedAt", "assignedCleanerId", "assignedCleanerIds", "requiredCleanerCount",
   "offerDistributionMode", "schemaVersion", "offerDistributionClosedAt", "firstAcceptClaim", "checklistContextRevision",
   "automaticOfferBatch", "manualReplacementOffer", "scheduleRevision", "startedAt", "organizationId"];
 
 async function waitingOffers(org, now) {
   let waiting = 0;
+  let oldOffers = 0;
   for await (const offers of pages(statusInOrganization(org, "offers", "PENDING").select(...offerFields))) {
     // A filled team or a manager decision can close an invitation while its
     // response stays PENDING. Project only the fields used by the actual gate.
@@ -86,10 +70,14 @@ async function waitingOffers(org, now) {
       if (isManualReplacementOfferId(doc.id)) available = currentManualReplacementOffer(job, offer, doc.id, now);
       else if (isAutomaticOfferJob(job)) available = automaticOfferState(offer, job, now) === "available";
       else available = ["OFFERED", "ASSIGNED"].includes(job.operationalStatus) && manualOfferAvailability(job, offer) === "open";
-      if (available) waiting++;
+      if (available) {
+        waiting++;
+        const waitingSince = offer.managerReopenedAt ?? offer.createdAt;
+        if (offerWaitingTooLong(waitingSince?.toMillis?.(), now)) oldOffers++;
+      }
     }
   }
-  return waiting;
+  return { waiting, oldOffers };
 }
 
 async function pageTimings(loads) {
@@ -106,13 +94,20 @@ async function pageTimings(loads) {
 
 async function readHealth(org, { since7, now }) {
   const loads = between(org.collection("managerPageLoadEvents"), "createdAt", since7, now);
-  const failures = between(org.collection("managerOperationEvents"), "createdAt", since7, now).where("result", "==", "error");
-  const [pageLoads, { durations, failedPageLoads }, byOperation] = await Promise.all([
-    count(loads),
+  const operations = between(org.collection("managerOperationEvents"), "createdAt", since7, now);
+  const [{ durations, failedPageLoads }, operationsByKind] = await Promise.all([
     pageTimings(loads),
-    Promise.all(operationKinds.map(async (kind) => [kind, await count(failures.where("operation", "==", kind))])),
+    Promise.all(operationKinds.map(async (kind) => {
+      const query = operations.where("operation", "==", kind);
+      const [failed, succeeded] = await Promise.all([
+        count(query.where("result", "==", "error")), count(query.where("result", "==", "success")),
+      ]);
+      return { kind, failed, attempts: failed + succeeded };
+    })),
   ]);
-  return summarizeHealth(pageLoads, durations, Object.fromEntries(byOperation), failedPageLoads);
+  return summarizeHealth(durations.length, durations,
+    Object.fromEntries(operationsByKind.map(({ kind, failed }) => [kind, failed])), failedPageLoads,
+    Object.fromEntries(operationsByKind.map(({ kind, attempts }) => [kind, attempts])));
 }
 
 async function upcomingJobs(jobs, window) {
@@ -130,18 +125,21 @@ async function readOrganization(doc, window) {
   const org = doc.ref;
   const jobs = org.collection("jobs");
   const [activeManagers, cleaners, clients, properties, total, created30d, scheduled7d, completed30d,
-    openIssues, pending, lastActivityAt, health] = await Promise.all([
+    openIssues, pending, lastActivityAt, health, alerts] = await Promise.all([
     count(org.collection("members").where("role", "==", "MANAGER").where("active", "==", true)),
     directoryCounts(org.collection("cleaners"), true), directoryCounts(org.collection("clients"), true), directoryCounts(org.collection("properties"), false),
     count(jobs), count(between(jobs, "createdAt", window.since30, window.now)),
     upcomingJobs(jobs, window),
     count(between(jobs.where("operationalStatus", "==", "COMPLETED"), "completedAt", window.since30, window.now).orderBy("completedAt", "desc")),
     count(statusInOrganization(org, "issues", "OPEN")), waitingOffers(org, window.now), lastJobActivity(jobs), readHealth(org, window),
+    attentionInputs(org, window),
   ]);
+  const createdAt = isoDate(doc.get("createdAt"));
   return {
-    id: organizationKey(org.id), displayName: displayLabel(doc.get("displayName")) ?? displayLabel(doc.get("name")), createdAt: isoDate(doc.get("createdAt")),
+    id: organizationKey(org.id), displayName: displayLabel(doc.get("displayName")) ?? displayLabel(doc.get("name")), createdAt,
     people: { activeManagers, activeCleaners: cleaners.active, archivedCleaners: cleaners.archived }, clients, properties,
-    jobs: { total, created30d, scheduled7d, completed30d }, attention: { openIssues, waitingOffers: pending }, lastActivityAt, health,
+    jobs: { total, created30d, scheduled7d, completed30d }, attention: { openIssues, waitingOffers: pending.waiting }, lastActivityAt, health,
+    attentionReasons: attentionReasons({ ...alerts, createdAt, lastActivityAt, health: health.status, oldOffers: pending.oldOffers }, window.now),
   };
 }
 
@@ -161,9 +159,9 @@ export async function readOverview(db, now = new Date()) {
   return { organizations };
 }
 
-export async function readPeople(org, auth) {
+export async function readPeople(org, auth, now = new Date()) {
   const [members, cleaners] = await Promise.all([
-    allRows(org.collection("members").where("role", "in", ["MANAGER", "CLEANER"]).orderBy(byId).select("role", "cleanerId", "displayName", "name", "active")),
+    allRows(org.collection("members").where("role", "in", ["MANAGER", "CLEANER"]).orderBy(byId).select("role", "cleanerId", "displayName", "name", "active", "organizationId", "sessionId", "sessionIds")),
     allRows(org.collection("cleaners").orderBy(byId).select("name", "displayName", "active", "archivedAt")),
   ]);
   const ids = members.map((doc) => doc.id).filter((id) => id.length <= 128);
@@ -176,15 +174,29 @@ export async function readPeople(org, auth) {
     .map((doc) => [doc.get("cleanerId"), doc]));
   const people = members.filter((doc) => doc.get("role") === "MANAGER")
     .map((doc) => directoryPerson("MANAGER", doc.data(), accounts.get(doc.id)));
-  for (const doc of cleaners) {
+  const cleanerProfiles = cleaners.map((doc) => {
     const member = linked.get(doc.id);
-    people.push(directoryPerson("CLEANER", doc.data(), accounts.get(member?.id)));
     linked.delete(doc.id);
+    return { cleanerId: doc.id, profile: doc.data(), member };
+  });
+  // A residual membership is still visible, but cannot use the Hub without
+  // its active cleaner profile. Never interpret an Auth sign-in as Hub usage.
+  for (const [cleanerId, member] of linked) {
+    if (typeof cleanerId !== "string" || cleanerId.includes("/")) continue;
+    cleanerProfiles.push({ cleanerId, profile: { ...member.data(), active: false }, member });
   }
-  // A residual membership is still visible in the audit directory, but
-  // cannot use the Hub without the matching active cleaner profile.
-  for (const member of linked.values()) {
-    people.push(directoryPerson("CLEANER", { ...member.data(), active: false }, accounts.get(member.id)));
+  const funnelCleaners = [];
+  for (let start = 0; start < cleanerProfiles.length; start += 4) {
+    const group = cleanerProfiles.slice(start, start + 4);
+    people.push(...await Promise.all(group.map(async ({ cleanerId, profile, member }) => {
+      const activity = await readCleanerActivity(org, cleanerId, member?.id);
+      const person = directoryPerson("CLEANER", profile, accounts.get(member?.id), activity);
+      const membership = member?.data();
+      const hubAccess = eligibleCleaner(profile) && isActiveCleanerMembership(membership)
+        && membership.organizationId === org.id && cleanerSessionIds(membership).some(id => typeof id === "string" && id.length > 0);
+      funnelCleaners.push({ id: cleanerId, active: person.active, hubAccess, lastActivityAt: person.lastActivityAt });
+      return person;
+    })));
   }
-  return { people };
+  return { people, usage: await readUsage(org, reportingWindow(now), funnelCleaners) };
 }
