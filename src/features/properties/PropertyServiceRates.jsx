@@ -3,6 +3,7 @@ import { serviceTypes } from "../../../functions/src/serviceTypes.js";
 import { useTranslation } from "../../i18n/translations.js";
 import { maxCleanersPerJob } from "../jobs/offerSlots.js";
 import { serviceTypeLabel, serviceTypeMessage } from "../jobs/serviceTypeMessages.js";
+import { defaultHourlyRates } from "../pricing/hourlyDefaults.js";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
 import { formatPricingRate, pricingMessage } from "../pricing/pricingMessages.js";
 import { parseRateRow, rateRowDraft } from "./propertyRateForm.js";
@@ -82,7 +83,10 @@ function RateEditor({ draft, msg, onChange }) {
         <fieldset key={side}>
           <legend>{msg(side)}</legend>
           <label>{msg("mode")}
-            <select value={draft[side].mode} onChange={(event) => update(side, { mode: event.target.value })}>
+            <select value={draft[side].mode} onChange={(event) => update(side, {
+              mode: event.target.value,
+              ...(event.target.value === "HOURLY" && draft[side].mode !== "HOURLY" ? { amount: defaultHourlyRates[side] } : {}),
+            })}>
               <option value="FIXED">{msg("fixed")}</option><option value="HOURLY">{msg("hourly")}</option>
             </select>
           </label>

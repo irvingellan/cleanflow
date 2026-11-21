@@ -339,7 +339,8 @@ describe("CreateCleaningForm", () => {
     fireEvent.change(screen.getByLabelText("Cleaner pay method"), { target: { value: "HOURLY" } });
     fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
     await waitFor(() => expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
-      billing: { mode: "HOURLY", hourlyRateCents: 5225 }, pay: { mode: "HOURLY", rateCents: 2800 },
+      // Switching cleaner pay to hourly prefills the standard $25 rate (Gabi, 2026-11-21).
+      billing: { mode: "HOURLY", hourlyRateCents: 5225 }, pay: { mode: "HOURLY", rateCents: 2500 },
       requiredCleanerCount: 2, clientPrice: undefined, cleanerPayout: undefined,
     })));
   });
@@ -354,6 +355,8 @@ describe("CreateCleaningForm", () => {
     expect(screen.getByLabelText("Client price")).toHaveValue(null);
     expect(screen.getByLabelText("Cleaner payout")).toHaveValue(null);
     fireEvent.change(screen.getByLabelText("Cleaner pay method"), { target: { value: "HOURLY" } });
+    expect(screen.getByLabelText("Cleaner pay per hour")).toHaveValue(25);
+    fireEvent.change(screen.getByLabelText("Cleaner pay per hour"), { target: { value: "" } });
     fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
     expect(screen.getByRole("alert")).toBeVisible();
     expect(createJob).not.toHaveBeenCalled();
