@@ -35,6 +35,21 @@ describe("fixed recipient terms", () => {
     expect(offerPayForRecipient(quote, null, "a")).toEqual({ offeredCompensation: 33.33 });
     expect(offerPayForRecipient({ offeredCompensation: 100 }, assigned, "d")).toEqual({ offeredCompensation: 100 });
   });
+  it("reprices an edited spot count from the agreed house total, keeping individual agreements and the settled receipt intact", () => {
+    const solo = { ...job, requiredCleanerCount: 1, cleanerPayout: 100.01, assignedCleanerIds: ["a"] };
+    const terms = newOfferPay(solo);
+    const larger = { ...solo, requiredCleanerCount: 3, cleanerPayout: 999 };
+    expect(offerPayForRecipient(terms, larger, "a")).toEqual({ offeredCompensation: 33.35, offeredPayEstimated: true });
+    expect(offerPayForRecipient(terms, larger, "b")).toEqual({ offeredCompensation: 33.33, offeredPayEstimated: true });
+    expect(offerPayForRecipient({ offeredCompensation: 42 }, larger, "a")).toEqual({ offeredCompensation: 42 });
+    expect(offerPayForRecipient({ offeredPay: { mode: "HOURLY", rateCents: 2500 } }, larger, "b"))
+      .toEqual({ offeredPay: { mode: "HOURLY", rateCents: 2500 } });
+    expect(offerPayForRecipient(terms, { ...larger, requiredCleanerCount: 2, assignedCleanerIds: ["a", "b"] }, "a"))
+      .toEqual({ offeredCompensation: 50.01 });
+    expect(offerPayForRecipient(terms, { ...larger, operationalStatus: "COMPLETED" }, "a"))
+      .toEqual({ offeredCompensation: 100.01 });
+    expect(offerPayForRecipient(terms, null, "b")).toEqual({ offeredCompensation: 100.01 });
+  });
   it("settles only agreed house totals on the final roster, including underfilled, overfilled and reordered crews", () => {
     const quote = newOfferPay({ ...job, cleanerPayout: 120 });
     const incomplete = { ...job, assignedCleanerIds: ["b", "a"], cleanerPayout: 800, operationalStatus: "ASSIGNED" };

@@ -1165,6 +1165,15 @@ describe("JobDetail lifecycle actions", () => {
     expect(screen.getByRole("link", { name: "Open in WhatsApp" }).href).toBe("https://wa.me/12025550110");
   });
 
+  it("shows the current fixed share on a manual link after the manager adds a spot", async () => {
+    const user = userEvent.setup();
+    const terms = { offeredCompensation: 100, fixedHousePay: { totalCents: 10000, teamSize: 1 } };
+    const offer = { id: "worker", cleanerId: "worker", cleanerName: "Demo", status: "PENDING", ...terms };
+    renderJobDetail("OFFERED", { schemaVersion: 2, requiredCleanerCount: 2, assignedCleanerIds: [], offers: [offer] });
+    await user.click(screen.getByRole("button", { name: "Create public link" }));
+    expect(screen.getByRole("spinbutton", { name: "Offered compensation (USD)" })).toHaveValue(50);
+  });
+
   it("keeps real public-offer actions and response statuses without exposing simulation", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = navigator.clipboard;

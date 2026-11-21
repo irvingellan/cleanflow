@@ -23,6 +23,7 @@ import {
   getJobAssignments,
   removeAssignment,
   replaceAssignment,
+  setAutomaticCleanerSpots,
   setRequiredCleanerCount,
 } from "./assignmentService.js";
 import { isAutomaticOfferJob } from "./automaticOffers.js";
@@ -640,7 +641,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   async function setCleanerSpots(count) {
-    await updateJob((job) => setRequiredCleanerCount(job.id, count));
+    await updateJob((job) => isAutomaticOfferJob(job)
+      ? setAutomaticCleanerSpots(job.id, count)
+      : setRequiredCleanerCount(job.id, count));
   }
 
   async function revokeCleanerOffer(offerId) {

@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { requireMission2Writes } from "./mission2WriteControl.js";
 import {
-  automaticOfferBatch, automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob,
+  assignmentAllowsAutomaticAcceptance, automaticOfferBatch, automaticOfferState, checklistContextRevision, FIRST_ACCEPT_WINS, isAutomaticOfferJob,
   isAutomaticOfferRecord, matchesAutomaticOfferBatch, rosterMatchesActiveAssignments, validRosterId,
 } from "./firstAcceptWins.js";
 import { buildManagerDirectAssignmentData } from "./managerDirectAssignmentService.js";
@@ -167,7 +167,7 @@ async function respondToAutomaticOffer(transaction, {
   if (isVersioned) {
     const activeRoster = activeAssignments.docs.map(snapshot => snapshot.data());
     if (!rosterMatchesActiveAssignments(job, activeRoster, organizationId, jobReference.id)
-      || activeRoster.some(assignment => assignment.assignmentMethod !== FIRST_ACCEPT_WINS)) {
+      || activeRoster.some(assignment => !assignmentAllowsAutomaticAcceptance(assignment, batch))) {
       return { state: "unavailable" };
     }
   } else if (!activeAssignments.empty) {
@@ -217,7 +217,7 @@ async function respondToAutomaticOffer(transaction, {
   };
   if (isVersioned) {
     createAutomaticOfferConfirmationNotices(transaction, organizationReference, jobReference, {
-      ...notice, batchId: String(batch.openingContextRevision), filled,
+      ...notice, batchId: String(batch.reopenedAtContextRevision ?? batch.openingContextRevision), filled,
       cleanerName: offer.cleanerName, scheduledDate: job.scheduledDate, scheduledStart: job.scheduledStart,
     });
   } else {

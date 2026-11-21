@@ -37,7 +37,9 @@ export function automaticOfferBatch(job) {
   const batch = job?.automaticOfferBatch;
   if (batch?.version !== automaticOfferBatchVersion || batch.capacity !== automaticOfferCapacity(job)
     || batch.capacity === null || !Number.isSafeInteger(batch.openingContextRevision) || batch.openingContextRevision < 0
-    || !Number.isSafeInteger(batch.currentContextRevision) || batch.currentContextRevision < batch.openingContextRevision) return null;
+    || !Number.isSafeInteger(batch.currentContextRevision) || batch.currentContextRevision < batch.openingContextRevision
+    || (Object.hasOwn(batch, "reopenedAtContextRevision") && (!Number.isSafeInteger(batch.reopenedAtContextRevision)
+      || batch.reopenedAtContextRevision < batch.openingContextRevision || batch.reopenedAtContextRevision > batch.currentContextRevision))) return null;
   return batch;
 }
 
@@ -62,6 +64,16 @@ export function rosterMatchesActiveAssignments(job, activeAssignments, organizat
     && activeAssignments.every(assignment => assignment.isActive === true && assignment.organizationId === organizationId
       && assignment.jobId === jobId && job.assignedCleanerIds.includes(assignment.cleanerId))
     && new Set(activeAssignments.map(assignment => assignment.cleanerId)).size === activeAssignments.length;
+}
+
+// A direct assignment closes the batch. A later, explicit increase can reopen
+// it while preserving the manager's active reservation.
+export function assignmentAllowsAutomaticAcceptance(assignment, batch) {
+  if (assignment.assignmentMethod === FIRST_ACCEPT_WINS) return true;
+  return Number.isSafeInteger(batch?.reopenedAtContextRevision) && assignment.assignmentMethod == null
+    && (assignment.source === "MANAGER_DIRECT"
+      || (assignment.source === "OFFER" && validRosterId(assignment.replacementOfferId)
+        && assignment.sourceOfferId === assignment.replacementOfferId));
 }
 
 function versionedAutomaticOfferState(offer, job) {

@@ -13,6 +13,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import {
+  canManageAssignmentAwareOffers,
   getAssignedCleanerIds,
   isAssignmentAwareJob,
   normalizeJobRecord,
@@ -23,6 +24,7 @@ import { isJobFilled, managerDecisionOf, maxCleanersPerJob, requiredCleanerCount
 
 const organizationId = "cleanflow-demo";
 const assignmentSchemaVersion = 1;
+const setJobCleanerSpotsCall = httpsCallable(functions, "setJobCleanerSpots");
 const assignCleanerDirectlyCall = httpsCallable(functions, "assignCleanerDirectly");
 const removeAutomaticCleanerAssignmentCall = httpsCallable(functions, "removeAutomaticCleanerAssignment");
 
@@ -55,6 +57,11 @@ function assignmentError(code, message, job) {
   error.code = code;
   error.job = job;
   return error;
+}
+
+export function canEditCleanerSpots(job) {
+  return canManageAssignmentAwareOffers(job) && !job.archivedAt && !job.startedAt
+    && !job.payoutId && !job.payoutPaidAt && !Object.keys(job.payoutIdsByCleaner ?? {}).length;
 }
 
 export function canEditAssignmentRoster(job) {
@@ -347,6 +354,12 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
   return jobFromSnapshot(await getDoc(jobReference));
 }
 
+/** Automatic capacity and roster provenance are server-owned. */
+export async function setAutomaticCleanerSpots(jobId, count) {
+  await setJobCleanerSpotsCall({ jobId, count });
+  return jobFromSnapshot(await getDoc(jobDocument(jobId)));
+}
+
 /** Number of cleaners a manual Job needs. It can never drop below the current roster. */
 export async function setRequiredCleanerCount(jobId, count) {
   const jobReference = jobDocument(jobId);
@@ -364,8 +377,7 @@ export async function setRequiredCleanerCount(jobId, count) {
 function assertRosterEditableOrOpen(snapshot) {
   if (!snapshot.exists()) throw assignmentError("job-not-found", "Job not found.");
   const job = jobFromSnapshot(snapshot);
-  if (!isAssignmentAwareJob(job) || isAutomaticOfferJob(job) || job.archivedAt
-    || !["UNASSIGNED", "OFFERED", "ASSIGNED"].includes(job.operationalStatus)) {
+  if (!canEditCleanerSpots(job) || isAutomaticOfferJob(job)) {
     throw assignmentError("assignment-roster-locked", "Cleaner spots cannot be changed for this Job.", job);
   }
   return job;

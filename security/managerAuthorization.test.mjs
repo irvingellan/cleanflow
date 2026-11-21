@@ -53,7 +53,7 @@ const {
   publicClientPortal,
   clientPortalAccess,
   correctChecklistAnswer,
-  rescheduleJob,
+  rescheduleJob, setJobCleanerSpots, respondToMyOffer,
 } = await import("../functions/src/index.js");
 // index.js only declares Functions; the Functions Admin app starts with the runtime module.
 await import("../functions/src/runtime/firebase.js");
@@ -2997,4 +2997,120 @@ test("operational notifications: committed checklist READY survives mixed provid
     event.id, "CHECKLIST_READY_FOR_REVIEW", "job", "initial",
   ]);
   assert.equal((await publicChecklistGet(issued.token)).body.checklist.status, "READY_FOR_REVIEW");
+});
+
+
+async function seedSpotJob(id, { legacy = false, count = 1, cleanerIds = ["alpha", "beta"] } = {}) {
+  const job = admin.doc(`${root}/jobs/${id}`);
+  const batch = admin.batch();
+  batch.set(job, {
+    schemaVersion: 2, organizationId: org, operationalStatus: "OFFERED", assignedCleanerIds: [],
+    offerDistributionMode: "FIRST_ACCEPT_WINS", requiredCleanerCount: count, checklistContextRevision: 0,
+    ...(!legacy && { automaticOfferBatch: { version: 2, capacity: count, openingContextRevision: 0, currentContextRevision: 0 } }),
+  });
+  for (const cleanerId of cleanerIds) {
+    batch.set(admin.doc(`${root}/cleaners/${cleanerId}`), { organizationId: org, name: "Demo", active: true });
+    batch.set(admin.doc(`${root}/members/user-${cleanerId}`), {
+      role: "CLEANER", active: true, organizationId: org, cleanerId, sessionId: "demo-session",
+    });
+    batch.set(job.collection("offers").doc(cleanerId), {
+      organizationId: org, jobId: id, cleanerId, cleanerName: "Demo", offerDistributionMode: "FIRST_ACCEPT_WINS",
+      offeredChecklistContextRevision: 0, status: "PENDING", ...(!legacy && { automaticOfferBatchVersion: 2 }),
+      publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 3600000),
+    });
+  }
+  await batch.commit();
+  return job;
+}
+
+function acceptSpot(jobId, cleanerId) {
+  const auth = request(`user-${cleanerId}`, { jobId, status: "ACCEPTED", scheduleRevision: 0 });
+  auth.auth.token.cleanerHub = { organizationId: org, cleanerId, sessionId: "demo-session" };
+  return respondToMyOffer.run(auth);
+}
+
+const setSpots = (job, count) => setJobCleanerSpots.run(request("manager", { jobId: job.id, count }));
+
+test("spot count authorizes manager in the transaction and keeps automatic capacity server-owned", async () => {
+  const job = await seedSpotJob("spot-scope");
+  for (const uid of ["inactive", "cleaner", "other-manager"]) {
+    await assert.rejects(setJobCleanerSpots.run(request(uid, { jobId: job.id, count: 2 })), { code: "permission-denied" });
+  }
+  await assert.rejects(setJobCleanerSpots.run(request(null, { jobId: job.id, count: 2 })), { code: "unauthenticated" });
+  await assert.rejects(setJobCleanerSpots.run(request("anonymous-member", { jobId: job.id, count: 2 }, true)), { code: "unauthenticated" });
+  await assert.rejects(setJobCleanerSpots.run(request("manager", { jobId: job.id, count: 2, organizationId: "other" })), { code: "invalid-argument" });
+  const browser = account("manager").firestore().doc(job.path);
+  await assertFails(browser.update({ requiredCleanerCount: 2, "automaticOfferBatch.capacity": 2 }));
+  await setSpots(job, 2);
+  const after = await job.get();
+  assert.equal(after.get("requiredCleanerCount"), 2);
+  assert.equal(after.get("automaticOfferBatch.capacity"), 2);
+  await assertSucceeds(account("manager").firestore().doc(`${job.path}/offers/alpha`).update({
+    publicOfferTokenHash: "b".repeat(64),
+  }));
+  await setSpots(job, 2);
+  assert.equal((await job.get()).updateTime.toMillis(), after.updateTime.toMillis());
+  for (const patch of [{ archivedAt: new Date() }, { operationalStatus: "IN_PROGRESS" }, { operationalStatus: "COMPLETED" },
+    { payoutIdsByCleaner: { alpha: "frozen" } }, { organizationId: "other" }]) {
+    await job.set({ ...after.data(), ...patch });
+    await assert.rejects(setSpots(job, 3), { code: "failed-precondition" });
+  }
+});
+
+for (const legacy of [false, true]) {
+  test(`spot count reopens a filled ${legacy ? "legacy" : "versioned"} batch, preserves winner replay and fills again`, async () => {
+    const job = await seedSpotJob("spot-refill", { legacy, cleanerIds: ["alpha", "beta", "gamma"] });
+    assert.equal((await acceptSpot(job.id, "alpha")).state, "assigned");
+    assert.equal((await acceptSpot(job.id, "beta")).state, "already-taken");
+    await setSpots(job, 2);
+    assert.equal((await acceptSpot(job.id, "alpha")).state, "assigned");
+    const results = await Promise.all([acceptSpot(job.id, "beta"), acceptSpot(job.id, "gamma")]);
+    assert.deepEqual(results.map(r => r.state).sort(), ["already-taken", "assigned"]);
+    const full = (await job.get()).data();
+    assert.equal(full.assignedCleanerIds[0], "alpha");
+    assert.equal(full.assignedCleanerIds.length, 2);
+    assert.equal(full.automaticOfferBatch.capacity, 2);
+    assert.equal(full.automaticOfferBatch.currentContextRevision, 2);
+    assert.ok(full.offerDistributionClosedAt);
+    await assert.rejects(setSpots(job, 1), { code: "failed-precondition" });
+    if (!legacy) assert.equal((await job.collection("managerNotificationDeliveries")
+      .where("eventType", "==", "AUTO_OFFER_BATCH_FILLED").get()).size, 2);
+  });
+}
+
+test("spot count shrinking to a confirmed roster closes all other pending invitations without changing their responses", async () => {
+  const job = await seedSpotJob("spot-shrink", { count: 3 });
+  assert.equal((await acceptSpot(job.id, "alpha")).state, "assigned");
+  await setSpots(job, 1);
+  const after = (await job.get()).data();
+  assert.equal(after.automaticOfferBatch.capacity, 1);
+  assert.ok(after.offerDistributionClosedAt);
+  assert.equal((await job.collection("offers").doc("beta").get()).get("status"), "PENDING");
+  assert.equal((await acceptSpot(job.id, "beta")).state, "already-taken");
+  await setSpots(job, 2);
+  assert.equal((await acceptSpot(job.id, "beta")).state, "assigned");
+});
+
+test("spot count reopens with the manager's reserved assignment intact", async () => {
+  const job = await seedSpotJob("spot-reserve", { count: 3, cleanerIds: ["alpha", "beta"] });
+  await job.collection("assignments").doc("reserved").set({
+    organizationId: org, jobId: job.id, cleanerId: "alpha", isActive: true, source: "MANAGER_DIRECT",
+  });
+  await job.update({ operationalStatus: "ASSIGNED", assignedCleanerIds: ["alpha"], checklistContextRevision: 1,
+    offerDistributionClosedAt: Timestamp.now() });
+  await setSpots(job, 1);
+  assert.equal((await acceptSpot(job.id, "beta")).state, "already-taken");
+  await setSpots(job, 2);
+  assert.equal((await acceptSpot(job.id, "beta")).state, "assigned");
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), ["alpha", "beta"]);
+  assert.equal((await job.collection("assignments").doc("reserved").get()).get("isActive"), true);
+
+  await setSpots(job, 3);
+  await admin.doc(`${root}/cleaners/extra`).set({ organizationId: org, name: "Demo", active: true });
+  const { createAutomaticJobOffersForManager } = await import("../functions/src/managerAutomaticOffers.js");
+  const result = await createAutomaticJobOffersForManager(functionDatabase, {
+    organizationId: org, jobId: job.id, actorUid: "manager", cleanerIds: ["extra"],
+  });
+  assert.equal(result.count, 1);
+  assert.equal((await job.collection("offers").doc("extra").get()).get("offeredChecklistContextRevision"), 0);
 });
