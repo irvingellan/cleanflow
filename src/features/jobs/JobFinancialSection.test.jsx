@@ -28,7 +28,8 @@ describe("Job financial section", () => {
     fireEvent.change(screen.getByLabelText("Client pricing method"), { target: { value: "FIXED" } });
     fireEvent.change(screen.getByLabelText("Cleaner pay method"), { target: { value: "HOURLY" } });
     fireEvent.click(screen.getByText("Save prices"));
-    expect(save).toHaveBeenCalledWith({ clientPrice: 35, cleanerPayout: undefined, pay: { mode: "HOURLY", rateCents: 1250 } });
+    // Switching to hourly prefills the standard $25 cleaner rate (Gabi, 2026-11-21).
+    expect(save).toHaveBeenCalledWith({ clientPrice: 35, cleanerPayout: undefined, pay: { mode: "HOURLY", rateCents: 2500 } });
     expect(screen.getByLabelText("Client price")).toBeDisabled();
     finish();
     await waitFor(() => expect(screen.getByRole("status")).toBeVisible());

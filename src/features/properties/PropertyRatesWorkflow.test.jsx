@@ -85,7 +85,7 @@ describe("Property service rate workflows", () => {
       fireEvent.click(cleaner.getByText(team));
       expect(cleaner.getByLabelText(person)).toHaveValue("26");
       change(cleaner.getByLabelText(mode), "HOURLY");
-      expect(cleaner.getByLabelText(hourly)).toHaveValue("39");
+      expect(cleaner.getByLabelText(hourly)).toHaveValue("25"); // standard hourly prefill
       expect(cleaner.getByLabelText(teamHour)).toHaveValue("26");
       expect(table.getByText(hourSummary)).toBeVisible();
     },

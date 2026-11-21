@@ -133,7 +133,7 @@ export function checklistSituation(entry) {
   return { state, pending: open };
 }
 
-const accessStates = ["available", "not-provided", "not-yet", "revoked", "denied"];
+const accessStates = ["available", "not-provided", "not-yet", "no-date", "closed", "revoked", "denied"];
 
 /**
  * Normalises what the proposed `getMyJobAccess` read returns (see contract).

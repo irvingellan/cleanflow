@@ -47,7 +47,7 @@ function shiftDate(date, days) {
  */
 export function accessWindow(job, nowMs, timeZone) {
   if (job?.operationalStatus === "IN_PROGRESS") return { open: true };
-  if (typeof job?.scheduledDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(job.scheduledDate)) return { open: false };
+  if (typeof job?.scheduledDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(job.scheduledDate)) return { open: false, noDate: true };
   const today = operatingDate(nowMs, timeZone);
   const from = shiftDate(job.scheduledDate, -1);
   if (today < from) return { open: false, availableFrom: from };
@@ -57,14 +57,18 @@ export function accessWindow(job, nowMs, timeZone) {
 /** Pure projection of what one authorized cleaner may read for one Job. */
 export function projectCleanerJobAccess({ job, property, cleanerId, nowMs = Date.now(), timeZone }) {
   if (!job || job.archivedAt || !rosterCleanerIds(job).includes(cleanerId)) return { state: "revoked" };
-  if (!openStatuses.has(job.operationalStatus)) return { state: "revoked" };
+  // On the roster but the Job is no longer open (completed or cancelled): the
+  // cleaner was not removed, so say the service is closed.
+  if (!openStatuses.has(job.operationalStatus)) return { state: "closed" };
   const shared = property?.cleanerAccess;
   if (!shared || shared.shared !== true) return { state: "not-provided" };
   const window = accessWindow(job, nowMs, timeZone);
   if (!window.open) {
-    return window.availableFrom
-      ? { state: "not-yet", availableFromMs: zonedMidnight(window.availableFrom, timeZone) }
-      : { state: "revoked" };
+    if (window.availableFrom) {
+      return { state: "not-yet", availableFromMs: zonedMidnight(window.availableFrom, timeZone) };
+    }
+    // Still on the roster: either the date is not set yet or the day has passed.
+    return { state: window.noDate ? "no-date" : "closed" };
   }
   const items = Object.values(cleanerAccessFieldKinds)
     .map((kind) => ({ kind, value: text(shared[kind], 400) }))

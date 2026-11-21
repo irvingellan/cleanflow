@@ -626,3 +626,9 @@
 .hb-root .cf-notice:has(.hb-reschedule) { grid-template-columns: auto minmax(0,1fr); align-items: start; }
 .hb-root .cf-notice:has(.hb-reschedule) .cf-notice__actions { grid-column: 1 / -1; flex-flow: row wrap; min-width: 0; }
 .hb-facts dd { white-space: pre-line; }
+
+.hb-root .hb-signout { margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--v2-color-border); text-align: center; }
+.hb-root .hb-signout__link { color: var(--v2-color-risk-text); font-weight: 600; font-size: 14px; }
+.hb-root .hb-signout--confirm { display: grid; gap: 8px; text-align: left; padding: 14px; border: 1px solid var(--v2-color-border); border-radius: 16px; background: var(--v2-color-surface); }
+.hb-root .hb-signout--confirm p:first-child { font-weight: 700; }
+.hb-root .hb-signout__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

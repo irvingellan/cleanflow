@@ -416,7 +416,7 @@ export function AccessSection({ t, hub, entry }) {
           <p className="mw-hint">{t("hb.access.private")}</p>
         </>
       )}
-      {["not-provided", "not-yet", "revoked", "denied", "closed", "unsupported", "error"].includes(state) && (
+      {["not-provided", "not-yet", "no-date", "revoked", "denied", "closed", "unsupported", "error"].includes(state) && (
         <div className={`hb-access-note${state === "revoked" || state === "denied" ? " is-blocked" : ""}`} role={state === "error" ? "alert" : undefined}>
           <p>{t(`hb.access.${state}`, { time: access.availableFromMs ? new Intl.DateTimeFormat(t.locale, { weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(access.availableFromMs)) : "" })}</p>
           {state === "error" && <button type="button" className="mw-linkbtn" onClick={() => setAttempt((value) => value + 1)}>{t("hb.access.retry")}</button>}
@@ -672,6 +672,25 @@ export function CleanerPushSettings({ t, push, go }) {
   );
 }
 
+// Signing out wipes the schedule on this phone and needs a new code from the
+// manager, so it is a quiet link with a confirmation step, not a big button.
+function SignOutControl({ t, onSignOut, signingOut }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming && !signingOut) {
+    return <div className="hb-signout">
+      <button type="button" className="mw-linkbtn hb-signout__link" onClick={() => setConfirming(true)}>{t("hb.acc.signOut")}</button>
+    </div>;
+  }
+  return <div className="hb-signout hb-signout--confirm" role="group" aria-label={t("hb.acc.signOut")}>
+    <p>{t("hb.acc.signOutConfirm")}</p>
+    <p className="mw-hint">{t("hb.acc.signOutNote")}</p>
+    <div className="hb-signout__actions">
+      <button type="button" className="cfv2-button mw-btn" onClick={() => setConfirming(false)} disabled={signingOut}>{t("hb.acc.signOutCancel")}</button>
+      <button type="button" className="cfv2-button cfv2-button-danger mw-btn" onClick={onSignOut} disabled={signingOut}>{t(signingOut ? "hb.acc.signingOut" : "hb.acc.signOutYes")}</button>
+    </div>
+  </div>;
+}
+
 function Account({ t, name, setLang, appearance, go, onSignOut, signingOut, push, installed }) {
   return (
     <div className="hb-screen">
@@ -697,8 +716,7 @@ function Account({ t, name, setLang, appearance, go, onSignOut, signingOut, push
           ))}
         </div>
       </div>
-      <button type="button" className="cfv2-button cfv2-button-danger mw-btn mw-btn-block" onClick={onSignOut} disabled={signingOut}>{t(signingOut ? "hb.acc.signingOut" : "hb.acc.signOut")}</button>
-      <p className="mw-hint">{t("hb.acc.signOutNote")}</p>
+      <SignOutControl t={t} onSignOut={onSignOut} signingOut={signingOut} />
     </div>
   );
 }
