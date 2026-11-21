@@ -44,13 +44,14 @@
 }
 .platform-company { color: var(--cf-brand-text); font-weight: 700; }
 .platform-company .cf-icon { flex-shrink: 0; }
-.platform-org-id { display: block; color: var(--cf-text-muted); font-weight: 400; }
+.platform-org-id { color: var(--cf-text-secondary); font-weight: 500; overflow-wrap: anywhere; }
+.platform-activity-source { display: block; color: var(--cf-text-secondary); }
 .platform-table button:focus-visible, .platform-switch button:focus-visible {
   outline: 2px solid var(--cf-focus);
   outline-offset: -1px;
   border-radius: 4px;
 }
-.platform-directory td .cf-state { white-space: nowrap; }
+.platform-directory td .cf-state { line-height: 1.2; }
 .platform-directory .platform-metrics { font-size: var(--cf-text-xs); }
 .platform-metrics { display: grid; gap: 5px; margin: 0; }
 .platform-metrics > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
