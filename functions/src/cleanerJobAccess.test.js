@@ -23,9 +23,10 @@ describe("FB01 cleaner job access", () => {
     const early = projectCleanerJobAccess({ job: job(), property: property(), cleanerId: "ana", nowMs: noonLa("2026-11-07") });
     // Midnight in Los Angeles (PST, UTC-8) on the day before.
     expect(early).toEqual({ state: "not-yet", availableFromMs: Date.parse("2026-11-09T08:00:00Z") });
-    expect(projectCleanerJobAccess({ job: job(), property: property(), cleanerId: "ana", nowMs: noonLa("2026-11-11") }).state).toBe("revoked");
+    expect(projectCleanerJobAccess({ job: job(), property: property(), cleanerId: "ana", nowMs: noonLa("2026-11-11") }).state).toBe("closed");
+    expect(projectCleanerJobAccess({ job: job({ scheduledDate: null }), property: property(), cleanerId: "ana", nowMs: noonLa("2026-11-10") }).state).toBe("no-date");
     expect(projectCleanerJobAccess({ job: job({ operationalStatus: "IN_PROGRESS" }), property: property(), cleanerId: "ana", nowMs: noonLa("2026-11-12") }).state).toBe("available");
-    expect(accessWindow(job({ scheduledDate: null }), noonLa("2026-11-10"))).toEqual({ open: false });
+    expect(accessWindow(job({ scheduledDate: null }), noonLa("2026-11-10"))).toEqual({ open: false, noDate: true });
     expect(operatingDate(Date.parse("2026-11-10T06:00:00Z"))).toBe("2026-11-09");
   });
 
@@ -33,7 +34,7 @@ describe("FB01 cleaner job access", () => {
     const now = noonLa("2026-11-10");
     expect(projectCleanerJobAccess({ job: job(), property: property(), cleanerId: "bia", nowMs: now }).state).toBe("revoked");
     expect(projectCleanerJobAccess({ job: job({ assignedCleanerIds: [] }), property: property(), cleanerId: "ana", nowMs: now }).state).toBe("revoked");
-    expect(projectCleanerJobAccess({ job: job({ operationalStatus: "COMPLETED" }), property: property(), cleanerId: "ana", nowMs: now }).state).toBe("revoked");
+    expect(projectCleanerJobAccess({ job: job({ operationalStatus: "COMPLETED" }), property: property(), cleanerId: "ana", nowMs: now }).state).toBe("closed");
     expect(projectCleanerJobAccess({ job: job({ archivedAt: {} }), property: property(), cleanerId: "ana", nowMs: now }).state).toBe("revoked");
     expect(projectCleanerJobAccess({ job: job(), property: property({ shared: false }), cleanerId: "ana", nowMs: now }).state).toBe("not-provided");
     expect(projectCleanerJobAccess({ job: job(), property: { keyCodeInfo: "private" }, cleanerId: "ana", nowMs: now }).state).toBe("not-provided");

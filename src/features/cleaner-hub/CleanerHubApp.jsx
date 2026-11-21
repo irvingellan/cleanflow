@@ -416,7 +416,7 @@ export function AccessSection({ t, hub, entry }) {
           <p className="mw-hint">{t("hb.access.private")}</p>
         </>
       )}
-      {["not-provided", "not-yet", "revoked", "denied", "closed", "unsupported", "error"].includes(state) && (
+      {["not-provided", "not-yet", "no-date", "revoked", "denied", "closed", "unsupported", "error"].includes(state) && (
         <div className={`hb-access-note${state === "revoked" || state === "denied" ? " is-blocked" : ""}`} role={state === "error" ? "alert" : undefined}>
           <p>{t(`hb.access.${state}`, { time: access.availableFromMs ? new Intl.DateTimeFormat(t.locale, { weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(access.availableFromMs)) : "" })}</p>
           {state === "error" && <button type="button" className="mw-linkbtn" onClick={() => setAttempt((value) => value + 1)}>{t("hb.access.retry")}</button>}
