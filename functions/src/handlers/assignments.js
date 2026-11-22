@@ -1,3 +1,4 @@
+import { setJobCleanerSpotsForManager } from "../jobCleanerSpots.js";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireOrganizationManager } from "../managerAuthorization.js";
 import { validChecklistRunJobId } from "../checklistRunService.js";
@@ -69,5 +70,18 @@ export async function rescheduleJob(request) {
     scheduledStart: request.data?.scheduledStart,
     expectedScheduleRevision: request.data?.expectedScheduleRevision,
     actorUid: request.auth.uid,
+  });
+}
+
+export async function setJobCleanerSpots(request) {
+  const uid = request.auth?.uid;
+  if (!uid || request.auth.token?.firebase?.sign_in_provider === "anonymous") {
+    throw new HttpsError("unauthenticated", "A non-anonymous account is required.");
+  }
+  if (!request.data || Object.keys(request.data).some(key => !["jobId", "count"].includes(key))) {
+    throw new HttpsError("invalid-argument", "Only a Job and its spot count may be supplied.");
+  }
+  return setJobCleanerSpotsForManager(db, {
+    organizationId, actorUid: uid, jobId: request.data?.jobId, count: request.data?.count,
   });
 }

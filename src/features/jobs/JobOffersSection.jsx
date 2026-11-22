@@ -1,9 +1,8 @@
 import { JobDetailSection } from "./JobDetailSection.jsx";
 import { JobOfferRow } from "./JobOfferRow.jsx";
-import { isJobFilled, maxCleanersPerJob, requiredCleanerCount, rosterCleanerIds } from "./offerSlots.js";
 import { StateCard } from "../../components/UiPrimitives.jsx";
 
-/** The Offers section of Job Detail: offer actions, cleaner spots, the offer list and the legacy "simulate cleaner" button. */
+/** The Offers section of Job Detail: offer actions, the offer list and the legacy "simulate cleaner" button. */
 export function JobOffersSection({
   job,
   translate,
@@ -16,10 +15,7 @@ export function JobOffersSection({
   onRefreshOffers,
   isAssignmentAware,
   automaticOfferJob,
-  onSetCleanerSpots,
   canEditRoster,
-  isSavingSpots,
-  changeCleanerSpots,
   offersCreatedCount,
   hasOffersError,
   cleanerNamesById,
@@ -89,34 +85,6 @@ export function JobOffersSection({
           </button>
         </div>
       </div>
-
-      {isAssignmentAware && automaticOfferJob && sortedOffers.length > 0 && (
-        <div className="offer-spots" data-testid="offer-spots">
-          <span>{translate(isJobFilled(job) ? "offers.spotsFilled" : "offers.automaticSpots", {
-            filled: rosterCleanerIds(job).length, total: requiredCleanerCount(job),
-          })}</span>
-        </div>
-      )}
-
-      {isAssignmentAware && !automaticOfferJob && sortedOffers.length > 0 && (
-        <div className="offer-spots" data-testid="offer-spots">
-          <span>{translate(isJobFilled(job) ? "offers.spotsFilled" : "offers.spotsOpen", {
-            filled: rosterCleanerIds(job).length, total: requiredCleanerCount(job),
-          })}</span>
-          {onSetCleanerSpots && canEditRoster && (
-            <span className="offer-spots__stepper" role="group" aria-label={translate("offers.spotsLabel")}>
-              <button className="button" type="button" aria-label={translate("offers.spotsLess")}
-                disabled={isSavingSpots || requiredCleanerCount(job) <= Math.max(1, rosterCleanerIds(job).length)}
-                onClick={() => changeCleanerSpots(requiredCleanerCount(job) - 1)}>−</button>
-              <span className="offer-spots__count" aria-live="polite">{requiredCleanerCount(job)}</span>
-              <button className="button" type="button" aria-label={translate("offers.spotsMore")}
-                disabled={isSavingSpots || requiredCleanerCount(job) >= maxCleanersPerJob}
-                onClick={() => changeCleanerSpots(requiredCleanerCount(job) + 1)}>+</button>
-              <span>{translate("offers.spotsLabel")}</span>
-            </span>
-          )}
-        </div>
-      )}
 
       {offersCreatedCount !== null && (
         <p className="offers-section__success" role="status">

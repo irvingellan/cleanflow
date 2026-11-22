@@ -41,6 +41,45 @@ describe("Public automatic offer", () => {
     expect(screen.queryByRole("button", { name: /Aceitar serviço|Tenho interesse|Não posso/ })).toBeNull();
   });
 
+  it("confirms an open automatic offer from the link and shows the winner receipt", async () => {
+    const fetchOffer = vi.fn()
+      .mockResolvedValueOnce(Response.json({ offer: { ...automaticOffer, confirmationMode: "FIRST_ACCEPT_WINS", scheduleRevision: 4 } }))
+      .mockResolvedValueOnce(Response.json({ status: "ACCEPTED" }));
+    vi.stubGlobal("fetch", fetchOffer);
+    render(<TranslationProvider><App /></TranslationProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar serviço" }));
+    expect(await screen.findByText("Serviço confirmado para você ✅")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Confirmar serviço" })).not.toBeInTheDocument();
+    expect(JSON.parse(fetchOffer.mock.calls[1][1].body)).toEqual({ token: "example-public-link", status: "ACCEPTED", scheduleRevision: 4 });
+  });
+
+  it("offers explicit confirmation to a previously interested team invite and explains a late response", async () => {
+    const fetchOffer = vi.fn()
+      .mockResolvedValueOnce(Response.json({ offer: { status: "INTERESTED", confirmationMode: "FIRST_ACCEPT_WINS", preferredLanguage: "pt" } }))
+      .mockResolvedValueOnce(Response.json({ error: "offer_already_taken" }, { status: 410 }));
+    vi.stubGlobal("fetch", fetchOffer);
+    render(<TranslationProvider><App /></TranslationProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar serviço" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Outra profissional já ficou com este serviço.");
+  });
+
+  it("requires another explicit confirmation after a schedule change", async () => {
+    const firstOffer = { ...automaticOffer, confirmationMode: "FIRST_ACCEPT_WINS", scheduleRevision: 2 };
+    const fetchOffer = vi.fn()
+      .mockResolvedValueOnce(Response.json({ offer: firstOffer }))
+      .mockResolvedValueOnce(Response.json({ error: "offer_stale_schedule" }, { status: 409 }))
+      .mockResolvedValueOnce(Response.json({ offer: { ...firstOffer, scheduledStart: "11:00", scheduleRevision: 3 } }));
+    vi.stubGlobal("fetch", fetchOffer);
+    render(<TranslationProvider><App /></TranslationProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar serviço" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("A data ou o horário mudou.");
+    expect(screen.queryByRole("button", { name: "Confirmar serviço" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+    expect(await screen.findByRole("button", { name: "Confirmar serviço" })).toBeEnabled();
+    expect(screen.getByText("11:00")).toBeVisible();
+    expect(fetchOffer).toHaveBeenCalledTimes(3);
+  });
+
   it("shows the manual hourly offer in the recipient's selected language", async () => {
     window.localStorage.setItem("cleanflow-language", "en");
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ offer: {
@@ -110,7 +149,7 @@ describe("Public automatic offer", () => {
   it("shows why a taken offer link is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "offer_already_taken" }, { status: 410 })));
     render(<TranslationProvider><App /></TranslationProvider>);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unavailable — this job has already been filled.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Another cleaner already took this service.");
     expect(screen.queryByRole("link", { name: "Sign in to My schedule" })).toBeNull();
   });
 });

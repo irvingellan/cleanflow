@@ -5,7 +5,7 @@ import { notificationRevision, notificationRoster } from "./cleanerNotificationE
 import { FIRST_ACCEPT_WINS, isAutomaticOfferJob, validRosterId } from "./firstAcceptWins.js";
 import { isActiveManagerMembership } from "./managerAuthorization.js";
 import {
-  automaticOfferNotice, cleanerInbox, cleanerInboxTypes as cleanerTypes, inboxEventVersion, inboxReceipt, isInboxId,
+  automaticOfferNotice, linkOfferConfirmationNotice, cleanerInbox, cleanerInboxTypes as cleanerTypes, inboxEventVersion, inboxReceipt, isInboxId,
   managerInboxCollection, managerInboxTypes as managerTypes, offerInboxGeneration, removedServiceNotice,
   safeServiceLabel, validInboxSegment,
 } from "./notificationInboxEvents.js";
@@ -300,7 +300,9 @@ export async function listNotificationInboxForRequest(database, { organizationId
     const items = entries.map(({ id, event }, index) => {
       const target = projectAuthorizedTarget(organization, event, identity, jobs[index],
         details.get(offerRefs[index]?.path), { now });
-      const notice = target && identity.role === managerRole ? automaticOfferNotice(event.type, event.automaticOffer) : null;
+      const managerCanOpen = target && identity.role === managerRole;
+      const notice = managerCanOpen ? automaticOfferNotice(event.type, event.automaticOffer) : null;
+      const linkConfirmation = managerCanOpen ? linkOfferConfirmationNotice(event.type, event.linkConfirmation) : null;
       const removedService = identity.role === cleanerRole ? removedServiceNotice(event.type, event.removedService) : null;
       const reschedule = target && resolveReschedule(lookups[index], details);
       return {
@@ -312,6 +314,7 @@ export async function listNotificationInboxForRequest(database, { organizationId
         openable: Boolean(target),
         serviceLabel: target?.serviceLabel ?? null,
         ...(notice ? { automaticOffer: notice } : {}),
+        ...(linkConfirmation ? { linkConfirmation } : {}),
         // The Hub can share a decision across its screens only for this current assignment.
         ...(reschedule ? { jobId: event.jobId, reschedule } : {}),
         ...(removedService ? { removedService } : {}),

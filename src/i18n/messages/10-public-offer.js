@@ -1,7 +1,10 @@
 export default {
   en: {
   "publicOffer.assignment": "Assignment",
-  "publicOffer.alreadyTaken": "Unavailable — this job has already been filled.",
+  "publicOffer.alreadyTaken": "Another cleaner already took this service.",
+  "publicOffer.confirmJob": "Confirm service",
+  "publicOffer.jobConfirmed": "Service confirmed for you ✅",
+  "publicOffer.staleSchedule": "The schedule changed. Reload the offer and check the new date or time before confirming.",
   "publicOffer.hubRequired": "Sign in to My schedule and open Offers to respond.",
   "publicOffer.openHub": "Sign in to My schedule",
   "publicOffer.assignmentAwaitingShort": "Awaiting your confirmation",
@@ -17,7 +20,10 @@ export default {
   },
   pt: {
   "publicOffer.assignment": "Atribuição",
-  "publicOffer.alreadyTaken": "Indisponível — a vaga deste serviço já foi preenchida.",
+  "publicOffer.alreadyTaken": "Outra profissional já ficou com este serviço.",
+  "publicOffer.confirmJob": "Confirmar serviço",
+  "publicOffer.jobConfirmed": "Serviço confirmado para você ✅",
+  "publicOffer.staleSchedule": "A data ou o horário mudou. Recarregue a oferta e confira antes de confirmar.",
   "publicOffer.hubRequired": "Entre na Minha agenda e abra Ofertas para responder.",
   "publicOffer.openHub": "Entrar na Minha agenda",
   "publicOffer.assignmentAwaitingShort": "Aguardando sua confirmação",
@@ -33,7 +39,10 @@ export default {
   },
   es: {
   "publicOffer.assignment": "Asignación",
-  "publicOffer.alreadyTaken": "No disponible — este servicio ya fue cubierto.",
+  "publicOffer.alreadyTaken": "Otra profesional ya se quedó con este servicio.",
+  "publicOffer.confirmJob": "Confirmar servicio",
+  "publicOffer.jobConfirmed": "Servicio confirmado para ti ✅",
+  "publicOffer.staleSchedule": "La fecha o la hora cambió. Vuelve a cargar la oferta y revisa el horario antes de confirmar.",
   "publicOffer.hubRequired": "Inicia sesión en Mi agenda y abre Ofertas para responder.",
   "publicOffer.openHub": "Entrar en Mi agenda",
   "publicOffer.assignmentAwaitingShort": "Esperando tu confirmación",

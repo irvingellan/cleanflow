@@ -212,6 +212,21 @@ response. A manager decision on one Offer is stored as `managerDecision`
 `previousManagerDecision`, `previousManagerDecisionAt` and
 `previousManagerDecisionByUid`.
 
+Managers can change the spot count of an assignment-aware, unpaid service before
+work starts. The assigned roster is the lower bound. For automatic distribution,
+`setJobCleanerSpots` changes the Job count and batch capacity atomically.
+Filling the final opening sets the Job's existing close marker, which makes
+remaining pending invitations show as taken. Increasing capacity reopens eligible
+pending invitations and permits new recipients. The batch records the manager UID
+and the checklist context revision at reopening. Its opening revision continues
+to identify the original invitations. An older single-slot automatic batch gains
+versioned invitation references when its manager first changes its capacity.
+
+The estimated individual share of a frozen house total uses the current planned
+spot count. The final active team determines settlement when work begins.
+Fixed personal agreements and hourly rates retain their original terms. A Job
+with a recorded payment keeps its original spot plan and payout receipts.
+
 An Offer may carry only the safe proposed compensation relevant to its
 recipient. That proposed amount is not an Assignment payout or a record of
 payment. It must not expose client charges, profit, other cleaner compensation,

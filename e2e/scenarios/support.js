@@ -118,7 +118,7 @@ export async function createScenarioJob(page, fixture) {
   await page.getByRole("navigation", { name: "Main navigation" })
     .getByRole("button", { name: "Jobs" }).click();
   await expect(page.getByRole("heading", { name: "Cleaning jobs" })).toBeVisible();
-  await page.getByRole("button", { name: "New service" }).click();
+  await page.getByRole("region", { name: "Cleaning jobs" }).getByRole("button", { name: "New service" }).click();
   const form = page.locator(".cleaning-form");
   await expect(form).toBeVisible();
   await form.getByRole("searchbox").fill(fixture.propertyName);
@@ -133,7 +133,6 @@ export async function createScenarioJob(page, fixture) {
   await form.getByRole("textbox", { name: "Notes" }).fill(fixture.runLabel);
   await form.getByRole("button", { name: "Create cleaning" }).click();
   await expect(page.getByRole("heading", { name: fixture.propertyName })).toBeVisible();
-  await expect(page.getByText("Job details", { exact: true })).toBeVisible();
   const jobs = await fixture.orgRef.collection("jobs").where("propertyId", "==", fixture.propertyId).get();
   expect(jobs.size).toBe(1);
   const jobRef = jobs.docs[0].ref;

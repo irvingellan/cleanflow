@@ -41,6 +41,8 @@ const messages = {
   "inbox.reschedule.confirmed": ["Novo horário confirmado.", "New time confirmed.", "Nuevo horario confirmado."],
   "inbox.reschedule.declined": ["Você informou que não pode na nova data.", "You declined the new time.", "Avisaste que no puedes en el nuevo horario."],
   "inbox.reschedule.stale": ["O horário mudou de novo. Confira o aviso mais recente.", "The time changed again. Check the latest notice.", "El horario cambió otra vez. Revisa el aviso más reciente."],
+  "inbox.linkConfirmation.cleaner": ["{cleaner} confirmou pelo link do WhatsApp.", "{cleaner} confirmed through the WhatsApp link.", "{cleaner} confirmó por el enlace de WhatsApp."],
+  "inbox.linkConfirmation.generic": ["Uma profissional confirmou pelo link do WhatsApp.", "A cleaner confirmed through the WhatsApp link.", "Una profesional confirmó por el enlace de WhatsApp."],
   "inbox.automatic.assignee": ["{cleaner} ficou com o serviço.", "{cleaner} was assigned to this job.", "{cleaner} quedó asignada al servicio."],
   "inbox.event.ASSIGNMENT_CONFIRMED": ["Atribuição confirmada", "Assignment confirmed", "Asignación confirmada"],
   "inbox.event.CHECKLIST_READY_FOR_REVIEW": ["Checklist pronto para revisão", "Checklist ready for review", "Checklist listo para revisión"],

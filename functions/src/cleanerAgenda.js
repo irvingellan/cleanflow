@@ -1,3 +1,4 @@
+import { canonicalManualRecipient, confirmsManualSpot } from "./manualOfferConfirmation.js";
 import { isDeepStrictEqual } from "node:util";
 import { offerPayForRecipient } from "./offerPay.js";
 import { FieldValue } from "firebase-admin/firestore";
@@ -152,6 +153,8 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
   const replacement = activeReplacement && jobOffers.find(offer => offer.offerReferenceId === activeReplacement && offer.jobId === jobId
     && currentManualReplacementOffer(job, offer, activeReplacement, now));
   const visibleOffers = replacement ? [replacement, ...jobOffers.filter(offer => offer !== replacement)] : jobOffers;
+  const manualRecipients = new Set(jobOffers.filter(offer => canonicalManualRecipient(offer, offer.offerReferenceId, jobId, organizationId))
+    .map(offer => offer.cleanerId));
   for (const offer of visibleOffers) {
     const cleanerId = offer?.cleanerId;
     if (!validId(cleanerId) || entries.has(cleanerId)) continue;
@@ -185,6 +188,8 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
       // Closed invitations keep only the amount saved on the recipient's own Offer.
       ...offerPayForRecipient(offer, closed ? null : job, cleanerId),
       ...(automatic ? { offerDistributionMode: FIRST_ACCEPT_WINS } : {}),
+      ...(!closed && canonicalManualRecipient(offer, offer.offerReferenceId, jobId, organizationId)
+        && confirmsManualSpot(job, offer, manualRecipients.size > 1) && { confirmationMode: FIRST_ACCEPT_WINS }),
       ...(offer === replacement ? { replacementOfferId: activeReplacement } : {}),
     });
   }
@@ -198,7 +203,7 @@ export function agendaEntryId(cleanerId, jobId) {
 const comparedFields = [
   "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offeredFirstSlotExtraCents", "offeredPayEstimated", "offerExpiresAtMs",
-  "offerDistributionMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType", "address", "notes",
+  "offerDistributionMode", "confirmationMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType", "address", "notes",
 ];
 
 export function sameEntry(previous, next) {

@@ -506,7 +506,7 @@ test("reschedule and roster removal through existing manager paths update the ag
   assert.ok(agenda.some((item) => item.change === "CANCELLED"));
 });
 
-test("offers stay separate: interest is recorded through the existing Offer service and never becomes an assignment", async () => {
+test("a single manual invitation keeps the historical interest and manager assignment flow", async () => {
   await createJob("job-offer", { operationalStatus: "OFFERED", serviceType: "DEEP_CLEANING" });
   await admin.doc(`${root}/properties/property`).update({ address: "Synthetic site A" });
   const offer = (cleanerId, extra = {}) => admin.doc(`${root}/jobs/job-offer/offers/${cleanerId}`).set({
@@ -514,7 +514,6 @@ test("offers stay separate: interest is recorded through the existing Offer serv
     publicOfferTokenHash: `hash-${cleanerId}`, publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + 86400000), ...extra,
   });
   await offer("cleaner-a");
-  await offer("cleaner-b", { publicOfferExpiresAt: null }); // never sent as a link
   await link("cleaner-a");
   await sync("job-offer");
   const entryPath = `${root}/cleanerAgenda/cleaner-a__job-offer`;
@@ -539,6 +538,7 @@ test("offers stay separate: interest is recorded through the existing Offer serv
   assert.equal((await admin.collection(`${root}/jobs/job-offer/managerNotificationDeliveries`).get()).size, 1);
 
   // A cleaner can only address her own Offer document; an unsent Offer cannot be answered.
+  await offer("cleaner-b", { publicOfferExpiresAt: null }); // never sent as a link
   await link("cleaner-b");
   await assertFails(cleanerDb(uidB).doc(entryPath).get());
   assert.deepEqual(await respondToMyOffer.run(cleanerRequest(uidB, { jobId: "job-offer", status: "INTERESTED" })), { state: "expired", status: null });
@@ -1270,12 +1270,14 @@ test("a partial versioned batch keeps active invitations private and allows only
   await assertSucceeds(db.doc(offerPath).update({ publicOfferTokenHash: tokenHash }));
   const publicLink = await requestPublicOffer("GET", token);
   assert.equal(publicLink.code, 200);
-  assert.deepEqual(publicLink.body, { offer: { offerDistributionMode: autoMode, preferredLanguage: "pt" } });
-  const forwarded = await requestPublicOffer("POST", token, { status: "ACCEPTED" });
-  assert.ok(forwarded.code >= 400);
-  assert.deepEqual(await assignmentsFor(job).then((rows) => rows.map(({ cleanerId }) => cleanerId)), ["cleaner-a"]);
+  assert.equal(publicLink.body.offer.confirmationMode, autoMode);
+  assert.equal(publicLink.body.offer.status, "PENDING");
+  assert.doesNotMatch(JSON.stringify(publicLink.body.offer), /cleaner-a|Ana Example|private-|clientPrice|cleanerPayout/);
 
   await assertSucceeds(db.doc(offerPath).update({ status: "REVOKED", revokedAt: serverTimestamp() }));
+  const revoked = await requestPublicOffer("POST", token, { status: "ACCEPTED" });
+  assert.equal(revoked.code, 410);
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), ["cleaner-a"]);
   assert.equal((await accept(job.id, uidB)).state, "unavailable");
   assert.equal((await accept(job.id, uidC)).state, "assigned");
   assert.ok((await job.get()).get("offerDistributionClosedAt"));
@@ -1455,28 +1457,157 @@ test("automatic acceptance leaves expired, revoked, cancelled, already assigned,
   }
 });
 
-test("a forwarded public link cannot assign, record legacy interest, or confirm an automatic assignment", async () => {
-  await link("cleaner-a");
-  await link("cleaner-b");
-  const job = await createAutomaticJob("auto-public-link");
-  const linkA = await createAutomaticOffer(job.id, "cleaner-a");
-  const linkB = await createAutomaticOffer(job.id, "cleaner-b");
-  const open = await requestPublicOffer("GET", linkA.token);
-  assert.equal(open.code, 200);
-  assert.deepEqual(open.body, { offer: { offerDistributionMode: autoMode, preferredLanguage: "pt" } });
-  for (const data of [{ status: "ACCEPTED" }, { status: "INTERESTED" }, { action: "ACKNOWLEDGE_ASSIGNMENT" }]) {
-    const response = await requestPublicOffer("POST", linkA.token, data);
-    assert.ok(response.code >= 400);
+const publicAccept = (token, scheduleRevision = 0) =>
+  requestPublicOffer("POST", token, { status: "ACCEPTED", scheduleRevision });
+
+async function issueAutomaticLink(job, cleanerId) {
+  const token = randomBytes(32).toString("base64url");
+  const managerDb = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
+  await assertSucceeds(managerDb.doc(`${job.path}/offers/${cleanerId}`).update({
+    publicOfferTokenHash: createHash("sha256").update(token).digest("hex"),
+  }));
+  return token;
+}
+
+test("two public confirmations compete for one automatic spot and the winner can reopen the same receipt", async () => {
+  const job = jobDocument("automatic-link-race");
+  await createJob(job.id);
+  const ids = ["cleaner-a", "cleaner-b"];
+  await createAutomaticJobOffers.run(managerRequest({ jobId: job.id, cleanerIds: ids }));
+  const tokens = await Promise.all(ids.map(id => issueAutomaticLink(job, id)));
+  for (const token of tokens) {
+    const open = await requestPublicOffer("GET", token);
+    assert.equal(open.code, 200);
+    assert.equal(open.body.offer.confirmationMode, autoMode);
+    assert.equal(open.body.offer.status, "PENDING");
+    assert.doesNotMatch(JSON.stringify(open.body), /keyCodeInfo|accessInstructions|private-|synthetic-job-instructions|clientPrice/);
   }
-  assert.equal((await linkA.offer.get()).data().status, "PENDING");
-  assert.deepEqual(await assignmentsFor(job), []);
-  assert.equal((await accept(job.id, uidA)).state, "assigned");
-  const lost = await requestPublicOffer("GET", linkB.token);
-  assert.equal(lost.code, 410);
-  assert.deepEqual(lost.body, { error: "offer_already_taken" });
-  const confirmation = await requestPublicOffer("POST", linkA.token, { action: "ACKNOWLEDGE_ASSIGNMENT" });
-  assert.ok(confirmation.code >= 400);
+  const unaffected = await createAutomaticJob("separate-token-job");
+  await createAutomaticOffer(unaffected.id, "cleaner-a");
+  const triggerJob = functionDatabase.doc(job.path);
+  const beforeConfirm = await triggerJob.get();
+  const results = await Promise.all(tokens.map(token => publicAccept(token)));
+  assert.deepEqual(results.map(result => result.code).sort(), [200, 410]);
+  const winner = results.findIndex(result => result.code === 200);
+  const loser = 1 - winner;
+  assert.deepEqual(results[winner].body, { status: "ACCEPTED" });
+  assert.deepEqual(results[loser].body, { error: "offer_already_taken" });
+  const committed = (await job.get()).data();
+  assert.deepEqual(committed.assignedCleanerIds, [ids[winner]]);
+  assert.ok(committed.offerDistributionClosedAt);
+  assert.deepEqual((await unaffected.get()).get("assignedCleanerIds"), []);
+  assert.deepEqual(await assignmentsFor(unaffected), []);
+  const assignments = await assignmentsFor(job);
+  assert.equal(assignments.length, 1);
+  assert.deepEqual([assignments[0].cleanerId, assignments[0].sourceOfferId,
+    assignments[0].assignmentMethod, assignments[0].confirmationChannel, assignments[0].isActive],
+    [ids[winner], ids[winner], autoMode, "WHATSAPP_LINK", true]);
+  assert.ok(assignments[0].cleanerAcknowledgedAt);
+  const managerDb = environment.authenticatedContext("manager", managerRequest().auth.token).firestore();
+  const storedAssignment = managerDb.doc(`${job.path}/assignments/${committed.firstAcceptClaim.assignmentId}`);
+  await assertFails(storedAssignment.update({ confirmationChannel: "CLEANER_HUB" }));
+  const winnerPage = await requestPublicOffer("GET", tokens[winner]);
+  assert.equal(winnerPage.code, 200);
+  assert.equal(winnerPage.body.offer.status, "ACCEPTED");
+  assert.doesNotMatch(JSON.stringify(winnerPage.body), /keyCodeInfo|accessInstructions|private-|synthetic-job-instructions|clientPrice/);
+  assert.deepEqual((await publicAccept(tokens[winner])).body, { status: "ACCEPTED" });
+  assert.deepEqual((await requestPublicOffer("GET", tokens[loser])).body, { error: "offer_already_taken" });
+  const notices = await job.collection("managerNotificationDeliveries").get();
+  const confirmation = notices.docs.filter(doc => doc.get("eventType") === "AUTO_ASSIGNMENT_CONFIRMED");
+  assert.equal(confirmation.length, 1);
+  const receipt = await admin.doc(`${root}/managerNotificationInbox/${confirmation[0].id}`).get();
+  const recipient = (await admin.doc(`${root}/cleaners/${ids[winner]}`).get()).get("name");
+  const managerOnly = { confirmationChannel: "WHATSAPP_LINK", cleanerLabel: recipient };
+  assert.deepEqual(receipt.get("linkConfirmation"), managerOnly);
+  const managerInbox = await listNotificationInbox.run(managerRequest({ role: "MANAGER" }));
+  assert.deepEqual(managerInbox.items.find(item => item.id === confirmation[0].id)?.linkConfirmation, managerOnly);
+  assert.equal(await recordCleanerJobInboxEvents(functionDatabase, {
+    organizationId: org, jobId: job.id, before: beforeConfirm, after: await triggerJob.get(), eventId: "automatic-link-confirmed",
+  }), 1);
+  await link(ids[winner]);
+  const ownInbox = await listNotificationInbox.run(cleanerRequest(winner === 0 ? uidA : uidB, { role: "CLEANER" }));
+  assert.ok(ownInbox.items.some(item => item.type === "AUTO_ASSIGNED"));
+  assert.ok(ownInbox.items.every(item => !Object.hasOwn(item, "linkConfirmation")));
+  assert.equal((await job.get()).get("checklistContextRevision"), 1);
+  assert.deepEqual(await assignmentsFor(job), assignments);
+});
+
+test("manual multi-recipient confirmation accepts past interest and a Hub and link share the last spot", async () => {
+  const job = jobDocument("manual-cross-channel");
+  const ids = ["cleaner-a", "cleaner-b", "cleaner-c"];
+  await createJob(job.id, { operationalStatus: "OFFERED", requiredCleanerCount: 2 });
+  const tokens = await manualOffers(job.id, ids);
+  await link("cleaner-b");
+  await link("cleaner-c");
+  await job.collection("offers").doc("cleaner-a").update({ status: "INTERESTED", respondedAt: Timestamp.now() });
+  const earlier = await requestPublicOffer("GET", tokens["cleaner-a"]);
+  assert.equal(earlier.body.offer.confirmationMode, autoMode);
+  assert.equal(earlier.body.offer.status, "INTERESTED");
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), []);
+  assert.deepEqual((await publicAccept(tokens["cleaner-a"])).body, { status: "ACCEPTED" });
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), ["cleaner-a"]);
+  const secondLink = await requestPublicOffer("GET", tokens["cleaner-c"]);
+  assert.equal(secondLink.code, 200);
+  assert.equal(secondLink.body.offer.status, "PENDING");
+  const [hub, external] = await Promise.all([accept(job.id, uidB), publicAccept(tokens["cleaner-c"])]);
+  const hubWon = hub.state === "assigned";
+  assert.deepEqual(hub, hubWon ? { state: "assigned", status: "ACCEPTED" } : { state: "already-taken", status: null });
+  assert.equal(external.code, hubWon ? 410 : 200);
+  assert.deepEqual(external.body, hubWon ? { error: "offer_already_taken" } : { status: "ACCEPTED" });
+  const last = hubWon ? "cleaner-b" : "cleaner-c";
+  const late = hubWon ? "cleaner-c" : "cleaner-b";
+  const assigned = (await assignmentsFor(job)).sort((a, b) => a.cleanerId.localeCompare(b.cleanerId));
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), ["cleaner-a", last]);
+  assert.deepEqual(assigned.map(({ cleanerId, assignmentMethod, confirmationChannel }) =>
+    [cleanerId, assignmentMethod, confirmationChannel]), [
+    ["cleaner-a", autoMode, "WHATSAPP_LINK"], [last, autoMode, hubWon ? "CLEANER_HUB" : "WHATSAPP_LINK"],
+  ]);
+  assert.deepEqual((await requestPublicOffer("GET", tokens[late])).body, { error: "offer_already_taken" });
+  assert.deepEqual((await publicAccept(tokens[late])).body, { error: "offer_already_taken" });
+  await sync(job.id);
+  const closed = (await agendaFor(late)).find(entry => entry.jobId === job.id);
+  assert.deepEqual([closed.kind, closed.offerStatus], ["OFFER", "ALREADY_TAKEN"]);
+  assert.doesNotMatch(JSON.stringify(closed), /private-door-code|private-access|synthetic-job-instructions|assignedCleanerIds/);
+  const events = await job.collection("managerNotificationDeliveries").get();
+  const forA = events.docs.filter(doc => doc.get("eventType") === "ASSIGNMENT_CONFIRMED" && doc.get("cleanerId") === "cleaner-a");
+  assert.equal(forA.length, 1);
+  const inbox = await admin.doc(`${root}/managerNotificationInbox/${forA[0].id}`).get();
+  assert.deepEqual(inbox.get("linkConfirmation"), { confirmationChannel: "WHATSAPP_LINK", cleanerLabel: "cleaner-a" });
+});
+
+test("manual confirmation with one open spot closes both untouched and previously interested invitations", async () => {
+  const job = jobDocument("one-manual-spot");
+  await createJob(job.id, { operationalStatus: "OFFERED" });
+  const tokens = await manualOffers(job.id, ["cleaner-a", "cleaner-b", "cleaner-c"]);
+  const interest = await requestPublicOffer("POST", tokens["cleaner-b"], { status: "INTERESTED" });
+  assert.deepEqual([interest.code, interest.body], [200, { status: "INTERESTED" }]);
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), []);
+  assert.equal((await publicAccept(tokens["cleaner-a"])).code, 200);
+  for (const cleanerId of ["cleaner-b", "cleaner-c"]) {
+    const late = await publicAccept(tokens[cleanerId]);
+    assert.deepEqual([late.code, late.body], [410, { error: "offer_already_taken" }]);
+  }
+  assert.deepEqual((await job.get()).get("assignedCleanerIds"), ["cleaner-a"]);
   assert.equal((await assignmentsFor(job)).length, 1);
+});
+
+test("expired, withdrawn, replaced and archived invitations cannot claim a public spot", async () => {
+  for (const state of ["expired", "revoked", "replaced", "archived", "archived-offer"]) {
+    const job = await createAutomaticJob(`closed-link-${state}`);
+    const { token, offer } = await createAutomaticOffer(job.id, "cleaner-a");
+    if (state === "expired") await offer.update({ publicOfferExpiresAt: Timestamp.fromMillis(Date.now() - 10_000) });
+    if (state === "revoked") await offer.update({ status: "REVOKED", revokedAt: Timestamp.now() });
+    if (state === "archived") await job.update({ archivedAt: Timestamp.now() });
+    if (state === "archived-offer") await offer.update({ archivedAt: Timestamp.now() });
+    if (state === "replaced") await issueAutomaticLink(job, "cleaner-a");
+    const before = (await job.get()).data();
+    for (const answer of [await requestPublicOffer("GET", token), await publicAccept(token)]) {
+      assert.equal(answer.code, state === "replaced" ? 404 : 410, state);
+    }
+    assert.deepEqual((await job.get()).data(), before, state);
+    assert.deepEqual(await assignmentsFor(job), [], state);
+    assert.equal((await job.collection("managerNotificationDeliveries").get()).size, 0, state);
+  }
 });
 
 
@@ -1983,6 +2114,8 @@ test("rescheduling an unversioned automatic batch still invalidates its earlier 
   const original = await createAutomaticOffer(job.id, "cleaner-a");
   await rescheduleJob.run(managerRequest({ jobId: job.id, scheduledDate: dateKey(4), scheduledStart: "13:00" }));
   assert.equal((await accept(job.id, uidA, { scheduleRevision: 1 })).state, "unavailable");
+  const oldLink = await publicAccept(original.token, 0);
+  assert.equal(oldLink.code, 410);
   assert.equal((await job.get()).data().scheduledStart, "13:00");
   assert.deepEqual(await assignmentsFor(job), []);
   assert.equal((await original.offer.get()).get("status"), "PENDING");

@@ -180,7 +180,11 @@ describe("manual hourly offers", () => {
     const set = transactionWithOffer(false, fixed);
     await createJobOffers(input);
     expect(set).toHaveBeenCalledTimes(cleaners.length);
-    for (const [, offer] of set.mock.calls) expect(offer).toMatchObject({ offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1 });
+    for (const [, offer] of set.mock.calls) {
+      expect(offer).toMatchObject({ offeredCompensation: 33.33, offeredFirstSlotExtraCents: 1,
+        publicOfferExpiresAt: { millis: expect.any(Number) } });
+      expect(offer).not.toHaveProperty("publicOfferTokenHash");
+    }
     const stale = transactionWithOffer(false, { ...fixed, cleanerPayout: 99.99 });
     await expect(createJobOffers(input)).rejects.toThrow("rate changed");
     expect(stale).not.toHaveBeenCalled();

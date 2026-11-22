@@ -12,14 +12,15 @@ function availableOffer() {
 
 describe("public offer projection", () => {
 
-  it("flags automatic links for authenticated Hub use and hides closed invites", () => {
+  it("offers explicit confirmation without exposing operational or access fields, and closes filled links", () => {
     const job = {
       schemaVersion: 2,
       operationalStatus: "OFFERED",
       offerDistributionMode: "FIRST_ACCEPT_WINS",
       assignedCleanerIds: [],
       checklistContextRevision: 1,
-      propertyName: "Private service name",
+      propertyName: "Example property",
+      clientPrice: 398, cleanerPayout: 290, accessInstructions: "private marker",
       scheduledDate: "2026-11-05",
     };
     const offer = {
@@ -29,13 +30,26 @@ describe("public offer projection", () => {
     };
 
     expect(publicOfferResult(offer, job)).toEqual({
-      state: "available", offer: { offerDistributionMode: "FIRST_ACCEPT_WINS", preferredLanguage: "en" },
+      state: "available", offer: { offerDistributionMode: "FIRST_ACCEPT_WINS", confirmationMode: "FIRST_ACCEPT_WINS",
+        propertyName: "Example property", scheduledDate: "2026-11-05", scheduledStart: null, status: "PENDING",
+        scheduleRevision: 0, offeredCompensation: null, preferredLanguage: "en" },
     });
     expect(publicOfferResult(offer, { ...job, checklistContextRevision: 2 })).toEqual({ state: "unavailable" });
     expect(publicOfferResult(offer, {
       ...job, operationalStatus: "ASSIGNED", assignedCleanerIds: ["private-cleaner-id"], offerDistributionClosedAt: {},
     })).toEqual({ state: "already-taken" });
     expect(publicOfferResult(availableOffer(), job)).toEqual({ state: "unavailable" });
+  });
+
+  it("keeps prior manual interest and allows explicit confirmation for a team, while a singular invitation stays manual", () => {
+    const job = { schemaVersion: 2, assignedCleanerIds: [], operationalStatus: "OFFERED", scheduleRevision: 4 };
+    const offer = { ...availableOffer(), cleanerId: "own", status: "INTERESTED", offeredCompensation: 81 };
+    expect(publicOfferResult(offer, job).offer).not.toHaveProperty("confirmationMode");
+    expect(publicOfferResult(offer, { ...job, requiredCleanerCount: 3 }).offer).toMatchObject({
+      confirmationMode: "FIRST_ACCEPT_WINS", scheduleRevision: 4, status: "INTERESTED", offeredCompensation: 81,
+    });
+    expect(publicOfferResult(offer, job, { manualConfirmation: true }).offer.confirmationMode).toBe("FIRST_ACCEPT_WINS");
+    expect(publicOfferResult({ ...offer, revokedAt: {} }, job)).toEqual({ state: "unavailable" });
   });
 
   it.each([

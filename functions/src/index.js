@@ -108,6 +108,8 @@ export const createAutomaticJobOffers = onCall(
   lazyHandler(assignments, "createAutomaticJobOffers"),
 );
 
+export const setJobCleanerSpots = onCall({ region: "us-central1" }, lazyHandler(assignments, "setJobCleanerSpots"));
+
 export const assignCleanerDirectly = onCall(
   { region: "us-central1" },
   lazyHandler(assignments, "assignCleanerDirectly"),

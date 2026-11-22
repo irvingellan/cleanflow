@@ -175,6 +175,28 @@ describe("FB08/FB09 — closing answers and invitations", () => {
     await vi.waitFor(() => expect(onReopenOffer).toHaveBeenCalledWith(expect.objectContaining({ id: "offer-bia" })));
   });
 
+  it.each([
+    ["UNASSIGNED", null], ["OFFERED", null], ["OFFERED", "FIRST_ACCEPT_WINS"], ["ASSIGNED", "FIRST_ACCEPT_WINS"],
+  ])("places one spot control in Cleaner & assignment for %s / %s before any offers load", async (status, mode) => {
+    const onSetCleanerSpots = vi.fn();
+    const job = { schemaVersion: 2, operationalStatus: status, assignedCleanerIds: status === "ASSIGNED" ? ["a"] : [],
+      requiredCleanerCount: 2, ...(mode && { offerDistributionMode: mode }) };
+    const { rerenderJob } = renderJob({ job, isLoadingOffers: true });
+    rerenderJob({ onSetCleanerSpots });
+    const group = screen.getByTestId("offer-spots");
+    const section = group.closest("details");
+    expect(section.querySelector("summary")).toHaveTextContent("Cleaner & assignment");
+    section.open = true;
+    fireEvent.click(within(group).getByRole("button", { name: "One more cleaner" }));
+    await vi.waitFor(() => expect(onSetCleanerSpots).toHaveBeenCalledWith(3));
+  });
+
+  it.each([{ operationalStatus: "COMPLETED" }, { operationalStatus: "IN_PROGRESS" },
+    { archivedAt: new Date() }, { schemaVersion: 1 }])("keeps history and single-cleaner legacy services read-only", job => {
+    const { rerenderJob } = renderJob({ job });
+    rerenderJob({ onSetCleanerSpots: vi.fn() });
+    expect(screen.queryByTestId("offer-spots")).toBeNull();
+  });
   it("changes the number of spots but never below the confirmed cleaners", async () => {
     const onSetCleanerSpots = vi.fn(async () => {});
     const { rerenderJob } = renderJob({ status: "ASSIGNED", job: { assignedCleanerIds: ["ana"] }, offers: [interested("ana", "Ana Demo"), interested("bia", "Bia Demo")], assignments: [{ id: "a1", cleanerId: "ana", isActive: true }] });

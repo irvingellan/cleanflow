@@ -18,7 +18,7 @@ import { useJobRosterEdit } from "./useJobRosterEdit.js";
 import { useJobExecution } from "./useJobExecution.js";
 import { JobDetailHead } from "./JobDetailHead.jsx";
 import { InterestDecisionPanel, decidableInterestedOffers } from "./InterestDecisionPanel.jsx";
-import { offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
+import { isJobFilled, maxCleanersPerJob, offerManagerDecisions, requiredCleanerCount } from "./offerSlots.js";
 import { serviceLifecyclePresentation } from "./serviceLifecyclePresentation.js";
 import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
 import { JobScheduleConfirmation } from "./JobScheduleConfirmation.jsx";
@@ -33,7 +33,7 @@ import { sortCleanerOptions, useCleanerSelectionContext } from "./CleanerSelecti
 import { normalizeCleanerPreferredLanguage } from "../cleaners/cleanerProfile.js";
 import { getAssignmentAcknowledgmentState } from "./assignmentPresentation.js";
 import { canExtendAutomaticOfferJob, isAutomaticOfferJob } from "./automaticOffers.js";
-import { canAssignCleanerDirectly, canDirectlyFillJob } from "./assignmentService.js";
+import { canAssignCleanerDirectly, canDirectlyFillJob, canEditCleanerSpots } from "./assignmentService.js";
 import {
   formatCreatedAt,
 } from "../../lib/presentation.js";
@@ -683,7 +683,9 @@ export function JobDetail({
     const offerWithRecentSnapshot = publicOfferLink?.offerId === offer.id
       ? publicOfferLink
       : offer;
-    const suggestion = getOfferCompensationSuggestion(job, offerWithRecentSnapshot);
+    const displayedTerms = offerWithRecentSnapshot.fixedHousePay
+      ? offerPayForRecipient(offerWithRecentSnapshot, job, offer.cleanerId) : offerWithRecentSnapshot;
+    const suggestion = getOfferCompensationSuggestion(job, displayedTerms);
     setOfferCompensationInput(suggestion.value);
     setEditingOfferCompensationFor(offer.id);
     setOfferCompensationErrorFor(null);
@@ -913,6 +915,24 @@ export function JobDetail({
       />
 
       <JobDetailSection jobId={job.id} title={translate("jobs.section.cleaner")}>
+      {canEditCleanerSpots(job) && (
+        <div className="offer-spots" data-testid="offer-spots">
+          <span aria-live="polite">{translate(isJobFilled(job) ? "offers.spotsFilled" : automaticOfferJob ? "offers.automaticSpots" : "offers.spotsOpen", {
+            filled: assignedCleanerIds.length, total: requiredCleanerCount(job),
+          })}</span>
+          {onSetCleanerSpots && (
+            <span className="offer-spots__stepper" role="group" aria-label={translate("offers.spotsLabel")}>
+              <button className="button" type="button" aria-label={translate("offers.spotsLess")}
+                disabled={isSavingSpots || requiredCleanerCount(job) <= Math.max(1, assignedCleanerIds.length)}
+                onClick={() => changeCleanerSpots(requiredCleanerCount(job) - 1)}>−</button>
+              <span className="offer-spots__count">{requiredCleanerCount(job)}</span>
+              <button className="button" type="button" aria-label={translate("offers.spotsMore")}
+                disabled={isSavingSpots || requiredCleanerCount(job) >= maxCleanersPerJob}
+                onClick={() => changeCleanerSpots(requiredCleanerCount(job) + 1)}>+</button>
+            </span>
+          )}
+        </div>
+      )}
       {!isAssignmentAware &&
         job.operationalStatus === "ASSIGNED" &&
         (job.assignedCleanerId || job.assignedCleanerName) && (
@@ -1059,10 +1079,7 @@ export function JobDetail({
         onRefreshOffers={onRefreshOffers}
         isAssignmentAware={isAssignmentAware}
         automaticOfferJob={automaticOfferJob}
-        onSetCleanerSpots={onSetCleanerSpots}
         canEditRoster={canEditRoster}
-        isSavingSpots={isSavingSpots}
-        changeCleanerSpots={changeCleanerSpots}
         offersCreatedCount={offersCreatedCount}
         hasOffersError={hasOffersError}
         cleanerNamesById={cleanerNamesById}

@@ -71,14 +71,26 @@ export function offerPayForRecipient(offer, job, cleanerId = offer?.cleanerId) {
   const { offeredCompensation, offeredFirstSlotExtraCents: extra, fixedHousePay } = terms;
   const roster = rosterCleanerIds(job);
   const index = roster.indexOf(cleanerId);
-  if (fixedHousePay && index >= 0 && (roster.length >= fixedHousePay.teamSize || ["IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus))) {
-    const actual = fixedCleanerShares(resolveJobPricing({ cleanerPayout: fixedHousePay.totalCents / 100 }), roster.length);
-    if (actual) return { offeredCompensation: (index === 0 ? actual.firstCents : actual.otherCents) / 100 };
+  if (fixedHousePay && job) {
+    // The manager can revise planned spots. The original house total stays frozen.
+    // A preview with no recipient already carries the form's chosen team size.
+    const planned = cleanerId && Number.isInteger(job.requiredCleanerCount)
+      ? job.requiredCleanerCount : fixedHousePay.teamSize;
+    const started = ["IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus);
+    const finalRoster = index >= 0 && (roster.length >= planned || started);
+    const shares = fixedCleanerShares(resolveJobPricing({ cleanerPayout: fixedHousePay.totalCents / 100 }),
+      finalRoster ? roster.length : planned);
+    if (shares) {
+      const remainder = shares.firstCents - shares.otherCents;
+      return {
+        offeredCompensation: (index === 0 ? shares.firstCents : shares.otherCents) / 100,
+        ...(!roster.length && remainder > 0 && { offeredFirstSlotExtraCents: remainder }),
+        ...(!started && roster.length < planned && planned > 1 && { offeredPayEstimated: true }),
+      };
+    }
   }
-  const estimate = job && fixedHousePay?.teamSize > 1 && roster.length < fixedHousePay.teamSize
-    && !["IN_PROGRESS", "COMPLETED"].includes(job.operationalStatus) ? { offeredPayEstimated: true } : {};
-  if (!extra || !job) return { offeredCompensation, ...estimate };
-  if (!roster.length) return { offeredCompensation, offeredFirstSlotExtraCents: extra, ...estimate };
+  if (!extra || !job) return { offeredCompensation };
+  if (!roster.length) return { offeredCompensation, offeredFirstSlotExtraCents: extra };
   const amount = index === 0 ? (Math.round(offeredCompensation * 100) + extra) / 100 : offeredCompensation;
-  return { offeredCompensation: amount, ...estimate };
+  return { offeredCompensation: amount };
 }

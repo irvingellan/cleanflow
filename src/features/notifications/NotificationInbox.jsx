@@ -128,7 +128,7 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
       request.version += 1;
       setSnapshot((previous) => {
         const items = previous.items.map((item) => item.id !== id ? item : result.state === "unavailable"
-          ? { ...item, serviceLabel: null, automaticOffer: null, reschedule: null, openable: false } : { ...item, read: true });
+          ? { ...item, serviceLabel: null, automaticOffer: null, linkConfirmation: null, reschedule: null, openable: false } : { ...item, read: true });
         return { ...previous, items, loadedUnreadCount: unreadCount(items) };
       });
     }
@@ -275,6 +275,8 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
             const look = noticeLook(item.type);
             const removedLabel = ["UNASSIGNED", "CANCELLED"].includes(item.type) && removedServiceLabel(item.removedService, language);
             const automatic = item.openable ? item.automaticOffer : null;
+            const linkConfirmation = item.openable && item.linkConfirmation?.confirmationChannel === "WHATSAPP_LINK"
+              ? item.linkConfirmation : null;
             const schedule = automatic?.scheduledDate
               ? [formatDate(automatic.scheduledDate, null, language), automatic.scheduledStart].filter(Boolean).join(" · ")
               : null;
@@ -291,7 +293,10 @@ export function NotificationInbox({ inbox, language, onOpen, onBack }) {
                   <h3>{t(`inbox.event.${item.type}`)}</h3>
                   {removedLabel && <RemovedServiceLines t={t} service={item.removedService} language={language} />}
                   {item.serviceLabel && <p className="cf-notice__service">{item.serviceLabel}</p>}
-                  {automatic?.cleanerLabel && <p>{t("inbox.automatic.assignee", { cleaner: automatic.cleanerLabel })}</p>}
+                  {linkConfirmation ? <p>{linkConfirmation.cleanerLabel
+                    ? t("inbox.linkConfirmation.cleaner", { cleaner: linkConfirmation.cleanerLabel })
+                    : t("inbox.linkConfirmation.generic")}</p>
+                    : automatic?.cleanerLabel && <p>{t("inbox.automatic.assignee", { cleaner: automatic.cleanerLabel })}</p>}
                   {schedule && <p className="cf-notice__service">{schedule}</p>}
                   {item.reschedule && <RescheduleResponse key={item.reschedule.scheduleRevision} language={language}
                     reschedule={item.reschedule} disabled={busyId !== null || item.rescheduleBusy}
