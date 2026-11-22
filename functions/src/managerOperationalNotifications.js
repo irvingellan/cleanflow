@@ -105,12 +105,13 @@ export function createManagerOperationalNotification(transaction, organizationRe
   createManagerInboxItem(transaction, organizationReference, {
     eventId, jobId: jobReference.id,
     type: context.automatic ? managerInboxTypes.automatic : context.eventType,
+    linkConfirmation: { confirmationChannel: context.confirmationChannel, cleanerLabel: context.cleanerName },
   });
 }
 
 /** A successful V2 acceptance writes both streams atomically with the Assignment. */
 export function createAutomaticOfferConfirmationNotices(transaction, organization, job, {
-  organizationId, cleanerId, cleanerName, offerId, assignmentId, batchId, filled, propertyName, scheduledDate, scheduledStart,
+  organizationId, cleanerId, cleanerName, offerId, assignmentId, batchId, filled, propertyName, scheduledDate, scheduledStart, confirmationChannel,
 }) {
   if (organization.path !== `organizations/${organizationId}`
     || job.path !== `${organization.path}/jobs/${job.id}` || !validInboxSegment(cleanerId) || typeof filled !== "boolean") {
@@ -124,7 +125,10 @@ export function createAutomaticOfferConfirmationNotices(transaction, organizatio
       ...(notice ? { automaticOffer: notice } : {}),
       deliveryProvider: "fcm", deliveryStatus: "PENDING", createdAt: FieldValue.serverTimestamp(),
     });
-    createManagerInboxItem(transaction, organization, { eventId, jobId: job.id, type: eventType, automaticOffer: notice });
+    createManagerInboxItem(transaction, organization, {
+      eventId, jobId: job.id, type: eventType, automaticOffer: notice,
+      linkConfirmation: { confirmationChannel, cleanerLabel: cleanerName },
+    });
   };
   publish(managerOperationalNotificationTypes.automatic, { offerId, assignmentId }, cleanerId);
   if (filled) publish(managerOperationalNotificationTypes.automaticBatchFilled, {}, null);

@@ -153,8 +153,12 @@ function FreshnessBanner({ t, freshness, onRetry, online = true }) {
   );
 }
 
+function offerConfirmsImmediately(entry) {
+  return entry.offerDistributionMode === FIRST_ACCEPT_WINS || entry.confirmationMode === FIRST_ACCEPT_WINS;
+}
+
 function offerStatusKey(entry) {
-  return entry.offerDistributionMode === FIRST_ACCEPT_WINS && entry.offerStatus === "PENDING"
+  return offerConfirmsImmediately(entry) && ["PENDING", "INTERESTED"].includes(entry.offerStatus)
     ? "hb.offer.autoPending"
     : `hb.offer.${entry.offerStatus}`;
 }
@@ -570,9 +574,10 @@ function OfferView({ t, hub, entry, today, removedLabel }) {
     return <RemovedService t={t} label={removedLabel || removedServiceLabel(entry, t.lang)} message={t(message)} />;
   }
 
-  const automatic = entry.offerDistributionMode === FIRST_ACCEPT_WINS;
+  const automatic = offerConfirmsImmediately(entry);
   const taken = entry.offerStatus === "ALREADY_TAKEN" || reply === "alreadyTaken";
-  const canRespond = entry.offerStatus === "PENDING" && ["idle", "sending", "error"].includes(reply);
+  const canRespond = (entry.offerStatus === "PENDING" || (automatic && entry.offerStatus === "INTERESTED"))
+    && ["idle", "sending", "error"].includes(reply);
   const waitingForNetwork = automatic && hub.freshness.reason === "offline";
 
   async function answer(status) {
@@ -638,9 +643,9 @@ function Offers({ t, hub, go }) {
       <header className="hb-hello"><h2>{t("hb.offers.title")}</h2><p className="mw-sec">{t("hb.offers.sub")}</p></header>
       {!offers.length && <div className={`hb-empty${hub.freshness.state === "live" ? "" : " is-uncertain"}`}><HubIcon name="send" size={22} /><p>{t("hb.offers.empty")}</p></div>}
       <ul className="hb-jobs">
-        {offers.map((entry) => <JobCard key={entry.id} t={t} entry={entry} onOpen={() => go({ type: "offer", jobId: entry.jobId, wasAutomatic: entry.offerDistributionMode === FIRST_ACCEPT_WINS })} />)}
+        {offers.map((entry) => <JobCard key={entry.id} t={t} entry={entry} onOpen={() => go({ type: "offer", jobId: entry.jobId, wasAutomatic: offerConfirmsImmediately(entry) })} />)}
       </ul>
-      {offers.some((entry) => entry.offerDistributionMode !== FIRST_ACCEPT_WINS) && <p className="mw-hint">{t("hb.offers.note")}</p>}
+      {offers.some((entry) => !offerConfirmsImmediately(entry)) && <p className="mw-hint">{t("hb.offers.note")}</p>}
     </div>
   );
 }

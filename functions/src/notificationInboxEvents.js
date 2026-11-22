@@ -105,17 +105,26 @@ export function automaticOfferNotice(type, value) {
   };
 }
 
+export function linkOfferConfirmationNotice(type, value) {
+  if (![managerInboxTypes.automatic, managerInboxTypes.confirmed].includes(type)
+    || value?.confirmationChannel !== "WHATSAPP_LINK") return null;
+  const cleanerLabel = safeServiceLabel({ propertyName: value.cleanerLabel });
+  return { confirmationChannel: "WHATSAPP_LINK", ...(cleanerLabel ? { cleanerLabel } : {}) };
+}
+
 /** Manager event metadata and push outbox are committed by the same source operation. */
-export function createManagerInboxItem(transaction, organization, { eventId, type, jobId, runId, targetDate, automaticOffer }) {
+export function createManagerInboxItem(transaction, organization, { eventId, type, jobId, runId, targetDate, automaticOffer, linkConfirmation }) {
   if (!isInboxId(eventId) || !Object.values(managerInboxTypes).includes(type)) {
     throw new Error("Invalid manager inbox event.");
   }
   const notice = automaticOfferNotice(type, automaticOffer);
+  const confirmation = linkOfferConfirmationNotice(type, linkConfirmation);
   transaction.create(organization.collection(managerInboxCollection).doc(eventId), inboxEventRecord({
     eventId, organizationId: organization.id, type, jobId,
     ...(runId ? { runId } : {}),
     ...(targetDate ? { targetDate } : {}),
     ...(notice ? { automaticOffer: notice } : {}),
+    ...(confirmation ? { linkConfirmation: confirmation } : {}),
   }));
 }
 

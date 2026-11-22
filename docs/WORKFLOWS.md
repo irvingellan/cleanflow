@@ -54,11 +54,18 @@ query detects a truncated result. Counts describe the records consulted.
 These hints preserve the existing selection and assignment rules. Only active
 managers can read the underlying organization-scoped Jobs.
 
-**Issue #86 local candidate:** the manager can opt an eligible single-slot Job
-into automatic distribution. The Cleaner Hub sends an explicit `ACCEPTED`
-response. The first valid server commit produces the Assignment. The manager
-can still assign directly before the slot is filled. A public link points to
-authenticated `/agenda`. See [the V1 workflow](FIRST_ACCEPT_WINS_V1.md).
+**First-to-confirm offers:** a cleaner can explicitly confirm a live automatic
+invite in the Cleaner Hub or through her own offer link. The same explicit
+confirmation fills a spot for assignment-aware manual team invitations. The
+server checks the current schedule and reserves each spot in a transaction.
+Once the roster fills the Job, remaining invitations report that the service is
+taken. An interest response alone never reserves a spot. The manager can still
+assign directly before work starts.
+
+A public link identifies its invitation. It does not unlock property access
+or prove who holds the link. Access instructions still require the signed-in
+Cleaner Hub and current assignment. A successful link confirmation records a
+receipt in the manager's inbox.
 
 **CURRENT v0 assignment acknowledgment:** after an interested cleaner's Offer
 produces a current active Assignment, that cleaner can use the same still-valid

@@ -141,6 +141,18 @@ describe("Notification Inbox", () => {
     expect(onOpen).toHaveBeenCalledExactlyOnceWith({ kind: "JOB", jobId: "current" });
   });
 
+  it("tells the manager who confirmed using a WhatsApp link", () => {
+    const confirmed = { ...items[0], type: "ASSIGNMENT_CONFIRMED", openable: true,
+      linkConfirmation: { confirmationChannel: "WHATSAPP_LINK", cleanerLabel: "Example Cleaner" } };
+    const hidden = { ...confirmed, id: "hidden", openable: false, linkConfirmation: {
+      confirmationChannel: "WHATSAPP_LINK", cleanerLabel: "Hidden label",
+    } };
+    const inbox = { state: "ready", items: [confirmed, hidden], refresh: vi.fn() };
+    render(<NotificationInbox inbox={inbox} language="pt" />);
+    expect(screen.getByText("Example Cleaner confirmou pelo link do WhatsApp.")).toBeVisible();
+    expect(screen.queryByText(/Hidden label/)).not.toBeInTheDocument();
+  });
+
   it("sends only the cleaner's notification id and schedule revision and waits for the decision", async () => {
     const notice = { ...items[0], type: "RESCHEDULED", reschedule: {
       state: "PENDING", scheduleRevision: 4, previousScheduledDate: "2026-11-15", previousScheduledStart: "08:15", scheduledDate: "2026-11-16", scheduledStart: "10:30",

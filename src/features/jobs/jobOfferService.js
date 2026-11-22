@@ -13,7 +13,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../services/firebase/client.js";
 import { serverFirestore, withReadDeadline } from "../../services/firebase/serverReads.js";
 import { automaticOfferDisplayStatus, isAutomaticOfferJob } from "./automaticOffers.js";
-import { managerDecisionOf, offerManagerDecisions, rosterCleanerIds } from "./offerSlots.js";
+import { managerDecisionOf, offerManagerDecisions, requiredCleanerCount, rosterCleanerIds } from "./offerSlots.js";
 import {
   canManageAssignmentAwareOffers,
   isAssignmentAwareJob,
@@ -142,6 +142,7 @@ export async function createJobOffers({
     // With no configured amount the manager can still agree a personal amount at first link issuance.
     const price = quote.offeredCompensation === null && !job.pay ? {} : quote;
     // A second manager or a retry must never replace a recipient's existing offer.
+    const teamInvitation = isAssignmentAwareJob(job) && (cleaners.length > 1 || requiredCleanerCount(job) > 1);
     const recipients = cleaners.map(cleaner => ({ cleaner, ref: offerDocument(jobId, cleaner.id) }));
     const priorOffers = await Promise.all(recipients.map(({ ref }) => transaction.get(ref)));
     if (priorOffers.some(offer => offer.exists())) {
@@ -154,8 +155,8 @@ export async function createJobOffers({
         cleanerName: cleaner.name,
         status: "PENDING",
         ...price,
-        // A new hourly invitation can be viewed in the Hub before its public link is issued.
-        ...(price.offeredPay && { publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + publicOfferTokenLifetimeMilliseconds) }),
+        // A payable hourly offer or a team invitation can be shown in the Hub before a link is issued.
+        ...((price.offeredPay || teamInvitation) && { publicOfferExpiresAt: Timestamp.fromMillis(Date.now() + publicOfferTokenLifetimeMilliseconds) }),
         createdAt: serverTimestamp(),
       });
     }

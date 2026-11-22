@@ -12,16 +12,16 @@ describe("message catalog", () => {
     expect({ en: fingerprint("en"), pt: fingerprint("pt"), es: fingerprint("es") }).toMatchInlineSnapshot(`
       {
         "en": {
-          "keys": 1750,
-          "sha256": "48a1c00c857ee623a918aa6e5b29472e0558aa8e109d999e19755db6db8a3c45",
+          "keys": 1753,
+          "sha256": "ea5158122525e8054879a6f53f1e82d6bcb6dfd8aee2d6ea5d0cbda5cdedfcab",
         },
         "es": {
-          "keys": 1750,
-          "sha256": "b701d60b9230d5d736717a315ba6607bdf64c3c19b52a758331bad0df362bbbd",
+          "keys": 1753,
+          "sha256": "56bcbd9b57373ff6464ae7667ae10a7e6d839d070f4e943bce9eef6c459af8ac",
         },
         "pt": {
-          "keys": 1750,
-          "sha256": "3fa542636d6e68639c21168e9328978380f95cc7c3d4c6bc25a5d1f1f4e202c0",
+          "keys": 1753,
+          "sha256": "4cede3651c11d4d1bfd64e63175b1b15cf57d9f451220dbc9c1e686db29cb531",
         },
       }
     `);

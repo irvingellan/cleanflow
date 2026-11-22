@@ -1,6 +1,8 @@
+import { canonicalManualRecipient, confirmsManualSpot, loadManualConfirmation } from "../manualOfferConfirmation.js";
+import { jobScheduleRevision } from "../rescheduleConfirmations.js";
 import { offerPayForRecipient } from "../offerPay.js";
 import { logger } from "firebase-functions";
-import { publicOfferState as offerState, respondToPublicOffer } from "../publicOfferResponseService.js";
+import { canUsePublicOffer, hasConfirmedAssignment, publicOfferState as offerState, respondToPublicOffer } from "../publicOfferResponseService.js";
 import { FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "../firstAcceptWins.js";
 import { validChecklistCleanerId } from "../checklistCapabilityService.js";
 import {
@@ -49,10 +51,13 @@ async function offerReferenceForTokenHash(tokenHash) {
 }
 
 export function publicOfferResult(offerData, jobData, {
-  assignmentAcknowledgment = null,
-  cleanerPreferredLanguage = null,
+  assignmentAcknowledgment = null, cleanerPreferredLanguage = null, manualConfirmation = confirmsManualSpot(jobData, offerData),
+  confirmedAssignment = false,
 } = {}) {
-  const state = offerState(offerData, jobData, new Date());
+  const now = new Date();
+  const ownReceipt = confirmedAssignment && offerData.status === "ACCEPTED" && canUsePublicOffer(jobData) && !offerData.revokedAt
+    && offerData.publicOfferExpiresAt?.toMillis?.() > now.getTime();
+  const state = ownReceipt ? "available" : offerState(offerData, jobData, now);
 
   if (state !== "available") {
     return { state };
@@ -61,9 +66,6 @@ export function publicOfferResult(offerData, jobData, {
   const preferredLanguage = supportedCleanerLanguages.has(cleanerPreferredLanguage)
     ? cleanerPreferredLanguage
     : "en";
-  if (isAutomaticOfferJob(jobData)) {
-    return { state, offer: { offerDistributionMode: FIRST_ACCEPT_WINS, preferredLanguage } };
-  }
 
   const offer = {
     propertyName: jobData.propertyName || null,
@@ -71,6 +73,10 @@ export function publicOfferResult(offerData, jobData, {
     scheduledStart: jobData.scheduledStart || null,
     status: offerData.status,
     preferredLanguage,
+    ...(isAutomaticOfferJob(jobData) && { offerDistributionMode: FIRST_ACCEPT_WINS }),
+    ...((isAutomaticOfferJob(jobData) || manualConfirmation || ownReceipt) && {
+      confirmationMode: FIRST_ACCEPT_WINS, scheduleRevision: jobScheduleRevision(jobData),
+    }),
   };
 
   const compensation = offerPayForRecipient(offerData, jobData);
@@ -121,7 +127,13 @@ async function loadPublicOffer(token) {
   const cleanerReference = validChecklistCleanerId(offerData.cleanerId)
     ? db.collection("organizations").doc(organizationId).collection("cleaners").doc(offerData.cleanerId)
     : null;
-  const [assignmentAcknowledgment, cleanerSnapshot] = await Promise.all([
+  if (offerData.archivedAt || (jobData.organizationId != null && jobData.organizationId !== organizationId)
+    || (offerData.organizationId != null && offerData.organizationId !== organizationId)
+    || (offerData.jobId != null && offerData.jobId !== jobDocument.id) || offerData.offerKind
+    || (isAutomaticOfferJob(jobData) && (offerData.jobId !== jobDocument.id || offerData.cleanerId !== offerDocument.id))) {
+    return { state: "unavailable" };
+  }
+  const [assignmentAcknowledgment, cleanerSnapshot, manualConfirmation, confirmedAssignment] = await Promise.all([
     loadPublicOfferAssignmentAcknowledgment(db, {
       organizationId,
       jobId: jobDocument.id,
@@ -131,9 +143,21 @@ async function loadPublicOffer(token) {
       tokenHash,
     }),
     cleanerReference ? cleanerReference.get() : Promise.resolve(null),
+    canonicalManualRecipient(offerData, offerDocument.id, jobDocument.id, organizationId)
+      && !(Array.isArray(jobData.assignedCleanerIds) && jobData.assignedCleanerIds.includes(offerData.cleanerId))
+      ? loadManualConfirmation(jobDocument, jobData, offerData, query => query.get()) : false,
+    hasConfirmedAssignment({ get: ref => ref.get() }, jobDocument, jobData, offerDocument.id, offerData, organizationId),
   ]);
+  const profile = cleanerSnapshot?.data();
+  const activeRecipient = profile?.active === true && !profile.archivedAt
+    && (profile.organizationId == null || profile.organizationId === organizationId);
+  if ((isAutomaticOfferJob(jobData) || confirmedAssignment) && !activeRecipient) {
+    return { state: "unavailable" };
+  }
+  // Historical manual links can still collect interest or decline. Only a
+  // current cleaner profile can use a link to take a spot.
   return publicOfferResult(offerData, jobData, {
-    assignmentAcknowledgment,
+    assignmentAcknowledgment, manualConfirmation: manualConfirmation && activeRecipient, confirmedAssignment,
     cleanerPreferredLanguage: cleanerSnapshot?.exists
       ? cleanerSnapshot.data().preferredLanguage
       : null,
@@ -175,10 +199,11 @@ export async function publicOffer(request, response) {
       return;
     }
 
-    const { token, status, action } = request.body || {};
+    const { token, status, action, scheduleRevision } = request.body || {};
 
     const isAssignmentAcknowledgment = action === "ACKNOWLEDGE_ASSIGNMENT";
-    if (!validToken(token) || (!isAssignmentAcknowledgment && !["INTERESTED", "DECLINED"].includes(status))) {
+    if (!validToken(token) || (!isAssignmentAcknowledgment && !["ACCEPTED", "INTERESTED", "DECLINED"].includes(status))
+      || (scheduleRevision !== undefined && (!Number.isSafeInteger(scheduleRevision) || scheduleRevision < 0))) {
       sendPublicError(response, 400, "invalid_request");
       return;
     }
@@ -219,7 +244,7 @@ export async function publicOffer(request, response) {
     }
 
     const result = await respondToPublicOffer(db, {
-      organizationId, jobReference: jobDocument, offerReference: offerDocument, tokenHash, status,
+      organizationId, jobReference: jobDocument, offerReference: offerDocument, tokenHash, status, scheduleRevision,
     });
 
     if (result.state === "not-found") {
@@ -234,6 +259,11 @@ export async function publicOffer(request, response) {
 
     if (result.state === "already-taken") {
       sendPublicError(response, 410, "offer_already_taken");
+      return;
+    }
+
+    if (result.state === "stale-schedule") {
+      sendPublicError(response, 409, "offer_stale_schedule");
       return;
     }
 

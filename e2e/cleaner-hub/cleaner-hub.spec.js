@@ -222,9 +222,8 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await pageA.goto("/agenda");
   });
 
-  let birchRef;
-  await test.step("9. The manager sees zero, one and multiple manual interests before assigning explicitly", async () => {
-    birchRef = await createService(page, fixture, { propertyId: fixture.birchId, propertyName: fixture.birchName, scheduledDate: dateKey(6), scheduledStart: "09:00" });
+  await test.step("9. A cleaner confirms a manual group offer from WhatsApp and closes the other invitation", async () => {
+    const birchRef = await createService(page, fixture, { propertyId: fixture.birchId, propertyName: fixture.birchName, scheduledDate: dateKey(6), scheduledStart: "09:00" });
     await page.locator("details.job-detail-section > summary", { hasText: "Offers" }).click();
     await page.locator(".offers-section").getByRole("button", { name: "Offer cleaning to cleaners" }).click();
     await expect(page.getByLabel("Assign automatically to the first cleaner who accepts")).toHaveCount(0);
@@ -232,75 +231,59 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await page.getByLabel(fixture.cleanerBName).check();
     await page.getByRole("button", { name: "Create offers" }).click();
     await expect(page.locator(".offers-section__success")).toContainText("Offers created (2)");
-    const offerCards = page.locator(".offer-status-item");
-    const offerA = offerCards.filter({ hasText: fixture.cleanerAName });
-    const offerB = offerCards.filter({ hasText: fixture.cleanerBName });
-    for (const card of [offerA, offerB]) {
-      await card.getByRole("button", { name: "Create public link" }).click();
-      await card.getByRole("button", { name: "Create public link" }).click();
-      await expect(card.getByRole("link", { name: "Open public cleaner offer" })).toBeVisible();
-    }
-    await expect(offerCards.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
-    await expect(page.getByTestId("interest-decision")).toHaveCount(0);
-    await evidence(page, "release-a-00-manual-zero-interested");
-
-    await pageA.getByRole("button", { name: /^Ofertas/ }).click();
-    const offer = pageA.locator(`[data-job-id="${birchRef.id}"]`);
-    await expect(offer).toContainText("Esperando sua resposta");
-    await expect(offer).toContainText("Padrão (troca de hóspedes)");
-    await offer.click();
-    await expect(pageA.getByText(`private-note-marker ${fixture.run}`)).toBeVisible();
-    await pageA.getByRole("button", { name: "Tenho interesse" }).click();
-    await expect(pageA.getByText("Resposta enviada para a gerente.")).toBeVisible();
-    await expect(pageA.locator(".hb-facts")).toContainText("Você tem interesse · a gerente decide");
-    await evidence(pageA, "03-offer-interested");
-    await page.getByRole("button", { name: "Refresh offers" }).click();
-    await expect(offerA.getByRole("button", { name: "Confirm", exact: true })).toBeVisible();
-    await expect(offerB.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
-    const firstInterest = (await birchRef.get()).data();
-    expect([firstInterest.operationalStatus, firstInterest.assignedCleanerIds]).toEqual(["OFFERED", []]);
-    expect((await birchRef.collection("offers").doc(fixture.cleanerAId).get()).data().status).toBe("INTERESTED");
-    await expect(page.getByTestId("interest-decision").getByRole("button", { name: `Confirm ${fixture.cleanerAName}`, exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Next step: Confirm interested cleaner", exact: true }).click();
-    await expect(page.getByTestId("interest-decision")).toBeFocused();
-    await evidence(page, "release-a-01-manual-one-interested");
-    await pageA.getByRole("button", { name: "Voltar" }).click();
-    await pageA.getByRole("button", { name: /^Agenda/ }).click();
-    await pageA.getByRole("button", { name: /^Agendadas/ }).click();
-    await expect(pageA.locator(`[data-job-id="${birchRef.id}"]`)).toHaveCount(0);
+    const offerB = page.locator(".offer-status-item").filter({ hasText: fixture.cleanerBName });
+    await offerB.getByRole("button", { name: "Create public link" }).click();
+    await offerB.getByRole("button", { name: "Create public link" }).click();
+    await expect(offerB.getByRole("link", { name: "Open public cleaner offer" })).toBeVisible();
+    const offerA = page.locator(".offer-status-item").filter({ hasText: fixture.cleanerAName });
+    await offerA.getByRole("button", { name: "Create public link" }).click();
+    await offerA.getByRole("button", { name: "Create public link" }).click();
+    const link = offerA.getByRole("link", { name: "Open public cleaner offer" });
+    await expect(link).toBeVisible();
 
     await pageB.getByRole("button", { name: /^Offers/ }).click();
     await pageB.locator(`[data-job-id="${birchRef.id}"]`).click();
-    await pageB.getByRole("button", { name: "I'm interested" }).click();
-    await expect(pageB.locator(".hb-facts")).toContainText("You're interested · the manager decides");
+    await expect(pageB.getByRole("button", { name: "Accept job" })).toBeEnabled();
+    await expect(pageB.getByRole("button", { name: "I'm interested" })).toHaveCount(0);
+    const guest = await cleanerContext("pt-BR");
+    try {
+      const invitation = await guest.newPage();
+      await invitation.goto(await link.getAttribute("href"));
+      await expect(invitation.getByText(fixture.birchName)).toBeVisible();
+      await expect(invitation.locator("body")).not.toContainText(/private-door-marker|private-access-marker|private-note-marker/);
+      await expect(invitation.getByText(fixture.cleanerBName)).toHaveCount(0);
+      await invitation.getByRole("button", { name: "Confirmar serviço" }).click();
+      const success = invitation.getByText("Serviço confirmado para você ✅");
+      await expect(success).toBeVisible();
+      await invitation.reload();
+      await expect(success).toBeVisible();
+      await expect(invitation.getByRole("button", { name: "Confirmar serviço" })).toHaveCount(0);
+      await expect(invitation.locator("body")).not.toContainText(/private-door-marker|private-access-marker|private-note-marker/);
+    } finally {
+      await guest.close();
+    }
+    await expect(pageB.getByText("Unavailable — this job has already been filled.")).toBeVisible();
+    await expect(pageB.getByRole("button", { name: "Accept job" })).toHaveCount(0);
+    await expect(pageB.locator("body")).not.toContainText(fixture.cleanerAName);
     await pageB.getByRole("button", { name: "Back", exact: true }).click();
     await pageB.getByRole("button", { name: /^Schedule/ }).click();
     await pageB.getByRole("button", { name: /^Scheduled/ }).click();
-    await page.getByRole("button", { name: "Refresh offers" }).click();
-    await expect(offerCards.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(2);
-    const multipleInterests = (await birchRef.get()).data();
-    expect([multipleInterests.operationalStatus, multipleInterests.assignedCleanerIds]).toEqual(["OFFERED", []]);
-    expect(multipleInterests.offerDistributionMode).toBeUndefined();
-    expect((await birchRef.collection("assignments").get()).empty).toBe(true);
-    await evidence(page, "release-a-02-manual-many-interested");
+    await expect(pageB.locator(`[data-job-id="${birchRef.id}"]`)).toHaveCount(0);
 
+    const job = (await birchRef.get()).data();
+    expect(job.offerDistributionMode).toBeUndefined();
+    expect(job.assignedCleanerIds).toEqual([fixture.cleanerAId]);
+    const assignments = await birchRef.collection("assignments").get();
+    expect(assignments.size).toBe(1);
+    expect(assignments.docs[0].data()).toMatchObject({ cleanerId: fixture.cleanerAId,
+      assignmentMethod: "FIRST_ACCEPT_WINS", confirmationChannel: "WHATSAPP_LINK", sourceOfferId: fixture.cleanerAId });
     await page.getByRole("button", { name: /\bInbox\b/ }).click();
-    const interestItem = page.getByRole("listitem").filter({ hasText: fixture.birchName })
-      .filter({ has: page.getByRole("heading", { name: "Cleaner expressed interest" }) }).first();
-    await interestItem.getByRole("button", { name: "Review interested cleaners", exact: true }).click();
-    const decision = page.getByTestId("interest-decision");
-    await expect(decision).toBeFocused();
-    await expect(decision.getByRole("button", { name: /^Confirm / })).toHaveCount(2);
-    await evidence(page, "release-a-03-inbox-interest-focus");
-    await decision.getByRole("button", { name: `Confirm ${fixture.cleanerAName}`, exact: true }).click();
-    await expect.poll(async () => (await birchRef.get()).data().assignedCleanerIds).toEqual([fixture.cleanerAId]);
-    expect((await birchRef.get()).data().firstAcceptClaim).toBeUndefined();
-    expect((await birchRef.collection("offers").doc(fixture.cleanerBId).get()).data().status).toBe("INTERESTED");
-
-    await page.getByRole("button", { name: /\bInbox\b/ }).click();
-    const interestEvents = page.getByRole("listitem").filter({ hasText: fixture.birchName })
-      .getByRole("heading", { name: "Cleaner expressed interest" });
-    await expect(interestEvents).toHaveCount(2);
+    const receipt = page.getByRole("listitem").filter({ hasText: fixture.birchName }).filter({ hasText: /WhatsApp/i });
+    await expect(receipt).toHaveCount(1);
+    await expect(receipt).toContainText(fixture.cleanerAName);
+    await pageA.goto("/agenda");
+    await pageA.getByRole("button", { name: /^Agendadas/ }).click();
+    await expect(pageA.locator(`[data-job-id="${birchRef.id}"]`)).toBeVisible();
   });
 
   await test.step("12. Cleaner A starts her own checklist from the Hub", async () => {
@@ -441,9 +424,10 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     const publicLink = otherOffer.getByRole("link", { name: "Open public cleaner offer" });
     await expect(publicLink).toBeVisible();
     await publicPage.goto(await publicLink.getAttribute("href"));
-    await expect(publicPage.getByRole("link", { name: /schedule/i })).toHaveAttribute("href", "/agenda");
-    await expect(publicPage.getByRole("button", { name: /accept|interested|confirm/i })).toHaveCount(0);
-    await expect(publicPage.locator("body")).not.toContainText(/68[.,]24|153[.,]57|379[.,]56/);
+    const publicConfirm = publicPage.getByRole("button", { name: /confirm (job|service)/i });
+    await expect(publicConfirm).toBeEnabled();
+    await expect(publicPage.locator("body")).toContainText(/68[.,]24/);
+    await expect(publicPage.locator("body")).not.toContainText(/153[.,]57|379[.,]56|private-door-marker|private-access-marker|private-note-marker/);
 
     const scenarios = [
       { target: pageA, cleanerId: fixture.cleanerAId, lang: "pt", accept: "Aceitar serviço", interest: "Tenho interesse" },
@@ -507,8 +491,10 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await pageB.getByRole("button", { name: /^Offers/ }).click();
     await expect(pageB.locator(`[data-job-id="${job.id}"]`)).toContainText(unavailable);
 
+    await publicConfirm.click();
+    await expect(publicPage.getByText(/another cleaner already took this (service|job)/i)).toBeVisible();
     await publicPage.reload();
-    await expect(publicPage.getByText(/already been filled/i)).toBeVisible();
+    await expect(publicPage.getByText(/another cleaner already took this (service|job)/i)).toBeVisible();
     await expect(publicPage.locator("body")).not.toContainText(fixture.cleanerAName);
 
     const jobData = (await job.get()).data();

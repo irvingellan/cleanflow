@@ -27,13 +27,16 @@ export function PublicOfferPage({ token }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isResponding, setIsResponding] = useState(false);
   const [responseError, setResponseError] = useState(null);
-  const requiresHub = offer?.offerDistributionMode === FIRST_ACCEPT_WINS;
+  const confirmsImmediately = offer?.confirmationMode === FIRST_ACCEPT_WINS;
+  // New Hosting can load before updated Functions. Preserve the old Hub route
+  // while the backend still advertises an automatic offer without link acceptance.
+  const requiresHub = !confirmsImmediately && offer?.offerDistributionMode === FIRST_ACCEPT_WINS;
 
   function handleResponseError(error) {
-    if (["offer_not_found", "offer_expired", "offer_unavailable", "offer_already_taken"].includes(error.code)) {
+    if (["offer_not_found", "offer_expired", "offer_unavailable", "offer_already_taken", "offer_stale_schedule"].includes(error.code)) {
       setLoadError(error.code);
     } else if (error.code === "offer_hub_required") {
-      setOffer((current) => ({ ...current, offerDistributionMode: FIRST_ACCEPT_WINS }));
+      setOffer((current) => ({ ...current, offerDistributionMode: FIRST_ACCEPT_WINS, confirmationMode: null }));
     } else {
       setResponseError(error.code || "request_failed");
     }
@@ -83,7 +86,7 @@ export function PublicOfferPage({ token }) {
     setResponseError(null);
 
     try {
-      const result = await respondToPublicOffer({ token, status });
+      const result = await respondToPublicOffer({ token, status, scheduleRevision: confirmsImmediately ? offer.scheduleRevision : undefined });
       setOffer((currentOffer) => ({ ...currentOffer, status: result.status }));
     } catch (error) {
       handleResponseError(error);
@@ -114,8 +117,10 @@ export function PublicOfferPage({ token }) {
     offer_expired: "publicOffer.expired",
     offer_unavailable: "publicOffer.unavailable",
     offer_already_taken: "publicOffer.alreadyTaken",
+    offer_stale_schedule: "publicOffer.staleSchedule",
   }[loadError] || "publicOffer.loadError";
-  const hasAnswered = offer && offer.status !== "PENDING";
+  const confirmed = offer?.status === "ACCEPTED";
+  const canRespond = offer?.status === "PENDING" || (confirmsImmediately && offer?.status === "INTERESTED");
 
   return (
     <main className="app-shell public-offer-shell">
@@ -133,7 +138,7 @@ export function PublicOfferPage({ token }) {
         {!isLoading && loadError && (
           <>
             <StateCard message={translate(errorMessage)} status="alert" isError />
-            {loadError === "request_failed" && (
+            {["request_failed", "offer_stale_schedule"].includes(loadError) && (
               <button className="button" type="button" onClick={() => setOfferLoadAttempt((attempt) => attempt + 1)}>
                 {translate("common.retry")}
               </button>
@@ -172,7 +177,7 @@ export function PublicOfferPage({ token }) {
                   label={translate("publicOffer.status")}
                   value={formatStatus(offer.status, translate)}
                 />
-                {offer.assignmentAcknowledgment && (
+                {!confirmed && offer.assignmentAcknowledgment && (
                   <DetailItem
                     label={translate("publicOffer.assignment")}
                     value={translate(offer.assignmentAcknowledgment === "CONFIRMED"
@@ -196,7 +201,7 @@ export function PublicOfferPage({ token }) {
                   <a className="button button--primary" href="/agenda">{translate("publicOffer.openHub")}</a>
                 </div>
               </>
-            ) : (
+            ) : !confirmed && (
               <PublicOfferAssignmentAcknowledgment
                 state={offer.assignmentAcknowledgment}
                 isSaving={isResponding}
@@ -204,15 +209,15 @@ export function PublicOfferPage({ token }) {
               />
             )}
 
-            {!requiresHub && offer.status === "PENDING" && (
+            {!requiresHub && canRespond && (
               <div className="public-offer-actions" aria-label={translate("publicOffer.status")}>
                 <button
                   className="button button--primary"
                   type="button"
                   disabled={isResponding}
-                  onClick={() => submitResponse("INTERESTED")}
+                  onClick={() => submitResponse(confirmsImmediately ? "ACCEPTED" : "INTERESTED")}
                 >
-                  {isResponding ? translate("publicOffer.responding") : translate("cleaner.interested")}
+                  {isResponding ? translate("publicOffer.responding") : translate(confirmsImmediately ? "publicOffer.confirmJob" : "cleaner.interested")}
                 </button>
                 <button
                   className="button"
@@ -225,11 +230,10 @@ export function PublicOfferPage({ token }) {
               </div>
             )}
 
-            {!requiresHub && hasAnswered && !offer.assignmentAcknowledgment && (
+            {!requiresHub && !canRespond && (confirmed || !offer.assignmentAcknowledgment) && (
               <p className="public-offer-confirmation" role="status">
-                {offer.status === "INTERESTED"
-                  ? translate("publicOffer.interestedConfirmation")
-                  : translate("publicOffer.declinedConfirmation")}
+                {translate(confirmed ? "publicOffer.jobConfirmed"
+                  : offer.status === "INTERESTED" ? "publicOffer.interestedConfirmation" : "publicOffer.declinedConfirmation")}
               </p>
             )}
           </section>

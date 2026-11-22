@@ -54,19 +54,19 @@ export async function getPublicOffer(token) {
   }
 }
 
-export async function respondToPublicOffer({ token, status }) {
-  if (status !== "INTERESTED" && status !== "DECLINED") {
+export async function respondToPublicOffer({ token, status, scheduleRevision }) {
+  if (!["ACCEPTED", "INTERESTED", "DECLINED"].includes(status)) {
     throw new Error("Invalid public offer response status.");
   }
 
   const body = await request(publicOfferApiPath, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ token, status }),
+    body: JSON.stringify({ token, status, ...(Number.isSafeInteger(scheduleRevision) && { scheduleRevision }) }),
     credentials: "omit",
   });
 
-  if (!["INTERESTED", "DECLINED"].includes(body.status)) {
+  if (!["ACCEPTED", "INTERESTED", "DECLINED"].includes(body.status)) {
     throw new PublicOfferRequestError("request_failed");
   }
 
