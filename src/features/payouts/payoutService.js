@@ -1,4 +1,5 @@
 import {
+  FieldPath,
   collection,
   doc,
   runTransaction,
@@ -125,7 +126,7 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
   );
   let recordedAmount = 0;
 
-  await runTransaction(db, async (transaction) => {
+  const settle = () => runTransaction(db, async (transaction) => {
     const snapshots = await Promise.all(
       jobReferences.map((jobReference) => transaction.get(jobReference)),
     );
@@ -164,9 +165,8 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     jobReferences.forEach((jobReference, index) => {
       const job = jobs[index];
       if (isAssignmentAwareJob(job)) {
-        transaction.update(jobReference, {
-          payoutIdsByCleaner: { ...job.payoutIdsByCleaner, [cleaner.id]: payoutReference.id },
-        });
+        // Add one key so a stale transaction retries instead of failing the Rules' paid-share check.
+        transaction.update(jobReference, new FieldPath("payoutIdsByCleaner", cleaner.id), payoutReference.id);
         return;
       }
       transaction.update(jobReference, {
@@ -175,6 +175,20 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
       });
     });
   });
+
+  try {
+    await settle();
+  } catch (error) {
+    // Rules reject a stale write over a paid share before the transaction can retry.
+    if (error?.code !== "permission-denied") throw error;
+    const current = await runTransaction(db, (transaction) =>
+      Promise.all(jobReferences.map((jobReference) => transaction.get(jobReference))));
+    if (current.some((snapshot) => snapshot.data()?.payoutIdsByCleaner?.[cleaner.id]
+      || snapshot.data()?.payoutId || snapshot.data()?.payoutPaidAt)) {
+      throw payoutError("job-not-payable", "One or more jobs are no longer payable.");
+    }
+    throw error;
+  }
 
   return {
     id: payoutReference.id,

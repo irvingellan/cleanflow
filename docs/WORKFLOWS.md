@@ -516,3 +516,10 @@ billing uses the sum of all approved roster minutes. Weekly close lists Jobs
 that still need approval. A completed Job can pay an approved individual share
 while someone else's hours are pending. Receipts retain the cents paid even
 when other shares still need review.
+
+An approval locks the Job's pricing and service type. Use **Remove approval**
+before changing the Job's rates or replacing a cleaner with approved hours.
+The cleaner's reported time is kept. Approve the hours again after reviewing
+the new Job rates. A saved agreement with the cleaner keeps its own terms.
+The manager can correct or remove an individual approval until that share is
+paid.

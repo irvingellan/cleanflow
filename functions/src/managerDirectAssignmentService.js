@@ -1,3 +1,4 @@
+import { assertUnapprovedAssignment, clearApprovedAssignmentBilling } from "./approvedAssignmentBilling.js";
 import { newOfferPay } from "./offerPay.js";
 import { requiredCleanerCount } from "./offerSlots.js";
 import { FieldValue } from "firebase-admin/firestore";
@@ -170,6 +171,7 @@ export async function assignCleanerDirectlyForManager(database, {
     const retireReplacement = Boolean(job.manualReplacementOffer && (replacementRef
       || replacementRecipient === cleanerId || (batch && assignedCleanerIds.length >= batch.capacity)));
     transaction.update(jobReference, {
+      ...clearApprovedAssignmentBilling(job),
       assignedCleanerIds,
       operationalStatus: "ASSIGNED",
       checklistContextRevision: revision + 1,
@@ -255,12 +257,14 @@ export async function removeAutomaticCleanerAssignmentForManager(database, {
       throw precondition("This Assignment cannot be removed.", "assignment-not-editable");
     }
 
+    assertUnapprovedAssignment(assignment);
     await requireMission2Writes(transaction, database);
     const assignedCleanerIds = job.assignedCleanerIds.filter((cleanerId) => cleanerId !== assignment.cleanerId);
     const operationalStatus = assignedCleanerIds.length ? "ASSIGNED" : "UNASSIGNED";
     const removedAt = FieldValue.serverTimestamp();
     transaction.update(assignmentReference, { isActive: false, removedAt, removedByUid: actorUid });
     transaction.update(jobReference, {
+      ...clearApprovedAssignmentBilling(job),
       assignedCleanerIds,
       operationalStatus,
       checklistContextRevision: revision + 1,

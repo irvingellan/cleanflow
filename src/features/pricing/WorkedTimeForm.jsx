@@ -15,7 +15,7 @@ function split(total) {
     : { hours: "", minutes: "" };
 }
 
-export function WorkedTimeForm({ language, work, onSave, allowSave = true, manager = false, touchUp = false, paid = false }) {
+export function WorkedTimeForm({ language, work, onSave, onRemoveApproval, allowSave = true, manager = false, touchUp = false, paid = false }) {
   const [draft, setDraft] = useState(null);
   const [result, setResult] = useState(null);
   const [correcting, setCorrecting] = useState(false);
@@ -26,6 +26,19 @@ export function WorkedTimeForm({ language, work, onSave, allowSave = true, manag
   const reportedMinutes = manager ? work?.reportedMinutes : result?.minutes ?? work?.reportedMinutes;
   const canEdit = allowSave && !paid;
 
+  async function removeApproval() {
+    setSaving(true);
+    setError(false);
+    try {
+      await onRemoveApproval();
+      setResult(null);
+    } catch {
+      setError(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (approvedMinutes != null && !correcting) {
     const payoutCents = (manager ? result?.payoutCents : undefined) ?? work?.payoutCents;
     const money = payoutCents == null ? "" : new Intl.NumberFormat(language, {
@@ -33,8 +46,11 @@ export function WorkedTimeForm({ language, work, onSave, allowSave = true, manag
     }).format(payoutCents / 100);
     return <>
       <p role="status">{t.approved} · {formatWorkedMinutes(approvedMinutes)}{money && ` · ${money}`}</p>
-      {manager && canEdit && <button type="button" className="button button--secondary"
-        onClick={() => { setDraft(split(approvedMinutes)); setCorrecting(true); }}>{t.correct}</button>}
+      {manager && canEdit && <button type="button" className="button button--secondary" disabled={saving}
+        onClick={() => { setError(false); setDraft(split(approvedMinutes)); setCorrecting(true); }}>{t.correct}</button>}
+      {manager && !paid && onRemoveApproval && <button type="button" className="button button--secondary"
+        disabled={saving} onClick={removeApproval}>{t.removeApproval}</button>}
+      {error && <p role="alert">{t.failed}</p>}
     </>;
   }
 

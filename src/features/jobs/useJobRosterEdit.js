@@ -52,8 +52,9 @@ export function useJobRosterEdit({
 
     try {
       await onRemoveAssignment(assignmentId);
-    } catch {
-      setAssignmentError(translate("jobs.rosterUpdateError"));
+    } catch (error) {
+      const reason = error?.details?.reason ?? error?.code;
+      setAssignmentError(translate(reason === "assignment-has-approved-work" ? "jobs.removeApprovalBeforeRosterEdit" : "jobs.rosterUpdateError"));
     } finally {
       setRemovingAssignmentId(null);
     }
@@ -71,8 +72,9 @@ export function useJobRosterEdit({
       await onReplaceAssignment(assignmentId, replacementOfferId);
       setReplacementOfferId("");
       setReplacementTargetId(null);
-    } catch {
-      setAssignmentError(translate("jobs.rosterUpdateError"));
+    } catch (error) {
+      const reason = error?.details?.reason ?? error?.code;
+      setAssignmentError(translate(reason === "assignment-has-approved-work" ? "jobs.removeApprovalBeforeRosterEdit" : "jobs.rosterUpdateError"));
     } finally {
       setReplacingAssignmentId(null);
     }

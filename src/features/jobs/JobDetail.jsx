@@ -91,6 +91,7 @@ export function JobDetail({
   onRefreshOffers,
   onRefreshIssues,
   onRefreshChecklistRun,
+  onRefreshWorkedTime,
   onCreateChecklistRun,
   onOpenChecklistRun,
   onRefreshChecklistCapability,
@@ -1142,7 +1143,7 @@ export function JobDetail({
 
       <JobWorkedTime job={job} assignments={activeAssignments} roster={summaryCleanerIds} offers={offers}
         names={summaryCleanerNames} language={language} checklistStatus={checklistRun?.status}
-        loading={isLoadingAssignments} failed={hasAssignmentsError} />
+        loading={isLoadingAssignments} failed={hasAssignmentsError} onRefresh={onRefreshWorkedTime} />
 
       <JobFinancialSection
         job={job}

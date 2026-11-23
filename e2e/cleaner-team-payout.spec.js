@@ -71,3 +71,38 @@ test("a completed hourly job pays an approved share exactly once while another i
   expect(receipt).toMatchObject({ cleanerId: approved, amount: 56.7, jobAmountsCents: { [job.id]: 5670 } });
   expect(data.billing).not.toHaveProperty("hours");
 });
+
+test("paying an approved hourly share and correcting the hours agree on one amount", async ({ page }) => {
+  const org = getE2eFirestore().collection("organizations").doc(managerOrganizationId);
+  const job = org.collection("jobs").doc("sample-concurrent-" + randomUUID());
+  const cleanerId = "sample-cleaner";
+  const assignment = job.collection("assignments").doc("sample-assignment");
+  await job.set({
+    organizationId: managerOrganizationId, schemaVersion: 2, serviceType: "STANDARD",
+    operationalStatus: "COMPLETED", assignedCleanerIds: [cleanerId], requiredCleanerCount: 1,
+    pay: { mode: "HOURLY", rateCents: 2200 }, scheduledDate: "2026-11-01", dataProvenance: "DEMO",
+  });
+  await assignment.set({
+    jobId: job.id, cleanerId, organizationId: managerOrganizationId, isActive: true, source: "MANAGER_DIRECT",
+  });
+  await loginManager(page);
+  const outcome = await page.evaluate(async ({ jobId, assignmentId, cleanerId }) => {
+    const { approveWorkedTime } = await import("/src/features/pricing/workedTimeService.js");
+    const { recordPayout } = await import("/src/features/payouts/payoutService.js");
+    await approveWorkedTime(jobId, assignmentId, 60);
+    const [paid, correction] = await Promise.allSettled([
+      recordPayout({ cleaner: { id: cleanerId }, jobIds: [jobId], paymentMethod: "CASH", note: "" }),
+      approveWorkedTime(jobId, assignmentId, 120),
+    ]);
+    return {
+      payout: paid.status === "fulfilled" ? paid.value : null,
+      correctionError: correction.status === "rejected" ? correction.reason.code : null,
+    };
+  }, { jobId: job.id, assignmentId: assignment.id, cleanerId });
+  expect(outcome.payout?.amount).toBe(outcome.correctionError ? 22 : 44);
+  if (outcome.correctionError) expect(outcome.correctionError).toBe("functions/failed-precondition");
+  const cents = (await assignment.get()).data().payoutCents;
+  const receipt = (await org.collection("payouts").doc(outcome.payout.id).get()).data();
+  expect(receipt.jobAmountsCents[job.id]).toBe(cents);
+  expect((await job.get()).data().payoutIdsByCleaner).toEqual({ [cleanerId]: outcome.payout.id });
+});

@@ -12,3 +12,9 @@ export async function approveWorkedTime(request) {
   await requireOrganizationManager(db, request, organizationId);
   return recordWorkedTime(db, { organizationId, uid: request.auth.uid, manager: true, input: request.data });
 }
+
+export async function removeWorkedTimeApproval(request) {
+  await requireOrganizationManager(db, request, organizationId);
+  return recordWorkedTime(db, { organizationId, uid: request.auth.uid, manager: true,
+    input: request.data, removeApproval: true });
+}
