@@ -1,5 +1,15 @@
 # CleanFlow — Current State
 
+## 2026-11-22 — External performance audit follow-up · review candidates, not published
+
+An external audit listed five performance items. Each was checked against `main` at `1ca8dac`;
+the results are in [the audit follow-up](performance/audit-2026-11/README.md). Two fixes are open
+as separate pull requests: late issue and assignment responses in Job Detail, and agreement reads
+for team Jobs that are already paid. Dashboard reads, thumbnail memory and frontend payload were
+measured and left unchanged; each needs a decision listed in that document. All numbers come from
+synthetic data in a development workspace. Nothing was deployed and nothing was verified on a
+physical device.
+
 ## 2026-11-15 — Service types V1 · review candidate
 
 The manager can choose Standard, Deep cleaning, Move-out / move-in, or
