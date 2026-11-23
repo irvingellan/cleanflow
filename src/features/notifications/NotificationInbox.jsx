@@ -32,12 +32,11 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
     const request = current.current;
     if (!request || request.sessionKey !== sessionKey) return;
     if (request.loading) {
-      // A resume during pagination must still reread the current first page.
-      if (cursor === null && request.loadingOlder) request.refreshAfterPage = true;
+      // Coalesce refreshes that arrive during either kind of page load.
+      if (cursor === null) request.refreshAfterPage = true;
       return;
     }
     request.loading = true;
-    request.loadingOlder = Boolean(cursor);
     if (cursor) setSnapshot((previous) => ({ ...previous, loadingOlder: true }));
     const version = request.version;
     try {
@@ -61,7 +60,6 @@ export function useNotificationInbox({ role, sessionKey, service = notificationI
       if (request === current.current && version === request.version) setSnapshot({ sessionKey, state: "error", ...empty });
     } finally {
       request.loading = false;
-      request.loadingOlder = false;
       if (request === current.current) {
         setSnapshot((previous) => previous.loadingOlder ? { ...previous, loadingOlder: false } : previous);
         if (request.refreshAfterPage) {
