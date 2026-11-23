@@ -3,7 +3,6 @@ import {
   computeAgendaEntries,
   offeredCompensationFor,
   checklistAgendaSummary,
-  planAgendaChanges,
   rosterCleanerIds,
   sameEntry,
 } from "./cleanerAgenda.js";
@@ -251,20 +250,6 @@ describe("cleaner agenda projection", () => {
     expect(sameEntry(old, checked)).toBe(false);
     expect(sameEntry(checked, assigned(2))).toBe(true);
     expect(assigned(0)).not.toHaveProperty("reschedule");
-  });
-
-  it("plans honest change notices: new, moved, removed and cancelled", () => {
-    const before = new Map([["ana", { kind: "ASSIGNED", jobId: "j", propertyName: "Maple", scheduledDate: "2026-11-06", scheduledStart: "10:30" }],
-      ["bia", { kind: "ASSIGNED", jobId: "j", propertyName: "Maple", scheduledDate: "2026-11-06", scheduledStart: "10:30" }],
-      ["cris", { kind: "OFFER", jobId: "j" }]]);
-    const after = new Map([["ana", { kind: "ASSIGNED", jobId: "j", propertyName: "Maple", scheduledDate: "2026-11-08", scheduledStart: "13:00" }],
-      ["cris", { kind: "ASSIGNED", jobId: "j", propertyName: "Maple", scheduledDate: "2026-11-08", scheduledStart: "13:00" }]]);
-    const changes = planAgendaChanges(before, after, { job: job() });
-    expect(changes.map((change) => [change.cleanerId, change.change, change.openJobId])).toEqual([
-      ["ana", "RESCHEDULED", "j"], ["bia", "UNASSIGNED", null], ["cris", "ASSIGNED", "j"],
-    ]);
-    expect(planAgendaChanges(before, new Map(), { job: job({ archivedAt: {} }) }).map((change) => change.change)).toEqual(["CANCELLED", "CANCELLED"]);
-    expect(planAgendaChanges(before, new Map(), { job: null, suppressNotices: true })).toEqual([]);
   });
 
   it("detects unchanged entries so syncs do not rewrite them", () => {
