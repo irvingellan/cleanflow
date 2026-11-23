@@ -1,5 +1,6 @@
 import userEvent from "@testing-library/user-event";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { TranslationProvider } from "../../i18n/translations.js";
 import { JobDetail } from "./JobDetail.jsx";
@@ -20,7 +21,7 @@ function renderExpanded(...args) {
   return { ...result, rerender: (...next) => { result.rerender(...next); reveal(); } };
 }
 
-function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {}, property = null) {
+function jobDetail(status, overrides = {}, callbacks = {}, checklist = {}, property = null) {
   const noOp = vi.fn();
   const {
     offers = [],
@@ -30,7 +31,7 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
     ...jobOverrides
   } = overrides;
 
-  return renderExpanded(
+  return (
     <TranslationProvider>
       <JobDetail
         job={{
@@ -92,8 +93,12 @@ function renderJobDetail(status, overrides = {}, callbacks = {}, checklist = {},
         onResolveIssue={noOp}
         onArchive={callbacks.onArchive || noOp}
       />
-    </TranslationProvider>,
+    </TranslationProvider>
   );
+}
+
+function renderJobDetail(...args) {
+  return renderExpanded(jobDetail(...args));
 }
 
 describe("JobDetail lifecycle actions", () => {
@@ -366,13 +371,26 @@ describe("JobDetail lifecycle actions", () => {
     }));
   });
 
-  it("explains schedule unavailability without opening the form while Run state is unknown or frozen", () => {
-    const { unmount } = renderJobDetail("ASSIGNED", {}, {}, { isLoading: true });
-    fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
-    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
+  it("waits for a delayed checklist load before the schedule action is available", async () => {
+    let finish;
+    const getChecklistRun = () => new Promise(resolve => { finish = resolve; });
+    function DelayedChecklist() {
+      const [loading, setLoading] = useState(true);
+      useEffect(() => { void getChecklistRun().then(() => setLoading(false)); }, []);
+      return jobDetail("ASSIGNED", { scheduledDate: "2026-10-01" }, {}, { isLoading: loading });
+    }
+    renderExpanded(<DelayedChecklist />);
+    const action = screen.getByRole("button", { name: "Choose intention: Change date / time" });
+    expect(action).toBeDisabled();
     expect(screen.getByText("Checking whether a checklist has been created…")).toBeVisible();
-    unmount();
+    expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
+    await act(() => finish(null));
+    expect(action).toBeEnabled();
+    fireEvent.click(action);
+    expect(screen.getByLabelText("Scheduled date")).toHaveValue("2026-10-01");
+  });
 
+  it("explains why a frozen checklist prevents schedule edits", () => {
     renderJobDetail("ASSIGNED", {}, {}, { run: { id: "initial", status: "DRAFT" } });
     fireEvent.click(screen.getByRole("button", { name: "Choose intention: Change date / time" }));
     expect(screen.queryByRole("button", { name: "Save schedule" })).not.toBeInTheDocument();
