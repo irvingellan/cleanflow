@@ -92,6 +92,21 @@ export async function recordWorkedTime(database, { organizationId, uid, cleanerI
     if (!removeApproval && !canRecordWorkedTime(job, belongs(checklist.data(), ids) ? checklist.data().status : null)) {
       throw new HttpsError("failed-precondition", "Worked time is available after work has started.");
     }
+    if (manager && input.refreshClientHours === true) {
+      const approved = active.filter(doc => doc.data().approvedWork);
+      const teamMinutes = roster.map(id => active.find(doc => doc.data().cleanerId === id)?.data().approvedWork?.minutes);
+      if (job.billing?.mode !== "HOURLY" || active.length !== roster.length
+        || !teamMinutes.every(value => Number.isInteger(value) && value >= 0 && value <= 1440 && value % 5 === 0)) {
+        throw new HttpsError("failed-precondition", "Every active cleaner needs approved hours.");
+      }
+      const approvedMinutes = teamMinutes.reduce((sum, value) => sum + value, 0);
+      transaction.update(jobRef, {
+        approvedAssignments: Object.fromEntries(approved.map(doc => [doc.id, doc.data().cleanerId])),
+        "billing.hours": { approved: true, approvedMinutes, source: "APPROVED_ASSIGNMENTS", roster,
+          assignmentIds: active.map(doc => doc.id).sort() },
+      });
+      return { approvedMinutes };
+    }
     if (job.payoutId || job.payoutPaidAt || job.payoutIdsByCleaner?.[assignment.cleanerId]) {
       throw new HttpsError("failed-precondition", "The assignment is already paid.");
     }

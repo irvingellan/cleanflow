@@ -2330,6 +2330,28 @@ test("roster edits require a fresh crew total when a worker returns", async () =
   assert.equal((await job.collection("assignments").doc("current").get()).data().approvedWork, undefined);
 });
 
+test("client hours recover after a paid approval and closed fields stay protected", async () => {
+  const { approveWorkedTime } = functionsIndex;
+  const jobId = "worked-time-client-recovery";
+  const cleanerId = "cleaner-a";
+  await createJob(jobId, { operationalStatus: "COMPLETED", assignedCleanerIds: [cleanerId], requiredCleanerCount: 2,
+    pay: { mode: "HOURLY", rateCents: 2100 }, billing: { mode: "HOURLY", hourlyRateCents: 3200 },
+    approvedAssignments: { assigned: cleanerId }, payoutIdsByCleaner: { [cleanerId]: "synthetic-receipt" } });
+  const job = admin.doc(`${root}/jobs/${jobId}`);
+  const assignment = job.collection("assignments").doc("assigned");
+  await assignment.set({ cleanerId, isActive: true, jobId, organizationId: org, approvedWork: { minutes: 60 }, payoutCents: 2100,
+    paySnapshot: { offeredPay: { mode: "HOURLY", rateCents: 2100 } } });
+  const before = (await assignment.get()).data();
+  const request = managerRequest({ jobId, assignmentId: "assigned", refreshClientHours: true });
+  assert.deepEqual(await approveWorkedTime.run(request), { approvedMinutes: 60 });
+  assert.deepEqual((await assignment.get()).data(), before);
+  assert.deepEqual((await job.get()).data().billing.hours, { approved: true, approvedMinutes: 60,
+    source: "APPROVED_ASSIGNMENTS", roster: [cleanerId], assignmentIds: ["assigned"] });
+  const manager = environment.authenticatedContext("manager").firestore();
+  await assertFails(manager.doc(job.path).update({ requiredCleanerCount: 1, "billing.hours": deleteField() }));
+  await assertFails(manager.doc(assignment.path).update({ paySnapshot: { offeredPay: { mode: "HOURLY", rateCents: 9900 } } }));
+});
+
 test("a payout and a concurrent approval correction settle on one amount", async () => {
   const { approveWorkedTime, removeWorkedTimeApproval } = functionsIndex;
   const jobId = "worked-time-settlement";

@@ -387,7 +387,7 @@ export async function setRequiredCleanerCount(jobId, count) {
       throw assignmentError("invalid-spot-count", "The number of cleaners is not valid for this Job.", job);
     }
     if (count !== requiredCleanerCount(job)) {
-      transaction.update(jobReference, { ...clearApprovedAssignmentBilling(job), requiredCleanerCount: count });
+      transaction.update(jobReference, { requiredCleanerCount: count });
     }
   });
   return jobFromSnapshot(await getDoc(jobReference));

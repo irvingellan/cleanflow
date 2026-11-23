@@ -183,7 +183,8 @@ export async function recordPayout({ cleaner, jobIds, paymentMethod, note }) {
     if (error?.code !== "permission-denied") throw error;
     const current = await runTransaction(db, (transaction) =>
       Promise.all(jobReferences.map((jobReference) => transaction.get(jobReference))));
-    if (current.some((snapshot) => snapshot.data()?.payoutIdsByCleaner?.[cleaner.id])) {
+    if (current.some((snapshot) => snapshot.data()?.payoutIdsByCleaner?.[cleaner.id]
+      || snapshot.data()?.payoutId || snapshot.data()?.payoutPaidAt)) {
       throw payoutError("job-not-payable", "One or more jobs are no longer payable.");
     }
     throw error;

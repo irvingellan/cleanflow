@@ -222,7 +222,7 @@ service cloud.firestore {
 
     function jobRosterChanged() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['assignedCleanerId', 'assignedCleanerIds', 'requiredCleanerCount', 'schemaVersion']);
+        .hasAny(['assignedCleanerId', 'assignedCleanerIds', 'schemaVersion']);
     }
 
     function validBrowserBillingHours() {
@@ -241,8 +241,8 @@ service cloud.firestore {
       let after = request.resource.data;
       let approvals = before.get('approvedAssignments', {});
       let hours = jobBillingHours(before);
-      let locked = approvals.size() > 0 || (hours is map && hours.get('approved', false) == true)
-        || before.get('payoutId', null) != null || before.get('payoutPaidAt', null) != null || jobPayoutIds(before).size() > 0;
+      let paid = before.get('payoutId', null) != null || before.get('payoutPaidAt', null) != null || jobPayoutIds(before).size() > 0;
+      let locked = paid || approvals.size() > 0 || (hours is map && hours.get('approved', false) == true);
       let billingChanges = jobBilling(after).diff(jobBilling(before)).affectedKeys();
       let roster = after.get('assignedCleanerIds', null) is list
         ? after.assignedCleanerIds : [after.get('assignedCleanerId', null)];
@@ -253,7 +253,8 @@ service cloud.firestore {
         && jobPayoutIds(after).diff(jobPayoutIds(before)).changedKeys().size() == 0
         && jobPayoutIds(after).diff(jobPayoutIds(before)).removedKeys().size() == 0
         && (!locked || (!after.diff(before).affectedKeys().hasAny(['clientPrice', 'cleanerPayout', 'pay', 'serviceType'])
-          && (billingChanges.size() == 0 || (approvedAssignmentBilling(before) && jobRosterChanged()
+          && (billingChanges.size() == 0 || (approvedAssignmentBilling(before) && jobRosterChanged() && !paid
+            && before.get('operationalStatus', null) in ['UNASSIGNED', 'OFFERED', 'ASSIGNED']
             && billingChanges.hasOnly(['hours'])))));
     }
 
@@ -458,10 +459,10 @@ service cloud.firestore {
         allow update: if activeManager(orgId)
           && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod', 'confirmationChannel',
-              'removalReason', 'removalScheduleRevision', 'replacementOfferId', 'reportedWork', 'approvedWork', 'payoutCents'])
+              'removalReason', 'removalScheduleRevision', 'replacementOfferId', 'reportedWork', 'approvedWork', 'payoutCents',
+              'paySnapshot', 'sourceOfferId', 'source'])
           && (resource.data.get('approvedWork', null) == null
-            || !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['cleanerId', 'isActive', 'paySnapshot', 'sourceOfferId']))
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['cleanerId', 'isActive']))
           && (!automaticOfferJob(orgId, jobId)
             || (!('automaticOfferBatch' in
                   get(/databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId)).data)
