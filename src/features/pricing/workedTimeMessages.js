@@ -6,6 +6,7 @@ const messages = {
     touchUp: "Touch-ups default to 2 hours. Confirm any longer duration manually.",
     rounding: "Time rounds to the nearest 5 minutes.", loading: "Loading assignments…",
     unavailable: "The assignments could not be loaded.", empty: "No hourly assignments yet.",
+    removeApproval: "Remove approval", agreedRate: "This assignment keeps the cleaner’s agreed rate.",
     pendingGroup: "Hours to approve",
   },
   pt: {
@@ -15,6 +16,7 @@ const messages = {
     touchUp: "O retoque tem duração padrão de 2 horas. Confirme manualmente qualquer duração maior.",
     rounding: "O tempo é arredondado para o múltiplo de 5 minutos mais próximo.", loading: "Carregando atribuições…",
     unavailable: "Não foi possível carregar as atribuições.", empty: "Ainda não há atribuições por hora.",
+    removeApproval: "Remover aprovação", agreedRate: "Esta atribuição mantém a tarifa combinada com a profissional.",
     pendingGroup: "Horas para aprovar",
   },
   es: {
@@ -24,6 +26,7 @@ const messages = {
     touchUp: "El retoque dura 2 horas por defecto. Confirma manualmente cualquier duración mayor.",
     rounding: "El tiempo se redondea a los 5 minutos más cercanos.", loading: "Cargando asignaciones…",
     unavailable: "No se pudieron cargar las asignaciones.", empty: "Aún no hay asignaciones por hora.",
+    removeApproval: "Quitar aprobación", agreedRate: "Esta asignación mantiene la tarifa acordada con la persona que realiza la limpieza.",
     pendingGroup: "Horas por aprobar",
   },
 };

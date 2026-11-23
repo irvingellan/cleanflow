@@ -1,3 +1,4 @@
+import { clearApprovedAssignmentBilling } from "./approvedAssignmentBilling.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import {
@@ -76,6 +77,7 @@ export async function setJobCleanerSpotsForManager(database, { organizationId, a
     const batch = current ?? await legacyBatchForResize(transaction, jobRef, job, revision, active);
     const reopening = count > previous;
     transaction.update(jobRef, {
+      ...clearApprovedAssignmentBilling(job),
       requiredCleanerCount: count,
       automaticOfferBatch: {
         ...batch, capacity: count, currentContextRevision: revision, spotsUpdatedByUid: actorUid,

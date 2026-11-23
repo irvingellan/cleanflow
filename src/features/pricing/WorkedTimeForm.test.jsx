@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { formatWorkedMinutes, WorkedTimeForm } from "./WorkedTimeForm.jsx";
@@ -62,4 +63,14 @@ describe("worked time form", () => {
       work={{ approvedMinutes: 120, payoutCents: 4800 }} onSave={save} />);
     expect(screen.queryByRole("button", { name: "Correct hours" })).not.toBeInTheDocument();
   });
+  it("offers approval removal before payment", async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const work = { reportedMinutes: 60, approvedMinutes: 60, payoutCents: 2000 };
+    const { rerender } = render(<WorkedTimeForm manager language="en" work={work} onRemoveApproval={remove} />);
+    await userEvent.click(screen.getByRole("button", { name: "Remove approval" }));
+    expect(remove).toHaveBeenCalledOnce();
+    rerender(<WorkedTimeForm manager paid language="en" work={work} onRemoveApproval={remove} />);
+    expect(screen.queryByRole("button", { name: "Remove approval" })).not.toBeInTheDocument();
+  });
+
 });

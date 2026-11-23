@@ -378,3 +378,4 @@ export const syncCleanerAgendaOnChecklistStart = onDocumentCreated(
 
 export const reportMyWorkedTime = onCall({ region: "us-central1" }, lazyHandler(workedTime, "reportMyWorkedTime"));
 export const approveWorkedTime = onCall({ region: "us-central1" }, lazyHandler(workedTime, "approveWorkedTime"));
+export const removeWorkedTimeApproval = onCall({ region: "us-central1" }, lazyHandler(workedTime, "removeWorkedTimeApproval"));

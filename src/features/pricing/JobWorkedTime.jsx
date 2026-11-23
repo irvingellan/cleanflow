@@ -1,8 +1,8 @@
 import { WorkedTimeForm } from "./WorkedTimeForm.jsx";
 import { workedTimeMessages } from "./workedTimeMessages.js";
-import { approveWorkedTime } from "./workedTimeService.js";
+import { approveWorkedTime, removeWorkedTimeApproval } from "./workedTimeService.js";
 
-export function JobWorkedTime({ job, assignments, roster, offers, names, language, checklistStatus, loading, failed }) {
+export function JobWorkedTime({ job, assignments, roster, offers, names, language, checklistStatus, loading, failed, onRefresh }) {
   const t = workedTimeMessages(language);
   const hourlyClient = job.billing?.mode === "HOURLY";
   const hourlyAssignments = assignments.filter(assignment => {
@@ -22,12 +22,23 @@ export function JobWorkedTime({ job, assignments, roster, offers, names, languag
       : hourlyAssignments.length === 0 ? <p>{t.empty}</p>
       : hourlyAssignments.map(assignment => <div key={assignment.id}>
         <h4>{names[roster.indexOf(assignment.cleanerId)]}</h4>
-        <WorkedTimeForm manager language={language} allowSave={canApprove && !job.archivedAt}
-          paid={Boolean(job.payoutId || job.payoutIdsByCleaner?.[assignment.cleanerId])}
+        {(assignment.paySnapshot?.offeredPay || offers?.find(offer => offer.id === assignment.sourceOfferId)?.offeredPay)
+          && <p className="form-hint">{t.agreedRate}</p>}
+        <WorkedTimeForm key={`${assignment.approvedWork?.minutes ?? ""}:${assignment.payoutCents ?? ""}`}
+          manager language={language} allowSave={canApprove && !job.archivedAt}
+          paid={Boolean(job.payoutId || job.payoutPaidAt || job.payoutIdsByCleaner?.[assignment.cleanerId])}
           touchUp={job.serviceType === "AIRBNB_TOUCH_UP"}
           work={{ reportedMinutes: assignment.reportedWork?.minutes, approvedMinutes: assignment.approvedWork?.minutes,
             payoutCents: assignment.payoutCents }}
-          onSave={minutes => approveWorkedTime(job.id, assignment.id, minutes)} />
+          onSave={async minutes => {
+            const result = await approveWorkedTime(job.id, assignment.id, minutes);
+            await onRefresh?.();
+            return result;
+          }}
+          onRemoveApproval={assignment.approvedWork && !job.archivedAt ? async () => {
+            await removeWorkedTimeApproval(job.id, assignment.id);
+            await onRefresh?.();
+          } : undefined} />
       </div>)}
   </section>;
 }

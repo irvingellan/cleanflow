@@ -647,6 +647,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "removeWorkedTimeApproval",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "reportManagerNotificationHealth",
     {
       "callableTrigger": {},

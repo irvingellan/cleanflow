@@ -1,3 +1,4 @@
+import { clearApprovedAssignmentBilling } from "./approvedAssignmentBilling.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { initialChecklistRunId, validChecklistRunJobId } from "./checklistRunService.js";
@@ -53,7 +54,7 @@ async function loadRate(transaction, jobRef, ids, job, assignment) {
   return job.pay?.mode === "HOURLY" ? { hourly: true, rate: job.pay.rateCents } : {};
 }
 
-export async function recordWorkedTime(database, { organizationId, uid, cleanerId, sessionId, input, manager = false }) {
+export async function recordWorkedTime(database, { organizationId, uid, cleanerId, sessionId, input, manager = false, removeApproval = false }) {
   const jobId = input?.jobId;
   if (!validChecklistRunJobId(jobId) || (manager && !validChecklistRunJobId(input.assignmentId))) {
     throw new HttpsError("invalid-argument", "The job or assignment is invalid.");
@@ -88,11 +89,19 @@ export async function recordWorkedTime(database, { organizationId, uid, cleanerI
     if (!assignment || active.filter(doc => doc.data().cleanerId === assignment.cleanerId).length !== 1) {
       throw new HttpsError("permission-denied", "The assignment is unavailable.");
     }
-    if (!canRecordWorkedTime(job, belongs(checklist.data(), ids) ? checklist.data().status : null)) {
+    if (!removeApproval && !canRecordWorkedTime(job, belongs(checklist.data(), ids) ? checklist.data().status : null)) {
       throw new HttpsError("failed-precondition", "Worked time is available after work has started.");
     }
     if (job.payoutId || job.payoutPaidAt || job.payoutIdsByCleaner?.[assignment.cleanerId]) {
       throw new HttpsError("failed-precondition", "The assignment is already paid.");
+    }
+    const approvedAssignments = Object.fromEntries(active.flatMap(doc => doc.data().approvedWork ? [[doc.id, doc.data().cleanerId]] : []));
+    if (manager && removeApproval) {
+      if (!assignment.approvedWork) return { removed: false };
+      delete approvedAssignments[target.id];
+      transaction.update(target.ref, { approvedWork: FieldValue.delete(), payoutCents: FieldValue.delete() });
+      transaction.update(jobRef, { approvedAssignments, ...clearApprovedAssignmentBilling(job) });
+      return { removed: true };
     }
     const rate = await loadRate(transaction, jobRef, ids, job, assignment);
     const clientHourly = job.billing?.mode === "HOURLY";
@@ -118,17 +127,19 @@ export async function recordWorkedTime(database, { organizationId, uid, cleanerI
       return { minutes };
     }
     const payoutCents = rate.hourly ? hourlyAmountCents(rate.rate, minutes) : null;
-    if (clientHourly) {
-      const approvals = new Map(active.map(doc => [doc.data().cleanerId,
-        doc.id === target.id ? minutes : doc.data().approvedWork?.minutes]));
-      const teamMinutes = roster.map(id => approvals.get(id));
-      if (active.length === roster.length && teamMinutes.every(value => Number.isInteger(value) && value >= 0 && value <= 1440)) {
-        transaction.update(jobRef, {
-          "billing.hours": { approved: true, approvedMinutes: teamMinutes.reduce((sum, value) => sum + value, 0),
-            source: "APPROVED_ASSIGNMENTS", roster },
-        });
-      }
-    }
+    approvedAssignments[target.id] = assignment.cleanerId;
+    const approvals = new Map(active.map(doc => [doc.data().cleanerId,
+      doc.id === target.id ? minutes : doc.data().approvedWork?.minutes]));
+    const teamMinutes = roster.map(id => approvals.get(id));
+    const completeTeam = clientHourly && active.length === roster.length && teamMinutes.every(value =>
+      Number.isInteger(value) && value >= 0 && value <= 1440 && value % 5 === 0);
+    transaction.update(jobRef, {
+      approvedAssignments,
+      ...(completeTeam ? {
+        "billing.hours": { approved: true, approvedMinutes: teamMinutes.reduce((sum, value) => sum + value, 0),
+          source: "APPROVED_ASSIGNMENTS", roster, assignmentIds: active.map(doc => doc.id).sort() },
+      } : clearApprovedAssignmentBilling(job)),
+    });
     transaction.update(target.ref, {
       approvedWork: { minutes, approvedByUid: uid, approvedAt: FieldValue.serverTimestamp() },
       ...(rate.hourly && { payoutCents }),

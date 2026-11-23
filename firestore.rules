@@ -216,6 +216,47 @@ service cloud.firestore {
       return hours is map && hours.get('source', null) == 'APPROVED_ASSIGNMENTS';
     }
 
+    function jobBilling(data) {
+      return data.get('billing', null) is map ? data.billing : {};
+    }
+
+    function jobRosterChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['assignedCleanerId', 'assignedCleanerIds', 'requiredCleanerCount', 'schemaVersion']);
+    }
+
+    function validBrowserBillingHours() {
+      return approvedAssignmentBilling(resource.data)
+        ? (jobRosterChanged() ? !('hours' in jobBilling(request.resource.data))
+          : jobBillingHours(request.resource.data) == jobBillingHours(resource.data))
+        : !approvedAssignmentBilling(request.resource.data);
+    }
+
+    function jobPayoutIds(data) {
+      return data.get('payoutIdsByCleaner', null) is map ? data.payoutIdsByCleaner : {};
+    }
+
+    function browserKeepsJobPricing() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let approvals = before.get('approvedAssignments', {});
+      let hours = jobBillingHours(before);
+      let locked = approvals.size() > 0 || (hours is map && hours.get('approved', false) == true)
+        || before.get('payoutId', null) != null || before.get('payoutPaidAt', null) != null || jobPayoutIds(before).size() > 0;
+      let billingChanges = jobBilling(after).diff(jobBilling(before)).affectedKeys();
+      let roster = after.get('assignedCleanerIds', null) is list
+        ? after.assignedCleanerIds : [after.get('assignedCleanerId', null)];
+      return !after.diff(before).affectedKeys().hasAny(['approvedAssignments'])
+        && (approvals.size() == 0 || roster.hasAll(approvals.values()))
+        && (before.get('payoutId', null) == null || after.get('payoutId', null) == before.payoutId)
+        && (before.get('payoutPaidAt', null) == null || after.get('payoutPaidAt', null) == before.payoutPaidAt)
+        && jobPayoutIds(after).diff(jobPayoutIds(before)).changedKeys().size() == 0
+        && jobPayoutIds(after).diff(jobPayoutIds(before)).removedKeys().size() == 0
+        && (!locked || (!after.diff(before).affectedKeys().hasAny(['clientPrice', 'cleanerPayout', 'pay', 'serviceType'])
+          && (billingChanges.size() == 0 || (approvedAssignmentBilling(before) && jobRosterChanged()
+            && billingChanges.hasOnly(['hours'])))));
+    }
+
     function assignmentParentRevisionAdvanced(orgId, jobId) {
       let jobPath = /databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId);
       let job = get(jobPath).data;
@@ -366,7 +407,7 @@ service cloud.firestore {
             && browserJobDoesNotCreateCompletion()
             && !request.resource.data.keys().hasAny([
               'offerDistributionMode', 'offerDistributionByUid', 'firstAcceptClaim', 'offerDistributionClosedAt',
-              'automaticOfferBatch', 'lastAutomaticOfferAcceptance'
+              'automaticOfferBatch', 'lastAutomaticOfferAcceptance', 'approvedAssignments'
             ])
             && !approvedAssignmentBilling(request.resource.data)
             && !('completedAt' in request.resource.data));
@@ -380,8 +421,8 @@ service cloud.firestore {
             && browserJobKeepsCompletionState()
             && browserJobKeepsAutomaticOfferProvenance()
             && browserKeepsPausedScheduleRoster()
-            && ((!approvedAssignmentBilling(resource.data) && !approvedAssignmentBilling(request.resource.data))
-              || jobBillingHours(request.resource.data) == jobBillingHours(resource.data))
+            && validBrowserBillingHours()
+            && browserKeepsJobPricing()
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedAt']));
       }
 
@@ -418,8 +459,9 @@ service cloud.firestore {
           && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod', 'confirmationChannel',
               'removalReason', 'removalScheduleRevision', 'replacementOfferId', 'reportedWork', 'approvedWork', 'payoutCents'])
-          && (!('approvedWork' in resource.data)
-            || request.resource.data.cleanerId == resource.data.cleanerId)
+          && (resource.data.get('approvedWork', null) == null
+            || !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['cleanerId', 'isActive', 'paySnapshot', 'sourceOfferId']))
           && (!automaticOfferJob(orgId, jobId)
             || (!('automaticOfferBatch' in
                   get(/databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId)).data)

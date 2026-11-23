@@ -70,6 +70,11 @@ export function billableJobMinutes(job, policy) {
   const hours = job.billing?.hours;
   if (hours?.source === "APPROVED_ASSIGNMENTS") {
     const roster = Array.isArray(job.assignedCleanerIds) ? job.assignedCleanerIds : [job.assignedCleanerId].filter(Boolean);
+    if (hours.assignmentIds !== undefined) {
+      const ids = Object.keys(job.approvedAssignments ?? {});
+      if (!Array.isArray(hours.assignmentIds) || hours.assignmentIds.length !== roster.length
+        || ids.length !== hours.assignmentIds.length || ids.some(id => !hours.assignmentIds.includes(id))) return null;
+    }
     if (!Array.isArray(hours.roster) || roster.length !== hours.roster.length
       || roster.some(id => !hours.roster.includes(id))) return null;
   }

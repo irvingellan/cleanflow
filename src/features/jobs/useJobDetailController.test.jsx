@@ -206,6 +206,26 @@ describe("useJobDetailController offer refresh isolation", () => {
   });
 });
 
+describe("useJobDetailController worked time readback", () => {
+  it("refreshes the Job and assignments after a worked time change on a completed Job", async () => {
+    const job = { id: "worked-time-job", schemaVersion: 2, operationalStatus: "COMPLETED" };
+    const updated = { ...job, approvedAssignments: { current: "sample-cleaner" } };
+    const assignments = [{ id: "current", approvedWork: { minutes: 60 } }];
+    const onJobUpdated = vi.fn();
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated }));
+    act(() => result.current.openJob(job));
+    await waitFor(() => expect(result.current.detail.isLoadingAssignments).toBe(false));
+    mocks.getJobById.mockResolvedValue(updated);
+    mocks.getJobAssignments.mockResolvedValue(assignments);
+    await act(async () => result.current.detail.refreshWorkedTime());
+    expect(mocks.getJobById).toHaveBeenCalledWith(job.id, { serverOnly: true });
+    expect(mocks.getJobAssignments).toHaveBeenCalledWith(job.id);
+    expect(onJobUpdated).toHaveBeenCalledWith(updated);
+    expect(result.current.job).toEqual(updated);
+    expect(result.current.detail.assignments).toEqual(assignments);
+  });
+});
+
 describe("useJobDetailController checklist refresh", () => {
   it("does not let a stale manager refresh overwrite a different Job's checklist run", async () => {
     const first = deferred();
