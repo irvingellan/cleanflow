@@ -167,6 +167,7 @@ export async function uploadPublicChecklistEvidence(database, {
   now = new Date(),
   storage = getStorage(),
   attemptStorage,
+  onCapabilityResolved,
 }) {
   let image;
   try {
@@ -181,6 +182,7 @@ export async function uploadPublicChecklistEvidence(database, {
   } catch (error) {
     throw markPhotoDiagnosticStage(error, validationOrUnknownStage(error));
   }
+  onCapabilityResolved?.();
   if (initial.run.evidencePolicy?.version === 2) {
     return uploadMultiPhotoEvidence(database, initial, { organizationId, tokenHash, requirementId, contentType, bytes, now, storage, attemptStorage }, image);
   }
