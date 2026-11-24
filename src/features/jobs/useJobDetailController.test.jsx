@@ -207,6 +207,95 @@ describe("useJobDetailController offer refresh isolation", () => {
   });
 });
 
+describe.each([
+  ["issues", "getJobIssues", "issues", "hasIssuesError", "isLoadingIssues"],
+  ["assignments", "getJobAssignments", "assignments", "hasAssignmentsError", "isLoadingAssignments"],
+])("useJobDetailController %s refresh isolation", (_name, read, list, errorFlag, loadingFlag) => {
+  const jobA = { id: "job-a", schemaVersion: 2, operationalStatus: "OFFERED" };
+  const jobB = { id: "job-b", schemaVersion: 2, operationalStatus: "OFFERED" };
+
+  it.each(["success", "failure"])("ignores an old Job's late %s after the new Job's records arrive", async (outcome) => {
+    const first = deferred();
+    const second = deferred();
+    mocks[read].mockImplementation((jobId) => jobId === "job-a" ? first.promise : second.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob(jobA));
+    await waitFor(() => expect(mocks[read]).toHaveBeenCalledWith("job-a"));
+    act(() => result.current.openJob(jobB));
+    await waitFor(() => expect(mocks[read]).toHaveBeenCalledWith("job-b"));
+    const currentRecords = [{ id: "b-record" }];
+    await act(async () => second.resolve(currentRecords));
+    await act(async () => outcome === "success"
+      ? first.resolve([{ id: "a-record" }])
+      : first.reject(new Error("old read failed")));
+    expect(result.current.job.id).toBe("job-b");
+    expect(result.current.detail[list]).toEqual(currentRecords);
+    expect(result.current.detail[errorFlag]).toBe(false);
+    expect(result.current.detail[loadingFlag]).toBe(false);
+  });
+
+  it("does not let an old request clear a new Job's loading state", async () => {
+    const first = deferred();
+    const second = deferred();
+    mocks[read].mockImplementation((jobId) => jobId === "job-a" ? first.promise : second.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob(jobA));
+    act(() => result.current.openJob(jobB));
+    await act(async () => first.resolve([{ id: "a-record" }]));
+    expect(result.current.detail[list]).toEqual([]);
+    expect(result.current.detail[loadingFlag]).toBe(true);
+    await act(async () => second.resolve([]));
+    expect(result.current.detail[loadingFlag]).toBe(false);
+  });
+
+  it("keeps the latest same-Job refresh when requests resolve backwards", async () => {
+    const first = deferred();
+    const second = deferred();
+    mocks[read].mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const watchedJob = { ...jobA, operationalStatus: "ASSIGNED" };
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob(watchedJob));
+    await waitFor(() => expect(mocks[read]).toHaveBeenCalledTimes(1));
+    const observeJob = mocks.subscribeToJob.mock.lastCall[1];
+    await act(async () => observeJob({ ...watchedJob, notes: "Server update" }));
+    await waitFor(() => expect(mocks[read]).toHaveBeenCalledTimes(2));
+    const currentRecords = [{ id: "a-record", state: "current" }];
+    await act(async () => second.resolve(currentRecords));
+    await act(async () => first.resolve([{ id: "a-record", state: "old" }]));
+    expect(result.current.detail[list]).toEqual(currentRecords);
+    expect(result.current.detail[loadingFlag]).toBe(false);
+  });
+
+  it("invalidates a pending read when the same Job is closed and reopened", async () => {
+    const first = deferred();
+    mocks[read].mockReturnValueOnce(first.promise).mockReturnValue(deferred().promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob(jobA));
+    await waitFor(() => expect(mocks[read]).toHaveBeenCalledTimes(1));
+    act(() => result.current.closeJob());
+    act(() => result.current.openJob(jobA));
+    await waitFor(() => expect(mocks[read]).toHaveBeenCalledTimes(2));
+    await act(async () => first.resolve([{ id: "a-record" }]));
+    expect(result.current.detail[list]).toEqual([]);
+    expect(result.current.detail[loadingFlag]).toBe(true);
+  });
+});
+
+describe("useJobDetailController assignment refresh for a legacy Job", () => {
+  it("does not show an Assignment-aware Job's late roster on a legacy Job", async () => {
+    const first = deferred();
+    mocks.getJobAssignments.mockReturnValue(first.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    act(() => result.current.openJob({ id: "job-a", schemaVersion: 2, operationalStatus: "ASSIGNED" }));
+    await waitFor(() => expect(mocks.getJobAssignments).toHaveBeenCalledWith("job-a"));
+    act(() => result.current.openJob({ id: "job-legacy", operationalStatus: "ASSIGNED" }));
+    await act(async () => first.resolve([{ id: "a-assignment", cleanerId: "a-cleaner" }]));
+    expect(result.current.job.id).toBe("job-legacy");
+    expect(result.current.detail.assignments).toEqual([]);
+    expect(result.current.detail.isLoadingAssignments).toBe(false);
+  });
+});
+
 describe("useJobDetailController checklist refresh", () => {
   it("keeps schedule availability pending until getChecklistRun settles", async () => {
     const pending = deferred();
