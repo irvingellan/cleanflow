@@ -13,15 +13,15 @@ describe("message catalog", () => {
       {
         "en": {
           "keys": 1753,
-          "sha256": "ea5158122525e8054879a6f53f1e82d6bcb6dfd8aee2d6ea5d0cbda5cdedfcab",
+          "sha256": "b10d76b106a316a7657dc5d39f63c8365b543eae2531b6f0f22d4321fa70666e",
         },
         "es": {
           "keys": 1753,
-          "sha256": "56bcbd9b57373ff6464ae7667ae10a7e6d839d070f4e943bce9eef6c459af8ac",
+          "sha256": "51c6f1328b5b0fd0f130bd6518f845da1401f1dffb078f5c086e6ef290b5d83c",
         },
         "pt": {
           "keys": 1753,
-          "sha256": "4cede3651c11d4d1bfd64e63175b1b15cf57d9f451220dbc9c1e686db29cb531",
+          "sha256": "bc68f05478be6ccf10113e1de3ac1555ee76a0cdb61fb96b39cbbfa04dbcac8e",
         },
       }
     `);

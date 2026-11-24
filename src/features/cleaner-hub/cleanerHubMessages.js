@@ -191,6 +191,7 @@ const M = {
   "hb.code.network": ["Sem conexão com a CleanFlow. Verifique a internet e tente de novo.", "Can't reach CleanFlow. Check your connection and try again.", "Sin conexión con CleanFlow. Revise la internet."],
   "hb.code.iosFirst": ["No iPhone, coloque o CleanFlow na tela inicial ANTES de digitar o código. O app da tela inicial guarda a entrada separado do Safari.", "On iPhone, add CleanFlow to your Home Screen BEFORE typing the code. The Home Screen app keeps its sign-in separate from Safari.", "En iPhone, agregue CleanFlow a inicio ANTES de escribir el código. La app de inicio guarda la sesión aparte de Safari."],
   "hb.code.iosGuide": ["Ver como colocar na tela inicial", "See how to add to Home Screen", "Ver cómo agregar a inicio"],
+  "hb.code.installGuide": ["Ver como colocar na tela inicial", "See how to add to Home Screen", "Ver cómo agregar a inicio"],
   "hb.code.iosAnyway": ["Entrar aqui no Safari mesmo assim", "Sign in here in Safari anyway", "Entrar aquí en Safari igual"],
   "hb.revoked.title": ["Seu acesso foi encerrado", "Your access was ended", "Su acceso fue cerrado"],
   "hb.revoked.body": ["A gerente encerrou o acesso deste celular. Sua agenda foi apagada daqui. Se foi engano, peça um código novo.", "The manager ended access on this phone. Your schedule was removed from here. If this was a mistake, ask for a new code.", "La gerente cerró el acceso. Su agenda se borró de aquí. Si fue un error, pida un código nuevo."],
