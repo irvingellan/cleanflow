@@ -71,6 +71,7 @@ vi.mock("./jobService.js", async (importOriginal) => ({
   subscribeToJob: mocks.subscribeToJob,
 }));
 
+import { jobScheduleAvailability } from "./jobScheduleAvailability.js";
 import { useJobDetailController } from "./useJobDetailController.js";
 
 beforeEach(() => {
@@ -207,6 +208,23 @@ describe("useJobDetailController offer refresh isolation", () => {
 });
 
 describe("useJobDetailController checklist refresh", () => {
+  it("keeps schedule availability pending until getChecklistRun settles", async () => {
+    const pending = deferred();
+    mocks.getChecklistRun.mockReturnValue(pending.promise);
+    const { result } = renderHook(() => useJobDetailController({ view: "job-detail", onJobUpdated: vi.fn() }));
+    const job = { id: "job-a", operationalStatus: "ASSIGNED", schemaVersion: 2 };
+    const scheduleBlock = () => jobScheduleAvailability(result.current.job, {
+      run: result.current.detail.checklistRun,
+      loading: result.current.detail.isLoadingChecklistRun,
+      error: result.current.detail.hasChecklistRunError,
+    });
+    act(() => result.current.openJob(job));
+    await waitFor(() => expect(mocks.getChecklistRun).toHaveBeenCalledWith(job.id));
+    expect(scheduleBlock()).toBe("jobs.scheduleCheckingChecklist");
+    await act(async () => pending.resolve(null));
+    expect(scheduleBlock()).toBeFalsy();
+  });
+
   it("does not let a stale manager refresh overwrite a different Job's checklist run", async () => {
     const first = deferred();
     const second = deferred();

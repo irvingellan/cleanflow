@@ -838,6 +838,7 @@ export function JobDetail({
       <JobIntentLayer
         key={job.id}
         primary={primaryIntent}
+        scheduleLoading={scheduleBlock === "jobs.scheduleCheckingChecklist"}
         showOperationalIntents={!job.archivedAt && !isCompleted}
         onIntent={chooseJobIntent}
         notice={intentNotice ? translate(intentNotice.key) : null}
