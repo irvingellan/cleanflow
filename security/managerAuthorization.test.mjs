@@ -1298,12 +1298,12 @@ async function publicChecklistUpload(token, requirementId, bytes, contentType = 
   return response;
 }
 
-async function publicChecklistPhotoDiagnostic(diagnostic) {
+async function publicChecklistDiagnostic(diagnostic, token, action = "PHOTO_UPLOAD_DIAGNOSTIC") {
   const response = { code: 200, headers: {}, set(key, value) { this.headers[key] = value; return this; }, status(code) { this.code = code; return this; }, end() { this.ended = true; return this; }, json(data) { this.body = data; return this; } };
   await publicChecklist({
     method: "POST",
     query: {},
-    body: { action: "PHOTO_UPLOAD_DIAGNOSTIC", diagnostic },
+    body: { action, diagnostic, token },
     get(header) { return header === "user-agent" ? "Mozilla/5.0 (iPhone) Version/17.0 Mobile Safari/604.1" : undefined; },
   }, response);
   return response;
@@ -1828,21 +1828,20 @@ test("V2 expired unknown writer stays charged while a saved retry can submit and
   assert.equal((await admin.doc(`${root}/jobs/job/checklistRuns/initial`).get()).data().status, "READY_FOR_REVIEW");
 });
 
-test("public photo diagnostics accept only token-free allowlisted events and do not write Firestore", async () => {
+test("public checklist diagnostics acknowledge compatible client requests", async () => {
+  await seedEligibleChecklistJob();
+  const issued = await issueChecklistCapability.run(request("manager", { jobId: "job", cleanerId: "cleaner-a" }));
   const before = (await admin.doc(`${root}/jobs/job`).get()).data();
-  const validDiagnostic = {
+  const event = {
     sessionId: "a".repeat(36), requestId: "b".repeat(36), result: "error", durationMs: 23,
-    fileType: "heic", sizeBucket: "1_to_3mb", stage: "preflight", errorCode: "unsupported_type",
-    deviceClass: "mobile",
+    fileType: "heic", sizeBucket: "1_to_3mb", stage: "preflight", errorCode: "unsupported_type", deviceClass: "mobile",
   };
-  const accepted = await publicChecklistPhotoDiagnostic(validDiagnostic);
-  assert.equal(accepted.code, 204);
-  assert.equal(accepted.headers["Cache-Control"], "no-store, private");
-
-  const rejected = await publicChecklistPhotoDiagnostic({ ...validDiagnostic, rawToken: "must-not-log" });
-  assert.equal(rejected.code, 400);
-  const injectedReason = await publicChecklistPhotoDiagnostic({ ...validDiagnostic, validationReason: "empty_body" });
-  assert.equal(injectedReason.code, 400);
+  for (const token of [undefined, "b".repeat(43), issued.token]) {
+    const result = await publicChecklistDiagnostic(event, token);
+    assert.equal(result.code, 204);
+    assert.equal(result.headers["Cache-Control"], "no-store, private");
+  }
+  assert.equal((await publicChecklistDiagnostic({ ...event, extra: "example" }, issued.token)).code, 204);
   assert.deepEqual((await admin.doc(`${root}/jobs/job`).get()).data(), before);
   assert.equal((await admin.collection(`${root}/managerPageLoadEvents`).get()).size, 0);
 });

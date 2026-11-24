@@ -190,7 +190,7 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
       sizeBucket,
       stage,
       errorCode,
-    }));
+    }), token);
   };
 
   try {
