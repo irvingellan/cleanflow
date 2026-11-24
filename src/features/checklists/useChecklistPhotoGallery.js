@@ -37,6 +37,8 @@ function pause(milliseconds, signal) {
 }
 const requiredPurpose = "living-belongings";
 const noop = () => {};
+const retainedBytes = (current) => current.local.reduce((sum, item) => sum + (item.blob?.size || 0), 0);
+const savedRequiredPhoto = (current) => current.saved.some((photo) => photo.requirementId === requiredPurpose);
 
 /** Owns only transient inputs, one encoder/uploader, and revisioned safe evidence. */
 export function useChecklistPhotoGallery({ token, checklist, disabled = false, onEvidence = noop,
@@ -89,15 +91,17 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
       while (editable(current) && (item = current.local.find((p) => p.state === "READY"))) {
         try {
           if (!item.blob) {
+            if (retainedBytes(current) >= retainedByteLimit) throw { code: "checklist_photo_queue_limit" };
             item.state = "OPTIMIZING"; notify(current);
             const startedAt = Date.now();
             let optimized;
             try { optimized = await options.current.optimize(item.file, { signal: current.controller.signal }); }
             catch (error) { options.current.reportFailure(item.file, error, startedAt); throw error; }
             if (scope.current !== current || current.disposed) return;
+            if (!(optimized.blob instanceof Blob)) throw { code: "checklist_photo_invalid_image" };
+            if (retainedBytes(current) + optimized.blob.size > retainedByteLimit) throw { code: "checklist_photo_queue_limit" };
             item.file = null;
             item.blob = optimized.blob;
-            if (!(item.blob instanceof Blob)) throw { code: "checklist_photo_invalid_image" };
             // The small picture is a convenience. It is made in the background and
             // never holds the upload back, even if the browser never answers.
             const pictured = item;
@@ -112,15 +116,25 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
             });
           }
           if (!editable(current) || current.controller.signal.aborted) return;
-          item.state = "UPLOADING"; notify(current);
           let result;
-          for (let attempt = 0; ; attempt++) {
+          let attempt = 0;
+          let checkedRequiredConflict = false;
+          while (true) {
+            // The first runnable item owns an empty required slot. Failed items never reserve it.
+            item.requirementId = savedRequiredPhoto(current) ? "additional" : requiredPurpose;
+            item.state = "UPLOADING"; notify(current);
             try {
               result = await options.current.upload({ token: current.token, requirementId: item.requirementId,
                 file: item.blob, version: 2, signal: current.controller.signal });
               break;
             } catch (error) {
-              const delay = options.current.uploadRetryDelays[attempt];
+              if (!checkedRequiredConflict && error?.status === 409 && item.requirementId === requiredPurpose) {
+                checkedRequiredConflict = true;
+                await refreshSaved();
+                if (!editable(current)) return;
+                if (savedRequiredPhoto(current)) continue;
+              }
+              const delay = options.current.uploadRetryDelays[attempt++];
               if (delay === undefined || !transientUploadErrors.has(error?.code || "checklist_photo_unavailable")
                 || scope.current !== current || current.disposed) throw error;
               await pause(delay, current.controller.signal);
@@ -129,7 +143,8 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
           }
           if (scope.current !== current || current.disposed) return;
           if (!Number.isInteger(result?.evidenceRevision) || !result?.evidence?.some((photo) =>
-            photo.evidenceId === result.evidenceId && photo.requirementId === item.requirementId)) throw { code: "checklist_response_invalid" };
+            photo.evidenceId === result.evidenceId && (photo.requirementId === item.requirementId
+              || (result.duplicate === true && item.requirementId === "additional" && photo.requirementId === requiredPurpose)))) throw { code: "checklist_response_invalid" };
           apply(current, result);
           item.savedId = result.evidenceId;
           if (item.preview) { releaseChecklistPhotoPreview(current.previews.get(result.evidenceId)); current.previews.set(result.evidenceId, item.preview); item.preview = null; }
@@ -163,7 +178,6 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
         // FB05: a selected File is a lazy handle to the phone's file; only an
         // optimized photo waiting to upload holds memory. Counting original
         // sizes stopped a 16-photo selection at the 50 MB queue limit.
-        const retained = state.local.reduce((sum, p) => sum + (p.blob?.size || 0), 0);
         // A failed receipt can already be represented in the saved gallery after a refresh.
         // Keep it retryable without charging it twice, and bound the local queue separately.
         const active = state.local.filter((item) => item.state !== "FAILED").length;
@@ -172,8 +186,8 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
           break;
         }
         if (file.size > sourceByteLimit) { state.error = "checklist_photo_source_too_large"; continue; }
-        if (retained + file.size > retainedByteLimit) { state.error = "checklist_photo_queue_limit"; break; }
-        const occupied = [...state.saved, ...state.local].some((p) => p.requirementId === requiredPurpose);
+        if (retainedBytes(state) >= retainedByteLimit) { state.error = "checklist_photo_queue_limit"; break; }
+        const occupied = savedRequiredPhoto(state) || state.local.some((p) => p.state !== "FAILED" && p.requirementId === requiredPurpose);
         state.local.push({ id: crypto.randomUUID(), requirementId: occupied ? "additional" : requiredPurpose, state: "READY", file, blob: null });
       }
       notify(state); pump(state);

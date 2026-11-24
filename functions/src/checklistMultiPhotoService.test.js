@@ -81,6 +81,12 @@ describe("V2 multi-photo evidence", () => {
     expect(f.objects.size).toBe(1);
     expect(results.some(x => x.status === "fulfilled")).toBe(true);
   });
+  it("recovers the required photo receipt on an additional upload of the same image", async () => {
+    const f = fixture();
+    const first = await f.upload(1, "living-belongings");
+    expect(await f.upload(1, "additional")).toEqual({ ...first, duplicate: true });
+  });
+
   it("rejects a duplicate with another purpose without claiming required evidence", async () => {
     const f = fixture();
     await f.upload(1, "additional");
