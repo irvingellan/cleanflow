@@ -788,6 +788,9 @@ function AccessCode({ t, onRedeem, platform, displayMode, installPrompt, initial
           <button type="submit" className="cfv2-button cfv2-button-primary mw-btn mw-btn-block" disabled={normalizeAccessCodeInput(code).length !== 12 || state === "checking"}>
             {t(state === "checking" ? "hb.code.checking" : "hb.code.submit")}
           </button>
+          {displayMode !== "standalone" && (
+            <button type="button" className="cfv2-button cfv2-button-secondary mw-btn mw-btn-block" onClick={() => setGuide(true)}>{t("hb.code.installGuide")}</button>
+          )}
         </form>
       )}
     </div>

@@ -27,6 +27,7 @@ describe("CleanerHubAccessPanel", () => {
     expect(fake.issueCleanerAccessCode).toHaveBeenCalledWith("ana");
     expect(await screen.findByText("ABCD-EFGH-JK23")).toBeInTheDocument();
     expect(screen.getByText(/Sua agenda CleanFlow: abra https:\/\/example.test\/agenda/)).toBeInTheDocument();
+    expect(screen.getByText(/Para colocar na tela inicial, toque em "Ver como colocar na tela inicial"/)).toBeInTheDocument();
     expect(screen.getByText(/works once/)).toBeInTheDocument();
   });
 

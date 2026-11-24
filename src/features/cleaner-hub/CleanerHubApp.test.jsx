@@ -363,6 +363,17 @@ describe("CleanerHubApp (live data boundary)", () => {
     expect(service.redeemAccessCode).toHaveBeenCalledWith("ABCDEFGHJK23");
   });
 
+  it("offers the Home Screen guide on Android before the code is entered", async () => {
+    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36");
+    const { service } = fakeService({ session: { status: "signed-out" } });
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    expect(screen.getByLabelText("Código de acesso (12 letras e números)")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ver como colocar na tela inicial" }));
+    expect(screen.getByRole("heading", { name: "Colocar o CleanFlow na tela inicial" })).toBeInTheDocument();
+    expect(screen.getByText("No Chrome, toque nos três pontos ⋮ no canto de cima.")).toBeInTheDocument();
+    expect(service.redeemAccessCode).not.toHaveBeenCalled();
+  });
+
   it("shows a clear message for a used or wrong code", async () => {
     const { service } = fakeService({ session: { status: "signed-out" } });
     service.redeemAccessCode.mockRejectedValue(Object.assign(new Error(), { code: "functions/failed-precondition" }));
