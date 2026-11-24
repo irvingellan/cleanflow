@@ -59,3 +59,18 @@ export function unpaidPayoutShares(job) {
       || !shares.some(share => share.cleanerId === id)))) return [];
   return shares.filter(share => share.cents > 0 && !Object.hasOwn(links ?? {}, share.cleanerId));
 }
+
+/**
+ * True when the Job document alone proves that no agreement can make this Job payable or
+ * reviewable: a fixed-pay team Job where every cleaner on the roster has a recorded payout.
+ * Hourly Jobs and legacy Jobs always return false and keep the full agreement check.
+ */
+export function payoutSettledOnJobRecord(job) {
+  if (!isAssignmentAwareJob(job) || job.pay?.mode === "HOURLY" || job.billing?.mode === "HOURLY") return false;
+  const roster = payoutRoster(job);
+  const links = job.payoutIdsByCleaner;
+  if (!roster.length || links == null || typeof links !== "object" || Array.isArray(links)) return false;
+  const linked = Object.entries(links);
+  return linked.length === roster.length
+    && linked.every(([id, value]) => roster.includes(id) && typeof value === "string" && value.trim());
+}
