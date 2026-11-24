@@ -93,6 +93,8 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   const checklistCapabilityInFlight = useRef(false);
   const capabilityJobsInFlight = useRef(new Set());
   const offersRequestId = useRef(0);
+  const issuesRequestId = useRef(0);
+  const assignmentsRequestId = useRef(0);
   const checklistRunRequestId = useRef(0);
   const checklistCapabilityRequestId = useRef(0);
   const selectedJobIdRef = useRef(null);
@@ -143,15 +145,23 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return tracker ? tracker.track(operation, task) : task();
   }
 
+  /**
+   * Starts a request for one list of the open Job. The returned check fails after a Job switch,
+   * a close and reopen, or a newer request for the same list, so a late response is dropped.
+   */
+  function currentDetailRequest(jobId, requestCounter) {
+    const epoch = selectedJobEpochRef.current;
+    const requestId = ++requestCounter.current;
+    return () => selectedJobIdRef.current === jobId
+      && selectedJobEpochRef.current === epoch && requestCounter.current === requestId;
+  }
+
   async function refreshOffers() {
     if (!selectedJob || selectedJobIdRef.current !== selectedJob.id) {
       return;
     }
     const jobId = selectedJob.id;
-    const epoch = selectedJobEpochRef.current;
-    const requestId = ++offersRequestId.current;
-    const isCurrent = () => selectedJobIdRef.current === jobId
-      && selectedJobEpochRef.current === epoch && offersRequestId.current === requestId;
+    const isCurrent = currentDetailRequest(jobId, offersRequestId);
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -170,9 +180,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
   }
 
   async function refreshIssues() {
-    if (!selectedJob) {
+    if (!selectedJob || selectedJobIdRef.current !== selectedJob.id) {
       return;
     }
+    const jobId = selectedJob.id;
+    const isCurrent = currentDetailRequest(jobId, issuesRequestId);
 
     setDetailData((currentData) => ({
       ...currentData,
@@ -181,17 +193,22 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }));
 
     try {
-      const issues = await loadDetailOperation("issues", () => getJobIssues(selectedJob.id));
-      setDetailData((currentData) => ({ ...currentData, issues }));
+      const issues = await loadDetailOperation("issues", () => getJobIssues(jobId));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, issues }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasIssuesError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasIssuesError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingIssues: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingIssues: false }));
     }
   }
 
   async function refreshAssignments(job = selectedJob) {
-    if (!job || !isAssignmentAwareJob(job)) {
+    if (!job || selectedJobIdRef.current !== job.id) {
+      return;
+    }
+    const isCurrent = currentDetailRequest(job.id, assignmentsRequestId);
+
+    if (!isAssignmentAwareJob(job)) {
       setDetailData((currentData) => ({ ...currentData, assignments: [] }));
       return;
     }
@@ -204,11 +221,11 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     try {
       const assignments = await loadDetailOperation("assignments", () => getJobAssignments(job.id));
-      setDetailData((currentData) => ({ ...currentData, assignments }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, assignments }));
     } catch {
-      setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, hasAssignmentsError: true }));
     } finally {
-      setDetailData((currentData) => ({ ...currentData, isLoadingAssignments: false }));
+      if (isCurrent()) setDetailData((currentData) => ({ ...currentData, isLoadingAssignments: false }));
     }
   }
 
