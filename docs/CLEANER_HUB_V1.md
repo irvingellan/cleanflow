@@ -67,15 +67,17 @@ Manager UI (unchanged services)            Cleaner Hub UI (/agenda, own Firebase
             │                                 │  callables: redeem / openMyChecklist / respondToMyOffer
             ▼                                 ▼
 Firestore source of truth ──triggers──► syncCleanerAgendaForJob (one transaction)
-  jobs/{id}, assignments, offers               │ writes cleaner-safe entries + notices
+  jobs/{id}, assignments, offers               │ writes cleaner-safe agenda entries
                                                 ▼
                                 organizations/{org}/cleanerAgenda/{cleanerId}__{jobId}
 ```
 
-- `functions/src/cleanerAgenda.js` — pure projection (`computeAgendaEntries`,
-  `planAgendaChanges`) plus `syncCleanerAgendaForJob` (reads Job, Offers, active
-  Assignments and the linked Property in one transaction) and
-  `rebuildCleanerAgenda` (backfill when a cleaner links).
+- `functions/src/cleanerAgenda.js` — pure projection (`computeAgendaEntries`),
+  `syncCleanerAgendaForJob` (reads current source records in one transaction)
+  and `rebuildCleanerAgenda` (repairs the agenda when a cleaner links a device).
+  The rebuild refreshes open work, live offers and completed history within
+  45 days, with up to five Jobs at a time. Completed history uses the service
+  date and falls back to the completion date when the service date is absent.
 - Roster rule = checklist capability rule: `assignedCleanerIds` for schema ≥ 2,
   legacy `assignedCleanerId` while ASSIGNED/IN_PROGRESS/COMPLETED. Archived = cancelled.
 - Offer rule = public Offer rule (`publicOfferState(...) === "available"`) and status
@@ -201,8 +203,8 @@ legitimate operational actions.
 
 ## Known limits
 
-- Completed entries appear in the recent 30-day window. Older change notices
-  remain in the projection after removal of the recent changes section.
+- Completed entries appear in the recent 30-day window. Existing change notices
+  remain stored. New operational notices are delivered through the cleaner inbox.
 - Existing agenda entries receive new fields at the next projection or
   link-time rebuild. Editing only the Property refreshes the address at the
   next Job, Offer, Assignment or checklist projection.

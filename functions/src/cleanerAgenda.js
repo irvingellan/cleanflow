@@ -6,6 +6,7 @@ import { publicOfferState } from "./publicOfferResponseService.js";
 import { automaticOfferBatchVersion, FIRST_ACCEPT_WINS, isAutomaticOfferJob } from "./firstAcceptWins.js";
 import { currentManualReplacementOffer } from "./managerManualReplacementOfferService.js";
 import { projectCleanerReschedule, rosterScheduleConfirmation } from "./rescheduleConfirmations.js";
+import { addCalendarDays, localDateKey } from "./managerReminders.js";
 import { normalizeServiceType } from "./serviceTypes.js";
 
 /**
@@ -21,13 +22,6 @@ import { normalizeServiceType } from "./serviceTypes.js";
 
 export const cleanerAgendaCollection = "cleanerAgenda";
 export const agendaKinds = Object.freeze({ assigned: "ASSIGNED", offer: "OFFER", change: "CHANGE" });
-export const agendaChanges = Object.freeze({
-  assigned: "ASSIGNED",
-  rescheduled: "RESCHEDULED",
-  unassigned: "UNASSIGNED",
-  cancelled: "CANCELLED",
-});
-
 const assignedStatuses = ["ASSIGNED", "IN_PROGRESS", "COMPLETED"];
 const visibleOfferStatuses = ["PENDING", "INTERESTED"];
 
@@ -80,6 +74,7 @@ function baseEntry(organizationId, jobId, cleanerId, job) {
     jobId,
     jobStatus: typeof job.operationalStatus === "string" ? job.operationalStatus : "UNKNOWN",
     scheduledDate: dateKey(job.scheduledDate),
+    ...(job.operationalStatus === "COMPLETED" && job.scheduledDate == null && { completedDate: completionDate(job) }),
     scheduledStart: timeKey(job.scheduledStart),
     propertyName: text(job.propertyName),
     scheduleRevision: revision(job.scheduleRevision),
@@ -201,7 +196,7 @@ export function agendaEntryId(cleanerId, jobId) {
 }
 
 const comparedFields = [
-  "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart",
+  "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart", "completedDate",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offeredFirstSlotExtraCents", "offeredPayEstimated", "offerExpiresAtMs",
   "offerDistributionMode", "confirmationMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType", "address", "notes",
 ];
@@ -212,60 +207,13 @@ export function sameEntry(previous, next) {
     && comparedFields.every((field) => (previous[field] ?? null) === (next[field] ?? null));
 }
 
-/**
- * Change notices the cleaner keeps after a Job leaves or moves on her agenda.
- * Removed/cancelled notices carry no Job ID, so the Job itself stays private.
- */
-export function planAgendaChanges(previousEntries, nextEntries, { job, suppressNotices = false }) {
-  if (suppressNotices) return [];
-  const changes = [];
-  for (const [cleanerId, previous] of previousEntries) {
-    if (previous.kind !== agendaKinds.assigned) continue;
-    const next = nextEntries.get(cleanerId);
-    if (!next || next.kind !== agendaKinds.assigned) {
-      changes.push({
-        cleanerId,
-        change: !job || job.archivedAt ? agendaChanges.cancelled : agendaChanges.unassigned,
-        propertyName: previous.propertyName ?? null,
-        from: { date: previous.scheduledDate ?? null, start: previous.scheduledStart ?? null },
-        to: null,
-        openJobId: null,
-      });
-    } else if (previous.scheduledDate !== next.scheduledDate || (previous.scheduledStart ?? null) !== (next.scheduledStart ?? null)) {
-      changes.push({
-        cleanerId,
-        change: agendaChanges.rescheduled,
-        propertyName: next.propertyName,
-        from: { date: previous.scheduledDate ?? null, start: previous.scheduledStart ?? null },
-        to: { date: next.scheduledDate, start: next.scheduledStart },
-        openJobId: next.jobId,
-      });
-    }
-  }
-  for (const [cleanerId, next] of nextEntries) {
-    const previous = previousEntries.get(cleanerId);
-    if (next.kind === agendaKinds.assigned && previous?.kind !== agendaKinds.assigned) {
-      changes.push({
-        cleanerId,
-        change: agendaChanges.assigned,
-        propertyName: next.propertyName,
-        from: null,
-        to: { date: next.scheduledDate, start: next.scheduledStart },
-        openJobId: next.jobId,
-      });
-    }
-  }
-  return changes;
-}
-
 /** Re-derives every cleaner entry for one Job from current source records. */
 export async function syncCleanerAgendaForJob(database, {
   organizationId,
   jobId,
   now = () => new Date(),
-  suppressNotices = false,
 }) {
-  if (!validId(organizationId) || !validId(jobId)) return { written: 0, deleted: 0, changes: 0 };
+  if (!validId(organizationId) || !validId(jobId)) return { written: 0, deleted: 0 };
   const organization = database.collection("organizations").doc(organizationId);
   const jobRef = organization.collection("jobs").doc(jobId);
   const agenda = organization.collection(cleanerAgendaCollection);
@@ -330,23 +278,30 @@ export async function syncCleanerAgendaForJob(database, {
       transaction.delete(reference);
       deleted += 1;
     }
-    const changes = planAgendaChanges(previous, next, { job, suppressNotices });
-    for (const change of changes) {
-      transaction.set(agenda.doc(), {
-        organizationId,
-        cleanerId: change.cleanerId,
-        kind: agendaKinds.change,
-        change: change.change,
-        propertyName: change.propertyName,
-        from: change.from,
-        to: change.to,
-        openJobId: change.openJobId,
-        atMs: current.getTime(),
-        at: FieldValue.serverTimestamp(),
-      });
-    }
-    return { written, deleted, changes: changes.length };
+    return { written, deleted };
   });
+}
+
+const completedRebuildDays = 45;
+const rebuildConcurrency = 5;
+
+function completionDate(data) {
+  const completed = data.completedAt?.toDate?.() ?? data.completedAt;
+  return completed instanceof Date && Number.isFinite(completed.getTime()) ? localDateKey(completed) : null;
+}
+
+function withinRebuildWindow(data, status, cutoff) {
+  if (status !== "COMPLETED") return true;
+  const date = data.scheduledDate == null ? (data.completedDate ?? completionDate(data)) : dateKey(data.scheduledDate);
+  return date == null || date >= cutoff;
+}
+
+async function inRebuildBatches(items, task) {
+  for (let offset = 0; offset < items.length; offset += rebuildConcurrency) {
+    const results = await Promise.allSettled(items.slice(offset, offset + rebuildConcurrency).map(task));
+    const failed = results.find(result => result.status === "rejected");
+    if (failed) throw failed.reason;
+  }
 }
 
 /**
@@ -357,25 +312,43 @@ export async function rebuildCleanerAgenda(database, { organizationId, cleanerId
   if (!validId(organizationId) || !validId(cleanerId)) return { jobs: 0 };
   const organization = database.collection("organizations").doc(organizationId);
   const jobs = organization.collection("jobs");
-  const [rosterSnapshot, legacySnapshot, openSnapshot, existingSnapshot] = await Promise.all([
+  const current = now();
+  const cutoff = addCalendarDays(localDateKey(current), -completedRebuildDays);
+  const [rosterSnapshot, legacySnapshot, openSnapshot, replacementSnapshot, existingSnapshot] = await Promise.all([
     jobs.where("assignedCleanerIds", "array-contains", cleanerId).get(),
     jobs.where("assignedCleanerId", "==", cleanerId).get(),
     jobs.where("operationalStatus", "in", ["OFFERED", "ASSIGNED"]).get(),
+    jobs.where("manualReplacementOffer.cleanerId", "==", cleanerId).get(),
     organization.collection(cleanerAgendaCollection).where("cleanerId", "==", cleanerId).get(),
   ]);
-  const jobIds = new Set([
-    ...rosterSnapshot.docs.map((snapshot) => snapshot.id),
-    ...legacySnapshot.docs.map((snapshot) => snapshot.id),
-    ...existingSnapshot.docs.map((snapshot) => snapshot.data().jobId).filter(validId),
-  ]);
-  const offerReads = await Promise.all(openSnapshot.docs.map((snapshot) => (
-    snapshot.ref.collection("offers").doc(cleanerId).get()
-  )));
-  offerReads.forEach((offer, index) => {
-    if (offer.exists) jobIds.add(openSnapshot.docs[index].id);
+  const rosterJobs = [...rosterSnapshot.docs, ...legacySnapshot.docs].filter(snapshot => {
+    const job = snapshot.data();
+    return withinRebuildWindow(job, job.operationalStatus, cutoff);
   });
-  for (const jobId of jobIds) {
-    await syncCleanerAgendaForJob(database, { organizationId, jobId, now, suppressNotices: true });
-  }
+  const existingJobs = existingSnapshot.docs.map(snapshot => snapshot.data())
+    .filter(entry => entry.kind !== agendaKinds.change && withinRebuildWindow(entry, entry.jobStatus, cutoff))
+    .map(entry => entry.jobId).filter(validId);
+  const jobIds = new Set([...rosterJobs.map(snapshot => snapshot.id), ...existingJobs]);
+  const offerJobs = new Map([...openSnapshot.docs, ...replacementSnapshot.docs].map(snapshot => [snapshot.id, snapshot]));
+  await inRebuildBatches([...offerJobs.values()].filter(snapshot => !jobIds.has(snapshot.id)), async snapshot => {
+    const job = snapshot.data();
+    if (job.archivedAt) return;
+    const offers = snapshot.ref.collection("offers");
+    const replacement = job.manualReplacementOffer;
+    if (replacement?.cleanerId === cleanerId && validId(replacement.offerId)) {
+      const document = await offers.doc(replacement.offerId).get();
+      const offer = document.data();
+      if (visibleOfferStatuses.includes(offer?.status) && currentManualReplacementOffer(job, offer, document.id, current)) {
+        jobIds.add(snapshot.id);
+        return;
+      }
+    }
+    if (!["OFFERED", "ASSIGNED"].includes(job.operationalStatus)) return;
+    const document = await offers.doc(cleanerId).get();
+    const offer = document.data();
+    if (offer?.cleanerId !== cleanerId || !visibleOfferStatuses.includes(offer.status)) return;
+    if (["available", "already-taken"].includes(publicOfferState(offer, job, current))) jobIds.add(snapshot.id);
+  });
+  await inRebuildBatches([...jobIds], jobId => syncCleanerAgendaForJob(database, { organizationId, jobId, now }));
   return { jobs: jobIds.size };
 }

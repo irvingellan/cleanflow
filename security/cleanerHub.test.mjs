@@ -47,9 +47,9 @@ const {
   submitChecklistRunForReview,
 } = functionsIndex;
 const { addCalendarDays, localDateKey } = await import("../functions/src/managerReminders.js");
-const { syncCleanerAgendaForJob } = await import("../functions/src/cleanerAgenda.js");
+const { rebuildCleanerAgenda, syncCleanerAgendaForJob } = await import("../functions/src/cleanerAgenda.js");
 const { recordCleanerJobInboxEvents } = await import("../functions/src/cleanerNotificationEvents.js");
-const { cleanerAccountUid, hashCleanerAccessCode } = await import("../functions/src/cleanerHubAccess.js");
+const { cleanerAccountUid, hashCleanerAccessCode, normalizeCleanerAccessCode, redeemCleanerAccessCode: redeemAccessCode } = await import("../functions/src/cleanerHubAccess.js");
 
 const admin = getFirestore();
 const functionDatabase = createRequire(new URL("../functions/src/index.js", import.meta.url))(
@@ -444,6 +444,79 @@ test("complete agenda keeps more than seven assignments across months, including
   assert.deepEqual(remaining.map((entry) => entry.jobId).sort(), ids.slice(2).sort());
 });
 
+test("agenda rebuild bounds completed history and remains retry-safe", async () => {
+  const cleanerId = "cleaner-a";
+  const jobs = admin.collection(`${root}/jobs`);
+  const entries = admin.collection(`${root}/cleanerAgenda`);
+  const current = new Date();
+  const batch = admin.batch();
+  for (let index = 0; index < 200; index++) {
+    batch.set(jobs.doc(`historical-${index}`), {
+      organizationId: org, schemaVersion: 2, assignedCleanerIds: [cleanerId],
+      operationalStatus: "COMPLETED",
+      ...(index ? { scheduledDate: dateKey(-46) } : {}),
+      completedAt: Timestamp.fromDate(index ? current : new Date(current.getTime() - 60 * 86400000)),
+    });
+  }
+  const expected = Array.from({ length: 10 }, (_, index) => `current-${index}`);
+  for (const [index, jobId] of expected.entries()) {
+    batch.set(jobs.doc(jobId), {
+      organizationId: org, schemaVersion: 2, assignedCleanerIds: [cleanerId],
+      operationalStatus: index === 0 ? "IN_PROGRESS" : "COMPLETED",
+      ...(index < 8 ? { scheduledDate: dateKey(index === 1 ? -45 : 0) } : {}),
+      ...(index === 8 ? { completedAt: Timestamp.fromDate(current) } : {}),
+    });
+  }
+  batch.set(entries.doc(`${cleanerId}__removed`), { organizationId: org, cleanerId, jobId: "removed", jobStatus: "ASSIGNED", kind: "ASSIGNED" });
+  batch.set(entries.doc("existing-change"), { organizationId: org, cleanerId, kind: "CHANGE" });
+  await batch.commit();
+
+  const { code } = await issueCleanerAccessCode.run(managerRequest({ cleanerId }));
+  const accessCode = admin.doc(`cleanerAccessCodes/${hashCleanerAccessCode(normalizeCleanerAccessCode(code))}`);
+  await assert.rejects(redeemAccessCode(admin, {
+    input: code, auth: { createCustomToken: async () => "synthetic-token" },
+    rebuild: async () => { throw new Error("Synthetic rebuild failure."); }, logger: { warn() {} },
+  }), { code: "unavailable" });
+  assert.equal((await accessCode.get()).data().status, "ACTIVE");
+
+  let active = 0;
+  let peak = 0;
+  let transactionReads = 0;
+  let firstAttemptReads = 0;
+  const measured = {
+    collection: functionDatabase.collection.bind(functionDatabase),
+    runTransaction: async (task) => {
+      peak = Math.max(peak, ++active);
+      let attempt = 0;
+      try {
+        return await functionDatabase.runTransaction(transaction => {
+          const firstAttempt = ++attempt === 1;
+          return task({
+            get: reference => {
+              transactionReads++;
+              if (firstAttempt) firstAttemptReads++;
+              return transaction.get(reference);
+            },
+            set: (...args) => transaction.set(...args),
+            delete: (...args) => transaction.delete(...args),
+          });
+        });
+      } finally { active--; }
+    },
+  };
+  const result = await rebuildCleanerAgenda(measured, { organizationId: org, cleanerId, now: () => current });
+  console.info("Agenda rebuild fixture", { jobs: result.jobs, firstAttemptReads, transactionReads, peak });
+  assert.equal(result.jobs, 11);
+  assert.equal(firstAttemptReads, 77);
+  assert.equal(peak, 5);
+  assert.deepEqual((await agendaFor(cleanerId)).filter(entry => entry.kind === "ASSIGNED").map(entry => entry.jobId).sort(), expected.sort());
+  assert.equal((await entries.doc("existing-change").get()).exists, true);
+  const signedIn = await redeemCleanerAccessCode.run({ data: { code } });
+  assert.ok(signedIn.token);
+  assert.equal((await accessCode.get()).data().status, "USED");
+  await assert.rejects(redeemCleanerAccessCode.run({ data: { code } }), { code: "failed-precondition" });
+});
+
 test("cross-organization: a cleaner of one organization reads nothing in another", async () => {
   await link("cleaner-a");
   const otherJob = admin.doc("organizations/other-org/jobs/other-job");
@@ -467,18 +540,19 @@ test("cross-organization: a cleaner of one organization reads nothing in another
   await assert.rejects(issueCleanerAccessCode.run({ auth: { uid: "other-manager", token: { firebase: { sign_in_provider: "password" } } }, data: { cleanerId: "cleaner-a" } }), { code: "permission-denied" });
 });
 
-test("reschedule and roster removal through existing manager paths update the agenda and leave honest notices", async () => {
+test("reschedule and roster removal update the agenda", async () => {
   await createJob("job-a");
   await link("cleaner-a");
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-a", cleanerId: "cleaner-a" }));
   await sync("job-a");
+  const initialJob = (await admin.doc(`${root}/jobs/job-a`).get()).data();
   await rescheduleJob.run(managerRequest({ jobId: "job-a", scheduledDate: dateKey(4), scheduledStart: "13:00" }));
   await sync("job-a");
   let agenda = await agendaFor("cleaner-a");
   const entry = agenda.find((item) => item.kind === "ASSIGNED");
   assert.deepEqual([entry.scheduledDate, entry.scheduledStart, entry.scheduleRevision], [dateKey(4), "13:00", 1]);
-  const moved = agenda.find((item) => item.change === "RESCHEDULED");
-  assert.deepEqual([moved.from, moved.to, moved.openJobId], [{ date: dateKey(3), start: "10:30" }, { date: dateKey(4), start: "13:00" }, "job-a"]);
+  assert.equal(agenda.length, 1);
+  assert.equal(entry.reschedule.previousScheduledDate, initialJob.scheduledDate);
 
   // Same writes the manager browser makes in assignmentService.removeAssignment, under real rules.
   const managerDb = environment.authenticatedContext("manager", { firebase: { sign_in_provider: "password" } }).firestore();
@@ -491,19 +565,17 @@ test("reschedule and roster removal through existing manager paths update the ag
   await sync("job-a");
   agenda = await agendaFor("cleaner-a");
   assert.equal(agenda.filter((item) => item.kind !== "CHANGE").length, 0);
-  const removed = agenda.find((item) => item.change === "UNASSIGNED");
-  assert.equal(removed.openJobId, null);
-  assert.equal(removed.jobId, undefined);
+  assert.equal(agenda.length, 0);
   await assertFails(cleanerDb(uidA).doc(`${root}/cleanerAgenda/cleaner-a__job-a`).get());
 
-  // Archive (cancellation) after re-assignment produces a CANCELLED notice.
+  // Archive after re-assignment also removes the projection.
   await assignCleanerDirectly.run(managerRequest({ jobId: "job-a", cleanerId: "cleaner-a" }));
   await sync("job-a");
   await admin.doc(`${root}/jobs/job-a`).update({ archivedAt: Timestamp.now(), archivedBy: "manager" });
   await sync("job-a");
   agenda = await agendaFor("cleaner-a");
   assert.equal(agenda.filter((item) => item.kind !== "CHANGE").length, 0);
-  assert.ok(agenda.some((item) => item.change === "CANCELLED"));
+  assert.equal(agenda.length, 0);
 });
 
 test("a single manual invitation keeps the historical interest and manager assignment flow", async () => {
