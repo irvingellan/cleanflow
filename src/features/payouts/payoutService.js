@@ -13,7 +13,7 @@ import { serverFirestore, withReadDeadline } from "../../services/firebase/serve
 import { isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
 import { enrichPayoutAgreements, jobWithPayoutAgreementsInTransaction } from "./payoutAgreements.js";
-import { missingAgreementReview, payoutNeedsHoursReview, unpaidPayoutShares } from "./payoutShares.js";
+import { missingAgreementReview, payoutNeedsHoursReview, payoutSettledOnJobRecord, unpaidPayoutShares } from "./payoutShares.js";
 
 const organizationId = "cleanflow-demo";
 const allowedPaymentMethods = ["ZELLE", "VENMO", "CASH", "CHECK", "OTHER"];
@@ -60,7 +60,9 @@ export async function getUnpaidCompletedJobs({ includePendingHours = false } = {
 
   // Legacy Jobs have no payout marker. Keep them eligible until a manager explicitly
   // records a payout; some also have no completedAt, so do not order them out of the query.
-  const candidates = snapshot.docs.map(jobFromSnapshot).filter(job => !job.archivedAt && !job.payoutId && !job.payoutPaidAt);
+  // A team Job whose whole roster is already paid needs no agreement reads: nothing can be owed on it.
+  const candidates = snapshot.docs.map(jobFromSnapshot)
+    .filter(job => !job.archivedAt && !job.payoutId && !job.payoutPaidAt && !payoutSettledOnJobRecord(job));
   const jobs = await enrichPayoutAgreements(candidates, { organizationId });
   return jobs.filter(job => job.operationalStatus === "COMPLETED" &&
     (unpaidPayoutShares(job).length > 0 || (includePendingHours && (payoutNeedsHoursReview(job) || missingAgreementReview(job)))))
