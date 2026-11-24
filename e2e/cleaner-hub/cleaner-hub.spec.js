@@ -173,7 +173,9 @@ test("cleaner sees her own real assignments, live, and nothing else", async ({ p
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Jobs" }).click();
     await page.getByRole("button", { name: new RegExp(fixture.mapleName) }).first().click();
     await page.locator(".job-intents__secondary > summary").click();
-    await page.locator(".job-intents__actions").getByRole("button", { name: /Change date \/ time/ }).click();
+    const scheduleAction = page.getByRole("button", { name: "Choose intention: Change date / time" });
+    await expect(scheduleAction).toBeEnabled();
+    await scheduleAction.click();
     const schedule = page.getByRole("region", { name: "Change date / time" });
     await schedule.getByLabel("Scheduled date").fill(movedDate);
     await schedule.getByLabel("Scheduled time").fill("13:00");
