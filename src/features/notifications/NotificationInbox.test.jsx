@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from "./NotificationInbox.jsx";
@@ -17,6 +17,24 @@ function Example({ sessionKey = "session-a", service, onOpen }) {
 }
 
 describe("Notification Inbox", () => {
+  it("coalesces refreshes during the first page load and shows the new item", async () => {
+    let finishFirst;
+    let finishNext;
+    const service = { list: vi.fn()
+      .mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { finishNext = resolve; })) };
+    const { result } = renderHook(() => useNotificationInbox({ role: "CLEANER", sessionKey: "test", service }));
+    act(() => {
+      for (let n = 0; n < 5; n++) void result.current.refresh();
+    });
+    expect(service.list).toHaveBeenCalledOnce();
+    await act(() => finishFirst({ items: [items[1]], unreadCount: 0 }));
+    expect(service.list).toHaveBeenCalledTimes(2);
+    await act(() => finishNext({ items, unreadCount: 1 }));
+    expect(result.current.items).toEqual(items);
+    expect(service.list).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     ["UNASSIGNED", "Serviço retirado da sua agenda"],
     ["CANCELLED", "Serviço cancelado"],
