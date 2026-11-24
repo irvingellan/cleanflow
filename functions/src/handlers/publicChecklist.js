@@ -1,4 +1,5 @@
 import { logger } from "firebase-functions";
+import { HttpsError } from "firebase-functions/v2/https";
 import {
   buildPublicChecklistPhotoUploadServerEvent,
   normalizePublicChecklistLoadDiagnostic,
@@ -14,11 +15,41 @@ import {
 import {
   downloadPublicChecklistEvidence,
   loadPublicChecklistEvidenceView,
+  resolveActiveCapability,
   uploadPublicChecklistEvidence,
 } from "../checklistEvidenceService.js";
 import { removePublicChecklistEvidence } from "../checklistMultiPhotoService.js";
 import { db, organizationId } from "../runtime/firebase.js";
 import { configureResponse, hashToken, sendPublicError, validToken } from "../runtime/publicHttp.js";
+
+function writeDiagnostic(level, message, fields) {
+  try { logger[level](message, fields); }
+  catch { /* Diagnostics are best effort. */ }
+}
+
+const diagnosticActions = {
+  LOAD_DIAGNOSTIC: ["Public checklist load diagnostic.", normalizePublicChecklistLoadDiagnostic],
+  PHOTO_UPLOAD_DIAGNOSTIC: ["Public checklist photo upload diagnostic.", normalizePublicChecklistPhotoUploadDiagnostic],
+};
+
+async function recordClientDiagnostic(request, response) {
+  const { token, action, diagnostic } = request.body;
+  const [message, normalize] = diagnosticActions[action];
+  let event;
+  try {
+    if (validToken(token)) event = normalize(diagnostic, request.get("user-agent") || "");
+  } catch { /* Unreadable events are discarded. */ }
+  if (event) {
+    try {
+      await resolveActiveCapability(db, { organizationId, tokenHash: hashToken(token), now: new Date() });
+      writeDiagnostic("info", message, event);
+    } catch (error) {
+      if (!(error instanceof HttpsError)) writeDiagnostic("error", "Unable to record public checklist diagnostic.", {});
+    }
+  }
+  configureResponse(response);
+  response.status(204).end();
+}
 
 function publicChecklistPhotoErrorCategory(error, stage) {
   if (stage === "storage-write") return "storage_write_failed";
@@ -46,26 +77,18 @@ export async function publicChecklist(request, response) {
     sendPublicError(response, 405, "method_not_allowed");
     return;
   }
+  const action = request.body?.action;
+  if (request.method === "POST" && typeof action === "string" && Object.hasOwn(diagnosticActions, action)) {
+    await recordClientDiagnostic(request, response);
+    return;
+  }
   let requestStage = "capability-resolution";
   let capabilityStartedAt = null;
   let capabilityDiagnostics = null;
   let photoUploadStartedAt = null;
   let photoUploadContext = null;
+  let photoCapabilityResolved = false;
   try {
-    if (request.method === "POST" && request.body?.action === "PHOTO_UPLOAD_DIAGNOSTIC") {
-      const diagnostic = normalizePublicChecklistPhotoUploadDiagnostic(
-        request.body?.diagnostic,
-        request.get("user-agent") || "",
-      );
-      if (!diagnostic) {
-        sendPublicError(response, 400, "invalid_diagnostic");
-        return;
-      }
-      logger.info("Public checklist photo upload diagnostic.", diagnostic);
-      configureResponse(response);
-      response.status(204).end();
-      return;
-    }
     if (request.method === "PUT") {
       requestStage = "evidence-upload";
       photoUploadStartedAt = Date.now();
@@ -76,38 +99,12 @@ export async function publicChecklist(request, response) {
         sizeBucket: publicChecklistPhotoSizeBucket(request.rawBody?.length),
       };
     }
-    if (request.method === "POST" && request.body?.action === "LOAD_DIAGNOSTIC") {
-      const diagnostic = normalizePublicChecklistLoadDiagnostic(
-        request.body?.diagnostic,
-        request.get("user-agent") || "",
-      );
-      if (!diagnostic) {
-        sendPublicError(response, 400, "invalid_diagnostic");
-        return;
-      }
-      logger.info("Public checklist load diagnostic.", diagnostic);
-      configureResponse(response);
-      response.status(204).end();
-      return;
-    }
-
     const token = ["GET", "PUT"].includes(request.method) ? request.query.token : request.body?.token;
     if (!validToken(token)) {
-      if (request.method === "PUT" && photoUploadContext && photoUploadStartedAt !== null) {
-        logger.info("Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
-          ...photoUploadContext,
-          result: "error",
-          durationMs: Date.now() - photoUploadStartedAt,
-          stage: "server-validation",
-          errorCode: "capability_unavailable",
-          validationReason: "capability_unavailable",
-        }, request.get("user-agent") || ""));
-      }
       sendPublicError(response, 404, "checklist_not_found");
       return;
     }
     if (request.method === "POST") {
-      const action = request.body?.action;
       if (action === "REMOVE_EVIDENCE") {
         requestStage = "evidence-remove";
         const result = await removePublicChecklistEvidence(db, {
@@ -147,8 +144,9 @@ export async function publicChecklist(request, response) {
         requirementId: request.get("X-CleanFlow-Checklist-Item"),
         contentType: request.get("Content-Type")?.split(";")[0]?.trim().toLowerCase(),
         bytes: request.rawBody,
+        onCapabilityResolved: () => { photoCapabilityResolved = true; },
       });
-      logger.info("Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
+      writeDiagnostic("info", "Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
         ...photoUploadContext,
         result: "success",
         durationMs: Date.now() - photoUploadStartedAt,
@@ -193,7 +191,7 @@ export async function publicChecklist(request, response) {
         evidenceResult: "loaded",
       };
       const sessionId = request.get("X-CleanFlow-Checklist-Session");
-      logger.info("Public checklist backend load completed.", {
+      writeDiagnostic("info", "Public checklist backend load completed.", {
         sessionId: /^[A-Fa-f0-9]{36}$/.test(sessionId || "") ? sessionId : null,
         result: "success",
         ...diagnostics,
@@ -207,21 +205,18 @@ export async function publicChecklist(request, response) {
       errorStage: requestStage,
       errorCode: result.state === "not-found" ? "checklist_not_found" : "checklist_unavailable",
     };
-    const sessionId = request.get("X-CleanFlow-Checklist-Session");
-    logger.info("Public checklist backend load completed.", {
-      sessionId: /^[A-Fa-f0-9]{36}$/.test(sessionId || "") ? sessionId : null,
-      result: "error",
-      ...diagnostics,
-    });
     const status = result.state === "expired" || result.state === "revoked" || result.state === "stale"
       ? 410
       : 404;
     sendPublicError(response, status, status === 410 ? "checklist_unavailable" : "checklist_not_found", diagnostics);
   } catch (error) {
-    if (requestStage === "evidence-upload" && photoUploadContext && photoUploadStartedAt !== null) {
+    const serverFailure = !(error instanceof HttpsError)
+      || ["internal", "unavailable", "deadline-exceeded", "aborted", "resource-exhausted"].includes(error.code);
+    if (photoCapabilityResolved && error?.checklistPhotoValidationReason !== "capability_unavailable"
+      && (error?.code !== "failed-precondition" || error?.checklistPhotoValidationReason)) {
       const diagnosticStage = ["server-validation", "storage-write", "metadata-write"].includes(error?.checklistPhotoDiagnosticStage)
         ? error.checklistPhotoDiagnosticStage : "unknown";
-      logger.info("Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
+      writeDiagnostic("info", "Public checklist photo upload diagnostic.", buildPublicChecklistPhotoUploadServerEvent({
         ...photoUploadContext,
         result: "error",
         durationMs: Date.now() - photoUploadStartedAt,
@@ -230,7 +225,6 @@ export async function publicChecklist(request, response) {
         validationReason: error?.checklistPhotoValidationReason,
       }, request.get("user-agent") || ""));
     }
-    const sessionId = request.get("X-CleanFlow-Checklist-Session");
     const errorCode = ["invalid-argument", "not-found", "failed-precondition", "already-exists", "aborted", "resource-exhausted", "unavailable", "deadline-exceeded"].includes(error?.code)
       ? error.code : "internal";
     const diagnostics = {
@@ -242,11 +236,7 @@ export async function publicChecklist(request, response) {
       errorStage: requestStage,
       errorCode,
     };
-    logger.error("Unable to process public checklist request.", {
-      sessionId: /^[A-Fa-f0-9]{36}$/.test(sessionId || "") ? sessionId : null,
-      stage: requestStage,
-      code: errorCode,
-    });
+    if (serverFailure) writeDiagnostic("error", "Unable to process public checklist request.", { stage: requestStage, code: errorCode });
     const hasRequirementGaps = error?.details?.reason === "checklist-requirements-missing";
     const requirements = hasRequirementGaps ? {
       missingChecklistCount: error.details.missingChecklistCount,

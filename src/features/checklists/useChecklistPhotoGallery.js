@@ -19,14 +19,14 @@ const optimizationDiagnosticCodes = {
   checklist_photo_optimization_timeout: "timeout",
 };
 /** A photo rejected on the phone never reaches the server, so report why. */
-function reportOptimizationFailure(file, error, startedAt) {
+function reportOptimizationFailure(file, error, startedAt, token) {
   if (error?.code === "checklist_photo_optimization_cancelled") return;
   recordPublicChecklistPhotoUploadDiagnostic(buildPublicChecklistPhotoUploadDiagnostic({
     sessionId: getPublicChecklistSessionId(), requestId: createPublicChecklistDiagnosticId(), result: "error",
     durationMs: Date.now() - startedAt, fileType: publicChecklistPhotoFileType(file?.type),
     sizeBucket: publicChecklistPhotoSizeBucket(file?.size), stage: "preflight",
     errorCode: optimizationDiagnosticCodes[error?.code] || "invalid_file",
-  }));
+  }), token);
 }
 function pause(milliseconds, signal) {
   return new Promise((resolve) => {
@@ -96,7 +96,7 @@ export function useChecklistPhotoGallery({ token, checklist, disabled = false, o
             const startedAt = Date.now();
             let optimized;
             try { optimized = await options.current.optimize(item.file, { signal: current.controller.signal }); }
-            catch (error) { options.current.reportFailure(item.file, error, startedAt); throw error; }
+            catch (error) { options.current.reportFailure(item.file, error, startedAt, current.token); throw error; }
             if (scope.current !== current || current.disposed) return;
             if (!(optimized.blob instanceof Blob)) throw { code: "checklist_photo_invalid_image" };
             if (retainedBytes(current) + optimized.blob.size > retainedByteLimit) throw { code: "checklist_photo_queue_limit" };

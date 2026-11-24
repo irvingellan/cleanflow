@@ -132,15 +132,15 @@ export function buildPublicChecklistPhotoUploadDiagnostic({
 }
 
 /** Fire-and-forget diagnostic; it contains no capability token or checklist data. */
-export function recordPublicChecklistLoadDiagnostic(event, fetcher = globalThis.fetch) {
-  if (typeof fetcher !== "function") return;
+export function recordPublicChecklistLoadDiagnostic(event, token, fetcher = globalThis.fetch) {
+  if (!token || typeof fetcher !== "function") return;
   try {
     void fetcher(diagnosticPath, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       credentials: "omit",
       keepalive: true,
-      body: JSON.stringify({ action: "LOAD_DIAGNOSTIC", diagnostic: event }),
+      body: JSON.stringify({ action: "LOAD_DIAGNOSTIC", diagnostic: event, token }),
     }).catch(() => undefined);
   } catch {
     // Diagnostics never affect the cleaner experience.
@@ -148,15 +148,15 @@ export function recordPublicChecklistLoadDiagnostic(event, fetcher = globalThis.
 }
 
 /** Fire-and-forget photo diagnostics; the event intentionally has no token or file data. */
-export function recordPublicChecklistPhotoUploadDiagnostic(event, fetcher = globalThis.fetch) {
-  if (typeof fetcher !== "function") return;
+export function recordPublicChecklistPhotoUploadDiagnostic(event, token, fetcher = globalThis.fetch) {
+  if (!token || typeof fetcher !== "function") return;
   try {
     void fetcher(diagnosticPath, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       credentials: "omit",
       keepalive: true,
-      body: JSON.stringify({ action: "PHOTO_UPLOAD_DIAGNOSTIC", diagnostic: event }),
+      body: JSON.stringify({ action: "PHOTO_UPLOAD_DIAGNOSTIC", diagnostic: event, token }),
     }).catch(() => undefined);
   } catch {
     // Diagnostics never affect the cleaner experience, especially while offline.

@@ -32,7 +32,7 @@ describe("public checklist photo diagnostics", () => {
     });
   });
 
-  it("sends a token-free fire-and-forget diagnostic and ignores transport failure", async () => {
+  it("sends a fire-and-forget diagnostic and ignores transport failure", async () => {
     const fetcher = vi.fn().mockRejectedValue(new TypeError("offline"));
     const event = buildPublicChecklistPhotoUploadDiagnostic({
       sessionId: "a".repeat(36), requestId: "b".repeat(36), result: "error", durationMs: 9,
@@ -40,14 +40,15 @@ describe("public checklist photo diagnostics", () => {
       client: { browser: "chrome", platform: "android", deviceClass: "mobile" },
     });
 
-    expect(recordPublicChecklistPhotoUploadDiagnostic(event, fetcher)).toBeUndefined();
+    expect(recordPublicChecklistPhotoUploadDiagnostic(event, "capability-token", fetcher)).toBeUndefined();
     expect(fetcher).toHaveBeenCalledWith("/api/public-checklist", expect.objectContaining({
       method: "POST", credentials: "omit", keepalive: true,
     }));
     const payload = JSON.parse(fetcher.mock.calls[0][1].body);
     expect(payload.action).toBe("PHOTO_UPLOAD_DIAGNOSTIC");
     expect(payload.diagnostic).toEqual(event);
-    expect(JSON.stringify(payload)).not.toContain("capability-token");
+    expect(payload.token).toBe("capability-token");
+    expect(JSON.stringify(payload.diagnostic)).not.toContain("capability-token");
     await Promise.resolve();
   });
 });

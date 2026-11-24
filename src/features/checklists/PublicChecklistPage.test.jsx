@@ -482,7 +482,8 @@ describe("PublicChecklistPage", () => {
       diagnostic: { result: "success", stage: "server-confirmed", fileType: "jpeg" },
     });
     expect(photoDiagnostic.diagnostic).not.toHaveProperty("preferredLanguage");
-    expect(JSON.stringify(photoDiagnostic)).not.toContain("opaque-capability-token");
+    expect(photoDiagnostic.token).toBe("opaque-capability-token");
+    expect(JSON.stringify(photoDiagnostic.diagnostic)).not.toContain("opaque-capability-token");
     expect(JSON.stringify(photoDiagnostic)).not.toContain("cleaning.jpg");
     expect(window.localStorage.getItem("cleanflow-language")).toBe("en");
   });
@@ -510,7 +511,8 @@ describe("PublicChecklistPage", () => {
     });
     expect(photoDiagnostic.diagnostic).not.toHaveProperty("preferredLanguage");
     expect(fetchMock.mock.calls.some(([, init]) => init.method === "PUT")).toBe(false);
-    expect(JSON.stringify(photoDiagnostic)).not.toContain("opaque-capability-token");
+    expect(photoDiagnostic.token).toBe("opaque-capability-token");
+    expect(JSON.stringify(photoDiagnostic.diagnostic)).not.toContain("opaque-capability-token");
     expect(JSON.stringify(photoDiagnostic)).not.toContain("photo.heic");
   });
 

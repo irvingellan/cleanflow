@@ -177,7 +177,8 @@ describe("public checklist requests", () => {
       { result: "error", stage: "request", errorCode: "server_rejected" },
       { result: "success", stage: "server-confirmed", errorCode: null },
     ]);
-    expect(JSON.stringify(photoDiagnostics)).not.toContain("opaque-token");
+    expect(photoDiagnostics.every(({ token }) => token === "opaque-token")).toBe(true);
+    expect(JSON.stringify(photoDiagnostics.map(({ diagnostic }) => diagnostic))).not.toContain("opaque-token");
     expect(JSON.stringify(photoDiagnostics)).not.toContain("photo.jpg");
   });
 
@@ -196,7 +197,7 @@ describe("public checklist requests", () => {
       action: "PHOTO_UPLOAD_DIAGNOSTIC",
       diagnostic: { result: "error", stage: "preflight", fileType: "heic", errorCode: "unsupported_type" },
     });
-    expect(init.body).not.toContain("opaque-token");
+    expect(JSON.parse(init.body).token).toBe("opaque-token");
     expect(init.body).not.toContain("camera.heic");
   });
 
@@ -229,7 +230,8 @@ describe("public checklist requests", () => {
     const payload = JSON.parse(diagnosticRequest[1].body);
     expect(payload.diagnostic).toMatchObject({ result: "success", stage: "server-confirmed" });
     expect(payload.diagnostic.requestId).toBe(fetchMock.mock.calls.find(([, init]) => init.method === "PUT")[1].headers["X-CleanFlow-Checklist-Request"]);
-    expect(JSON.stringify(payload)).not.toContain("opaque-token");
+    expect(payload.token).toBe("opaque-token");
+    expect(JSON.stringify(payload.diagnostic)).not.toContain("opaque-token");
     expect(JSON.stringify(payload)).not.toContain("not-logged.jpg");
     expect(JSON.stringify(payload)).not.toContain("living-belongings");
   });

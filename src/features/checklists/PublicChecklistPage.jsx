@@ -401,8 +401,8 @@ export function PublicChecklistPage({ token }) {
       errorCode: loadDiagnostics?.errorCode || loadError || null,
       client: publicChecklistClientClass(),
     });
-    recordPublicChecklistLoadDiagnostic(diagnostic);
-  }, [isLoading, loadDiagnostics, loadError]);
+    recordPublicChecklistLoadDiagnostic(diagnostic, token);
+  }, [isLoading, loadDiagnostics, loadError, token]);
 
   if (isLoading) {
     return <main className="public-offer-page checklist-public-page"><section className="panel"><StateCard message={translate("checklists.publicLoading")} status="status" /></section></main>;
