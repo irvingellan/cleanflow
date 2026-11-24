@@ -244,7 +244,8 @@ export async function uploadPublicChecklistEvidence({ token, requirementId, file
       }
       return result;
     }, publicChecklistUploadTimeoutMilliseconds);
-    if (!Array.isArray(body.evidence) || !body.evidence.some((saved) => saved.requirementId === requirementId
+    if (!Array.isArray(body.evidence) || !body.evidence.some((saved) => (saved.requirementId === requirementId
+      || (version === 2 && body.duplicate === true && requirementId === "additional" && saved.requirementId === "living-belongings"))
       && (version !== 2 || (typeof body.evidenceId === "string" && saved.evidenceId === body.evidenceId)))
       || (version === 2 && (!Number.isInteger(body.evidenceRevision) || body.evidenceRevision < 0))) {
       throw new PublicChecklistRequestError("checklist_response_invalid", undefined, null, "response-parse");

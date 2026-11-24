@@ -31,6 +31,67 @@ describe("sequential bounded photo gallery", () => {
     expect(calls).toBe(3);
     expect(result.current.local).toHaveLength(0);
   });
+  it.each([false, true])("fills the required slot in successful upload order (retry first: %s)", async (retryFirst) => {
+    const calls = [];
+    const accepted = [];
+    const upload = async ({ requirementId }) => {
+      calls.push(requirementId);
+      if (calls.length === 1 || (retryFirst && calls.length === 2)) throw new TypeError("offline");
+      const saved = photo(String(calls.length), requirementId);
+      accepted.push(saved);
+      return { evidenceId: saved.evidenceId, evidenceRevision: calls.length, evidence: [...accepted] };
+    };
+    const { result } = setup({ upload });
+    act(() => result.current.append(retryFirst ? [file(), file()] : [file()]));
+    await waitFor(() => expect(result.current.local.filter(item => item.state === "FAILED"))
+      .toHaveLength(retryFirst ? 2 : 1));
+    const firstId = result.current.local[0].id;
+    if (retryFirst) {
+      act(() => result.current.retryAll());
+    } else {
+      act(() => result.current.append([file()]));
+      await waitFor(() => expect(result.current.saved).toHaveLength(1));
+      act(() => result.current.retry(firstId));
+    }
+    await waitFor(() => expect(result.current.pendingCount).toBe(0));
+    expect(result.current.saved.map(item => item.requirementId)).toEqual(["living-belongings", "additional"]);
+    expect(calls).toEqual([...Array(retryFirst ? 3 : 2).fill("living-belongings"), "additional"]);
+  });
+
+  it("refreshes the saved slot after a conflict with an earlier lost receipt", async () => {
+    const required = photo("first", "living-belongings");
+    const extra = photo("second");
+    const upload = vi.fn()
+      .mockRejectedValueOnce(new TypeError("lost response"))
+      .mockRejectedValueOnce({ status: 409, code: "checklist_conflict" })
+      .mockResolvedValueOnce({ evidenceId: "second", evidenceRevision: 2, evidence: [required, extra] })
+      .mockResolvedValueOnce({ duplicate: true, evidenceId: "first", evidenceRevision: 2, evidence: [required, extra] });
+    const { result } = setup({ upload, refresh: async () => ({
+      checklist: { ...checklist, evidenceRevision: 1, evidence: [required] },
+    }) });
+    act(() => result.current.append([file()]));
+    await waitFor(() => expect(result.current.local[0]?.state).toBe("FAILED"));
+    act(() => result.current.append([file()]));
+    await waitFor(() => expect(result.current.saved).toEqual([required, extra]));
+    act(() => result.current.retryAll());
+    await waitFor(() => expect(result.current.pendingCount).toBe(0));
+    expect(upload.mock.calls.map(([request]) => request.requirementId)).toEqual([
+      "living-belongings", "living-belongings", "additional", "additional",
+    ]);
+  });
+
+  it("accepts large offline selections while bounding the optimized blobs retained for retry", async () => {
+    const blob = new Blob([new Uint8Array(5 * 1024 * 1024)]);
+    const optimize = vi.fn(async () => ({ blob }));
+    const upload = vi.fn(async () => { throw new TypeError("offline"); });
+    const { result } = setup({ optimize, upload });
+    const source = file(20 * 1024 * 1024);
+    act(() => result.current.append(Array(12).fill(source)));
+    await waitFor(() => expect(result.current.local.filter(item => item.state === "FAILED")).toHaveLength(12));
+    expect(optimize).toHaveBeenCalledTimes(10);
+    expect(upload).toHaveBeenCalledTimes(10);
+    expect(result.current.local.slice(10).map(item => item.error)).toEqual(Array(2).fill("checklist_photo_queue_limit"));
+  });
   it("stops retrying by itself when the server refuses the photo", async () => {
     const upload = vi.fn(async () => { throw Object.assign(new Error("full"), { code: "checklist_photo_limit" }); });
     const { result } = setup({ uploadRetryDelays: [0, 0], upload });
@@ -185,11 +246,13 @@ describe("sequential bounded photo gallery", () => {
 
   it("retries the exact optimized Blob after a lost response, reconciling one saved identity", async () => {
     const optimized = new Blob(["abc"], { type: "image/jpeg" }); const sent = []; let attempts = 0;
-    const { result } = setup({ optimize: async () => ({ blob: optimized }), upload: async ({ file: blob }) => { sent.push(blob); if (++attempts === 1) throw new TypeError("network"); return { duplicate: true, evidenceId: "accepted", evidenceRevision: 1, evidence: [photo("accepted", "living-belongings")] }; } });
+    const { result } = setup({ optimize: async () => ({ blob: optimized }), refresh: async () => ({ checklist: { ...checklist, evidenceRevision: 1, evidence: [photo("accepted", "living-belongings")] } }),
+      upload: async ({ file: blob, requirementId }) => { sent.push(blob); if (++attempts === 1) throw new TypeError("network"); expect(requirementId).toBe("additional"); return { duplicate: true, evidenceId: "accepted", evidenceRevision: 1, evidence: [photo("accepted", "living-belongings")] }; } });
     act(() => result.current.append([file()]));
     await waitFor(() => expect(result.current.local[0]?.state).toBe("FAILED"));
     const id = result.current.local[0].id;
     expect(result.current.pendingCount).toBe(1);
+    await act(async () => result.current.refreshSaved());
     act(() => result.current.retry(id));
     await waitFor(() => expect(result.current.pendingCount).toBe(0));
     expect(sent).toEqual([optimized, optimized]);

@@ -112,7 +112,7 @@ export async function uploadMultiPhotoEvidence(database, initial, options, image
     const content = previous.data();
     if (content?.status === "REMOVED") throw new HttpsError("failed-precondition", "This photo was removed. Choose another image.");
     if (content?.status === "SAVED") {
-      if (content.requirementId !== requirementId) throw new HttpsError("already-exists", "This photo is already saved for another purpose.");
+      if (requirementId !== "additional" && content.requirementId !== requirementId) throw new HttpsError("already-exists", "This photo is already saved for another purpose.");
       return { duplicate: true, evidenceId: content.evidenceId, evidenceRevision: state.revision || 0, evidence: projectChecklistEvidenceGallery(state.photos) };
     }
     if (state.pending.some(p => p.contentHash === image.contentHash && p.status === "RESERVED" && p.leaseExpiresAt > clock().getTime())) {
