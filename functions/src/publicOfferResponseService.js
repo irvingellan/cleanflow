@@ -264,7 +264,8 @@ async function respondToAutomaticOffer(transaction, {
   });
   if (isVersioned) {
     createAutomaticOfferConfirmationNotices(transaction, organizationReference, jobReference, {
-      ...notice, batchId: String(batch.reopenedAtContextRevision ?? batch.openingContextRevision), filled,
+      // A one-spot batch already reports its single confirmation; "all spots filled" would repeat it.
+      ...notice, batchId: String(batch.reopenedAtContextRevision ?? batch.openingContextRevision), filled: filled && batch.capacity > 1,
       cleanerName: offer.cleanerName, scheduledDate: job.scheduledDate, scheduledStart: job.scheduledStart,
     });
   } else {
