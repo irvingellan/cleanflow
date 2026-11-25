@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import jpeg from "jpeg-js";
-import { downscaleRgba, makeJpegThumbnail, thumbnailMaxEdge } from "./checklistThumbnail.js";
+import { makeJpegThumbnail } from "./checklistThumbnail.js";
 import { checklistThumbnailPath, downloadSavedChecklistEvidence } from "./checklistEvidenceService.js";
 
 function sampleJpeg(width = 1600, height = 1200) {
@@ -13,25 +13,30 @@ function sampleJpeg(width = 1600, height = 1200) {
 }
 
 describe("checklist thumbnails", () => {
-  it("makes a much smaller JPEG with the same orientation", () => {
-    const source = sampleJpeg();
-    const thumb = makeJpegThumbnail(source);
+  it("makes a much smaller valid JPEG from a 12 MP photo", async () => {
+    const source = sampleJpeg(4000, 3000);
+    const thumb = await makeJpegThumbnail(source);
+    expect(Buffer.isBuffer(thumb)).toBe(true);
     const decoded = jpeg.decode(thumb);
-    expect(decoded.width).toBe(thumbnailMaxEdge);
+    expect(decoded.width).toBe(360);
     expect(decoded.height).toBe(270);
     expect(thumb.length).toBeLessThan(source.length / 5);
   });
 
-  it("returns null for anything that is not a usable JPEG", () => {
-    expect(makeJpegThumbnail(Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]))).toBeNull();
-    expect(makeJpegThumbnail(Buffer.from([0xff, 0xd8, 0xff, 0x00, 0x00]))).toBeNull();
-    expect(makeJpegThumbnail(null)).toBeNull();
+  it("keeps working when a phone stores extra data after the JPEG", async () => {
+    const source = Buffer.concat([sampleJpeg(1600, 1200), Buffer.from("extra data stored after the image")]);
+    const thumb = await makeJpegThumbnail(source);
+    expect(jpeg.decode(thumb).width).toBe(360);
   });
 
-  it("averages pixels when shrinking", () => {
-    const image = { width: 2, height: 2, data: Buffer.from([0, 0, 0, 255, 200, 200, 200, 255, 0, 0, 0, 255, 200, 200, 200, 255]) };
-    const small = downscaleRgba(image, 1);
-    expect([...small.data]).toEqual([100, 100, 100, 255]);
+  it("returns null for a PNG, a truncated JPEG, a malformed JPEG and null", async () => {
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC", "base64");
+    const truncated = sampleJpeg(800, 600).subarray(0, -2);
+    const malformed = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    await expect(makeJpegThumbnail(png)).resolves.toBeNull();
+    await expect(makeJpegThumbnail(truncated)).resolves.toBeNull();
+    await expect(makeJpegThumbnail(malformed)).resolves.toBeNull();
+    await expect(makeJpegThumbnail(null)).resolves.toBeNull();
   });
 
   it("builds the thumbnail once, caches it and then serves the cached copy", async () => {

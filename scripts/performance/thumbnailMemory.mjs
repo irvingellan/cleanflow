@@ -36,7 +36,7 @@ let thumbnails = 0;
 const times = [];
 for (let index = 0; index < photos; index += 1) {
   const started = performance.now();
-  if (makeJpegThumbnail(source)) thumbnails += 1;
+  if (await makeJpegThumbnail(source)) thumbnails += 1;
   times.push(performance.now() - started);
   peakRss = Math.max(peakRss, process.memoryUsage().rss);
   await new Promise((resolve) => setTimeout(resolve, 0));

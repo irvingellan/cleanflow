@@ -321,7 +321,7 @@ export async function downloadSavedChecklistEvidence(run, evidence, { storage = 
       // Not generated yet: build it once from the saved photo.
     }
     const [full] = await original();
-    const small = makeJpegThumbnail(full);
+    const small = await makeJpegThumbnail(full);
     if (!small) return { bytes: full, contentType: evidence.contentType };
     await cached.save(small, { contentType: "image/jpeg", resumable: false }).catch(() => {});
     return { bytes: small, contentType: "image/jpeg", variant: "thumbnail" };
