@@ -207,6 +207,15 @@ service cloud.firestore {
             && request.resource.data.revokedAt == request.time));
     }
 
+    function jobBillingHours(data) {
+      return data.get('billing', null) is map ? data.billing.get('hours', null) : null;
+    }
+
+    function approvedAssignmentBilling(data) {
+      let hours = jobBillingHours(data);
+      return hours is map && hours.get('source', null) == 'APPROVED_ASSIGNMENTS';
+    }
+
     function assignmentParentRevisionAdvanced(orgId, jobId) {
       let jobPath = /databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId);
       let job = get(jobPath).data;
@@ -359,6 +368,7 @@ service cloud.firestore {
               'offerDistributionMode', 'offerDistributionByUid', 'firstAcceptClaim', 'offerDistributionClosedAt',
               'automaticOfferBatch', 'lastAutomaticOfferAcceptance'
             ])
+            && !approvedAssignmentBilling(request.resource.data)
             && !('completedAt' in request.resource.data));
         allow update: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
@@ -370,6 +380,8 @@ service cloud.firestore {
             && browserJobKeepsCompletionState()
             && browserJobKeepsAutomaticOfferProvenance()
             && browserKeepsPausedScheduleRoster()
+            && ((!approvedAssignmentBilling(resource.data) && !approvedAssignmentBilling(request.resource.data))
+              || jobBillingHours(request.resource.data) == jobBillingHours(resource.data))
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedAt']));
       }
 
@@ -400,12 +412,14 @@ service cloud.firestore {
         allow create: if activeManager(orgId) && !automaticOfferJob(orgId, jobId)
           && !request.resource.data.keys()
             .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod', 'confirmationChannel',
-              'removalReason', 'removalScheduleRevision', 'replacementOfferId'])
+              'removalReason', 'removalScheduleRevision', 'replacementOfferId', 'reportedWork', 'approvedWork', 'payoutCents'])
           && assignmentParentRevisionAdvanced(orgId, jobId);
         allow update: if activeManager(orgId)
           && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['cleanerAcknowledgedAt', 'cleanerAcknowledgedOfferId', 'assignmentMethod', 'confirmationChannel',
-              'removalReason', 'removalScheduleRevision', 'replacementOfferId'])
+              'removalReason', 'removalScheduleRevision', 'replacementOfferId', 'reportedWork', 'approvedWork', 'payoutCents'])
+          && (!('approvedWork' in resource.data)
+            || request.resource.data.cleanerId == resource.data.cleanerId)
           && (!automaticOfferJob(orgId, jobId)
             || (!('automaticOfferBatch' in
                   get(/databases/$(database)/documents/organizations/$(orgId)/jobs/$(jobId)).data)

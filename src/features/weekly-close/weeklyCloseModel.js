@@ -1,9 +1,10 @@
+import { hourlyAmountCents } from "../../../functions/src/hourlyAmount.js";
 import { normalizeDataProvenance } from "../../lib/dataProvenance.js";
 import { getAssignedCleanerIds, isAssignmentAwareJob } from "../jobs/jobCompatibility.js";
 
-import { billableMinutes, hourlyAmountCents, PRICING_HOURLY } from "../billing/billingStatementModel.js";
+import { billableJobMinutes, PRICING_HOURLY } from "../billing/billingStatementModel.js";
 import { payoutTimestamp, recordedShareCents } from "../payouts/payoutReceipt.js";
-import { fixedPayoutShares, payoutNeedsHoursReview } from "../payouts/payoutShares.js";
+import { payoutShares, payoutNeedsHoursReview } from "../payouts/payoutShares.js";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
 
 const dayMilliseconds = 86_400_000;
@@ -78,9 +79,9 @@ function jobFingerprint(job) {
     job.propertyId, job.propertyName, job.schemaVersion, job.assignedCleanerId,
     job.assignedCleanerName, getAssignedCleanerIds(job),
     money(job.clientPrice), money(job.cleanerPayout), job.payoutId,
-    job.billing?.mode, job.billing?.hourlyRateCents, billableMinutes(job.billing?.hours),
+    job.billing?.mode, job.billing?.hourlyRateCents, billableJobMinutes(job),
     job.pay?.mode, job.pay?.rateCents, job.pay?.perCleanerCents, sortedEntries(job.payoutIdsByCleaner),
-    sortedEntries(job.payoutAgreementsByCleaner),
+    sortedEntries(job.payoutAgreementsByCleaner), sortedEntries(job.payoutApprovedWorkByCleaner),
     Boolean(job.payoutPaidAt), payoutTimestamp(job.payoutPaidAt), job.legacyPayoutEligible === true,
   ]);
 }
@@ -120,7 +121,14 @@ function teamPayoutEvidence(job, shares, index, organizationId, complete) {
   if (!complete) return unknown("payout_lookup_incomplete");
   const links = job.payoutIdsByCleaner;
   const references = index.byJob.get(job.id) ?? new Set();
-  if (!links && !references.size) return unknown("v2_payout_untracked");
+  if (!links && !references.size) {
+    const approved = job.payoutApprovedWorkByCleaner || {};
+    if (shares.length && shares.every(({ cleanerId, cents }) => cents !== null && Object.hasOwn(approved, cleanerId))) {
+      const outstandingCents = shares.reduce((sum, share) => sum + share.cents, 0);
+      return { status: outstandingCents ? "OUTSTANDING" : "PAID", paidCents: 0, outstandingCents };
+    }
+    return unknown("v2_payout_untracked");
+  }
   if (!shares.length || !links || typeof links !== "object" || Array.isArray(links)
     || job.payoutId || job.payoutPaidAt) return unknown("payout_link_conflict");
   const linked = Object.entries(links);
@@ -273,11 +281,11 @@ export function buildWeeklyClose({
     } else if (job.billing?.mode === PRICING_HOURLY) {
       const rate = resolveJobPricing(job).client;
       client = {
-        cents: hourlyAmountCents(rate.rateCents, billableMinutes(job.billing.hours)),
+        cents: hourlyAmountCents(rate.rateCents, billableJobMinutes(job)),
         state: rate.state === "ready" ? "valid" : "missing",
       };
     }
-    const shares = fixedPayoutShares(job);
+    const shares = payoutShares(job);
     if (!pendingHours && shares.length) {
       payout = shares.every(share => share.cents !== null)
         ? { cents: shares.reduce((sum, share) => sum + share.cents, 0), state: "valid" }

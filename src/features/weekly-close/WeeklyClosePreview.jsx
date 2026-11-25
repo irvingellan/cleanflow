@@ -1,3 +1,4 @@
+import { workedTimeMessages } from "../pricing/workedTimeMessages.js";
 import { useEffect, useState } from "react";
 import { hoursReviewLabel } from "../pricing/pricingMessages.js";
 import { BackButton, StateCard } from "../../components/UiPrimitives.jsx";
@@ -86,6 +87,8 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
 
   const activeClient = model?.clients.find((client) => client.key === selectedClient);
   const visibleClients = activeClient ? [activeClient] : model?.clients;
+  const pendingJobs = (visibleClients ?? []).flatMap(client => client.jobs)
+    .filter(job => job.attentionReasons.includes("hours_review"));
   const totals = activeClient || model?.overall;
   const isPartial = model?.coverage?.truncated === true;
   const completeSelection = totals?.completedServiceCount > 0 && totals.grossOperationalMargin !== null && !isPartial;
@@ -154,6 +157,12 @@ export function WeeklyClosePreview({ onBack, onOpenJob, initialSelection }) {
       {isLoading && <StateCard message={t("loading")} status="status" />}
       {hasError && <StateCard message={t("error")} status="alert" isError />}
       {model && !isLoading && !hasError && <>
+        {pendingJobs.length > 0 && <section aria-labelledby="weekly-close-hours">
+          <h3 id="weekly-close-hours">{workedTimeMessages(language).review}</h3>
+          <ul>{pendingJobs.map(job => <li key={job.id}>
+            {job.propertyName} · {formatDate(job.serviceDate, translate, language)}
+          </li>)}</ul>
+        </section>}
         {isPartial && <p role="status" className="weekly-close-attention">{t("partial", { limit: model.coverage.limit })}</p>}
         {model.clients.length > 0 && <div className="weekly-close-controls">
           <div>

@@ -2263,3 +2263,66 @@ test("an automatic offer falls back to the Property cleaner price when the Job h
     await admin.doc(`${root}/properties/property`).update({ defaultCleanerPrice: FieldValue.delete() });
   }
 });
+
+test("worked time follows the roster, lets only the manager correct an unpaid approval, and exposes only personal time", async () => {
+  const { reportMyWorkedTime, approveWorkedTime } = functionsIndex;
+  const jobId = "synthetic-hourly-job";
+  await link("cleaner-a");
+  await link("cleaner-b");
+  await link("cleaner-c");
+  await createJob(jobId, { assignedCleanerIds: ["cleaner-a", "cleaner-b"], operationalStatus: "ASSIGNED",
+    pay: { mode: "HOURLY", rateCents: 2100 }, billing: { mode: "HOURLY", hourlyRateCents: 3200 } });
+  const job = admin.doc(`${root}/jobs/${jobId}`);
+  for (const [cleanerId, rate] of [["cleaner-a", 2401], ["cleaner-b", 2600]]) {
+    await job.collection("assignments").doc(cleanerId).set({
+      jobId, organizationId: org, cleanerId, isActive: true, source: "MANAGER_DIRECT",
+      paySnapshot: { offeredPay: { mode: "HOURLY", rateCents: rate } },
+    });
+  }
+  const request = (uid, minutes) => cleanerRequest(uid, { jobId, minutes, cleanerId: "cleaner-b" });
+  await assert.rejects(reportMyWorkedTime.run(request(uidC, 105)), { code: "permission-denied" });
+  await assert.rejects(reportMyWorkedTime.run(request(uidA, 105)), { code: "failed-precondition" });
+  await job.collection("checklistRuns").doc("initial").set({ jobId, organizationId: org, status: "READY_FOR_REVIEW" });
+  assert.deepEqual(await reportMyWorkedTime.run(request(uidA, 123)), { minutes: 125 });
+  assert.deepEqual(await reportMyWorkedTime.run(request(uidA, 122)), { minutes: 120 });
+  assert.deepEqual(await reportMyWorkedTime.run(request(uidB, 2)), { minutes: 0 });
+  const approval = { jobId, assignmentId: "cleaner-a", minutes: 118 };
+  await assert.rejects(approveWorkedTime.run(cleanerRequest(uidA, approval)), { code: "permission-denied" });
+  await assert.rejects(approveWorkedTime.run({ auth: { uid: "other-manager" }, data: approval }), { code: "permission-denied" });
+  assert.deepEqual(await approveWorkedTime.run(managerRequest(approval)), { minutes: 120, payoutCents: 4802 });
+  assert.equal((await job.get()).data().billing.hours, undefined);
+  const manager = environment.authenticatedContext("manager").firestore();
+  const assignmentPath = job.collection("assignments").doc("cleaner-a").path;
+  for (const field of ["approvedWork", "reportedWork", "payoutCents"]) {
+    await assertFails(manager.doc(assignmentPath).update({ [field]: null }));
+    await assertFails(cleanerDb(uidA).doc(assignmentPath).update({ [field]: null }));
+  }
+  await assertFails(cleanerDb(uidB).doc(assignmentPath).get());
+  await assertFails(environment.authenticatedContext("other-manager").firestore().doc(assignmentPath).get());
+  await assert.rejects(reportMyWorkedTime.run(request(uidA, 60)), { code: "failed-precondition" });
+  const approvalB = { jobId, assignmentId: "cleaner-b" };
+  await job.update({ payoutIdsByCleaner: { "cleaner-b": "synthetic-existing-receipt" } });
+  await assert.rejects(approveWorkedTime.run(managerRequest(approvalB)), { code: "failed-precondition" });
+  await job.update({ payoutIdsByCleaner: {} });
+  assert.deepEqual(await approveWorkedTime.run(managerRequest(approvalB)), { minutes: 0, payoutCents: 0 });
+  assert.deepEqual((await job.get()).data().billing.hours, {
+    source: "APPROVED_ASSIGNMENTS", approved: true, approvedMinutes: 120, roster: ["cleaner-a", "cleaner-b"],
+  });
+  // A manager correction before payment recomputes the pay and the client hours.
+  assert.deepEqual(await approveWorkedTime.run(managerRequest({ ...approval, minutes: 148 })), { minutes: 150, payoutCents: 6003 });
+  assert.equal((await job.get()).data().billing.hours.approvedMinutes, 150);
+  await job.update({ payoutIdsByCleaner: { "cleaner-a": "synthetic-existing-receipt" } });
+  await assert.rejects(approveWorkedTime.run(managerRequest(approval)), { code: "failed-precondition" });
+  await job.update({ payoutIdsByCleaner: {} });
+  assert.deepEqual(await approveWorkedTime.run(managerRequest(approval)), { minutes: 120, payoutCents: 4802 });
+  assert.equal((await job.get()).data().billing.hours.approvedMinutes, 120);
+  await assertFails(manager.doc(job.path).update({ "billing.hours.approvedMinutes": 500 }));
+  await sync(jobId);
+  const ownEntry = (await agendaFor("cleaner-a")).find(item => item.kind === "ASSIGNED");
+  const teammate = (await agendaFor("cleaner-b")).find(item => item.kind === "ASSIGNED");
+  assert.deepEqual(ownEntry.workedTime, { reportedMinutes: 120, approvedMinutes: 120, payoutCents: 4802 });
+  assert.deepEqual(teammate.workedTime, { reportedMinutes: 0, approvedMinutes: 0, payoutCents: 0 });
+  assert.equal(ownEntry.billing, undefined);
+  assert.equal(ownEntry.approvedByUid, undefined);
+  await assertFails(cleanerDb(uidB).doc(`${root}/cleanerAgenda/cleaner-a__${jobId}`).get());
+});
