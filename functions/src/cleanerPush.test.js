@@ -133,6 +133,15 @@ describe("cleaner device lifecycle", () => {
     expect(sendFcm).toHaveBeenCalledTimes(1);
     expect(f.records.get(eventPath)).toMatchObject({ processingState: "STORED" });
   });
+  it("sends cleaner notices with high urgency and a one-hour lifetime", async () => {
+    const f = fixture();
+    await register(f);
+    const sendFcm = vi.fn(async () => batch(accepted));
+    await deliver(f, sendFcm);
+    const [message] = sendFcm.mock.calls[0][0];
+    expect(message.webpush).toEqual({ headers: { TTL: "3600", Urgency: "high" } });
+    expect(message.notification).toBeUndefined();
+  });
   it("keeps two installations independently active and repeats enrollment without changing the binding", async () => {
     const f = fixture();
     const first = await register(f);
