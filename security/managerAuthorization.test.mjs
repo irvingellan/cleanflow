@@ -3072,8 +3072,9 @@ for (const legacy of [false, true]) {
     assert.equal(full.automaticOfferBatch.currentContextRevision, 2);
     assert.ok(full.offerDistributionClosedAt);
     await assert.rejects(setSpots(job, 1), { code: "failed-precondition" });
+    // The first one-spot fill reports only its confirmation; the two-spot fill reports "all spots filled".
     if (!legacy) assert.equal((await job.collection("managerNotificationDeliveries")
-      .where("eventType", "==", "AUTO_OFFER_BATCH_FILLED").get()).size, 2);
+      .where("eventType", "==", "AUTO_OFFER_BATCH_FILLED").get()).size, 1);
   });
 }
 
