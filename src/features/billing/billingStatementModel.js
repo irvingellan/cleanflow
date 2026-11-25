@@ -1,3 +1,5 @@
+import { hourlyAmountCents as calculateHourlyAmount } from "../../../functions/src/hourlyAmount.js";
+
 // Billing Statement V0 — pure model, no Firestore. See docs/BILLING_STATEMENT_V0.md.
 // All money is integer US cents. Nothing here infers hours from timestamps,
 // invents a price, or marks anything as paid without a recorded payment.
@@ -59,8 +61,7 @@ export function billableMinutes(hours, { roundUpToMinutes = 1 } = {}) {
 
 /** rate (cents per hour) × minutes, rounded half-up to the cent. */
 export function hourlyAmountCents(rateCents, minutes) {
-  if (validCents(rateCents) === null || !Number.isSafeInteger(minutes) || minutes <= 0) return null;
-  return Math.floor((rateCents * minutes + minutesPerHour / 2) / minutesPerHour);
+  return minutes === 0 ? null : calculateHourlyAmount(rateCents, minutes);
 }
 
 /**

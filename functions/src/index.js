@@ -23,6 +23,7 @@ const publicOfferHandlers = () => import("./handlers/publicOffer.js");
 const publicChecklistHandlers = () => import("./handlers/publicChecklist.js");
 const publicReports = () => import("./handlers/publicReports.js");
 const cleanerHub = () => import("./handlers/cleanerHub.js");
+const workedTime = () => import("./handlers/workedTime.js");
 const unavailability = () => import("./handlers/unavailability.js");
 const notificationInbox = () => import("./handlers/notificationInbox.js");
 const cleanerPush = () => import("./handlers/cleanerPush.js");
@@ -374,3 +375,6 @@ export const syncCleanerAgendaOnChecklistStart = onDocumentCreated(
   },
   lazyHandler(cleanerAgendaTriggers, "onChecklistStart"),
 );
+
+export const reportMyWorkedTime = onCall({ region: "us-central1" }, lazyHandler(workedTime, "reportMyWorkedTime"));
+export const approveWorkedTime = onCall({ region: "us-central1" }, lazyHandler(workedTime, "approveWorkedTime"));
