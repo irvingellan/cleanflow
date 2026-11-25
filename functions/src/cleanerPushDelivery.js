@@ -50,7 +50,9 @@ function cleanerFcmMessage(snapshot, eventId, reschedule) {
       eventId,
       link: "/agenda",
     },
-    webpush: { headers: { TTL: "300" } },
+    // Data-only Web Push defaults to normal urgency, which iOS may hold while the
+    // phone is idle; with a short TTL the notice can then expire undelivered.
+    webpush: { headers: { TTL: "3600", Urgency: "high" } },
   };
 }
 
