@@ -350,6 +350,7 @@ service cloud.firestore {
         // Records are archived, never deleted, from a browser.
         allow create: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
+          && (collectionName != 'properties' || !('cleanerAccessPhotos' in request.resource.data))
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && validJobServiceType(request.resource.data)
@@ -362,6 +363,8 @@ service cloud.firestore {
             && !('completedAt' in request.resource.data));
         allow update: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
+          && (collectionName != 'properties'
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['cleanerAccessPhotos']))
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && validJobServiceType(request.resource.data)

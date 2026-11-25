@@ -1,0 +1,11 @@
+.property-access-photos { display: grid; gap: .75rem; padding-top: .75rem; }
+.property-access-photos__list { list-style: none; padding: 0; margin: 0; }
+.property-access-photos__section > summary { padding: 4px 0; }
+.property-access-photos__section .property-access-photos__list li { display: grid; grid-template-columns: minmax(0, 1fr); gap: .25rem; justify-items: start; }
+.property-access-photos__add { justify-self: start; display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; }
+.property-access-photos__add.is-disabled { opacity: .6; cursor: progress; }
+.property-access-photos__add:focus-within { outline: 2px solid var(--cf-focus, currentColor); outline-offset: 2px; }
+.property-access-photos .visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

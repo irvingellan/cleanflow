@@ -9,7 +9,7 @@ describe("Functions export surface", () => {
       .sort(([a], [b]) => (a < b ? -1 : 1));
 
     expect(surface).toMatchSnapshot();
-    expect(surface.length).toBe(68);
+    expect(surface.length).toBe(72);
 
     const helpers = Object.entries(handlers)
       .filter(([, value]) => !value?.__endpoint)

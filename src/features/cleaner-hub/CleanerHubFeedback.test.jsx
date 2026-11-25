@@ -236,4 +236,36 @@ describe("FB01 — disconnected access scaffold clears stale data", () => {
     expect(screen.queryByText("FICTITIOUS-ACCESS")).toBeNull();
     expect(document.querySelector(".hb-access")).toHaveAttribute("data-access-state", "closed");
   });
+
+  it("lazy-loads a captioned photo, opens it full screen, and clears it when the Job closes", async () => {
+    const photoId = "a".repeat(32);
+    const preview = { contentType: "image/jpeg", dataBase64: "/9j/2Q==" };
+    const loadJobAccessPhoto = vi.fn().mockResolvedValue(preview);
+    const loadJobAccess = vi.fn().mockResolvedValue({
+      state: "available", items: [], photos: [{ id: photoId, caption: "Side gate" }],
+    });
+    let intersection;
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback) { intersection = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    try {
+      const hub = { session, loadJobAccess, loadJobAccessPhoto };
+      const { rerender } = render(<AccessSection t={t} hub={hub} entry={job(1, today)} />);
+      expect(await screen.findByText("Side gate")).toBeVisible();
+      expect(loadJobAccessPhoto).not.toHaveBeenCalled();
+      await act(() => intersection([{ isIntersecting: true }]));
+      expect(loadJobAccessPhoto).toHaveBeenCalledExactlyOnceWith("j1", photoId);
+      const thumbnail = await screen.findByRole("button", { name: "Side gate" });
+      expect(within(thumbnail).getByRole("img")).toHaveAttribute("src", `data:image/jpeg;base64,${preview.dataBase64}`);
+      await userEvent.click(thumbnail);
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      rerender(<AccessSection t={t} hub={hub} entry={job(1, today, { jobStatus: "COMPLETED" })} />);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.queryByRole("img", { name: "Side gate" })).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

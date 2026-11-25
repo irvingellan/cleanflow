@@ -24,6 +24,7 @@ service firebase.storage {
     }
 
     // Checklist evidence has no browser access until deliberately implemented.
+    // Property access photos are served only through authenticated Functions.
     match /{allPaths=**} {
       allow read, write: if false;
     }
