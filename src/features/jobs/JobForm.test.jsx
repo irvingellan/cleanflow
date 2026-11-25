@@ -87,7 +87,7 @@ describe("CreateCleaningForm", () => {
       target: { value: " Taylor Morgan " },
     });
     fireEvent.change(screen.getByLabelText("Service type"), {
-      target: { value: "POST_CONSTRUCTION" },
+      target: { value: "DEEP_CLEANING" },
     });
     fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
 
@@ -97,7 +97,7 @@ describe("CreateCleaningForm", () => {
         propertyName: "Pacific Beach Condo",
         clientId: "client-carl",
         clientName: "Carl",
-        serviceType: "POST_CONSTRUCTION",
+        serviceType: "DEEP_CLEANING",
         scheduledDate: "2026-09-01",
         scheduledStart: "10:00",
         clientPrice: 350,
@@ -350,7 +350,7 @@ describe("CreateCleaningForm", () => {
       cleaner: { mode: "HOURLY", amountCents: 2000 }, client: { mode: "FIXED", amountCents: 5000 },
     } } };
     render(<TranslationProvider><CreateCleaningForm property={property} /></TranslationProvider>);
-    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "MOVE_IN_OUT" } });
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "DEEP_CLEANING" } });
     expect(screen.getByText(/price is missing for this service type/i)).toBeVisible();
     expect(screen.getByLabelText("Client price")).toHaveValue(null);
     expect(screen.getByLabelText("Cleaner payout")).toHaveValue(null);
@@ -366,9 +366,46 @@ describe("CreateCleaningForm", () => {
     const property = { id: "p", name: "Sample property", defaultClientPrice: 80, defaultCleanerPrice: 40 };
     render(<TranslationProvider><CreateCleaningForm property={property} /></TranslationProvider>);
     fireEvent.change(screen.getByLabelText("Client price"), { target: { value: "72" } });
-    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "MOVE_IN_OUT" } });
+    fireEvent.change(screen.getByLabelText("Client price"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "DEEP_CLEANING" } });
     expect(screen.getByText(/review the amounts already entered/i)).toBeVisible();
-    expect(screen.getByLabelText("Client price")).toHaveValue(72);
+    expect(screen.getByLabelText("Client price")).toHaveValue(null);
+  });
+
+  it("does not warn about a missing price once both amounts are entered (Gabi, 2026-11-25)", () => {
+    const property = { id: "p", name: "Sample property" };
+    render(<TranslationProvider><CreateCleaningForm property={property} /></TranslationProvider>);
+    fireEvent.change(screen.getByLabelText("Client pricing method"), { target: { value: "HOURLY" } });
+    fireEvent.change(screen.getByLabelText("Cleaner pay method"), { target: { value: "HOURLY" } });
+    expect(screen.getByLabelText("Client price per hour")).toHaveValue(45);
+    expect(screen.getByLabelText("Cleaner pay per hour")).toHaveValue(25);
+    expect(screen.queryByText(/price is missing for this service type/i)).toBeNull();
+  });
+
+  it.each(["MOVE_IN_OUT", "POST_CONSTRUCTION", "AIRBNB_TOUCH_UP"])(
+    "prefills editable hourly prices for %s when the property has no saved rate", async (serviceType) => {
+      render(<TranslationProvider><CreateCleaningForm property={{ id: "p", name: "Sample property" }} onCreated={vi.fn()} /></TranslationProvider>);
+      fireEvent.change(screen.getByLabelText("Service type"), { target: { value: serviceType } });
+      expect(screen.getByLabelText("Client pricing method")).toHaveValue("HOURLY");
+      expect(screen.getByLabelText("Cleaner pay method")).toHaveValue("HOURLY");
+      expect(screen.getByLabelText("Client price per hour")).toHaveValue(45);
+      fireEvent.change(screen.getByLabelText("Cleaner pay per hour"), { target: { value: "27" } });
+      fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-12-08" } });
+      fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+      await waitFor(() => expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
+        serviceType, billing: { mode: "HOURLY", hourlyRateCents: 4500 }, pay: { mode: "HOURLY", rateCents: 2700 },
+      })));
+    });
+
+  it("keeps a saved property rate instead of the hourly default", () => {
+    const property = { id: "p", name: "Sample property", serviceRates: { MOVE_IN_OUT: {
+      client: { mode: "FIXED", amountCents: 30000 }, cleaner: { mode: "FIXED", amountCents: 15000 },
+    } } };
+    render(<TranslationProvider><CreateCleaningForm property={property} /></TranslationProvider>);
+    fireEvent.change(screen.getByLabelText("Service type"), { target: { value: "MOVE_IN_OUT" } });
+    expect(screen.getByLabelText("Client pricing method")).toHaveValue("FIXED");
+    expect(screen.getByLabelText("Client price")).toHaveValue(300);
+    expect(screen.getByLabelText("Cleaner payout")).toHaveValue(150);
   });
 
   it("keeps blank price defaults absent instead of converting them to zero", async () => {
