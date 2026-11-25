@@ -76,6 +76,15 @@ test("code-split chunks enter the manifest only when a reviewed script names the
   write("ManagerRoot-a1B2c3D4.css", "synthetic");
   assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected Hosting file: assets\/ManagerRoot-a1B2c3D4\.css/);
 });
+test("lazy entry stylesheets enter the manifest only when a reviewed script names them", t => {
+  const dir = fixture(t);
+  const style = "assets/ManagerRoot-demo.css";
+  fs.writeFileSync(path.join(dir, style), "body{}");
+  assert.throws(() => inspectHostingBuild(dir, "expected", []), /Unexpected Hosting file: assets\/ManagerRoot-demo.css/);
+  fs.writeFileSync(path.join(dir, "assets/index-demo.js"), `import("./ManagerRoot-demo.js");const css=["${style}"];`);
+  fs.writeFileSync(path.join(dir, "assets/ManagerRoot-demo.js"), "synthetic");
+  assert.ok(inspectHostingBuild(dir, "expected", []).some(entry => entry.file === style));
+});
 test("wrong build SHA, missing public assets and symlinks fail closed", t => {
   const dir = fixture(t);
   assert.throws(() => inspectHostingBuild(dir, "other", []), /build ID/);
