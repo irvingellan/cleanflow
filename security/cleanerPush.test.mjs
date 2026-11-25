@@ -350,7 +350,8 @@ test("two overlapping automatic offer batches survive partial provider outcomes 
     const deliveries = (await job.collection("managerNotificationDeliveries").get()).docs;
     assert.deepEqual(deliveries.map((entry) => [entry.get("eventType"), entry.get("deliveryStatus")])
       .sort(([left], [right]) => left.localeCompare(right)), [
-      ["AUTO_ASSIGNMENT_CONFIRMED", "PENDING"], ["AUTO_OFFER_BATCH_FILLED", "PENDING"],
+      // One-spot batches report only the confirmation, never a repeated "all spots filled".
+      ["AUTO_ASSIGNMENT_CONFIRMED", "PENDING"],
     ]);
   }
 
