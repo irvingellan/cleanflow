@@ -31,7 +31,7 @@ test("manager adds an access photo and only the assigned cleaner sees it in the 
   await orgRef.collection("properties").doc(fixture.cedarId).update({
     cleanerAccess: { shared: true, door: "Use the side gate", note: "Park on the street" },
   });
-  await orgRef.collection("jobs").doc(fixture.cedarJobId).update({ scheduledDate: dateKey(1) });
+  await orgRef.collection("jobs").doc(fixture.cedarJobId).update({ scheduledDate: dateKey(0) }); // Today is inside the access window in any runner time zone.
 
   // Manager: Properties > Cedar > Photos for the cleaner.
   await page.goto("/");
