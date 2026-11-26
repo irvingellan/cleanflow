@@ -13,9 +13,21 @@ describe("FB01 cleaner job access", () => {
     const result = projectCleanerJobAccess({ job: job(), property: property(), cleanerId: "ana", nowMs: noonLa("2026-11-10") });
     expect(result).toEqual({
       state: "available", address: "123 Example St", houseInstructions: "Leave towels folded.",
-      items: [{ kind: "door", value: "4321" }, { kind: "parking", value: "Spot 2" }],
+      items: [{ kind: "door", value: "4321" }, { kind: "parking", value: "Spot 2" }], photos: [],
     });
     expect(JSON.stringify(result)).not.toMatch(/private-internal/);
+  });
+
+  it("makes photo-only instructions available and projects only photo ids and captions", () => {
+    const photo = { id: "a".repeat(32), caption: "  Side gate  ", createdByUid: "internal-manager", sizeBytes: 42 };
+    const options = { job: job(), cleanerId: "ana", nowMs: noonLa("2026-11-10") };
+    const photosOnly = { cleanerAccess: { shared: true }, cleanerAccessPhotos: [photo, { id: "invalid/photo" }] };
+    expect(projectCleanerJobAccess({ ...options, property: photosOnly })).toEqual({
+      state: "available", items: [], photos: [{ id: photo.id, caption: "Side gate" }],
+    });
+    expect(projectCleanerJobAccess({
+      ...options, property: { ...photosOnly, cleanerAccess: { shared: false } },
+    })).toEqual({ state: "not-provided" });
   });
 
   it("opens the day before, closes after the service day, and stays open while in progress", () => {

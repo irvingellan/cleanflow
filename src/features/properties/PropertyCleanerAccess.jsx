@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n/translations.js";
+import { PropertyAccessPhotos } from "./PropertyAccessPhotos.jsx";
 
 // FB01: what the manager deliberately shares with the cleaner on a Job at
 // this Property. Internal fields (key codes, access notes) are never shared
@@ -21,6 +22,7 @@ export function PropertyCleanerAccess({ property, onSave }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
+  const [photosOpen, setPhotosOpen] = useState(false);
   useEffect(() => { if (!editing) setForm(formFrom(property)); }, [property, editing]);
 
   const filled = cleanerAccessFields.filter((field) => form[field].trim());
@@ -88,5 +90,9 @@ export function PropertyCleanerAccess({ property, onSave }) {
     </div>}
     {status === "saved" && <p className="property-history-state" role="status">{translate("propertyAccess.saved")}</p>}
     {status === "error" && <p className="form-error" role="alert">{translate("propertyAccess.error")}</p>}
+    <details className="property-checklist__section property-access-photos__section" onToggle={(event) => setPhotosOpen(event.currentTarget.open)}>
+      <summary>{translate("propertyAccess.photos.title")}</summary>
+      {photosOpen && <PropertyAccessPhotos key={property.id} propertyId={property.id} />}
+    </details>
   </section>;
 }

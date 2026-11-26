@@ -79,7 +79,7 @@ function detectImage(buffer) {
   return null;
 }
 
-export function normalizeImageUpload({ contentType, bytes }) {
+export function normalizeImageUpload({ contentType, bytes }, maximumSizeBytes = maximumChecklistEvidenceSizeBytes) {
   if (!supportedImageTypes.has(contentType)) {
     throw photoValidationError("invalid-argument", "Choose a JPEG, PNG, or WebP image.", "unsupported_content_type");
   }
@@ -89,7 +89,7 @@ export function normalizeImageUpload({ contentType, bytes }) {
   if (bytes.length === 0) {
     throw photoValidationError("invalid-argument", "Checklist photo is invalid or too large.", "empty_body");
   }
-  if (bytes.length > maximumChecklistEvidenceSizeBytes) {
+  if (bytes.length > maximumSizeBytes) {
     throw photoValidationError("invalid-argument", "Checklist photo is invalid or too large.", "file_too_large");
   }
   const detected = detectImage(bytes);

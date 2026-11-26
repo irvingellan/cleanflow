@@ -10,6 +10,7 @@ import { useCleanerNotificationSettings } from "../notifications/useCleanerNotif
 import { cleanerPushReceiptText } from "../notifications/cleanerPushReceiptText.js";
 import { cleanerMessagingWorkerPath, cleanerPushOpenInboxEvent } from "../notifications/cleanerPushBinding.js";
 import { InstallGuide } from "./InstallGuide.jsx";
+import { JobAccessPhotos } from "./JobAccessPhotos.jsx";
 import {
   addDaysToKey,
   agendaMonths,
@@ -418,6 +419,8 @@ export function AccessSection({ t, hub, entry }) {
               <p>{access.instructions}</p>
             </details>
           )}
+          {access.photos.length > 0 && hub.loadJobAccessPhoto && <JobAccessPhotos key={scope}
+            t={t} jobId={entry.jobId} photos={access.photos} load={hub.loadJobAccessPhoto} />}
           <p className="mw-hint">{t("hb.access.private")}</p>
         </>
       )}

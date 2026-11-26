@@ -23,6 +23,7 @@ const publicOfferHandlers = () => import("./handlers/publicOffer.js");
 const publicChecklistHandlers = () => import("./handlers/publicChecklist.js");
 const publicReports = () => import("./handlers/publicReports.js");
 const cleanerHub = () => import("./handlers/cleanerHub.js");
+const propertyAccessPhotos = () => import("./handlers/propertyAccessPhotos.js");
 const unavailability = () => import("./handlers/unavailability.js");
 const notificationInbox = () => import("./handlers/notificationInbox.js");
 const cleanerPush = () => import("./handlers/cleanerPush.js");
@@ -283,6 +284,27 @@ export const openMyChecklist = onCall(
 export const getMyJobAccess = onCall(
   { region: "us-central1" },
   lazyHandler(cleanerHub, "getMyJobAccess"),
+);
+
+export const uploadPropertyAccessPhoto = onCall(
+  // Decoding a large phone photo with sharp needs more than the default memory.
+  { region: "us-central1", memory: "512MiB" },
+  lazyHandler(propertyAccessPhotos, "uploadPropertyAccessPhoto"),
+);
+
+export const removePropertyAccessPhoto = onCall(
+  { region: "us-central1" },
+  lazyHandler(propertyAccessPhotos, "removePropertyAccessPhoto"),
+);
+
+export const getPropertyAccessPhoto = onCall(
+  { region: "us-central1" },
+  lazyHandler(propertyAccessPhotos, "getPropertyAccessPhoto"),
+);
+
+export const getMyJobAccessPhoto = onCall(
+  { region: "us-central1" },
+  lazyHandler(propertyAccessPhotos, "getMyJobAccessPhoto"),
 );
 
 export const respondToMyOffer = onCall(

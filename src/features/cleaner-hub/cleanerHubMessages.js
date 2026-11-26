@@ -45,6 +45,7 @@ const M = {
   "hb.access.title": ["Acesso ao imóvel", "Getting in", "Acceso a la propiedad"],
   "hb.access.loading": ["Carregando informações de acesso…", "Loading access information…", "Cargando información de acceso…"],
   "hb.access.house": ["Instruções da casa", "House instructions", "Instrucciones de la casa"],
+  "hb.access.photos": ["Fotos de acesso", "Access photos", "Fotos de acceso"],
   "hb.access.private": ["Só quem está neste serviço vê estas informações. Não tire print nem repasse.", "Only the people on this job see this. Don't screenshot or forward it.", "Solo quien está en este servicio ve esto. No haga captura ni lo reenvíe."],
   "hb.access.not-provided": ["A gerente ainda não cadastrou informações de acesso para este serviço.", "The manager hasn't added access information for this job yet.", "La gerente aún no agregó información de acceso."],
   "hb.access.not-yet": ["As informações de acesso ficam disponíveis a partir de {time}.", "Access information becomes available from {time}.", "La información de acceso estará disponible desde {time}."],

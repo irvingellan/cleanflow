@@ -72,6 +72,16 @@ ordinary operational data.
 manager-only Property data. Do not copy them into cleaner-facing projections or
 checklist snapshots by default.
 
+`cleanerAccessPhotos` is an optional, server-owned Property array with up to
+eight entries. Each entry has `id`, `caption`, `sizeBytes`, `width`, `height`,
+`createdAt` (Firestore Timestamp), and `createdByUid`. Functions create the
+random ID, encode a metadata-free JPEG, and save it under the Property's
+private `accessPhotos` Storage prefix before committing the entry. Managers
+list metadata through their existing Property access. A cleaner's authenticated
+Job access projection contains only the IDs and captions when access is available.
+Both roles retrieve bytes through authenticated callables. Agenda, notifications,
+and client reports exclude the photos and their metadata.
+
 **Phase 2 checklist foundation:** `checklistSettings` is optional. When absent,
 the current versioned global default definition applies. Its allowlisted
 cleaner-facing fields are additional checklist items, inventory item additions
