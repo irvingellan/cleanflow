@@ -1,5 +1,7 @@
 const messages = {
   en: {
+    send: "Send hours", submitted: "Hours sent", confirmSubmission: "After you send, only the manager can change these hours.",
+    alreadySubmitted: "You already sent your hours. Only the manager can change them.",
     report: "Report my hours", review: "Hours to approve", hours: "Hours", minutes: "Minutes", total: "Total", correct: "Correct hours", cancel: "Cancel",
     waiting: "Waiting for approval", unreported: "Hours not reported", approved: "Approved",
     save: "Save hours", approve: "Approve hours", saving: "Saving…", failed: "Could not save hours. Check the service and try again.",
@@ -10,6 +12,8 @@ const messages = {
     pendingGroup: "Hours to approve",
   },
   pt: {
+    send: "Enviar horas", submitted: "Horas enviadas", confirmSubmission: "Depois que você enviar, só a gerência poderá alterar essas horas.",
+    alreadySubmitted: "Você já enviou suas horas. Só a gerência pode alterá-las.",
     report: "Informar minhas horas", review: "Horas para aprovar", hours: "Horas", minutes: "Minutos", total: "Total", correct: "Corrigir horas", cancel: "Cancelar",
     waiting: "Aguardando aprovação", unreported: "Horas ainda não informadas", approved: "Aprovadas",
     save: "Salvar horas", approve: "Aprovar horas", saving: "Salvando…", failed: "Não foi possível salvar as horas. Confira o serviço e tente novamente.",
@@ -20,6 +24,8 @@ const messages = {
     pendingGroup: "Horas para aprovar",
   },
   es: {
+    send: "Enviar horas", submitted: "Horas enviadas", confirmSubmission: "Después de enviar tus horas, solo la persona encargada podrá cambiarlas.",
+    alreadySubmitted: "Ya enviaste tus horas. Solo la persona encargada puede cambiarlas.",
     report: "Informar mis horas", review: "Horas por aprobar", hours: "Horas", minutes: "Minutos", total: "Total", correct: "Corregir horas", cancel: "Cancelar",
     waiting: "Pendiente de aprobación", unreported: "Horas sin informar", approved: "Aprobadas",
     save: "Guardar horas", approve: "Aprobar horas", saving: "Guardando…", failed: "No se pudieron guardar las horas. Revisa el servicio e inténtalo de nuevo.",

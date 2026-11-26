@@ -18,13 +18,14 @@ function split(total) {
 export function WorkedTimeForm({ language, work, onSave, onRemoveApproval, allowSave = true, manager = false, touchUp = false, paid = false }) {
   const [draft, setDraft] = useState(null);
   const [result, setResult] = useState(null);
+  const [confirming, setConfirming] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
   const t = workedTimeMessages(language);
   const approvedMinutes = manager ? result?.minutes ?? work?.approvedMinutes : work?.approvedMinutes;
   const reportedMinutes = manager ? work?.reportedMinutes : result?.minutes ?? work?.reportedMinutes;
-  const canEdit = allowSave && !paid;
+  const canEdit = allowSave && !paid && (manager || reportedMinutes == null);
 
   async function removeApproval() {
     setSaving(true);
@@ -45,12 +46,13 @@ export function WorkedTimeForm({ language, work, onSave, onRemoveApproval, allow
       style: "currency", currency: "USD",
     }).format(payoutCents / 100);
     return <>
+      {!manager && reportedMinutes != null && <p>{t.submitted} · {formatWorkedMinutes(reportedMinutes)}</p>}
       <p role="status">{t.approved} · {formatWorkedMinutes(approvedMinutes)}{money && ` · ${money}`}</p>
       {manager && canEdit && <button type="button" className="button button--secondary" disabled={saving}
         onClick={() => { setError(false); setDraft(split(approvedMinutes)); setCorrecting(true); }}>{t.correct}</button>}
       {manager && !paid && onRemoveApproval && <button type="button" className="button button--secondary"
         disabled={saving} onClick={removeApproval}>{t.removeApproval}</button>}
-      {error && <p role="alert">{t.failed}</p>}
+      {error && <p role="alert">{error === "submitted" ? t.alreadySubmitted : t.failed}</p>}
     </>;
   }
 
@@ -62,15 +64,21 @@ export function WorkedTimeForm({ language, work, onSave, onRemoveApproval, allow
 
   async function submit(event) {
     event.preventDefault();
-    if (invalid) return;
+    if (invalid || !canEdit || saving) return;
+    if (!manager && !confirming) {
+      setConfirming(true);
+      setError(false);
+      return;
+    }
     setSaving(true);
     setError(false);
     try {
       setResult(await onSave(total));
       setDraft(null);
+      setConfirming(false);
       setCorrecting(false);
-    } catch {
-      setError(true);
+    } catch (error) {
+      setError(error.details?.reason === "worked-time-already-submitted" ? "submitted" : true);
     } finally {
       setSaving(false);
     }
@@ -81,18 +89,21 @@ export function WorkedTimeForm({ language, work, onSave, onRemoveApproval, allow
     {canEdit && <form onSubmit={submit} className="worked-time-form">
       <div className="worked-time-form__fields">
         <label>{t.hours}<input type="number" inputMode="numeric" min="0" max="24" step="1"
-          value={value.hours} onChange={change("hours")} disabled={saving} /></label>
+          value={value.hours} onChange={change("hours")} disabled={saving || confirming} /></label>
         <label>{t.minutes}<input type="number" inputMode="numeric" min="0" max="59" step="1"
-          value={value.minutes} onChange={change("minutes")} disabled={saving} /></label>
+          value={value.minutes} onChange={change("minutes")} disabled={saving || confirming} /></label>
       </div>
       {!empty && <p>{t.total}: {formatWorkedMinutes(total)}</p>}
       <p>{touchUp && manager ? t.touchUp : t.rounding}</p>
+      {confirming && <p role="status">{t.confirmSubmission}</p>}
       <button type="submit" className="button" disabled={saving || invalid}>
-        {saving ? t.saving : manager ? t.approve : t.save}
+        {saving ? t.saving : manager ? t.approve : confirming ? t.send : t.save}
       </button>
+      {confirming && <button type="button" className="button button--secondary" disabled={saving}
+        onClick={() => { setConfirming(false); setError(false); }}>{t.cancel}</button>}
       {correcting && <button type="button" className="button button--secondary" disabled={saving}
         onClick={() => { setDraft(null); setCorrecting(false); }}>{t.cancel}</button>}
-      {error && <p role="alert">{t.failed}</p>}
+      {error && <p role="alert">{error === "submitted" ? t.alreadySubmitted : t.failed}</p>}
     </form>}
   </>;
 }

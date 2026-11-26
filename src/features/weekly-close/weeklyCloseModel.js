@@ -154,7 +154,10 @@ function teamPayoutEvidence(job, shares, index, organizationId, complete) {
     if (recorded === null) return unknown("payout_evidence_invalid");
     paidByCleaner.set(cleanerId, recorded);
     paidCents += recorded;
-    if (cents !== null && recorded !== cents) mismatch = true;
+    const approved = job.payoutApprovedWorkByCleaner?.[cleanerId]?.payoutCents;
+    const hasSavedTerms = Object.hasOwn(job.payoutAgreementsByCleaner ?? {}, cleanerId)
+      || (Number.isSafeInteger(approved) && approved >= 0);
+    if (hasSavedTerms && cents !== null && recorded !== cents) mismatch = true;
   }
   // An edited or inconsistent agreement cannot change what its linked receipt actually paid.
   return { status: mismatch || unknownOutstanding ? "UNKNOWN" : outstandingCents ? "OUTSTANDING" : "PAID",
@@ -285,7 +288,14 @@ export function buildWeeklyClose({
         state: rate.state === "ready" ? "valid" : "missing",
       };
     }
-    const shares = payoutShares(job);
+    const quotedShares = payoutShares(job);
+    let evidence;
+    if (isAssignmentAwareJob(job) && (!pendingHours || job.payoutIdsByCleaner || index.byJob.has(id))) {
+      evidence = teamPayoutEvidence(job, quotedShares, index, organizationId, payoutLookupComplete);
+    }
+    const shares = quotedShares.map(share => ({
+      ...share, cents: evidence?.paidByCleaner?.get(share.cleanerId) ?? share.cents,
+    }));
     if (!pendingHours && shares.length) {
       payout = shares.every(share => share.cents !== null)
         ? { cents: shares.reduce((sum, share) => sum + share.cents, 0), state: "valid" }
@@ -294,13 +304,8 @@ export function buildWeeklyClose({
     else if (!pendingHours && job.pay?.mode === "FIXED" && Object.hasOwn(job.pay, "perCleanerCents")) {
       payout = { cents: null, state: "invalid" };
     }
-    let evidence;
-    if (isAssignmentAwareJob(job) && (!pendingHours || job.payoutIdsByCleaner || index.byJob.has(id))) {
-      evidence = teamPayoutEvidence(job, shares, index, organizationId, payoutLookupComplete);
-    } else if (pendingHours) {
-      evidence = unknown();
-    } else {
-      evidence = payoutEvidence(job, payout.cents, index, organizationId, payoutLookupComplete);
+    if (!evidence) {
+      evidence = pendingHours ? unknown() : payoutEvidence(job, payout.cents, index, organizationId, payoutLookupComplete);
     }
     const cleanerIds = isAssignmentAwareJob(job) ? getAssignedCleanerIds(job)
       : [text(job.assignedCleanerId)].filter(Boolean);

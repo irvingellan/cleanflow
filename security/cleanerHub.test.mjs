@@ -2284,7 +2284,12 @@ test("worked time follows the roster, lets only the manager correct an unpaid ap
   await assert.rejects(reportMyWorkedTime.run(request(uidA, 105)), { code: "failed-precondition" });
   await job.collection("checklistRuns").doc("initial").set({ jobId, organizationId: org, status: "READY_FOR_REVIEW" });
   assert.deepEqual(await reportMyWorkedTime.run(request(uidA, 123)), { minutes: 125 });
-  assert.deepEqual(await reportMyWorkedTime.run(request(uidA, 122)), { minutes: 120 });
+  const firstReport = (await job.collection("assignments").doc("cleaner-a").get()).data().reportedWork;
+  assert.equal((await job.collection("assignments").doc("cleaner-b").get()).data().reportedWork, undefined);
+  assert.deepEqual(await reportMyWorkedTime.run(request(uidA, 123)), { minutes: 125 });
+  await assert.rejects(reportMyWorkedTime.run(request(uidA, 124)), { code: "failed-precondition" });
+  await assert.rejects(reportMyWorkedTime.run(request(uidA, 122)), { code: "failed-precondition" });
+  assert.deepEqual((await job.collection("assignments").doc("cleaner-a").get()).data().reportedWork, firstReport);
   assert.deepEqual(await reportMyWorkedTime.run(request(uidB, 2)), { minutes: 0 });
   const approval = { jobId, assignmentId: "cleaner-a", minutes: 118 };
   await assert.rejects(approveWorkedTime.run(cleanerRequest(uidA, approval)), { code: "permission-denied" });
@@ -2293,14 +2298,15 @@ test("worked time follows the roster, lets only the manager correct an unpaid ap
   assert.equal((await job.get()).data().billing.hours, undefined);
   const manager = environment.authenticatedContext("manager").firestore();
   const assignmentPath = job.collection("assignments").doc("cleaner-a").path;
-  for (const field of ["approvedWork", "reportedWork", "payoutCents"]) {
+  for (const field of ["approvedWork", "reportedWork", "payoutCents", "paySnapshot"]) {
     await assertFails(manager.doc(assignmentPath).update({ [field]: null }));
     await assertFails(cleanerDb(uidA).doc(assignmentPath).update({ [field]: null }));
   }
   assert.deepEqual((await job.get()).data().approvedAssignments, { "cleaner-a": "cleaner-a" });
   const managerJob = manager.doc(job.path);
-  for (const patch of [{ clientPrice: 1 }, { "billing.hourlyRateCents": 1 }, { billing: { mode: "FIXED" } },
-    { pay: { mode: "FIXED" } }, { serviceType: "DEEP_CLEANING" }, { approvedAssignments: {} }]) {
+  await assertSucceeds(managerJob.update({ serviceType: "DEEP_CLEANING" }));
+  await assertFails(cleanerDb(uidA).doc(job.path).update({ approvedAssignments: {} }));
+  for (const patch of [{ "billing.hourlyRateCents": 4000 }, { billing: { mode: "FIXED" } }, { pay: { mode: "FIXED" } }, { approvedAssignments: {} }]) {
     await assertFails(managerJob.update(patch));
   }
   const rosterEdit = manager.batch();
@@ -2313,8 +2319,13 @@ test("worked time follows the roster, lets only the manager correct an unpaid ap
   const removed = (await admin.doc(assignmentPath).get()).data();
   assert.equal(removed.approvedWork, undefined);
   assert.equal(removed.payoutCents, undefined);
-  assert.equal(removed.reportedWork.minutes, 120);
-  await assertSucceeds(managerJob.update({ "pay.rateCents": 3000, "billing.hourlyRateCents": 4000, serviceType: "DEEP_CLEANING" }));
+  assert.equal(removed.reportedWork.minutes, 125);
+  await assert.rejects(reportMyWorkedTime.run(request(uidA, 120)), { code: "failed-precondition" });
+  const history = await job.collection("corrections").get();
+  assert.deepEqual(history.docs.map(doc => doc.get("kind")).sort(), ["APPROVAL_REMOVED", "WORKED_TIME"]);
+  await functionsIndex.updateJobPricing.run(managerRequest({ jobId, prices: {
+    billing: { mode: "HOURLY", hourlyRateCents: 4000 }, pay: { mode: "HOURLY", rateCents: 3000 },
+  } }));
   assert.deepEqual(await approveWorkedTime.run(managerRequest(approval)), { minutes: 120, payoutCents: 4802 });
   await assertFails(cleanerDb(uidB).doc(assignmentPath).get());
   await assertFails(environment.authenticatedContext("other-manager").firestore().doc(assignmentPath).get());
@@ -2343,7 +2354,7 @@ test("worked time follows the roster, lets only the manager correct an unpaid ap
   await sync(jobId);
   const ownEntry = (await agendaFor("cleaner-a")).find(item => item.kind === "ASSIGNED");
   const teammate = (await agendaFor("cleaner-b")).find(item => item.kind === "ASSIGNED");
-  assert.deepEqual(ownEntry.workedTime, { reportedMinutes: 120, approvedMinutes: 120, payoutCents: 4802 });
+  assert.deepEqual(ownEntry.workedTime, { reportedMinutes: 125, approvedMinutes: 120, payoutCents: 4802 });
   assert.deepEqual(teammate.workedTime, { reportedMinutes: 0, approvedMinutes: 0, payoutCents: 0 });
   assert.equal(ownEntry.billing, undefined);
   assert.equal(ownEntry.approvedByUid, undefined);
@@ -2351,7 +2362,7 @@ test("worked time follows the roster, lets only the manager correct an unpaid ap
 });
 
 test("worked time uses the corrected job rate and clears incomplete crew totals", async () => {
-  const { approveWorkedTime, removeWorkedTimeApproval } = functionsIndex;
+  const { approveWorkedTime, updateJobPricing } = functionsIndex;
   const cleanerId = "cleaner-a";
   const jobId = "worked-time-crew";
   await createJob(jobId, { operationalStatus: "IN_PROGRESS", assignedCleanerIds: [cleanerId],
@@ -2362,11 +2373,16 @@ test("worked time uses the corrected job rate and clears incomplete crew totals"
   const approval = managerRequest({ jobId, assignmentId: "assigned" });
   assert.deepEqual(await approveWorkedTime.run(approval), { minutes: 60, payoutCents: 2100 });
   assert.equal((await job.get()).data().billing.hours.approvedMinutes, 60);
-  await removeWorkedTimeApproval.run(approval);
-  assert.equal((await job.get()).data().billing.hours, undefined);
-  const manager = environment.authenticatedContext("manager").firestore();
-  await assertSucceeds(manager.doc(job.path).update({ "pay.rateCents": 3000 }));
-  assert.deepEqual(await approveWorkedTime.run(approval), { minutes: 60, payoutCents: 3000 });
+  await updateJobPricing.run(managerRequest({ jobId, prices: { pay: { mode: "HOURLY", rateCents: 3000 },
+    billing: { mode: "HOURLY", hourlyRateCents: 4000 } } }));
+  const updated = (await assignments.doc("assigned").get()).data();
+  assert.equal(updated.approvedWork.minutes, 60);
+  assert.equal(updated.payoutCents, 3000);
+  assert.equal((await job.get()).data().billing.hours.approvedMinutes, 60);
+  const [correction] = (await job.collection("corrections").get()).docs;
+  assert.equal(correction.get("kind"), "CLEANER_PAY");
+  assert.equal(correction.get("before.payoutCents"), 2100);
+  assert.equal(correction.get("after.payoutCents"), 3000);
 
   // A legacy aggregate may outlive an incomplete crew before the next approval.
   await job.update({ assignedCleanerIds: [cleanerId, "cleaner-b"] });
@@ -2375,6 +2391,31 @@ test("worked time uses the corrected job rate and clears incomplete crew totals"
   assert.equal((await job.get()).data().billing.hours, undefined);
   await approveWorkedTime.run(managerRequest({ jobId, assignmentId: "new-assignment", minutes: 30 }));
   assert.equal((await job.get()).data().billing.hours.approvedMinutes, 85);
+});
+
+test("a partial payout preserves paid work while pricing and client corrections update independently", async () => {
+  const { approveWorkedTime, correctJobPrices, updateJobPricing } = functionsIndex;
+  const jobId = "worked-time-partial-price-update";
+  const job = jobDocument(jobId);
+  await createJob(jobId, { assignedCleanerIds: ["cleaner-a", "cleaner-b"], operationalStatus: "COMPLETED",
+    pay: { mode: "HOURLY", rateCents: 2400 }, clientPrice: 80 });
+  const first = job.collection("assignments").doc("first");
+  const second = job.collection("assignments").doc("second");
+  await first.set({ cleanerId: "cleaner-a", isActive: true });
+  await second.set({ cleanerId: "cleaner-b", isActive: true });
+  await approveWorkedTime.run(managerRequest({ jobId, assignmentId: first.id, minutes: 60 }));
+  await approveWorkedTime.run(managerRequest({ jobId, assignmentId: second.id, minutes: 90 }));
+  await job.update({ payoutIdsByCleaner: { "cleaner-a": "recorded" } });
+  const paidBefore = (await first.get()).data();
+  await updateJobPricing.run(managerRequest({ jobId, cleanerOnly: true, prices: { pay: { mode: "HOURLY", rateCents: 3000 } } }));
+  await correctJobPrices.run(managerRequest({
+    jobId, clientPricing: { mode: "HOURLY", hourlyRateCents: 4800 }, reason: "Apply hourly client pricing",
+  }));
+  assert.deepEqual((await first.get()).data(), paidBefore);
+  assert.equal((await second.get()).get("payoutCents"), 4500);
+  assert.equal((await job.get()).get("billing.hours.approvedMinutes"), 150);
+  assert.deepEqual((await job.collection("corrections").get()).docs.map(doc => doc.get("kind")).sort(),
+    ["CLEANER_PAY", "CLIENT_PRICE"]);
 });
 
 test("roster edits require a fresh crew total when a worker returns", async () => {

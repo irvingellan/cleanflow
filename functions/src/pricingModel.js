@@ -1,4 +1,4 @@
-import { defaultServiceType } from "./serviceTypes.js";
+import { defaultServiceType, normalizeServiceType } from "./serviceTypes.js";
 import { maxCleanersPerJob, requiredCleanerCount } from "./offerSlots.js";
 
 const maxRateCents = 10_000_000;
@@ -43,7 +43,7 @@ function resolveSide({ job, property, cleanerCount, convert, side }) {
     return rate("FIXED", job[fixedField], true, convert);
   }
 
-  const serviceType = job.serviceType || defaultServiceType;
+  const serviceType = normalizeServiceType(job.serviceType);
   if (Object.hasOwn(property.serviceRates ?? {}, serviceType)) {
     const configured = property.serviceRates[serviceType]?.[side];
     if (configured == null) return rate("FIXED", undefined, false, convert);

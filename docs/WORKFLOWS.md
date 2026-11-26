@@ -504,22 +504,28 @@ access-reset meaning. See the [notification runbook](NOTIFICATIONS_V1_85.md).
 
 ### Reporting and approving hourly work
 
-In the Cleaner Hub, an assigned cleaner can report her elapsed time while the
+In the Cleaner Hub, an assigned cleaner can submit her elapsed time while the
 Job is in progress, after its checklist is submitted, or after completion.
-Reports round to the nearest five minutes and remain editable until approved.
+She confirms before sending. The Hub then displays the submitted time and
+approval status. An identical retry returns the original result. Time rounds
+to the nearest five minutes, so two minutes round to zero and three to five.
 Touch-ups default to 120 minutes. A longer duration requires a deliberate
 manager entry.
 
-Managers review and, if necessary, adjust each person's minutes in Job Detail.
-Approval fixes that person's amount at the agreed hourly rate. Hourly client
-billing uses the sum of all approved roster minutes. Weekly close lists Jobs
-that still need approval. A completed Job can pay an approved individual share
-while someone else's hours are pending. Receipts retain the cents paid even
-when other shares still need review.
+Managers review each person's minutes in Job Detail and can correct or remove
+an approval until that cleaner is paid. An hourly client pays for the sum of
+the roster's approved minutes. Each hourly cleaner's own approved minutes
+determine her pay. Weekly close lists Jobs that still need approval.
+A completed Job can record payment for an approved individual share while
+someone else's hours are pending.
 
-An approval locks the Job's pricing and service type. Use **Remove approval**
-before changing the Job's rates or replacing a cleaner with approved hours.
-The cleaner's reported time is kept. Approve the hours again after reviewing
-the new Job rates. A saved agreement with the cleaner keeps its own terms.
-The manager can correct or remove an individual approval until that share is
-paid.
+The manager can edit prices after approval. Updating Job-based cleaner rates
+recalculates approved, unpaid shares and records the changes together. Saved
+cleaner agreements keep their terms. After a payout is recorded, the manager
+uses **Correct client price** and provides a reason to update the client
+charge. Weekly close uses verified receipts for the amounts already paid.
+The app records payments made outside CleanFlow.
+
+**Remove approval** retains the cleaner's submitted time and clears the
+approval and derived client hours. It remains available for unpaid work and
+for the separate roster changes that require approval removal.

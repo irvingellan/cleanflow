@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canRecordWorkedTime, roundedWorkedMinutes } from "./workedTime.js";
+import { canRecordWorkedTime, cleanerSubmission, roundedWorkedMinutes } from "./workedTime.js";
 import { hourlyAmountCents } from "./hourlyAmount.js";
 
 describe("worked time", () => {
@@ -13,6 +13,21 @@ describe("worked time", () => {
       expect(() => roundedWorkedMinutes(input)).toThrow();
     }
   });
+  it("accepts exact retries and refuses a different duration even when it rounds to the same value", () => {
+    const initial = cleanerSubmission({ minutes: 123 });
+    expect(initial).toEqual({ minutes: 125, submittedMinutes: 123 });
+    expect(cleanerSubmission({ minutes: 123 }, initial)).toEqual(initial);
+    expect(() => cleanerSubmission({ minutes: 124 }, initial)).toThrow("Worked time was already sent.");
+  });
+
+  it("checks both clock values on retries and compares legacy submissions by rounded minutes", () => {
+    const input = { start: "09:00", end: "10:00" };
+    const initial = cleanerSubmission(input);
+    expect(cleanerSubmission(input, initial)).toEqual(initial);
+    expect(() => cleanerSubmission({ start: "09:05", end: "10:05" }, initial)).toThrow("already sent");
+    expect(cleanerSubmission({ minutes: 2 }, { minutes: 0 }).minutes).toBe(0);
+  });
+
   it("rounds pay in cents and accepts an explicitly approved zero", () => {
     expect(hourlyAmountCents(2201, 125)).toBe(4585);
     expect(hourlyAmountCents(2201, 0)).toBe(0);

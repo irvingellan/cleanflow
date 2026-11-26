@@ -22,10 +22,15 @@ describe("worked time form", () => {
     fireEvent.change(field("Minutes"), { target: { value: "58" } });
     expect(screen.getByText("Total: 1 h 58 min")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Save hours" }));
+    expect(screen.getByText("After you send, only the manager can change these hours.")).toBeVisible();
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send hours" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save hours");
-    fireEvent.click(screen.getByRole("button", { name: "Save hours" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send hours" }));
     expect(await screen.findByText("Waiting for approval · 2 h")).toBeVisible();
     expect(save).toHaveBeenLastCalledWith(118);
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("does not let a cleaner save zero or more than 24 hours", () => {
@@ -39,6 +44,15 @@ describe("worked time form", () => {
     expect(button).toBeDisabled();
     fireEvent.change(field("Hours"), { target: { value: "3" } });
     expect(button).toBeEnabled();
+  });
+
+  it("shows an existing submission in read-only form even after approval is removed", () => {
+    const { rerender } = render(<WorkedTimeForm language="en"
+      work={{ reportedMinutes: 60, approvedMinutes: 75 }} />);
+    expect(screen.getByText("Hours sent · 1 h")).toBeVisible();
+    rerender(<WorkedTimeForm language="en" work={{ reportedMinutes: 60 }} />);
+    expect(screen.getByText("Waiting for approval · 1 h")).toBeVisible();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 
   it("shows an approval to the cleaner without any way to change it", () => {

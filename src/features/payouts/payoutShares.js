@@ -33,10 +33,14 @@ function approvedPayoutCents(job, cleanerId) {
   return Number.isSafeInteger(amount) && amount >= 0 ? amount : null;
 }
 
+function payoutRecordedFor(job, cleanerId) {
+  return Boolean(job.payoutId || job.payoutPaidAt || job.payoutIdsByCleaner?.[cleanerId]);
+}
+
 export function payoutNeedsHoursReview(job) {
   if (unresolvedClientHours(job)) return true;
   const roster = payoutRoster(job);
-  return roster.length ? roster.some(id => hourlyAgreement(job, id) && approvedPayoutCents(job, id) === null)
+  return roster.length ? roster.some(id => !payoutRecordedFor(job, id) && hourlyAgreement(job, id) && approvedPayoutCents(job, id) === null)
     : job.pay?.mode === "HOURLY";
 }
 
@@ -46,7 +50,9 @@ export function payoutShares(job) {
   const amounts = fixedCleanerShares(resolveJobPricing(job), ids.length);
   const agreements = job.payoutAgreementsByCleaner ?? {};
   return ids.map((cleanerId, index) => {
-    let cents = null;
+    const recordedApproval = payoutRecordedFor(job, cleanerId) ? approvedPayoutCents(job, cleanerId) : null;
+    let cents = recordedApproval;
+    if (recordedApproval !== null) return { cleanerId, cents };
     if (hourlyAgreement(job, cleanerId)) {
       cents = approvedPayoutCents(job, cleanerId);
     } else if (!unresolvedClientHours(job)) {

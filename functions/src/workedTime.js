@@ -1,4 +1,6 @@
-import { clearApprovedAssignmentBilling } from "./approvedAssignmentBilling.js";
+import { appendJobCorrection, cleanerWasPaid, jobHasPayoutMarker, jobPayoutRecords } from "./jobCorrections.js";
+import { normalizeServiceType } from "./serviceTypes.js";
+import { approvedAssignmentBillingUpdate, clearApprovedAssignmentBilling, validApprovedMinutes } from "./approvedAssignmentBilling.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { initialChecklistRunId, validChecklistRunJobId } from "./checklistRunService.js";
@@ -18,7 +20,7 @@ function clock(value) {
   return 60 * hours + minutes;
 }
 
-export function roundedWorkedMinutes(input, allowedZero = false) {
+function workedDuration(input, allowedZero = false) {
   const { minutes, start, end } = input || {};
   const from = clock(start);
   const to = clock(end);
@@ -27,7 +29,26 @@ export function roundedWorkedMinutes(input, allowedZero = false) {
   if (!Number.isInteger(duration) || duration < (allowedZero ? 0 : 1) || duration > 1440) {
     throw new HttpsError("invalid-argument", "Enter a duration from 1 minute to 24 hours.");
   }
-  return Math.round(duration / 5) * 5;
+  return duration;
+}
+
+export function roundedWorkedMinutes(input, allowedZero = false) {
+  return Math.round(workedDuration(input, allowedZero) / 5) * 5;
+}
+
+export function cleanerSubmission(input, reportedWork) {
+  const submittedMinutes = workedDuration(input);
+  const minutes = Math.round(submittedMinutes / 5) * 5;
+  const clockTimes = input.start === undefined ? {} : { start: input.start, end: input.end };
+  const matches = reportedWork?.submittedMinutes == null ? reportedWork?.minutes === minutes
+    : reportedWork.submittedMinutes === submittedMinutes
+      && reportedWork.start === clockTimes.start && reportedWork.end === clockTimes.end;
+  if (reportedWork && !matches) {
+    throw new HttpsError("failed-precondition", "Worked time was already sent. Only the manager can change it.", {
+      reason: "worked-time-already-submitted",
+    });
+  }
+  return { minutes, submittedMinutes, ...clockTimes };
 }
 
 function belongs(data, ids) {
@@ -35,7 +56,7 @@ function belongs(data, ids) {
     && (data.jobId == null || data.jobId === ids.jobId);
 }
 
-async function loadRate(transaction, jobRef, ids, job, assignment) {
+export async function loadWorkedTimeRate(transaction, jobRef, ids, job, assignment) {
   let agreement = assignment.paySnapshot;
   if (assignment.sourceOfferId) {
     if (!validChecklistRunJobId(assignment.sourceOfferId)) return { unresolved: true };
@@ -46,10 +67,10 @@ async function loadRate(transaction, jobRef, ids, job, assignment) {
     agreement = offer;
   }
   if (agreement?.offeredPay?.mode === "HOURLY") {
-    return { hourly: true, rate: agreement.offeredPay.rateCents };
+    return { hourly: true, rate: agreement.offeredPay.rateCents, agreed: true };
   }
   if (agreement && (Object.hasOwn(agreement, "offeredCompensation") || Object.hasOwn(agreement, "offeredPay"))) {
-    return { unresolved: agreement.offeredCompensation == null };
+    return { unresolved: agreement.offeredCompensation == null, agreed: true };
   }
   return job.pay?.mode === "HOURLY" ? { hourly: true, rate: job.pay.rateCents } : {};
 }
@@ -89,6 +110,8 @@ export async function recordWorkedTime(database, { organizationId, uid, cleanerI
     if (!assignment || active.filter(doc => doc.data().cleanerId === assignment.cleanerId).length !== 1) {
       throw new HttpsError("permission-denied", "The assignment is unavailable.");
     }
+    const submission = manager ? null : cleanerSubmission(input, assignment.reportedWork);
+    if (!manager && assignment.reportedWork) return { minutes: assignment.reportedWork.minutes };
     if (!removeApproval && !canRecordWorkedTime(job, belongs(checklist.data(), ids) ? checklist.data().status : null)) {
       throw new HttpsError("failed-precondition", "Worked time is available after work has started.");
     }
@@ -96,7 +119,7 @@ export async function recordWorkedTime(database, { organizationId, uid, cleanerI
       const approved = active.filter(doc => doc.data().approvedWork);
       const teamMinutes = roster.map(id => active.find(doc => doc.data().cleanerId === id)?.data().approvedWork?.minutes);
       if (job.billing?.mode !== "HOURLY" || active.length !== roster.length
-        || !teamMinutes.every(value => Number.isInteger(value) && value >= 0 && value <= 1440 && value % 5 === 0)) {
+        || !teamMinutes.every(validApprovedMinutes)) {
         throw new HttpsError("failed-precondition", "Every active cleaner needs approved hours.");
       }
       const approvedMinutes = teamMinutes.reduce((sum, value) => sum + value, 0);
@@ -107,58 +130,64 @@ export async function recordWorkedTime(database, { organizationId, uid, cleanerI
       });
       return { approvedMinutes };
     }
-    if (job.payoutId || job.payoutPaidAt || job.payoutIdsByCleaner?.[assignment.cleanerId]) {
+    const payouts = await jobPayoutRecords(transaction, organization, jobId);
+    if (cleanerWasPaid(job, assignment.cleanerId, payouts)) {
       throw new HttpsError("failed-precondition", "The assignment is already paid.");
     }
+    const afterPayout = jobHasPayoutMarker(job) || !payouts.empty;
+    const correction = (kind, before, after, reason) => appendJobCorrection(transaction, jobRef, {
+      kind, before: { assignmentId: target.id, ...before }, after: { assignmentId: target.id, ...after },
+      reason, byUid: uid, afterPayout,
+    });
     const approvedAssignments = Object.fromEntries(active.flatMap(doc => doc.data().approvedWork ? [[doc.id, doc.data().cleanerId]] : []));
     if (manager && removeApproval) {
       if (!assignment.approvedWork) return { removed: false };
       delete approvedAssignments[target.id];
       transaction.update(target.ref, { approvedWork: FieldValue.delete(), payoutCents: FieldValue.delete() });
       transaction.update(jobRef, { approvedAssignments, ...clearApprovedAssignmentBilling(job) });
+      correction("APPROVAL_REMOVED", { minutes: assignment.approvedWork.minutes, payoutCents: assignment.payoutCents ?? null },
+        { minutes: null, payoutCents: null }, "Manager removed the worked time approval.");
       return { removed: true };
     }
-    const rate = await loadRate(transaction, jobRef, ids, job, assignment);
+    const rate = await loadWorkedTimeRate(transaction, jobRef, ids, job, assignment);
     const clientHourly = job.billing?.mode === "HOURLY";
-    if (rate.unresolved || (!rate.hourly && !(manager && clientHourly))
+    if (rate.unresolved || (!rate.hourly && !(manager && (clientHourly || assignment.reportedWork || assignment.approvedWork)))
       || (rate.hourly && hourlyAmountCents(rate.rate, 0) === null)) {
       throw new HttpsError("failed-precondition", "Eligible hourly pricing is required.");
     }
-    // A manager may correct an approval until that cleaner is paid; a cleaner cannot change it.
     if (assignment.approvedWork && !manager) {
       throw new HttpsError("failed-precondition", "Worked time is already approved.");
     }
-    const minutes = manager && input.minutes === undefined && input.start === undefined && input.end === undefined
-      ? assignment.reportedWork?.minutes : roundedWorkedMinutes(input, manager);
-    if (manager && job.serviceType === "AIRBNB_TOUCH_UP" && minutes > 120
-      && input.minutes === undefined && input.start === undefined && input.end === undefined) {
+    const useReport = input.minutes === undefined && input.start === undefined && input.end === undefined;
+    const minutes = submission?.minutes ?? (useReport ? assignment.reportedWork?.minutes : roundedWorkedMinutes(input, true));
+    if (manager && normalizeServiceType(job.serviceType) === "AIRBNB_TOUCH_UP" && minutes > 120 && useReport) {
       throw new HttpsError("failed-precondition", "Explicitly adjust a touch-up that exceeds two hours.");
     }
-    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440 || minutes % 5 !== 0) {
+    if (!validApprovedMinutes(minutes)) {
       throw new HttpsError("failed-precondition", "Reported or adjusted time is required.");
     }
     if (!manager) {
-      transaction.update(target.ref, { reportedWork: { minutes, reportedAt: FieldValue.serverTimestamp() } });
+      transaction.update(target.ref, { reportedWork: { ...submission, reportedAt: FieldValue.serverTimestamp() } });
       return { minutes };
     }
-    const payoutCents = rate.hourly ? hourlyAmountCents(rate.rate, minutes) : null;
+    const payoutCents = rate.hourly ? hourlyAmountCents(rate.rate, minutes) : assignment.payoutCents ?? null;
     approvedAssignments[target.id] = assignment.cleanerId;
-    const approvals = new Map(active.map(doc => [doc.data().cleanerId,
-      doc.id === target.id ? minutes : doc.data().approvedWork?.minutes]));
-    const teamMinutes = roster.map(id => approvals.get(id));
-    const completeTeam = clientHourly && active.length === roster.length && teamMinutes.every(value =>
-      Number.isInteger(value) && value >= 0 && value <= 1440 && value % 5 === 0);
+    const approved = active.map(doc => doc.id === target.id
+      ? { assignmentId: doc.id, cleanerId: assignment.cleanerId, minutes }
+      : { assignmentId: doc.id, cleanerId: doc.data().cleanerId, minutes: doc.data().approvedWork?.minutes });
     transaction.update(jobRef, {
       approvedAssignments,
-      ...(completeTeam ? {
-        "billing.hours": { approved: true, approvedMinutes: teamMinutes.reduce((sum, value) => sum + value, 0),
-          source: "APPROVED_ASSIGNMENTS", roster, assignmentIds: active.map(doc => doc.id).sort() },
-      } : clearApprovedAssignmentBilling(job)),
+      ...approvedAssignmentBillingUpdate(job, clientHourly, approved),
     });
     transaction.update(target.ref, {
       approvedWork: { minutes, approvedByUid: uid, approvedAt: FieldValue.serverTimestamp() },
       ...(rate.hourly && { payoutCents }),
     });
+    const beforeMinutes = assignment.approvedWork?.minutes ?? assignment.reportedWork?.minutes;
+    if (beforeMinutes != null && beforeMinutes !== minutes) {
+      correction("WORKED_TIME", { minutes: beforeMinutes, payoutCents: assignment.payoutCents ?? null },
+        { minutes, payoutCents }, "Manager adjusted worked time.");
+    }
     return { minutes, payoutCents };
   });
 }

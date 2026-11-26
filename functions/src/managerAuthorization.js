@@ -5,14 +5,13 @@ export function isActiveManagerMembership(data) {
   return data?.role === "MANAGER" && data?.active === true;
 }
 
-export async function requireOrganizationManager(database, request, organizationId) {
+export async function requireOrganizationManager(database, request, organizationId, transaction) {
   if (!request.auth?.uid || request.auth.token?.firebase?.sign_in_provider === "anonymous") {
     throw new HttpsError("unauthenticated", "A non-anonymous account is required.");
   }
 
-  const membership = await database.doc(
-    `organizations/${organizationId}/members/${request.auth.uid}`,
-  ).get();
+  const reference = database.doc(`organizations/${organizationId}/members/${request.auth.uid}`);
+  const membership = await (transaction ? transaction.get(reference) : reference.get());
   if (!isActiveManagerMembership(membership.data())) {
     throw new HttpsError("permission-denied", "Active organization manager access is required.");
   }

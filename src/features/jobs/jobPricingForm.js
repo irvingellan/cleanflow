@@ -1,4 +1,5 @@
 import { centsFromDollars, PRICING_FIXED, PRICING_HOURLY } from "../billing/billingStatementModel.js";
+import { rosterCleanerIds } from "./offerSlots.js";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
 
 function inputAmount(rate, fixedAmount, storedMode, hourlyCents) {
@@ -47,8 +48,21 @@ export function readJobPriceForm({ clientMode, clientPrice, cleanerMode, cleaner
   };
 }
 
-export function jobPricesLocked(job) {
-  return Boolean(Object.keys(job?.approvedAssignments ?? {}).length || job?.payoutId || job?.payoutPaidAt || Object.keys(job?.payoutIdsByCleaner ?? {}).length || job?.billing?.hours?.approved === true);
+export function jobHasRecordedPayout(job) {
+  return Boolean(job?.payoutId || job?.payoutPaidAt || Object.keys(job?.payoutIdsByCleaner ?? {}).length);
+}
+
+export function canEditJobCleanerPay(job) {
+  return !jobHasRecordedPayout(job) || (!job.payoutId && !job.payoutPaidAt
+    && rosterCleanerIds(job).some(cleanerId => !job.payoutIdsByCleaner?.[cleanerId]));
+}
+
+export function readClientPriceCorrection({ clientMode, clientPrice }) {
+  const cents = inputCents(clientPrice);
+  if (cents == null) return null;
+  if (clientMode === PRICING_HOURLY) return { mode: clientMode, hourlyRateCents: cents };
+  if (clientMode === PRICING_FIXED) return { mode: clientMode, amountCents: cents };
+  return null;
 }
 
 // Validate a manager's pricing write independently of the form. Only copy rate fields;

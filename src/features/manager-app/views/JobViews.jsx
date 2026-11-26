@@ -91,6 +91,7 @@ export function JobViews({
   startCleaning,
   completeCleaning,
   saveJobPrices,
+  saveJobPriceCorrection,
   saveJobDetails,
   saveJobSchedule,
   offerManualReplacement,
@@ -236,6 +237,7 @@ export function JobViews({
           onStartCleaning={startCleaning}
           onCompleteCleaning={completeCleaning}
           onUpdatePrices={saveJobPrices}
+          onCorrectPrice={saveJobPriceCorrection}
           onUpdateDetails={saveJobDetails}
           onUpdateSchedule={saveJobSchedule}
           onOfferManualReplacement={offerManualReplacement}

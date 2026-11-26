@@ -15,6 +15,13 @@ describe("approved pay", () => {
       { cleanerId: "b", cents: null }, { cleanerId: "c", cents: 0 }]);
     expect(unpaidPayoutShares(team)).toEqual([{ cleanerId: "a", cents: 5750 }]);
   });
+  it("keeps the approved amount of a paid cleaner after the Job switches to fixed pay", () => {
+    const job = { ...team, pay: { mode: "FIXED", perCleanerCents: 4300 }, payoutIdsByCleaner: { a: "receipt-a" },
+      billing: { mode: "FIXED" } };
+    expect(payoutShares(job)).toEqual([{ cleanerId: "a", cents: 5750 },
+      { cleanerId: "b", cents: 4300 }, { cleanerId: "c", cents: 4300 }]);
+  });
+
   it("does not offer a payment for a linked receipt or a rounded zero", () => {
     expect(unpaidPayoutShares({ ...team, payoutIdsByCleaner: { a: "receipt-a" } })).toEqual([]);
   });

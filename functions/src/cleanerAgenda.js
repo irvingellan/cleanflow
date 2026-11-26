@@ -134,7 +134,7 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
     const pay = offerPayForRecipient(agreement, job, cleanerId);
     const canReportTime = assignment && (pay.offeredPay?.mode === "HOURLY"
       || (!agreement && job.pay?.mode === "HOURLY"));
-    const workedTime = canReportTime && {
+    const workedTime = (canReportTime || assignment?.reportedWork || assignment?.approvedWork) && {
       reportedMinutes: assignment.reportedWork?.minutes ?? null,
       approvedMinutes: assignment.approvedWork?.minutes ?? null,
       payoutCents: assignment.payoutCents ?? null,

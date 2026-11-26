@@ -279,8 +279,14 @@ Job creation and service-type changes on a saved Job copy the selected
 Property rates. Fixed snapshots use `clientPrice` and `cleanerPayout`
 in dollars. An hourly side uses `billing.mode` and `billing.hourlyRateCents`
 for the client or `pay.mode` and `pay.rateCents` for the cleaner. The manager
-can edit the Job snapshot. A recorded payout or any approved hours lock
-that edit. For a Property with no service table, switching the type in the
+can edit the Job snapshot after worked time approval. Before payout,
+the standard editor updates prices and recalculates approved, unpaid
+Assignment pay that uses the Job's cleaner rate. Issued Offer terms and
+Assignment pay snapshots remain the basis for agreed pay. After any payout,
+a manager changes the client price with a reason through the correction action.
+Cleaner pay can still be updated for an unpaid Assignment that uses Job rates.
+Service-type changes can copy Property rates for eligible sides of the Job.
+For a Property with no service table, switching the type in the
 legacy creation form keeps amounts already entered and prompts for review.
 
 An hourly Offer stores the recipient's own `offeredPay` with `mode: "HOURLY"`
@@ -559,18 +565,25 @@ are independent of these records.
 
 ### Approved hourly work
 
-An active Assignment can store server-owned `reportedWork` (rounded minutes and
-server timestamp), `approvedWork` (rounded minutes, manager UID and server
-timestamp), and `payoutCents` for a confirmed hourly cleaner rate. The cleaner can
-correct her report until approval. The manager may adjust the duration during
-approval. The approved amount uses the Assignment or Offer terms when present.
-An already paid Assignment keeps its approval and receipt. The server maintains
-`approvedAssignments` on the Job, keyed by Assignment ID, so a partial approval
-also locks pricing and service type. Removing an unpaid approval retains the
-reported time and clears the approval, amount and any derived client total.
-A Job billed hourly receives
-`billing.hours` with source `APPROVED_ASSIGNMENTS` after all people on its roster
-are approved. This total stores the roster and the Assignment IDs. Roster or
-capacity changes clear it, so a returning cleaner's previous approval cannot
-carry forward. Its minutes sum each person's approved time. A rounded zero is a
-valid approved duration. A missing approval remains pending.
+An active Assignment can store server-owned `reportedWork` (submitted and
+rounded minutes, optional clock times, and a server timestamp), `approvedWork`
+(rounded minutes, manager UID and server timestamp), and `payoutCents`.
+A cleaner submits once. Repeating the same submission returns the original
+rounded minutes. Reports created before submitted minutes were stored are
+compared by rounded minutes. The manager may adjust the duration during or
+after approval, until that cleaner is paid. Removing an unpaid approval
+retains the submission and clears the approval, payout amount, and any
+derived client total.
+
+The server maintains `approvedAssignments` on the Job, keyed by Assignment
+ID. An hourly Job gets `billing.hours` with source `APPROVED_ASSIGNMENTS` when
+all people on its roster have approved time. Its minutes sum each cleaner's
+approved time. The total records the roster and Assignment IDs so it can be
+invalidated when the roster changes. A rounded zero is a valid approval.
+
+A correction creates a manager-readable, server-written record under
+`jobs/{jobId}/corrections/{correctionId}` in the same transaction. The
+`kind` is `CLIENT_PRICE`, `WORKED_TIME`, `APPROVAL_REMOVED`, or `CLEANER_PAY`.
+Every record stores `before`, `after`, `reason`, `byUid`, `at`, and
+`afterPayout`. The Assignment-specific snapshots contain the Assignment ID.
+A paid Assignment retains its approval, recorded amount, and receipt.
