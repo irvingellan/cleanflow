@@ -53,6 +53,7 @@ const {
   publicClientPortal,
   clientPortalAccess,
   correctChecklistAnswer,
+  correctJobPrices,
   rescheduleJob, setJobCleanerSpots, respondToMyOffer,
   getMyJobAccess, getMyJobAccessPhoto, getPropertyAccessPhoto, removePropertyAccessPhoto, uploadPropertyAccessPhoto,
 } = await import("../functions/src/index.js");
@@ -158,6 +159,59 @@ test("active manager can read/query/create/update only supported operational doc
     const added = collection.doc("new-record");
     await assertSucceeds(added.set({ organizationId: org }));
   }
+});
+
+test("Job price correction records are readable only by active managers of that organization", async () => {
+  const path = `${root}/jobs/job/corrections`;
+  await admin.doc(`${path}/correction`).set({ kind: "CLIENT_PRICE" });
+  const manager = account("manager").firestore().collection(path);
+  await assertSucceeds(manager.doc("correction").get());
+  await assertSucceeds(manager.orderBy("kind").get());
+  for (const actor of [account("cleaner"), account("other-manager"), account("inactive")]) {
+    const collection = actor.firestore().collection(path);
+    await assertFails(collection.doc("correction").get());
+    await assertFails(collection.get());
+    await assertFails(collection.doc("new").set({ kind: "CLIENT_PRICE" }));
+  }
+  await assertFails(manager.doc("new").set({ kind: "CLIENT_PRICE" }));
+  await assertFails(manager.doc("correction").update({ reason: "Rewritten reason" }));
+  await assertFails(manager.doc("correction").delete());
+});
+
+test("the paid Job client price changes through the callable with an auditable history", async () => {
+  const path = `${root}/jobs/job`;
+  const job = admin.doc(path);
+  const hours = { approved: true, quantity: 3 };
+  const cleanerFields = { cleanerPayout: 80, pay: { mode: "FIXED", perCleanerCents: 8000 } };
+  await job.update({ clientPrice: 100, billing: { hours }, ...cleanerFields });
+  const browser = account("manager").firestore().doc(path);
+  await assertSucceeds(browser.update({ clientPrice: 120 }));
+  await assertSucceeds(browser.update({ payoutId: "payout", payoutPaidAt: serverTimestamp() }));
+  const { payoutPaidAt } = (await job.get()).data();
+  await assertFails(browser.update({ clientPrice: 150 }));
+  await assertFails(browser.update({ "billing.mode": "HOURLY", "billing.hourlyRateCents": 6000 }));
+  await assertFails(browser.update({ payoutId: deleteField(), payoutPaidAt: deleteField() }));
+  const data = { jobId: "job", clientPricing: { mode: "HOURLY", hourlyRateCents: 6000 }, reason: "Confirmed hourly rate" };
+  await assert.rejects(correctJobPrices.run(request("cleaner", data)), { code: "permission-denied" });
+  await assert.rejects(correctJobPrices.run(request("other-manager", data)), { code: "permission-denied" });
+  assert.deepEqual(await correctJobPrices.run(request("manager", data)), { unchanged: false });
+  assert.deepEqual(await correctJobPrices.run(request("manager", data)), { unchanged: true });
+  assert.deepEqual((await job.get()).data(), {
+    organizationId: org, fixture: true, payoutId: "payout", payoutPaidAt, ...cleanerFields,
+    billing: { mode: "HOURLY", hourlyRateCents: 6000, hours },
+  });
+  const records = await job.collection("corrections").get();
+  assert.equal(records.size, 1);
+  const { at, ...record } = records.docs[0].data();
+  assert.ok(at instanceof Timestamp);
+  assert.deepEqual(record, {
+    kind: "CLIENT_PRICE",
+    before: { mode: "FIXED", amountCents: 12000 },
+    after: data.clientPricing,
+    reason: data.reason,
+    byUid: "manager",
+    afterPayout: true,
+  });
 });
 
 test("a manager browser archives and updates operational documents but cannot delete them", async () => {

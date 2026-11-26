@@ -45,6 +45,7 @@ import {
   rescheduleJob as rescheduleJobRequest,
 } from "./jobScheduleService.js";
 import { currentScheduleRevision } from "./scheduleConfirmation.js";
+import { correctJobPrices } from "./jobPriceCorrectionService.js";
 import {
   createManagerOperationTracker,
   createManagerPageVisitId,
@@ -501,6 +502,15 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     return updateJob((job) => updateJobPrices(job.id, prices));
   }
 
+  async function saveJobPriceCorrection(correction) {
+    let result;
+    await updateJob(async (job) => {
+      result = await correctJobPrices(job.id, correction);
+      return getJobById(job.id, { serverOnly: true });
+    });
+    return result;
+  }
+
   async function saveJobDetails(details) {
     return updateJob((job) => updateJobDetails(job.id, details));
   }
@@ -850,6 +860,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       submitChecklistRunForReview,
       abandonChecklistRunAndCompleteJob,
       saveJobPrices,
+      saveJobPriceCorrection,
       saveJobDetails,
       saveJobSchedule,
       offerManualReplacement,
