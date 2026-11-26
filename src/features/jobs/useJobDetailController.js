@@ -229,6 +229,20 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
     }
   }
 
+  async function refreshWorkedTime() {
+    if (!selectedJob) return;
+    const jobId = selectedJob.id;
+    const epoch = selectedJobEpochRef.current;
+    const [latest, assignments] = await Promise.all([
+      getJobById(jobId, { serverOnly: true }),
+      loadDetailOperation("assignments", () => getJobAssignments(jobId)),
+    ]);
+    if (selectedJobIdRef.current !== jobId || selectedJobEpochRef.current !== epoch) return;
+    if (!latest) throw new Error("Job not found.");
+    updateSelectedJob(latest);
+    setDetailData(current => ({ ...current, assignments, isLoadingAssignments: false, hasAssignmentsError: false }));
+  }
+
   async function refreshChecklistRun(job = selectedJob, { manual = false } = {}) {
     if (!job) {
       return;
@@ -816,6 +830,7 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       isCreatingChecklistRun: detailData.isCreatingChecklistRun,
       hasCreateChecklistRunError: detailData.hasCreateChecklistRunError,
       refreshChecklistRun,
+      refreshWorkedTime,
       checklistCapability: detailData.checklistCapability,
       isLoadingChecklistCapability: detailData.isLoadingChecklistCapability,
       hasChecklistCapabilityError: detailData.hasChecklistCapabilityError,

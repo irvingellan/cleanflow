@@ -713,6 +713,10 @@ export async function updateJobDetails(jobId, details) {
       throw error;
     }
     let prices = {};
+    if (jobPricesLocked(job) && updates.serviceType) {
+      if (updates.serviceType !== normalizeServiceType(job.serviceType)) throw new Error("Recorded Job prices are read-only.");
+      delete updates.serviceType;
+    }
     if (updates.serviceType && updates.serviceType !== normalizeServiceType(job.serviceType)) {
       const property = await transaction.get(doc(db, "organizations", organizationId, "properties", job.propertyId));
       if (!property.exists()) throw new Error("Property not found.");

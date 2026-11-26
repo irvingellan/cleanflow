@@ -1,3 +1,4 @@
+import { assertUnapprovedAssignment, clearApprovedAssignmentBilling } from "./approvedAssignmentBilling.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireMission2Writes } from "./mission2WriteControl.js";
@@ -123,6 +124,7 @@ export function respondToRescheduleForCleaner(database, {
 
     let removal = null;
     if (decision === "DECLINED") {
+      assertUnapprovedAssignment(assignment);
       const runRef = jobRef.collection("checklistRuns").doc("initial");
       const run = await transaction.get(runRef);
       if (await checklistWorkStarted(transaction, runRef, run.data())) {
@@ -145,6 +147,7 @@ export function respondToRescheduleForCleaner(database, {
         byCleaner: { ...job.scheduleConfirmation.byCleaner, [cleanerId]: { ...entry, state: decision } },
       },
       ...removal,
+      ...(removal && clearApprovedAssignmentBilling(job)),
     });
     if (removal) {
       if (entry.assignmentId) {

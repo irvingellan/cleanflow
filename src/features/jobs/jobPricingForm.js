@@ -48,7 +48,7 @@ export function readJobPriceForm({ clientMode, clientPrice, cleanerMode, cleaner
 }
 
 export function jobPricesLocked(job) {
-  return Boolean(job?.payoutId || job?.payoutPaidAt || Object.keys(job?.payoutIdsByCleaner ?? {}).length || job?.billing?.hours?.approved === true);
+  return Boolean(Object.keys(job?.approvedAssignments ?? {}).length || job?.payoutId || job?.payoutPaidAt || Object.keys(job?.payoutIdsByCleaner ?? {}).length || job?.billing?.hours?.approved === true);
 }
 
 // Validate a manager's pricing write independently of the form. Only copy rate fields;

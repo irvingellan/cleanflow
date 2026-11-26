@@ -139,7 +139,8 @@ export function JobDetailsSection({
         <form className="cleaning-form" noValidate onSubmit={saveJobDetails}>
           <JobServiceTypeSelect value={jobDetailValues.serviceType} disabled={isSavingJobDetails || jobPricesLocked(job)}
             onChange={(event) => setJobDetailValues((current) => ({ ...current, serviceType: event.target.value }))} />
-          {typeChanged && (
+          {jobPricesLocked(job) && <p className="form-hint">{serviceTypeMessage(language, "paidPrices")}</p>}
+          {typeChanged && !jobPricesLocked(job) && (
             <div className="form-hint" role="status">
               <p>{serviceTypeMessage(language, checkPrices ? "keepJobPrices" : "typePriceChange")}</p>
               {nextRates && <>

@@ -1,4 +1,5 @@
 import {
+  deleteField,
   collection,
   doc,
   getDoc,
@@ -192,6 +193,16 @@ export async function getJobAssignments(jobId) {
  * manager must ask for one more spot explicitly (`addSpot`), so a stale screen
  * or a double click cannot put an extra cleaner on a single-cleaner Job.
  */
+function clearApprovedAssignmentBilling(job) {
+  return job.billing?.hours?.source === "APPROVED_ASSIGNMENTS" ? { "billing.hours": deleteField() } : {};
+}
+
+function assertUnapprovedAssignment(job, assignment) {
+  if (assignment.approvedWork) {
+    throw assignmentError("assignment-has-approved-work", "Remove the worked time approval first.", job);
+  }
+}
+
 export async function assignInterestedCleaner(jobId, offerId, { addSpot = false } = {}) {
   const jobReference = jobDocument(jobId);
   const offerReference = offerDocument(jobId, offerId);
@@ -229,6 +240,7 @@ export async function assignInterestedCleaner(jobId, offerId, { addSpot = false 
     };
     transaction.update(jobReference, {
       ...jobUpdate,
+      ...clearApprovedAssignmentBilling(job),
       ...buildAssignmentChecklistContextRevisionUpdate(job),
     });
   });
@@ -252,6 +264,7 @@ async function hasActionableOffers(jobId) {
 export async function removeAssignment(jobId, assignmentId, actorUid) {
   const jobReference = jobDocument(jobId);
   const job = assertRosterEditable(await getDoc(jobReference));
+  if (job.approvedAssignments?.[assignmentId]) assertUnapprovedAssignment(job, { approvedWork: true });
   if (isAutomaticOfferJob(job) && job.automaticOfferBatch?.version === 2) {
     await removeAutomaticCleanerAssignmentCall({ jobId, assignmentId });
     return jobFromSnapshot(await getDoc(jobReference));
@@ -274,6 +287,7 @@ export async function removeAssignment(jobId, assignmentId, actorUid) {
     }
 
     const assignment = assignmentSnapshot.data();
+    assertUnapprovedAssignment(job, assignment);
     if (!getAssignedCleanerIds(job).includes(assignment.cleanerId)) {
       throw assignmentError("assignment-mismatch", "This assignment no longer matches the Job roster.", job);
     }
@@ -287,6 +301,7 @@ export async function removeAssignment(jobId, assignmentId, actorUid) {
     const jobUpdate = assignmentRemovalJobUpdate(job, assignment.cleanerId, jobHasActionableOffers);
     transaction.update(jobReference, {
       ...jobUpdate,
+      ...clearApprovedAssignmentBilling(job),
       ...buildAssignmentChecklistContextRevisionUpdate(job),
     });
   });
@@ -319,6 +334,7 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
     }
 
     const previousAssignment = assignmentSnapshot.data();
+    assertUnapprovedAssignment(job, previousAssignment);
     const replacementOffer = { ...offerSnapshot.data(), id: offerSnapshot.id };
     const assignedCleanerIds = getAssignedCleanerIds(job);
     if (
@@ -347,6 +363,7 @@ export async function replaceAssignment(jobId, assignmentId, replacementOfferId,
     };
     transaction.update(jobReference, {
       ...jobUpdate,
+      ...clearApprovedAssignmentBilling(job),
       ...buildAssignmentChecklistContextRevisionUpdate(job),
     });
   });
@@ -369,7 +386,9 @@ export async function setRequiredCleanerCount(jobId, count) {
       || count < getAssignedCleanerIds(job).length) {
       throw assignmentError("invalid-spot-count", "The number of cleaners is not valid for this Job.", job);
     }
-    transaction.update(jobReference, { requiredCleanerCount: count });
+    if (count !== requiredCleanerCount(job)) {
+      transaction.update(jobReference, { requiredCleanerCount: count });
+    }
   });
   return jobFromSnapshot(await getDoc(jobReference));
 }

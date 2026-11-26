@@ -501,3 +501,25 @@ state and open currently authorized targets. An event remains in history when
 push fails. The manager can issue a one-time additional-device code to preserve
 a cleaner's existing sessions. Replacement and revocation retain their
 access-reset meaning. See the [notification runbook](NOTIFICATIONS_V1_85.md).
+
+### Reporting and approving hourly work
+
+In the Cleaner Hub, an assigned cleaner can report her elapsed time while the
+Job is in progress, after its checklist is submitted, or after completion.
+Reports round to the nearest five minutes and remain editable until approved.
+Touch-ups default to 120 minutes. A longer duration requires a deliberate
+manager entry.
+
+Managers review and, if necessary, adjust each person's minutes in Job Detail.
+Approval fixes that person's amount at the agreed hourly rate. Hourly client
+billing uses the sum of all approved roster minutes. Weekly close lists Jobs
+that still need approval. A completed Job can pay an approved individual share
+while someone else's hours are pending. Receipts retain the cents paid even
+when other shares still need review.
+
+An approval locks the Job's pricing and service type. Use **Remove approval**
+before changing the Job's rates or replacing a cleaner with approved hours.
+The cleaner's reported time is kept. Approve the hours again after reviewing
+the new Job rates. A saved agreement with the cleaner keeps its own terms.
+The manager can correct or remove an individual approval until that share is
+paid.

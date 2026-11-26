@@ -380,3 +380,33 @@ describe("fixed team payout evidence", () => {
     expect(close([team], { payouts: [first] }).jobs[0].paidAmount).toBeNull();
   });
 });
+
+describe("approved hourly team in the weekly close", () => {
+  const roster = ["cleaner-a", "cleaner-b"];
+  const team = job({ schemaVersion: 2, assignedCleanerId: null, assignedCleanerIds: roster,
+    pay: { mode: "HOURLY", rateCents: 2400 },
+    billing: { mode: "HOURLY", hourlyRateCents: 3600, hours: {
+      approved: true, source: "APPROVED_ASSIGNMENTS", roster, approvedMinutes: 360,
+    } },
+    payoutApprovedWorkByCleaner: {
+      "cleaner-a": { minutes: 180, payoutCents: 7200 },
+      "cleaner-b": { minutes: 180, payoutCents: 8100 },
+    },
+  });
+  it("charges the sum of minutes once and uses the separately approved cleaner amounts", () => {
+    const result = close([team]);
+    expect(result.overall).toMatchObject({ clientCharges: 216, cleanerPayoutTotal: 153, cleanerOutstandingTotal: 153,
+      grossOperationalMargin: 63 });
+    expect(result.jobs[0].cleanerShares.map(share => share.amount)).toEqual([72, 81]);
+  });
+  it("preserves every legacy paid subtotal when the additional job still needs hours", () => {
+    const historical = close([job({ payoutId: "payout-1" })], { payouts: [paid()] });
+    const pending = close([job({ payoutId: "payout-1" }), { ...team, id: "pending", payoutApprovedWorkByCleaner: {} }],
+      { payouts: [paid()] });
+    for (const field of ["knownClientCharges", "knownCleanerPayoutTotal", "knownCleanerPaidTotal",
+      "knownCleanerOutstandingTotal", "knownGrossOperationalMargin"]) {
+      expect(pending.overall[field]).toBe(historical.overall[field]);
+    }
+    expect(pending.jobs.find(row => row.id === "pending").attentionReasons).toContain("hours_review");
+  });
+});

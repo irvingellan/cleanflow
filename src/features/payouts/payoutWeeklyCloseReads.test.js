@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const firebase = vi.hoisted(() => ({
+  FieldPath: class { constructor(...segments) { this.segments = segments; } },
   collection: vi.fn(), doc: vi.fn(), documentId: vi.fn(), getDocs: vi.fn(),
   getServerDocs: vi.fn(), limit: vi.fn(), orderBy: vi.fn(), query: vi.fn(),
   runTransaction: vi.fn(), serverTimestamp: vi.fn(), where: vi.fn(),
@@ -133,7 +134,11 @@ describe("individual payout transaction", () => {
     const transaction = {
       get: vi.fn(async ref => ({ id: ref.id, data: () => jobs[ref.id] })),
       set: vi.fn((_ref, data) => receipts.push(data)),
-      update: vi.fn((ref, patch) => Object.assign(jobs[ref.id], patch)),
+      update: vi.fn((ref, patch, value) => {
+        if (!(patch instanceof firebase.FieldPath)) return Object.assign(jobs[ref.id], patch);
+        const [field, key] = patch.segments;
+        jobs[ref.id][field] = { ...jobs[ref.id][field], [key]: value };
+      }),
     };
     firebase.runTransaction.mockImplementation((_db, callback) => callback(transaction));
     const pay = (id, jobIds) => recordPayout({ cleaner: { id }, jobIds, paymentMethod: "ZELLE" });

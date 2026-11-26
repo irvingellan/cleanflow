@@ -1,3 +1,4 @@
+import { clearApprovedAssignmentBilling } from "./approvedAssignmentBilling.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { hasMission2JobState, requireMission2Writes } from "./mission2WriteControl.js";
 import {
@@ -128,7 +129,7 @@ async function respondToOffer(database, {
       const finalState = currentState();
       if (finalState !== "available") return { state: finalState };
       const { assignment, notice, acceptedAt } = createConfirmedAssignment(transaction, { organizationId, jobReference, job, offerReference, offer, identity });
-      transaction.update(jobReference, { assignedCleanerIds: [...job.assignedCleanerIds, offer.cleanerId],
+      transaction.update(jobReference, { ...clearApprovedAssignmentBilling(job), assignedCleanerIds: [...job.assignedCleanerIds, offer.cleanerId],
         operationalStatus: "ASSIGNED", checklistContextRevision: revision + 1 });
       transaction.update(offerReference, { status, respondedAt: acceptedAt, acceptedAssignmentId: assignment.id });
       createManagerOperationalNotification(transaction, organizationReference, jobReference, notice);
@@ -249,6 +250,7 @@ async function respondToAutomaticOffer(transaction, {
     cleanerId: offer.cleanerId, offerId: offerReference.id, assignmentId: assignment.id, acceptedAt,
   };
   transaction.update(jobReference, {
+    ...clearApprovedAssignmentBilling(job),
     assignedCleanerIds,
     operationalStatus: "ASSIGNED",
     checklistContextRevision: checklistRevision,

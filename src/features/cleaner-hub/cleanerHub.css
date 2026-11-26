@@ -632,3 +632,7 @@
 .hb-root .hb-signout--confirm { display: grid; gap: 8px; text-align: left; padding: 14px; border: 1px solid var(--v2-color-border); border-radius: 16px; background: var(--v2-color-surface); }
 .hb-root .hb-signout--confirm p:first-child { font-weight: 700; }
 .hb-root .hb-signout__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.worked-time-form { display: grid; gap: 8px; }
+.worked-time-form__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.worked-time-form__fields label { display: grid; gap: 4px; font-weight: 650; }
+.worked-time-form__fields input { min-height: 44px; font-size: 16px; }

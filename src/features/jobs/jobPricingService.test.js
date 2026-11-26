@@ -79,6 +79,14 @@ describe("manager job pricing writes", () => {
     expect(db.transaction.update.mock.calls[1][1]).toEqual({ notes: "Synthetic note", guestName: db.deleted });
   });
 
+  it("preserves the service type during a details edit when a cleaner has approved hours", async () => {
+    db.transaction.get.mockResolvedValue(record({ approvedAssignments: { assignment: "cleaner" } }));
+    await expect(updateJobDetails("sample-job", { serviceType: "DEEP_CLEANING" })).rejects.toThrow("read-only");
+    expect(db.transaction.update).not.toHaveBeenCalled();
+    await updateJobDetails("sample-job", { serviceType: "STANDARD", notes: "Synthetic note" });
+    expect(db.transaction.update).toHaveBeenCalledWith(expect.any(String), { notes: "Synthetic note", guestName: db.deleted });
+  });
+
   it("preserves both legacy agreements when the new service type has no property rate", async () => {
     const job = record({ propertyId: "sample-property", serviceType: "STANDARD", clientPrice: 83.41, cleanerPayout: 61.27 });
     const property = record({ defaultClientPrice: 86.73, defaultCleanerPrice: 54.39 });
@@ -100,7 +108,7 @@ describe("manager job pricing writes", () => {
     });
   });
 
-  it.each([{ payoutId: "recorded" }, { payoutPaidAt: new Date(0) }, { billing: { hours: { approved: true } } }])(
+  it.each([{ approvedAssignments: { assignment: "cleaner" } }, { payoutIdsByCleaner: { cleaner: "recorded" } }, { payoutId: "recorded" }, { payoutPaidAt: new Date(0) }, { billing: { hours: { approved: true } } }])(
     "rejects a price edit when a concurrent read finds recorded money or approved hours", async (fields) => {
       db.transaction.get.mockResolvedValue(record(fields));
       await expect(updateJobPrices("sample-job", hourly)).rejects.toThrow("read-only");

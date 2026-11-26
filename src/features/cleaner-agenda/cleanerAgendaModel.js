@@ -1,7 +1,7 @@
 import { openSpots, requiredCleanerCount, rosterCleanerIds } from "../jobs/offerSlots.js";
 import { currentScheduleRevision } from "../jobs/scheduleConfirmation.js";
 import { serviceTypeLabel } from "../jobs/serviceTypeMessages.js";
-import { fixedPayoutShares } from "../payouts/payoutShares.js";
+import { payoutShares } from "../payouts/payoutShares.js";
 import { normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 
 // Cleaner Agenda: the manager's compact views of one service period —
@@ -79,7 +79,7 @@ export function cleanerPayoutFor(job, cleanerId, paidCents = null) {
   if (job.payoutId || job.payoutPaidAt || Object.hasOwn(job.payoutIdsByCleaner ?? {}, id)) {
     return Number.isSafeInteger(paidCents) && paidCents >= 0 ? paidCents / 100 : null;
   }
-  const share = fixedPayoutShares(job).find(item => item.cleanerId === id);
+  const share = payoutShares(job).find(item => item.cleanerId === id);
   return share?.cents == null ? null : share.cents / 100;
 }
 

@@ -48,6 +48,7 @@ test("candidate declarations produce explicit20 in actual CLI JSON and update ma
     // One Function per line, sorted, so parallel PRs merge without conflicts.
     "abandonChecklistRunAndCompleteJob",
     "approveChecklistRun",
+    "approveWorkedTime",
     "assignCleanerDirectly",
     "cleanerPushTest",
     "clearDevCenterData",
@@ -92,7 +93,9 @@ test("candidate declarations produce explicit20 in actual CLI JSON and update ma
     "removeAutomaticCleanerAssignment",
     "removeCleanerUnavailability",
     "removeMyUnavailability",
+    "removeWorkedTimeApproval",
     "reportManagerNotificationHealth",
+    "reportMyWorkedTime",
     "rescheduleJob",
     "respondToMyOffer",
     "respondToMyReschedule",

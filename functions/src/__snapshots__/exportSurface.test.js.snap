@@ -27,6 +27,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "approveWorkedTime",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "assignCleanerDirectly",
     {
       "callableTrigger": {},
@@ -671,6 +683,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "removeWorkedTimeApproval",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "reportCleanerPushReceipts",
     {
       "callableTrigger": {},
@@ -684,6 +708,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
   ],
   [
     "reportManagerNotificationHealth",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "reportMyWorkedTime",
     {
       "callableTrigger": {},
       "labels": {},

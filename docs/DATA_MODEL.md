@@ -279,7 +279,7 @@ Job creation and service-type changes on a saved Job copy the selected
 Property rates. Fixed snapshots use `clientPrice` and `cleanerPayout`
 in dollars. An hourly side uses `billing.mode` and `billing.hourlyRateCents`
 for the client or `pay.mode` and `pay.rateCents` for the cleaner. The manager
-can edit the Job snapshot. A recorded payout or approved billing hours locks
+can edit the Job snapshot. A recorded payout or any approved hours lock
 that edit. For a Property with no service table, switching the type in the
 legacy creation form keeps amounts already entered and prompts for review.
 
@@ -556,3 +556,21 @@ internal document records the last change time and is inaccessible from browsers
 Identical periods share a block. Limits are 366 calendar days per block
 and 30 current or future blocks per cleaner. Existing assignments and offers
 are independent of these records.
+
+### Approved hourly work
+
+An active Assignment can store server-owned `reportedWork` (rounded minutes and
+server timestamp), `approvedWork` (rounded minutes, manager UID and server
+timestamp), and `payoutCents` for a confirmed hourly cleaner rate. The cleaner can
+correct her report until approval. The manager may adjust the duration during
+approval. The approved amount uses the Assignment or Offer terms when present.
+An already paid Assignment keeps its approval and receipt. The server maintains
+`approvedAssignments` on the Job, keyed by Assignment ID, so a partial approval
+also locks pricing and service type. Removing an unpaid approval retains the
+reported time and clears the approval, amount and any derived client total.
+A Job billed hourly receives
+`billing.hours` with source `APPROVED_ASSIGNMENTS` after all people on its roster
+are approved. This total stores the roster and the Assignment IDs. Roster or
+capacity changes clear it, so a returning cleaner's previous approval cannot
+carry forward. Its minutes sum each person's approved time. A rounded zero is a
+valid approved duration. A missing approval remains pending.
