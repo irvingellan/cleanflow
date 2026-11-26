@@ -509,7 +509,8 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
       return events.docs.map((snapshot) => [snapshot.get("eventType"), snapshot.get("deliveryStatus")])
         .sort(([left], [right]) => left.localeCompare(right));
     }).toEqual([
-      ["AUTO_ASSIGNMENT_CONFIRMED", "NO_ACTIVE_DEVICES"], ["AUTO_OFFER_BATCH_FILLED", "NO_ACTIVE_DEVICES"],
+      // A one-spot job reports only the confirmation, without a repeated "All spots filled".
+      ["AUTO_ASSIGNMENT_CONFIRMED", "NO_ACTIVE_DEVICES"],
     ]);
 
     await expect(otherOffer).toContainText("Unavailable");
@@ -521,8 +522,8 @@ test("automatic offer confirms in the signed-in Hub and becomes unavailable to t
     await page.getByRole("button", { name: /\bInbox\b/ }).click();
     const managerJobItems = page.getByRole("listitem").filter({ hasText: fixture.mapleName });
     await expect(managerJobItems.getByRole("heading", { name: "Automatic assignment confirmed" })).toHaveCount(1);
-    await expect(managerJobItems.getByRole("heading", { name: "All spots filled" })).toHaveCount(1);
-    await expect(managerJobItems.getByText(/11:15/)).toHaveCount(2);
+    await expect(managerJobItems.getByRole("heading", { name: "All spots filled" })).toHaveCount(0);
+    await expect(managerJobItems.getByText(/11:15/)).toHaveCount(1);
     await expect(managerJobItems.getByRole("heading", { name: "Cleaner expressed interest" })).toHaveCount(0);
     await evidence(page, "85-02-manager-inbox");
 

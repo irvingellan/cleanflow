@@ -9,7 +9,8 @@ import {
 import {
   collection as serverCollection, getDocs as getServerDocs, query as serverQuery, where as serverWhere,
 } from "firebase/firestore/lite";
-import { db } from "../../services/firebase/client.js";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../../services/firebase/client.js";
 import {
   getServerCollection, getServerRecordsById, serverFirestore, withReadDeadline,
 } from "../../services/firebase/serverReads.js";
@@ -138,6 +139,27 @@ export async function updatePropertyCleanerAccess(propertyId, access, actorUid) 
   };
   await updateDoc(propertyDocument(propertyId), { cleanerAccess });
   return { id: propertyId, cleanerAccess: { ...cleanerAccess, updatedAt: null } };
+}
+
+export async function listPropertyAccessPhotos(propertyId) {
+  const [property] = await withReadDeadline(getServerRecordsById(organizationId, "properties", [propertyId]));
+  if (!property) throw new Error("Property is unavailable.");
+  const photos = property.data().cleanerAccessPhotos;
+  return Array.isArray(photos) ? photos : [];
+}
+
+export async function uploadPropertyAccessPhoto(photo) {
+  const { data } = await httpsCallable(functions, "uploadPropertyAccessPhoto")(photo);
+  return data;
+}
+
+export async function removePropertyAccessPhoto(propertyId, photoId) {
+  await httpsCallable(functions, "removePropertyAccessPhoto")({ propertyId, photoId });
+}
+
+export async function getPropertyAccessPhoto(propertyId, photoId) {
+  const { data } = await httpsCallable(functions, "getPropertyAccessPhoto")({ propertyId, photoId });
+  return data;
 }
 
 export async function updateProperty(propertyId, {

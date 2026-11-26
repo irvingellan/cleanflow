@@ -32,8 +32,10 @@ source-of-truth documents needed for the task. Do not load all docs by default.
    intended paths in the Issue or PR. Claim the local scope with
    `node scripts/engineering.mjs claim --issue N --path path/to/area` before
    editing. Resolve scope overlaps before either agent writes.
-3. Use one PR per task and label it `scope:hosting` or `scope:full`. Claude
-   leads visual design, CSS and visual QA. Codex leads service boundaries,
+3. Use one PR per task. CI derives PR scope from the merge-base diff and runs
+   full scope on pushes to `main`. Apply `scope:full` when full scope is
+   required on a PR. Claude leads visual design, CSS and visual QA.
+   Codex leads service boundaries,
    security, integration and release tooling. Cross-review changes that cross
    those boundaries. Review the exact commit and CI results before integration.
 4. Use Issues and PRs to track work, CURRENT_STATE for the technical summary
@@ -41,6 +43,7 @@ source-of-truth documents needed for the task. Do not load all docs by default.
    with `node scripts/engineering.mjs checkpoint --issue N` and link the
    checks and receipt where appropriate. Report real-device acceptance separately.
 5. Release from the integrated canonical SHA under specific authorization.
+   Release requires a green CI run on the exact main commit being published.
    Compare the reviewed release plan, live snapshot and rollback before writing.
    Use the Hosting-only executor for eligible presentation changes. CI has
    no Production credentials. See [Unified Engineering](docs/engineering/UNIFIED_ENGINEERING.md).

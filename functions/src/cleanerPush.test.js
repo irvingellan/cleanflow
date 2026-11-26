@@ -9,6 +9,16 @@ import { isCleanerPushEnabledProfile, isCleanerPushPilotApproval, resolveCleaner
 import { managerFcmTimeoutMs } from "./managerFcmDelivery.js";
 import { notificationOutcomeLog } from "./notificationOutcomeLog.js";
 import { awaitCleanerPushTest, cleanerPushOverview, pushTestLimits, requestCleanerPushTest } from "./cleanerPushTest.js";
+import { reportCleanerPushReceipts } from "./handlers/cleanerPush.js";
+
+const runtime = vi.hoisted(() => ({ database: null }));
+vi.mock("./runtime/firebase.js", () => ({
+  organizationId: "synthetic-org",
+  db: { doc: (...args) => runtime.database.doc(...args), collection: (...args) => runtime.database.collection(...args),
+    runTransaction: (...args) => runtime.database.runTransaction(...args) },
+  emulatorPushDisabled: () => true,
+  liveMessaging: () => { throw new Error("Provider access is forbidden in tests."); },
+}));
 
 const organizationId = "synthetic-org";
 const cleanerId = "cleaner-a";
@@ -119,7 +129,10 @@ const batch = (...responses) => ({
   failureCount: responses.filter((item) => !item.success).length,
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("cleaner device lifecycle", () => {
   it("distinguishes failed audit persistence from provider acceptance without a resend", async () => {
@@ -132,6 +145,15 @@ describe("cleaner device lifecycle", () => {
     await deliver(f, sendFcm);
     expect(sendFcm).toHaveBeenCalledTimes(1);
     expect(f.records.get(eventPath)).toMatchObject({ processingState: "STORED" });
+  });
+  it("sends cleaner notices with high urgency and a one-hour lifetime", async () => {
+    const f = fixture();
+    await register(f);
+    const sendFcm = vi.fn(async () => batch(accepted));
+    await deliver(f, sendFcm);
+    const [message] = sendFcm.mock.calls[0][0];
+    expect(message.webpush).toEqual({ headers: { TTL: "3600", Urgency: "high" } });
+    expect(message.notification).toBeUndefined();
   });
   it("keeps two installations independently active and repeats enrollment without changing the binding", async () => {
     const f = fixture();
@@ -462,6 +484,19 @@ describe("manager and cleaner test notices", () => {
     expect(sendFcm.mock.calls[0][0]).toHaveLength(2);
     await expect(awaitCleanerPushTest(f.database, { organizationId, eventId: stored.eventId, wait: async () => {} }))
       .resolves.toEqual({ state: "sent", acceptedDevices: 2, targetDevices: 2 });
+    const overview = () => cleanerPushOverview(f.database, { organizationId, cleanerId, mode: "enabled", now: at });
+    await expect(overview()).resolves.toMatchObject({ latestTest: { attemptedAt: expect.any(String), receipt: null } });
+    runtime.database = f.database;
+    const clientNowMs = Date.now();
+    await reportCleanerPushReceipts({
+      auth: { uid, token: { cleanerHub: identity() } },
+      data: { deviceId: registration.deviceId, clientNowMs, receipts: [{
+        eventId: stored.eventId, receivedAtMs: clientNowMs, clientVisible: false, outcome: "shown", errorName: null,
+      }] },
+    });
+    await expect(overview()).resolves.toMatchObject({ latestTest: { receipt: {
+      receivedAt: expect.any(String), clientVisible: false, outcome: "shown",
+    } } });
   });
 
   it("sends a cleaner's own test only to the phone that asked for it", async () => {
@@ -472,6 +507,14 @@ describe("manager and cleaner test notices", () => {
     expect(stored).toMatchObject({ state: "stored", targetDeviceCount: 1 });
     const sendFcm = await deliverTest(f, stored.eventId);
     expect(sendFcm.mock.calls[0][0].map(({ token }) => token)).toEqual([otherRegistration.token]);
+    runtime.database = f.database;
+    const receipts = [];
+    const afterReturn = (target, deviceId) => reportCleanerPushReceipts({
+      auth: { uid, token: { cleanerHub: identity(target) } }, data: { deviceId, clientNowMs: Date.now(), receipts },
+    });
+    expect((await afterReturn(sessionA, registration.deviceId)).latestTest).toBeNull();
+    expect((await afterReturn(sessionB, otherRegistration.deviceId)).latestTest)
+      .toMatchObject({ attemptedAt: expect.any(String), receipt: null });
   });
 
   it("limits tests per minute and per day, and refuses without phones or transport", async () => {
@@ -498,5 +541,77 @@ describe("manager and cleaner test notices", () => {
     expect(await cleanerPushOverview(f.database, { organizationId, cleanerId, mode: "pilot", now: at }))
       .toEqual({ state: "ready", alertsEnabled: true, activeDevices: 1 });
     expect(await testRequest(f, pilot)).toMatchObject({ state: "stored", targetDeviceCount: 1 });
+  });
+});
+
+describe("reportCleanerPushReceipts callable", () => {
+  const now = Date.parse("2026-11-25T19:00:00Z");
+  const clientNowMs = now + 5 * 60_000;
+  const receipt = { eventId, receivedAtMs: clientNowMs - 10_000, clientVisible: false, outcome: "shown", errorName: null };
+  const input = { deviceId: registration.deviceId, clientNowMs, receipts: [receipt] };
+  const auth = (who = identity()) => ({ uid: who.uid, token: { cleanerHub: who } });
+  const report = (data = input, caller = auth()) => reportCleanerPushReceipts({ auth: caller, data });
+
+  async function delivered() {
+    const f = fixture();
+    runtime.database = f.database;
+    await register(f);
+    await deliver(f, async () => batch(accepted));
+    const delivery = f.records.get(deliveryPath);
+    f.records.set(deliveryPath, { ...delivery, attemptedAt: Timestamp.fromMillis(now - 60_000) });
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    return f;
+  }
+
+  it("requires an active cleaner and rejects invalid fields and oversized batches", async () => {
+    const f = fixture();
+    runtime.database = f.database;
+    await expect(reportCleanerPushReceipts({ data: input })).rejects.toMatchObject({ code: "unauthenticated" });
+    await expect(report(input, auth(identity("retired-session")))).rejects.toMatchObject({ code: "permission-denied" });
+    for (const data of [
+      { ...input, receipts: Array(21).fill(receipt) },
+      { ...input, clientNowMs: Number.MAX_VALUE },
+      { ...input, receipts: [{ ...receipt, eventId: "bad/id" }] },
+      { ...input, receipts: [{ ...receipt, clientVisible: "false" }] },
+      { ...input, receipts: [{ ...receipt, receivedAtMs: -1 }] },
+      { ...input, receipts: [{ ...receipt, outcome: "read" }] },
+      { ...input, receipts: [{ ...receipt, errorName: "Secret" }] },
+      { ...input, receipts: [{ ...receipt, address: "private" }] },
+    ]) {
+      await expect(report(data)).rejects.toMatchObject({ code: "invalid-argument" });
+    }
+  });
+
+  it("normalizes clock skew, caps writes to the targeted installation, and ignores unknown events", async () => {
+    const f = await delivered();
+    const unknown = "b".repeat(64);
+    const otherCleanerId = "cleaner-other";
+    const otherIdentity = identity(sessionB, otherCleanerId);
+    addCleaner(f.records, otherCleanerId, [sessionB]);
+    await register(f, otherRegistration, otherIdentity);
+    await report({ ...input, deviceId: otherRegistration.deviceId }, auth(otherIdentity));
+    await register(f, otherRegistration, identity(sessionB));
+    await report({ ...input, deviceId: otherRegistration.deviceId }, auth(identity(sessionB)));
+    expect(f.records.get(deliveryPath).phoneReceipts).toBeUndefined();
+
+    await expect(report({ ...input, receipts: [receipt, { ...receipt, eventId: unknown }] }))
+      .resolves.toMatchObject({ acknowledgedEventIds: [eventId, unknown] });
+    const delivery = f.records.get(deliveryPath);
+    const [{ installationKey }] = delivery.devices;
+    expect(delivery.phoneReceipts).toEqual({ [installationKey]: {
+      receivedAt: Timestamp.fromMillis(now - 10_000), delayMs: 50_000,
+      clientVisible: false, outcome: "shown", errorName: null,
+    } });
+    expect(f.records.has(deliveryPath.replace(eventId, unknown))).toBe(false);
+    await report({ ...input, receipts: [{ ...receipt, receivedAtMs: clientNowMs }] });
+    expect(f.records.get(deliveryPath).phoneReceipts).toEqual(delivery.phoneReceipts);
+  });
+
+  it("clamps an early timestamp to the attempt and sanitizes provider error names", async () => {
+    const f = await delivered();
+    await report({ ...input, receipts: [{ ...receipt, receivedAtMs: clientNowMs - 120_000, outcome: "error", errorName: "Private" }] });
+    expect(Object.values(f.records.get(deliveryPath).phoneReceipts)).toEqual([{
+      receivedAt: Timestamp.fromMillis(now - 60_000), delayMs: 0, clientVisible: false, outcome: "error", errorName: "Error",
+    }]);
   });
 });

@@ -71,6 +71,28 @@ service cloud.firestore {
       ];
     }
 
+    function jobHasPayout(data) {
+      let linked = data.get('payoutIdsByCleaner', {});
+      return data.get('payoutId', null) != null && data.get('payoutId', null) != ''
+        || data.get('payoutPaidAt', null) != null
+        || (linked is map && linked.size() > 0);
+    }
+
+    function jobBillingPriceField(data, field) {
+      let billing = data.get('billing', {});
+      return billing is map ? billing.get(field, null) : null;
+    }
+
+    function browserKeepsPaidClientPricing() {
+      let wasPaid = jobHasPayout(resource.data);
+      let isPaid = jobHasPayout(request.resource.data);
+      return (!wasPaid && !isPaid)
+        || (isPaid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['clientPrice'])
+          && jobBillingPriceField(resource.data, 'mode') == jobBillingPriceField(request.resource.data, 'mode')
+          && jobBillingPriceField(resource.data, 'hourlyRateCents') == jobBillingPriceField(request.resource.data, 'hourlyRateCents'));
+    }
+
     function jobChecklistContextChanged() {
       return request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'archivedAt',
@@ -350,6 +372,7 @@ service cloud.firestore {
         // Records are archived, never deleted, from a browser.
         allow create: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
+          && (collectionName != 'properties' || !('cleanerAccessPhotos' in request.resource.data))
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && validJobServiceType(request.resource.data)
@@ -362,6 +385,8 @@ service cloud.firestore {
             && !('completedAt' in request.resource.data));
         allow update: if collectionName in ['clients', 'properties', 'cleaners', 'payouts']
           && activeManager(orgId)
+          && (collectionName != 'properties'
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['cleanerAccessPhotos']))
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && validJobServiceType(request.resource.data)
@@ -370,7 +395,12 @@ service cloud.firestore {
             && browserJobKeepsCompletionState()
             && browserJobKeepsAutomaticOfferProvenance()
             && browserKeepsPausedScheduleRoster()
+            && browserKeepsPaidClientPricing()
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completedAt']));
+      }
+
+      match /jobs/{jobId}/corrections/{correctionId} {
+        allow read: if activeManager(orgId);
       }
 
       match /jobs/{jobId}/{collectionName}/{recordId} {

@@ -150,6 +150,10 @@ export function normalizeJobAccess(result) {
     .slice(0, 12);
   const address = clean(result.address, 240);
   const instructions = clean(result.houseInstructions, 4000);
-  if (!items.length && !address && !instructions) return { state: "not-provided" };
-  return { state: "available", address, items, instructions };
+  const photos = (Array.isArray(result.photos) ? result.photos : [])
+    .filter((photo) => typeof photo?.id === "string" && /^[a-f0-9]{32}$/.test(photo.id))
+    .slice(0, 8)
+    .map(({ id, caption }) => ({ id, caption: clean(caption, 120) || "" }));
+  if (!items.length && !address && !instructions && !photos.length) return { state: "not-provided" };
+  return { state: "available", address, items, instructions, photos };
 }

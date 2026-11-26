@@ -14,6 +14,7 @@ const platformOverview = () => import("./handlers/platformOverview.js");
 const devCenter = () => import("./handlers/devCenter.js");
 const feedback = () => import("./handlers/feedback.js");
 const managerDevices = () => import("./handlers/managerDevices.js");
+const jobPriceCorrection = () => import("./handlers/jobPriceCorrection.js");
 const checklistRuns = () => import("./handlers/checklistRuns.js");
 const assignments = () => import("./handlers/assignments.js");
 const checklistAccess = () => import("./handlers/checklistAccess.js");
@@ -23,6 +24,7 @@ const publicOfferHandlers = () => import("./handlers/publicOffer.js");
 const publicChecklistHandlers = () => import("./handlers/publicChecklist.js");
 const publicReports = () => import("./handlers/publicReports.js");
 const cleanerHub = () => import("./handlers/cleanerHub.js");
+const propertyAccessPhotos = () => import("./handlers/propertyAccessPhotos.js");
 const unavailability = () => import("./handlers/unavailability.js");
 const notificationInbox = () => import("./handlers/notificationInbox.js");
 const cleanerPush = () => import("./handlers/cleanerPush.js");
@@ -109,6 +111,7 @@ export const createAutomaticJobOffers = onCall(
 );
 
 export const setJobCleanerSpots = onCall({ region: "us-central1" }, lazyHandler(assignments, "setJobCleanerSpots"));
+export const correctJobPrices = onCall({ region: "us-central1" }, lazyHandler(jobPriceCorrection, "correctJobPrices"));
 
 export const assignCleanerDirectly = onCall(
   { region: "us-central1" },
@@ -285,6 +288,27 @@ export const getMyJobAccess = onCall(
   lazyHandler(cleanerHub, "getMyJobAccess"),
 );
 
+export const uploadPropertyAccessPhoto = onCall(
+  // Decoding a large phone photo with sharp needs more than the default memory.
+  { region: "us-central1", memory: "512MiB" },
+  lazyHandler(propertyAccessPhotos, "uploadPropertyAccessPhoto"),
+);
+
+export const removePropertyAccessPhoto = onCall(
+  { region: "us-central1" },
+  lazyHandler(propertyAccessPhotos, "removePropertyAccessPhoto"),
+);
+
+export const getPropertyAccessPhoto = onCall(
+  { region: "us-central1" },
+  lazyHandler(propertyAccessPhotos, "getPropertyAccessPhoto"),
+);
+
+export const getMyJobAccessPhoto = onCall(
+  { region: "us-central1" },
+  lazyHandler(propertyAccessPhotos, "getMyJobAccessPhoto"),
+);
+
 export const respondToMyOffer = onCall(
   { region: "us-central1" },
   lazyHandler(cleanerHub, "respondToMyOffer"),
@@ -334,6 +358,11 @@ export const getCleanerPushDeviceStatus = onCall(
 export const cleanerPushTest = onCall(
   { region: "us-central1" },
   lazyHandler(cleanerPush, "cleanerPushTest"),
+);
+
+export const reportCleanerPushReceipts = onCall(
+  { region: "us-central1" },
+  lazyHandler(cleanerPush, "reportCleanerPushReceipts"),
 );
 
 export const notifyCleanerInboxEvent = onDocumentCreated(

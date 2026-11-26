@@ -92,7 +92,9 @@ function projectAuthorizedTarget(organization, event, identity, job, offer, { fo
     if (cancelled !== (event.type === cleanerTypes.cancelled)) return null;
     return { destination: { kind: "INBOX" }, serviceLabel: null };
   }
-  if (!job || job.archivedAt) return null;
+  if (!job) return null;
+  // A manager keeps the context of a cancelled (archived) Job; its detail opens read-only.
+  if (job.archivedAt && identity.role !== managerRole) return null;
   if (identity.role === managerRole) {
     return { destination: { kind: "JOB", jobId: event.jobId }, serviceLabel: safeServiceLabel(job) };
   }

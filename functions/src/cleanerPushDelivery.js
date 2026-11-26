@@ -26,10 +26,13 @@ const rescheduleNotices = {
   es: "Cambió el horario de un servicio. Abre Mi agenda para confirmar.",
 };
 
+export function cleanerInstallationKey({ organizationId, userId, deviceId }) {
+  return createHash("sha256").update(JSON.stringify([organizationId, userId, deviceId])).digest("hex");
+}
+
 function deviceAudit(snapshot, outcome) {
-  const { organizationId, userId, deviceId, registrationRevision } = snapshot.data();
-  const installationKey = createHash("sha256").update(JSON.stringify([organizationId, userId, deviceId])).digest("hex");
-  return { installationKey, registrationRevision, outcome };
+  const record = snapshot.data();
+  return { installationKey: cleanerInstallationKey(record), registrationRevision: record.registrationRevision, outcome };
 }
 
 function cleanerFcmMessage(snapshot, eventId, reschedule) {
@@ -50,7 +53,9 @@ function cleanerFcmMessage(snapshot, eventId, reschedule) {
       eventId,
       link: "/agenda",
     },
-    webpush: { headers: { TTL: "300" } },
+    // Data-only Web Push defaults to normal urgency, which iOS may hold while the
+    // phone is idle; with a short TTL the notice can then expire undelivered.
+    webpush: { headers: { TTL: "3600", Urgency: "high" } },
   };
 }
 
@@ -120,7 +125,7 @@ async function claimDelivery(database, { organization, cleanerId, eventId, deliv
     transaction.create(deliveryReference, {
       organizationId, cleanerId, eventId, type: event.type, stages, provider: "fcm",
       deliveryStatus: skipped || "UNKNOWN",
-      ...(skipped ? {} : { pendingProviderResult: true, claimedAt: FieldValue.serverTimestamp() }),
+      ...(skipped ? {} : { pendingProviderResult: true, claimedAt: FieldValue.serverTimestamp(), attemptedAt: Timestamp.now() }),
       recordedAt: FieldValue.serverTimestamp(),
       targetDeviceCount: devices.length, acceptedByFcmDevices: 0, rejectedDevices: 0,
       unknownDevices: devices.length,
@@ -188,7 +193,6 @@ export async function processCleanerNotification({ database, organizationId, cle
 
   // The committed claim already records an unknown result. Start the attempt
   // without waiting for another Firestore write after the authorization check.
-  const attemptedAt = Timestamp.now();
   let outcome;
   try {
     const response = await boundedManagerFcmSend(sendFcm, devices.map((device) => cleanerFcmMessage(device, eventId, reschedule)));
@@ -208,7 +212,7 @@ export async function processCleanerNotification({ database, organizationId, cle
     };
   }
   const auditRecorded = await recordOutcome(reference, {
-    ...outcome, pendingProviderResult: false, attemptedAt, completedAt: FieldValue.serverTimestamp(),
+    ...outcome, pendingProviderResult: false, completedAt: FieldValue.serverTimestamp(),
   }, logger);
   // The event wrapper logs only aggregate evidence. Provider acceptance is not display.
   return {

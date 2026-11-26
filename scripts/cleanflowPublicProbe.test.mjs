@@ -62,7 +62,7 @@ async function withFixture(options, run) {
       case "/onesignal/OneSignalSDKWorker.js":
         return send("text/javascript", "self.fixture = true;");
       case "/cleaner-messaging-sw.js":
-        return send("text/javascript", "self.fixture = true;", { "Service-Worker-Allowed": "/cleaner-messaging-push/" });
+        return send("text/javascript", "self.fixture = true;", { "Service-Worker-Allowed": "/agenda/push/" });
       case entryAsset:
         if (options.assetFallback) return send("text/html", entryHtml("/manifest.webmanifest"));
         return send("text/javascript", options.emptyApp ? "export {};" : renderedEntry);

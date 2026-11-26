@@ -1,4 +1,5 @@
 import { rosterCleanerIds } from "./cleanerAgenda.js";
+import { validInboxSegment } from "./notificationInboxEvents.js";
 
 // FB01: practical access details for the cleaner who is on a Job's roster.
 // Only what the manager explicitly shares in Property.cleanerAccess (plus the
@@ -75,25 +76,34 @@ export function projectCleanerJobAccess({ job, property, cleanerId, nowMs = Date
     .filter((item) => item.value);
   const address = text(property.address, 240);
   const houseInstructions = text(property.cleanerInstructions, 4000);
-  if (!items.length && !address && !houseInstructions) return { state: "not-provided" };
+  const photos = (Array.isArray(property.cleanerAccessPhotos) ? property.cleanerAccessPhotos : [])
+    .filter((photo) => validInboxSegment(photo?.id))
+    .slice(0, 8)
+    .map(({ id, caption }) => ({ id, caption: text(caption, 120) || "" }));
+  if (!items.length && !address && !houseInstructions && !photos.length) return { state: "not-provided" };
   return {
-    state: "available", items,
+    state: "available", items, photos,
     ...(address ? { address } : {}),
     ...(houseInstructions ? { houseInstructions } : {}),
   };
 }
 
 /** Reads the Job and its Property for an already authenticated active cleaner. */
-export async function loadCleanerJobAccess(database, { organizationId, cleanerId, jobId, nowMs = Date.now(), timeZone }) {
-  if (typeof jobId !== "string" || !jobId || jobId.includes("/") || jobId.length > 256) return { state: "denied" };
+export async function loadCleanerJobAccessContext(database, { organizationId, cleanerId, jobId, nowMs, timeZone }) {
+  const denied = { access: { state: "denied" } };
+  if (!validInboxSegment(organizationId) || !validInboxSegment(jobId)) return denied;
   const organization = database.collection("organizations").doc(organizationId);
   const jobSnapshot = await organization.collection("jobs").doc(jobId).get();
   const job = jobSnapshot.exists ? jobSnapshot.data() : null;
-  if (!job || (job.organizationId != null && job.organizationId !== organizationId)) return { state: "denied" };
-  if (!rosterCleanerIds(job).includes(cleanerId)) return { state: "denied" };
-  const propertyId = typeof job.propertyId === "string" && job.propertyId && !job.propertyId.includes("/") ? job.propertyId : null;
+  if (!job || (job.organizationId != null && job.organizationId !== organizationId)) return denied;
+  if (!rosterCleanerIds(job).includes(cleanerId)) return denied;
+  const propertyId = validInboxSegment(job.propertyId) ? job.propertyId : null;
   const propertySnapshot = propertyId ? await organization.collection("properties").doc(propertyId).get() : null;
   const property = propertySnapshot?.exists ? propertySnapshot.data() : null;
-  if (property && property.organizationId != null && property.organizationId !== organizationId) return { state: "denied" };
-  return projectCleanerJobAccess({ job, property, cleanerId, nowMs, timeZone });
+  if (property && property.organizationId != null && property.organizationId !== organizationId) return denied;
+  return { propertyId, access: projectCleanerJobAccess({ job, property, cleanerId, nowMs, timeZone }) };
+}
+
+export async function loadCleanerJobAccess(database, options) {
+  return (await loadCleanerJobAccessContext(database, options)).access;
 }

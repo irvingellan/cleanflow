@@ -18,7 +18,7 @@ function commit(cwd, subject) {
   git(cwd, "commit", "-m", subject);
   return git(cwd, "rev-parse", "HEAD");
 }
-function scenario() {
+function scenario({ trustedPolicy = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "cleanflow-engineering-simulation-"));
   const repo = join(root, "repo");
   mkdirSync(repo);
@@ -30,6 +30,11 @@ function scenario() {
   file(repo, "firestore.rules", "rules_version = '2';\n");
   file(repo, "storage.rules", "rules_version = '2';\n");
   file(repo, "firebase.json", '{"hosting":{"public":"dist"}}\n');
+  if (trustedPolicy) {
+    for (const script of ["engineering.mjs", "releaseHostingScope.mjs"]) {
+      file(repo, `scripts/${script}`, readFileSync(new URL(script, import.meta.url), "utf8"));
+    }
+  }
   const base = commit(repo, "synthetic canonical base");
   const claude = join(root, "visual-worktree");
   const codex = join(root, "server-worktree");
@@ -72,12 +77,97 @@ test("visual commit leaves Functions, Rules and Firebase configuration identical
   const backend = commit(codex, "isolated backend update");
   assert.throws(() => checkCandidate(repo, { base, head: backend, scope: "hosting" }), /Hosting scope blocked/);
   assert.doesNotThrow(() => checkCandidate(repo, { base, head: backend, scope: "full" }));
-  assert.throws(() => checkCandidate(repo, { base: visual, head: backend, scope: "full" }), /exact integration base/);
-  assert.throws(() => checkCandidate(repo, { base: visual, head: base, scope: "hosting" }), /exact integration base/);
+  assert.deepEqual(checkCandidate(repo, { base: backend, head: visual, scope: "hosting" }).changed, ["src/index.css"]);
+  assert.throws(() => checkCandidate(repo, { base: visual, head: base, scope: "hosting" }), /advance the common ancestor/);
   file(claude, "src/index.css", ":root { color: red; }\n");
   file(claude, ".github/workflows/engineering.yml", "name: synthetic policy update\n");
   const selfEditing = commit(claude, "visual update modifies its own CI");
   assert.throws(() => checkCandidate(repo, { base: visual, head: selfEditing, scope: "hosting" }), /scope:full/);
+});
+
+test("Integration scope handles main pushes and classifies PR diffs using the main policy", async (context) => {
+  const { root, repo, claude, codex, base } = scenario({ trustedPolicy: true });
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const workflow = readFileSync(new URL("../.github/workflows/engineering.yml", import.meta.url), "utf8");
+  const scopeJob = workflow.split("\n  scope:\n")[1].split("\n  unit:\n")[0];
+  const runBlock = scopeJob.split("\n        run: |\n")[1].trimEnd().replace(/^ {10}/gm, "");
+  file(repo, "firestore.rules", "rules_version = '2';\n// Main-only change.\n");
+  const main = commit(repo, "advance main independently");
+  git(repo, "update-ref", "refs/remotes/origin/main", main);
+  git(claude, "commit", "--allow-empty", "-m", "empty PR");
+  const empty = git(claude, "rev-parse", "HEAD");
+  for (const worktree of [claude, codex]) {
+    file(worktree, "src/index.css", ":root { color: blue; }\n");
+  }
+  const visual = commit(claude, "visual PR");
+  file(codex, "functions/index.js", "export const fixture = false;\n");
+  const mixed = commit(codex, "mixed PR");
+  file(claude, "scripts/engineering.mjs", 'throw new Error("Untrusted candidate policy executed");\n');
+  const policyEdit = commit(claude, "PR edits its own policy");
+
+  function runScope(eventEnv) {
+    const summary = join(root, "summary.md");
+    writeFileSync(summary, "");
+    const gh = 'gh() { [[ "$1 $2" == "api repos/fixture/repo/issues/42/labels" ]] || return 2; printf "%s\\n" "$RETRY_LABELS"; }';
+    execFileSync("bash", ["-c", gh + "\n" + runBlock], {
+      cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env, GITHUB_SHA: git(repo, "rev-parse", "HEAD"), GITHUB_STEP_SUMMARY: summary,
+        ...eventEnv,
+      },
+    });
+    return readFileSync(summary, "utf8");
+  }
+
+  function run(head, { eventBase = main, hosting = false, full = false, retryLabels } = {}) {
+    git(repo, "checkout", "--detach", eventBase);
+    git(repo, "merge", "--no-ff", "--no-edit", head);
+    return runScope({
+      GITHUB_EVENT_NAME: "pull_request", BASE_SHA: eventBase, HEAD_SHA: head,
+      GITHUB_RUN_ATTEMPT: retryLabels === undefined ? "1" : "2", GITHUB_REPOSITORY: "fixture/repo",
+      PR_NUMBER: "42", RETRY_LABELS: retryLabels ?? "", HOSTING: String(hosting), FULL: String(full),
+    });
+  }
+
+  await context.test("a hosting-only PR behind main uses hosting scope", () => {
+    assert.match(run(visual), /- Scope: hosting\n/);
+  });
+  await context.test("a PR run can use the original event merge after main advances", () => {
+    assert.match(run(visual, { eventBase: base }), /- Scope: hosting\n/);
+  });
+  await context.test("a main push of a merge commit uses full scope without PR metadata", () => {
+    git(repo, "checkout", "--detach", main);
+    git(repo, "merge", "--no-ff", "--no-edit", visual);
+    const merged = git(repo, "rev-parse", "HEAD");
+    const summary = runScope({ GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/main" });
+    assert.ok(summary.includes(`- Main commit: \`${merged}\`\n`));
+    assert.match(summary, /- Scope: full\n/);
+  });
+  await context.test("mixed diff without scope labels uses full", () => {
+    assert.match(run(mixed), /- Scope: full\n/);
+  });
+  await context.test("scope:full overrides a hosting-only diff", () => {
+    assert.match(run(visual, { full: true }), /- Scope: full\n/);
+  });
+  await context.test("scope:hosting on a mixed diff uses full", () => {
+    assert.match(run(mixed, { hosting: true }), /- Scope: full\n/);
+  });
+  await context.test("both scope labels fail with a clear message", () => {
+    assert.throws(() => run(visual, { hosting: true, full: true }), (error) => {
+      assert.equal(error.status, 1);
+      assert.match(error.stdout, /Conflicting scope labels: remove scope:hosting or scope:full/);
+      return true;
+    });
+  });
+  await context.test("rerun honors labels updated after the original event", () => {
+    assert.match(run(visual, { hosting: true, retryLabels: "scope:full" }), /- Scope: full\n/);
+  });
+  await context.test("policy edits require full scope and use the archived main policy", () => {
+    assert.match(run(policyEdit, { hosting: true }), /- Scope: full\n/);
+  });
+  await context.test("invalid candidates still fail policy validation", () => {
+    assert.throws(() => run(empty), /Candidate has no changes/);
+  });
 });
 
 test("doctor distinguishes a public, stale canonical ref from the published commit", () => {

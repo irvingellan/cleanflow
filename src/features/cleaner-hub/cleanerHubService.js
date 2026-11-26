@@ -137,6 +137,12 @@ export async function getMyJobAccess(jobId) {
   return data;
 }
 
+export async function getMyJobAccessPhoto(jobId, photoId) {
+  const { functions } = cleanerHubFirebase();
+  const { data } = await httpsCallable(functions, "getMyJobAccessPhoto")({ jobId, photoId });
+  return data;
+}
+
 /** Wakes the Functions a cleaner waits on when opening a service or checklist. */
 export function cleanerWarmupTasks() {
   const { functions } = cleanerHubFirebase();

@@ -26,8 +26,22 @@ preloadCurrentEntry()
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
-      .catch(() => window.__cleanflowStartup?.workerFailed())
+    const cleanerEntry = location.pathname.startsWith('/agenda')
+      || document.querySelector('link[rel="manifest"][href="/agenda.webmanifest"]')
+    const workers = navigator.serviceWorker
+    // An installed Minha agenda app has its own storage on iOS, so a legacy root
+    // worker there belongs to it alone. In a shared browser tab the root worker
+    // belongs to the manager entry and stays.
+    const installedApp = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true
+    const registration = cleanerEntry
+      ? (installedApp ? workers.getRegistration('/') : Promise.resolve(null)).then((existing) => {
+        if (existing?.scope === new URL('/', location.origin).href
+          && [existing.active, existing.waiting, existing.installing].some(
+            (worker) => worker?.scriptURL === new URL('/sw.js', location.origin).href,
+          )) return existing.unregister()
+      })
+      : workers.register('/sw.js', { updateViaCache: 'none' })
+    registration.catch(() => window.__cleanflowStartup?.workerFailed())
   })
 }
 

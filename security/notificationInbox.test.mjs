@@ -272,6 +272,13 @@ test("versioned batch writes one confirmation for each assignment and one filled
   ]);
   assert.ok(rows.every(({ deliveryStatus }) => deliveryStatus === "PENDING"));
   assert.equal((await target.collection("assignments").get()).size, 2);
+
+  // A cancelled (archived) Job keeps its context for managers, never for cleaners.
+  await target.update({ archivedAt: Timestamp.now() });
+  const cancelledView = await listNotificationInbox.run(manager("manager"));
+  assert.equal(cancelledView.items.length, 3);
+  assert.ok(cancelledView.items.every((item) => item.openable && typeof item.serviceLabel === "string"));
+  assert.ok((await listNotificationInbox.run(cleaner("ana"))).items.every((item) => !item.openable && item.serviceLabel === null));
 });
 
 test("reschedule push rejects the superseded revision and cancellation never reopens job details", async () => {

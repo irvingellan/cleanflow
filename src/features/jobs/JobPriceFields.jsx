@@ -4,8 +4,10 @@ import { defaultHourlyRates } from "../pricing/hourlyDefaults.js";
 import { pricingMessage } from "../pricing/pricingMessages.js";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
 
-export function JobPriceFields({ values, onChange, disabled }) {
+export function JobPriceFields({ values, onChange, disabled, clientOnly = false }) {
   const { translate, language } = useTranslation();
+  const fields = [["clientMode", "clientPrice"]];
+  if (!clientOnly) fields.push(["cleanerMode", "cleanerPayout"]);
   // Switching to hourly prefills the standard rate; a fixed amount is not an hourly rate.
   function changeMode(event, amountKey) {
     onChange(event);
@@ -16,7 +18,7 @@ export function JobPriceFields({ values, onChange, disabled }) {
   }
   return (
     <div className="form-row">
-      {[["clientMode", "clientPrice"], ["cleanerMode", "cleanerPayout"]].map(([modeKey, amountKey]) => (
+      {fields.map(([modeKey, amountKey]) => (
         <div key={modeKey}>
           <label>
             {serviceTypeMessage(language, modeKey)}
@@ -31,7 +33,7 @@ export function JobPriceFields({ values, onChange, disabled }) {
               : amountKey === "cleanerPayout" && values.fixedPerCleaner ? pricingMessage(language, "teamAmount")
               : translate("jobs." + amountKey)}
             <input type="number" name={amountKey} min="0" step="0.01" inputMode="decimal"
-              value={values[amountKey]} onChange={onChange} disabled={disabled} />
+              value={values[amountKey]} onChange={onChange} disabled={disabled} required={clientOnly} />
           </label>
         </div>
       ))}

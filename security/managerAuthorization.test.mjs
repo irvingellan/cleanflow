@@ -53,11 +53,15 @@ const {
   publicClientPortal,
   clientPortalAccess,
   correctChecklistAnswer,
+  correctJobPrices,
   rescheduleJob, setJobCleanerSpots, respondToMyOffer,
+  getMyJobAccess, getMyJobAccessPhoto, getPropertyAccessPhoto, removePropertyAccessPhoto, uploadPropertyAccessPhoto,
 } = await import("../functions/src/index.js");
 // index.js only declares Functions; the Functions Admin app starts with the runtime module.
 await import("../functions/src/runtime/firebase.js");
 const { authorizedManagerDevices } = await import("../functions/src/managerAuthorization.js");
+const { syncCleanerAgendaForJob } = await import("../functions/src/cleanerAgenda.js");
+const { cleanerInbox, managerInboxCollection } = await import("../functions/src/notificationInboxEvents.js");
 const { sendCurrentManagerTestNotification: dispatchCurrentDeviceTest } = await import("../functions/src/currentDeviceNotificationTest.js");
 const { processChecklistReviewNotification } = await import("../functions/src/checklistReviewNotifications.js");
 const { loadEligibleManagerPushDevices } = await import("../functions/src/managerFcmDelivery.js");
@@ -157,6 +161,59 @@ test("active manager can read/query/create/update only supported operational doc
   }
 });
 
+test("Job price correction records are readable only by active managers of that organization", async () => {
+  const path = `${root}/jobs/job/corrections`;
+  await admin.doc(`${path}/correction`).set({ kind: "CLIENT_PRICE" });
+  const manager = account("manager").firestore().collection(path);
+  await assertSucceeds(manager.doc("correction").get());
+  await assertSucceeds(manager.orderBy("kind").get());
+  for (const actor of [account("cleaner"), account("other-manager"), account("inactive")]) {
+    const collection = actor.firestore().collection(path);
+    await assertFails(collection.doc("correction").get());
+    await assertFails(collection.get());
+    await assertFails(collection.doc("new").set({ kind: "CLIENT_PRICE" }));
+  }
+  await assertFails(manager.doc("new").set({ kind: "CLIENT_PRICE" }));
+  await assertFails(manager.doc("correction").update({ reason: "Rewritten reason" }));
+  await assertFails(manager.doc("correction").delete());
+});
+
+test("the paid Job client price changes through the callable with an auditable history", async () => {
+  const path = `${root}/jobs/job`;
+  const job = admin.doc(path);
+  const hours = { approved: true, quantity: 3 };
+  const cleanerFields = { cleanerPayout: 80, pay: { mode: "FIXED", perCleanerCents: 8000 } };
+  await job.update({ clientPrice: 100, billing: { hours }, ...cleanerFields });
+  const browser = account("manager").firestore().doc(path);
+  await assertSucceeds(browser.update({ clientPrice: 120 }));
+  await assertSucceeds(browser.update({ payoutId: "payout", payoutPaidAt: serverTimestamp() }));
+  const { payoutPaidAt } = (await job.get()).data();
+  await assertFails(browser.update({ clientPrice: 150 }));
+  await assertFails(browser.update({ "billing.mode": "HOURLY", "billing.hourlyRateCents": 6000 }));
+  await assertFails(browser.update({ payoutId: deleteField(), payoutPaidAt: deleteField() }));
+  const data = { jobId: "job", clientPricing: { mode: "HOURLY", hourlyRateCents: 6000 }, reason: "Confirmed hourly rate" };
+  await assert.rejects(correctJobPrices.run(request("cleaner", data)), { code: "permission-denied" });
+  await assert.rejects(correctJobPrices.run(request("other-manager", data)), { code: "permission-denied" });
+  assert.deepEqual(await correctJobPrices.run(request("manager", data)), { unchanged: false });
+  assert.deepEqual(await correctJobPrices.run(request("manager", data)), { unchanged: true });
+  assert.deepEqual((await job.get()).data(), {
+    organizationId: org, fixture: true, payoutId: "payout", payoutPaidAt, ...cleanerFields,
+    billing: { mode: "HOURLY", hourlyRateCents: 6000, hours },
+  });
+  const records = await job.collection("corrections").get();
+  assert.equal(records.size, 1);
+  const { at, ...record } = records.docs[0].data();
+  assert.ok(at instanceof Timestamp);
+  assert.deepEqual(record, {
+    kind: "CLIENT_PRICE",
+    before: { mode: "FIXED", amountCents: 12000 },
+    after: data.clientPricing,
+    reason: data.reason,
+    byUid: "manager",
+    afterPayout: true,
+  });
+});
+
 test("a manager browser archives and updates operational documents but cannot delete them", async () => {
   const db = account("manager").firestore();
   for (const path of [...paths, assignmentPath]) {
@@ -180,6 +237,81 @@ test("a manager browser archives and updates operational documents but cannot de
   await assertSucceeds(db.doc(`${root}/payouts/payout`).update({ status: "VOID" }));
   await assertSucceeds(db.doc(`${root}/jobs/job/issues/issue`).update({ status: "RESOLVED" }));
   await assertSucceeds(db.doc(`${root}/jobs/job/offers/offer`).update({ status: "CANCELLED" }));
+});
+
+test("only Functions write Property access photo metadata and no browser can access the objects", async () => {
+  const path = `${root}/properties/property`;
+  const photo = { id: "a".repeat(32), caption: "Synthetic gate" };
+  const manager = account("manager").firestore().doc(path);
+  const fresh = account("manager").firestore().doc(`${root}/properties/new-photo-property`);
+  await assertFails(fresh.set({ organizationId: org, cleanerAccessPhotos: [] }));
+  await assertSucceeds(fresh.set({ organizationId: org }));
+  await assertFails(manager.update({ cleanerAccessPhotos: [photo] }));
+  await admin.doc(path).update({ cleanerAccessPhotos: [photo] });
+  await assertFails(manager.update({ cleanerAccessPhotos: [{ ...photo, caption: "Changed" }] }));
+  await assertFails(manager.update({ cleanerAccessPhotos: deleteField() }));
+  await assertFails(manager.set({ organizationId: org, name: "Replacement" }));
+  await assertSucceeds(manager.update({ name: "Allowed Property edit" }));
+  assert.deepEqual((await manager.get()).data().cleanerAccessPhotos, [photo]);
+
+  const object = `${path}/accessPhotos/${photo.id}.jpg`;
+  const bytes = new Uint8Array([255, 216, 255, 217]);
+  await environment.withSecurityRulesDisabled((context) => context.storage().ref(object).put(bytes, { contentType: "image/jpeg" }));
+  for (const actor of [account("cleaner"), account("inactive"), account("other-manager"), environment.unauthenticatedContext()]) {
+    await assertFails(actor.firestore().doc(path).get());
+  }
+  for (const actor of [account("manager"), account("cleaner"), environment.unauthenticatedContext()]) {
+    const file = actor.storage().ref(object);
+    await assertFails(file.getMetadata());
+    await assertFails(file.put(bytes, { contentType: "image/jpeg" }));
+    await assertFails(file.delete());
+  }
+});
+
+test("access photos round-trip through authenticated callables without entering agenda or Inbox documents", async () => {
+  const propertyId = "property";
+  const caption = "Synthetic access-photo caption";
+  const { photo } = await uploadPropertyAccessPhoto.run(request("manager", {
+    propertyId, contentType: "image/png", dataBase64: syntheticChecklistPng().toString("base64"), caption,
+  }));
+  const { id: photoId } = photo;
+  const property = admin.doc(`${root}/properties/${propertyId}`);
+  const stored = (await property.get()).data().cleanerAccessPhotos[0];
+  assert.deepEqual([stored.id, stored.caption, stored.createdByUid], [photoId, caption, "manager"]);
+  assert.equal(typeof stored.createdAt.toMillis, "function");
+  const managerRead = await getPropertyAccessPhoto.run(request("manager", { propertyId, photoId }));
+  assert.deepEqual(Object.keys(managerRead).sort(), ["contentType", "dataBase64"]);
+  assert.equal(managerRead.contentType, "image/jpeg");
+  assert.equal(Buffer.from(managerRead.dataBase64, "base64").length, stored.sizeBytes);
+
+  const jobId = "job";
+  const cleanerId = "cleaner";
+  const sessionId = "synthetic-session";
+  await admin.doc(`${root}/members/cleaner`).update({ organizationId: org, cleanerId, sessionId });
+  await admin.doc(`${root}/cleaners/cleaner`).update({ active: true });
+  await admin.doc(`${root}/jobs/${jobId}`).update({
+    propertyId, operationalStatus: "IN_PROGRESS", schemaVersion: 2, assignedCleanerIds: [cleanerId],
+    scheduledDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date()),
+  });
+  await property.update({ cleanerAccess: { shared: true } });
+  const cleaner = request("cleaner", { jobId, photoId });
+  cleaner.auth.token.cleanerHub = { organizationId: org, cleanerId, sessionId };
+  assert.deepEqual((await getMyJobAccess.run(cleaner)).photos, [{ id: photoId, caption }]);
+  assert.deepEqual(await getMyJobAccessPhoto.run(cleaner), managerRead);
+
+  await syncCleanerAgendaForJob(functionDatabase, { organizationId: org, jobId });
+  const agenda = await admin.collection(`${root}/cleanerAgenda`).get();
+  assert.ok(agenda.size > 0);
+  const serialized = JSON.stringify(agenda.docs.map((entry) => entry.data()));
+  for (const privateValue of [photoId, caption, managerRead.dataBase64]) assert.equal(serialized.includes(privateValue), false);
+  const organization = admin.doc(root);
+  assert.equal((await cleanerInbox(organization, cleanerId).get()).empty, true);
+  assert.equal((await organization.collection(managerInboxCollection).get()).empty, true);
+  await property.update({ cleanerAccess: { shared: false } });
+  assert.deepEqual(await getMyJobAccessPhoto.run(cleaner), { state: "not-provided" });
+  assert.deepEqual(await removePropertyAccessPhoto.run(request("manager", { propertyId, photoId })), { removed: true });
+  assert.deepEqual((await property.get()).data().cleanerAccessPhotos, []);
+  await assert.rejects(getPropertyAccessPhoto.run(request("manager", { propertyId, photoId })), { code: "not-found" });
 });
 
 test("only an active manager can update Job price snapshots without changing checklist context", async () => {
@@ -2330,7 +2462,10 @@ test("client portal link shows one client only what the manager released and can
   const later = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   await admin.doc(`${root}/clients/client-a`).set({ organizationId: org, name: "Owner A", email: "owner-a@example.test", notes: "private client note" });
   await admin.doc(`${root}/clients/client-b`).set({ organizationId: org, name: "Owner B" });
-  await admin.doc(`${root}/properties/property`).update({ clientId: "client-a", accessInstructions: "gate code 4821" });
+  const accessPhoto = { id: "a".repeat(32), caption: "Private synthetic access photo" };
+  await admin.doc(`${root}/properties/property`).update({
+    clientId: "client-a", accessInstructions: "gate code 4821", cleanerAccessPhotos: [accessPhoto],
+  });
   await admin.doc(`${root}/properties/property-b`).set({ organizationId: org, name: "Other Owner Property", clientId: "client-b" });
   await admin.doc(`${root}/jobs/job`).update({ clientId: "client-a", scheduledDate: today, scheduledStart: "09:00", assignedCleanerName: "Private Cleaner" });
   await assertSucceeds(account("manager").firestore().doc(`${root}/jobs/job`).update({ serviceType: "MOVE_IN_OUT" }));
@@ -2379,6 +2514,7 @@ test("client portal link shows one client only what the manager released and can
   portal = await publicClientPortalGet(access.token);
   assert.deepEqual(portal.body.portal.reports, [{ jobId: "job", propertyId: "property", propertyName: "Fixture Property", date: today, start: "09:00", serviceType: "POST_CONSTRUCTION" }]);
   const serialized = JSON.stringify(portal.body);
+  for (const value of Object.values(accessPhoto)) assert.equal(serialized.includes(value), false);
   for (const secret of ["Private Cleaner", "4821", "777", "999", "manager-only", "owner-a@example.test", "private client note", "Other Owner Property", "job-b", "cleaner-a"]) {
     assert.equal(serialized.includes(secret), false, `portal leaked ${secret}`);
   }
@@ -2388,6 +2524,7 @@ test("client portal link shows one client only what the manager released and can
   assert.equal(report.body.report.propertyName, "Fixture Property");
   assert.equal(report.body.report.serviceType, "POST_CONSTRUCTION");
   assert.equal(report.body.report.issueNotes, "A lamp bulb needs replacement.");
+  for (const value of Object.values(accessPhoto)) assert.equal(JSON.stringify(report.body).includes(value), false);
   for (const secret of ["private access instructions", "private code", "internal manager note", "private guest", "Cleaner-facing instruction."]) {
     assert.equal(JSON.stringify(report.body).includes(secret), false, `report leaked ${secret}`);
   }
@@ -3072,8 +3209,9 @@ for (const legacy of [false, true]) {
     assert.equal(full.automaticOfferBatch.currentContextRevision, 2);
     assert.ok(full.offerDistributionClosedAt);
     await assert.rejects(setSpots(job, 1), { code: "failed-precondition" });
+    // The first one-spot fill reports only its confirmation; the two-spot fill reports "all spots filled".
     if (!legacy) assert.equal((await job.collection("managerNotificationDeliveries")
-      .where("eventType", "==", "AUTO_OFFER_BATCH_FILLED").get()).size, 2);
+      .where("eventType", "==", "AUTO_OFFER_BATCH_FILLED").get()).size, 1);
   });
 }
 

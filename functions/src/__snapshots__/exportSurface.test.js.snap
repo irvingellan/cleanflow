@@ -104,6 +104,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "correctJobPrices",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "createAutomaticJobOffers",
     {
       "callableTrigger": {},
@@ -311,6 +323,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "getMyJobAccessPhoto",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "getPlatformOverview",
     {
       "callableTrigger": {},
@@ -324,6 +348,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
         {
           "key": "DEV_CENTER_DEVELOPER_UIDS",
         },
+      ],
+    },
+  ],
+  [
+    "getPropertyAccessPhoto",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
       ],
     },
   ],
@@ -624,6 +660,30 @@ exports[`Functions export surface > keeps the name, trigger and options of every
   ],
   [
     "removeMyUnavailability",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "removePropertyAccessPhoto",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
+    "reportCleanerPushReceipts",
     {
       "callableTrigger": {},
       "labels": {},
@@ -970,6 +1030,19 @@ exports[`Functions export surface > keeps the name, trigger and options of every
         "us-central1",
       ],
       "timeoutSeconds": 60,
+    },
+  ],
+  [
+    "uploadPropertyAccessPhoto",
+    {
+      "availableMemoryMb": 512,
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
     },
   ],
 ]

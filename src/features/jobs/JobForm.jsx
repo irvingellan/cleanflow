@@ -4,6 +4,7 @@ import { BackButton } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
 import { maximumGuestNameLength } from "./jobCompatibility.js";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
+import { withHourlyServiceDefaults } from "../pricing/hourlyDefaults.js";
 import { jobPriceFormValues, readJobPriceForm } from "./jobPricingForm.js";
 import { JobPriceFields } from "./JobPriceFields.jsx";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
@@ -48,10 +49,9 @@ export function CreateCleaningForm({
     ? [selectedProperty, ...matchingProperties]
     : matchingProperties;
 
-  const propertyRates = resolveJobPricing({ serviceType: formValues.serviceType }, {
-    property: selectedProperty, cleanerCount: Number(formValues.requiredCleanerCount),
-  });
-  const missingRate = propertyRates.client.state !== "ready" || propertyRates.cleaner.state !== "ready";
+  // Warn only while an amount is still blank; typed amounts are the job's prices.
+  const missingRate = [formValues.clientPrice, formValues.cleanerPayout]
+    .some((amount) => !String(amount ?? "").trim());
   const legacyType = !selectedProperty?.serviceRates && formValues.serviceType !== defaultServiceType;
 
   function selectProperty(event) {
@@ -82,8 +82,12 @@ export function CreateCleaningForm({
           property: selectedProperty, cleanerCount: Number(next.requiredCleanerCount),
         }));
         if (name === "serviceType") {
+          const rates = resolveJobPricing({ serviceType: next.serviceType }, {
+            property: selectedProperty, cleanerCount: Number(next.requiredCleanerCount),
+          });
           // Legacy forms kept the entered amounts when changing type before a rate table existed.
-          if (selectedProperty?.serviceRates || value === defaultServiceType) return { ...next, ...pricing };
+          const base = selectedProperty?.serviceRates || value === defaultServiceType ? { ...next, ...pricing } : next;
+          return withHourlyServiceDefaults(base, value, rates);
         } else if (selectedProperty?.serviceRates?.[next.serviceType]?.cleaner?.byCleanerCount) {
           return { ...next, cleanerPayout: pricing.cleanerPayout, cleanerMode: pricing.cleanerMode, fixedPerCleaner: pricing.fixedPerCleaner };
         }

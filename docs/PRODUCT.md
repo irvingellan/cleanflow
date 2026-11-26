@@ -133,6 +133,10 @@ Property information may include reusable access instructions, parking,
 supplies, operational notes, checklist templates, reference photos, and default
 pricing. Selecting a Property should populate relevant defaults for a new Job.
 
+Managers can add up to eight captioned access photos to a Property. Cleaners
+on the Job roster can view them in the Cleaner Hub while the Property's access
+sharing is on and the Job's access window is open.
+
 Job-effective instructions, pricing, checklists, and other operational values
 must preserve historical truth. Editing a Property later must not rewrite what
 applied to completed or previously scheduled work.

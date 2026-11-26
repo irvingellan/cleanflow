@@ -72,6 +72,16 @@ ordinary operational data.
 manager-only Property data. Do not copy them into cleaner-facing projections or
 checklist snapshots by default.
 
+`cleanerAccessPhotos` is an optional, server-owned Property array with up to
+eight entries. Each entry has `id`, `caption`, `sizeBytes`, `width`, `height`,
+`createdAt` (Firestore Timestamp), and `createdByUid`. Functions create the
+random ID, encode a metadata-free JPEG, and save it under the Property's
+private `accessPhotos` Storage prefix before committing the entry. Managers
+list metadata through their existing Property access. A cleaner's authenticated
+Job access projection contains only the IDs and captions when access is available.
+Both roles retrieve bytes through authenticated callables. Agenda, notifications,
+and client reports exclude the photos and their metadata.
+
 **Phase 2 checklist foundation:** `checklistSettings` is optional. When absent,
 the current versioned global default definition applies. Its allowlisted
 cleaner-facing fields are additional checklist items, inventory item additions
@@ -269,8 +279,14 @@ Job creation and service-type changes on a saved Job copy the selected
 Property rates. Fixed snapshots use `clientPrice` and `cleanerPayout`
 in dollars. An hourly side uses `billing.mode` and `billing.hourlyRateCents`
 for the client or `pay.mode` and `pay.rateCents` for the cleaner. The manager
-can edit the Job snapshot. A recorded payout or approved billing hours locks
-that edit. For a Property with no service table, switching the type in the
+can edit the Job snapshot. A recorded payout or approved billing hours closes
+the standard price editor. After a recorded payout, a manager can correct the
+client price with a reason. Each change appends a manager-only
+`jobs/{jobId}/corrections/{correctionId}` record with the prior and new client
+prices in cents, the reason, the actor, the server timestamp, and whether a
+payout already existed. The correction preserves billable hours, cleaner
+compensation, payout records, and issued offer terms. For a Property with no
+service table, switching the type in the
 legacy creation form keeps amounts already entered and prompts for review.
 
 An hourly Offer stores the recipient's own `offeredPay` with `mode: "HOURLY"`
