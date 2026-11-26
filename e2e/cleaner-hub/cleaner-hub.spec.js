@@ -573,7 +573,11 @@ test("reports and approves worked time in the signed-in experiences", async ({ p
     await cleaner.getByLabel("Horas", { exact: true }).fill("1");
     await cleaner.getByLabel("Minutos", { exact: true }).fill("58");
     await cleaner.getByRole("button", { name: "Salvar horas" }).click();
+    // Single submission: the cleaner confirms before sending, then sees a read-only summary.
+    await expect(cleaner.getByText("Depois que você enviar, só a gerência poderá alterar essas horas.")).toBeVisible();
+    await cleaner.getByRole("button", { name: "Enviar horas" }).click();
     await expect(cleaner.getByText("Aguardando aprovação · 2 h")).toBeVisible();
+    await expect(cleaner.getByRole("button", { name: "Salvar horas" })).toHaveCount(0);
     await cleaner.getByRole("button", { name: "Conta", exact: true }).click();
     await cleaner.getByRole("button", { name: "Escuro", exact: true }).click();
     await expect(cleaner.locator(".hb-root")).toHaveAttribute("data-theme", "dark");
