@@ -125,7 +125,7 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix functions
       - name: Verify release and integration tooling
-        run: node --test scripts/engineering.test.mjs scripts/releaseHostingOnly.test.mjs scripts/releaseNotificationBUpdate.test.mjs
+        run: node --test scripts/engineering.test.mjs scripts/releaseHostingOnly.test.mjs scripts/releaseNotificationBUpdate.test.mjs scripts/prepareHosting.test.mjs scripts/sandboxBuildGuards.test.mjs
       - run: npm test
       - run: npm run build:emulators
   manager_security:

@@ -6,8 +6,11 @@ import { fileURLToPath } from "node:url";
 
 export const hostingBundleAsset = /^assets\/(?:index|main)-[A-Za-z0-9_-]+\.(js|css)$/;
 // Code-split JavaScript emitted next to the entry bundle. A chunk is accepted only when a
-// reviewed script names it, so a stray script can never ride along. CSS stays one entry file.
+// reviewed script names it, so a stray script can never ride along.
 export const hostingChunkAsset = /^assets\/[A-Za-z0-9_-]+\.js$/;
+// Lazy entries also emit their own stylesheet. It is accepted under the same rule: a reviewed
+// script must name it.
+export const hostingStyleChunkAsset = /^assets\/[A-Za-z0-9_-]+\.css$/;
 // Emitted by Vite from @fontsource-variable/inter 5.2.8's wght.css.
 // Pin both the emitted paths and the SHA-256 of the reviewed package bytes.
 const interFonts = new Map([
@@ -41,10 +44,14 @@ export function inspectHostingFonts(dist, files) {
 
 export function inspectHostingChunks(dist, files) {
   const scripts = files.filter((name) => hostingChunkAsset.test(name));
+  const styles = files.filter((name) => hostingStyleChunkAsset.test(name) && !hostingBundleAsset.test(name));
   const reached = new Set(scripts.filter((name) => hostingBundleAsset.test(name)));
   const pending = [...reached];
   while (pending.length) {
     const source = fs.readFileSync(path.join(dist, pending.pop()), "utf8");
+    for (const name of styles) {
+      if (!reached.has(name) && source.includes(name.slice("assets".length))) reached.add(name);
+    }
     for (const name of scripts) {
       if (reached.has(name) || !source.includes(name.slice("assets".length))) continue;
       reached.add(name);
