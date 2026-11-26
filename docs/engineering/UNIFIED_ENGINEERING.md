@@ -30,13 +30,13 @@ Irving Hub note `2026-11-09-5dbclm` provides shared context. Git holds the sourc
    Keep the claim until work is handed off. Inspect a stale claim and its
    worktree before deciding to clear it.
 3. Commit the scoped change. Review the outgoing history before pushing
-   to the public repository. Open one PR against `main` with a single
-   `scope:hosting` or `scope:full` label. Bring the exact current `main` into
-   the candidate before review. Have the other agent review affected shared
+   to the public repository. Open one PR against `main`. Bring the exact
+   current `main` into the candidate before review. Have the other agent review affected shared
    interfaces. The Actions workflow checks the PR event base against the
-   fetched main, runs the scope policy from that base and tests the merge
-   candidate without cloud credentials. The first bootstrap PR is
-   `scope:full` and requires manual review of the policy and workflow.
+   fetched target branch, runs the scope policy from fetched `main` and tests the
+   merge candidate without cloud credentials. A bootstrap PR against a base
+   without the policy still requires `scope:full` and manual review of the policy
+   and workflow.
 4. Generate a shareable checkpoint from the task checkout:
 
    ```sh
@@ -51,8 +51,18 @@ Irving Hub note `2026-11-09-5dbclm` provides shared context. Git holds the sourc
    sanitized conclusion to the Irving Hub when the task authorizes it. This
    command does not send a message or infer acceptance of a release.
 
-The CI checks the exact GitHub event merge commit and its two parents. The
-manager browser suite (`npm run test:e2e`) uses isolated local Auth, Firestore
+The **Integration scope** job checks the exact GitHub event merge commit and
+its two parents. It uses `hosting` when the diff qualifies under the Hosting
+policy and `full` otherwise. Scope labels are optional. Add `scope:full` to
+force full scope. `scope:hosting` still requires an eligible diff. Applying
+both labels fails the job.
+
+Editing the PR or changing its labels does not trigger CI. After changing a
+scope label, push a commit or re-run **Integration scope**. A rerun reads the
+current labels and checks the original event's commits. If the base has
+advanced, update the PR branch and push it.
+
+The manager browser suite (`npm run test:e2e`) uses isolated local Auth, Firestore
 and Functions for `demo-cleanflow`, with synthetic secret overrides and no
 Production credentials. Nested browser suites retain their dedicated runners.
 Use a task worktree without an existing Functions secret override file.
