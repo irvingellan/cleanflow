@@ -26,11 +26,15 @@ describe("ChecklistCapabilityControls", () => {
     expect(screen.queryByText(/Do not reuse the previous link/)).not.toBeInTheDocument();
   });
 
-  it("hides a locally issued URL after another action rotates its capability", async () => {
+  it.each([
+    ["refreshed", "The checklist was updated to the current version."],
+    ["work-started", "The cleaner already started, so the checklist on this service was kept."],
+  ])("shows the %s message only while the locally issued link is current", async (checklistRefresh, message) => {
     const issued = { state: "ACTIVE", cleanerId: "cleaner-a", issuedAt: "2026-09-29T12:00:00Z" };
     const onIssue = vi.fn().mockResolvedValue({
       url: "https://cleanflow.example/checklist?t=synthetic-token",
       capability: issued,
+      checklistRefresh,
     });
     const common = {
       job: { id: "job-a", schemaVersion: 2, operationalStatus: "ASSIGNED", assignedCleanerIds: ["cleaner-a"] },
@@ -47,9 +51,11 @@ describe("ChecklistCapabilityControls", () => {
     await waitFor(() => expect(onIssue).toHaveBeenCalledWith("cleaner-a"));
     rerender(view(issued));
     expect(screen.getByRole("button", { name: "Copy link" })).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(message);
 
     rerender(view({ ...issued, issuedAt: "2026-09-29T12:01:00Z" }));
     expect(screen.queryByRole("button", { name: "Copy link" })).not.toBeInTheDocument();
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
   });
 
   it("does not show Cleaner A's link after the manager selects Cleaner B", async () => {

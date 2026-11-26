@@ -436,6 +436,15 @@ one active capability, this bundled handoff cannot give multiple team members
 simultaneously usable checklist links. It remains a manual send with no
 sent/delivered state.
 
+The first manager link uses the snapshot frozen when the Draft Run was created.
+When the manager reissues a link from Job Detail or the reminder, the same
+transaction can refresh the snapshot from the current Property and checklist
+template if there is no persisted draft or photo activity. A persisted draft
+keeps the snapshot even if its answers were cleared. The link rotates on the
+same Run, and the manager sees whether the snapshot was updated or kept because
+work had started. If the Property is missing or a new checklist cannot be
+started, an eligible link can still be issued with the existing snapshot.
+
 **CURRENT (DEPLOYED 2026-09-28):** the reminder's system-generated text and
 date formatting use the assigned Cleaner's allowlisted `preferredLanguage`,
 not the manager UI language. A manager-facing label identifies the message

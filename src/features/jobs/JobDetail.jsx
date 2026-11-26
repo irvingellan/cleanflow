@@ -791,7 +791,10 @@ export function JobDetail({
       }
       if (currentJobIdRef.current === jobId) {
         setReminderPreview((current) => current?.cleanerId === cleanerId
-          ? { ...current, checklistUrl: result.url, checklistIssuedAt: result.capability.issuedAt }
+          ? {
+            ...current, checklistUrl: result.url, checklistIssuedAt: result.capability.issuedAt,
+            checklistRefresh: result.checklistRefresh,
+          }
           : current);
       }
     } catch {

@@ -103,7 +103,12 @@ export function JobReminderPreview({
                     <p className="form-error" role="alert">{translate("jobs.reminderChecklistUnavailable")}</p>
                   )}
                   {reminderChecklistCapabilityCurrent && (
-                    <p className="form-success" role="status">{translate("jobs.reminderChecklistReady")}</p>
+                    <p className="form-success" role="status">
+                      {translate("jobs.reminderChecklistReady")}
+                      {reminderPreview.checklistRefresh && (
+                        <> {translate(`checklists.linkSnapshot.${reminderPreview.checklistRefresh}`)}</>
+                      )}
+                    </p>
                   )}
                   {hasReminderChecklistError && (
                     <p className="form-error" role="alert">{translate("jobs.reminderChecklistError")}</p>
