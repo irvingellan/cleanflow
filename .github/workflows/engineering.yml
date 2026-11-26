@@ -116,8 +116,8 @@ jobs:
         run: node --test scripts/engineering.test.mjs scripts/releaseHostingOnly.test.mjs scripts/releaseNotificationBUpdate.test.mjs
       - run: npm test
       - run: npm run build:emulators
-  security:
-    name: Security rules
+  manager_security:
+    name: Manager security rules
     needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -142,8 +142,68 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm ci --prefix functions
+      - &firebase_version
+        name: Read locked Firebase CLI version
+        id: firebase_version
+        run: node -p "'version=' + require('./package-lock.json').packages['node_modules/firebase-tools'].version" >> "$GITHUB_OUTPUT"
+      # Keep the Firestore-only and Firestore + Storage archives separate.
+      - &firebase_firestore_storage_cache
+        name: Cache Firestore and Storage emulators
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ runner.arch }}-${{ steps.firebase_version.outputs.version }}-firestore-storage
       - run: npm run test:security
+  hub_security:
+    name: Cleaner Hub security rules
+    needs: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      FIREBASE_CLI_DISABLE_TELEMETRY: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # Release tests inspect exact historical baselines.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - *firebase_version
+      - &firebase_firestore_cache
+        name: Cache Firestore emulator
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ runner.arch }}-${{ steps.firebase_version.outputs.version }}-firestore
       - run: npm run test:cleaner-hub:security
+  security:
+    name: Security rules
+    needs: [manager_security, hub_security]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require both security suites to pass
+        env:
+          MANAGER_RESULT: ${{ needs.manager_security.result }}
+          HUB_RESULT: ${{ needs.hub_security.result }}
+        run: |
+          if [[ "$MANAGER_RESULT" != success || "$HUB_RESULT" != success ]]; then
+            printf 'Manager security rules: %s\nCleaner Hub security rules: %s\n' "$MANAGER_RESULT" "$HUB_RESULT"
+            exit 1
+          fi
   manager_e2e:
     name: Manager browser tests
     needs: scope
@@ -170,7 +230,27 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm ci --prefix functions
-      - run: npx --no-install playwright install --with-deps chromium webkit
+      - *firebase_version
+      - *firebase_firestore_cache
+      - &playwright_version
+        name: Read locked Playwright version
+        id: playwright_version
+        run: node -p "'version=' + require('./package-lock.json').packages['node_modules/@playwright/test'].version" >> "$GITHUB_OUTPUT"
+      - &playwright_cache
+        name: Cache Playwright browsers
+        id: playwright_cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright_version.outputs.version }}-chromium-webkit
+      - &playwright_install
+        name: Install Playwright browsers and system dependencies
+        if: steps.playwright_cache.outputs.cache-hit != 'true'
+        run: npx --no-install playwright install --with-deps chromium webkit
+      - &playwright_install_deps
+        name: Install Playwright system dependencies
+        if: steps.playwright_cache.outputs.cache-hit == 'true'
+        run: npx --no-install playwright install-deps chromium webkit
       - run: npm run test:e2e
   hub_e2e:
     name: Cleaner Hub browser tests
@@ -198,7 +278,12 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm ci --prefix functions
-      - run: npx --no-install playwright install --with-deps chromium webkit
+      - *firebase_version
+      - *firebase_firestore_storage_cache
+      - *playwright_version
+      - *playwright_cache
+      - *playwright_install
+      - *playwright_install_deps
       - run: npm run test:cleaner-hub:e2e
   suites:
     name: Image, Job Detail and PWA suites
@@ -226,7 +311,10 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm ci --prefix functions
-      - run: npx --no-install playwright install --with-deps chromium webkit
+      - *playwright_version
+      - *playwright_cache
+      - *playwright_install
+      - *playwright_install_deps
       - name: Verify image processing and pending-thumbnail regressions in Chromium and WebKit
         run: |
           npx --no-install playwright test --config=e2e/image-optimizer/playwright.config.js
@@ -240,7 +328,7 @@ jobs:
   verification:
     # Keeps the historical check name. It runs only when every parallel job passed.
     name: Unit, build and emulator checks
-    needs: [unit, security, manager_e2e, hub_e2e, suites]
+    needs: [scope, unit, manager_security, hub_security, security, manager_e2e, hub_e2e, suites]
     runs-on: ubuntu-latest
     steps:
       - name: Record technical checkpoint
