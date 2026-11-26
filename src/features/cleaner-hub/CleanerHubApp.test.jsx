@@ -38,7 +38,7 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("CleanerHubApp (live data boundary)", () => {
-  it("shows synced progress, start time and a countdown on the assigned NowCard until check-in", () => {
+  it("shows progress, start time and a countdown on the assigned NowCard until check-in", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-25T21:42:00Z"));
     const { service, handlers } = fakeService();
@@ -52,7 +52,6 @@ describe("CleanerHubApp (live data boundary)", () => {
     const card = within(screen.getByRole("region", { name: "Limpando agora" }));
     expect(card.getByText("desde 11:34")).toBeVisible();
     expect(card.getByText(/22 de 30 itens · 9 fotos/)).toBeVisible();
-    expect(card.getByText(/Última sincronização/)).toBeVisible();
     expect(card.getByRole("img", { name: "22 de 30 itens respondidos" })).toBeVisible();
     expect(card.getByText("Hóspede entra às 15:00 · faltam 1h18")).toBeVisible();
     act(() => vi.advanceTimersByTime(78 * 60000));

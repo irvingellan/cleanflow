@@ -374,7 +374,7 @@ function NowCard({ t, hub, entry, onOpen }) {
       </button>
       {progress && (
         <div className="hb-now-facts">
-          <div>{progress} <small>· {t("hb.now.lastSynced")}</small></div>
+          <div>{progress}</div>
           {hasItemProgress && (
             <div className="hb-now-progress" role="img" aria-label={t("hb.now.itemsDone", { answered: answeredItems, total: totalItems })}>
               <span style={{ width: `${answeredItems / totalItems * 100}%` }} />
