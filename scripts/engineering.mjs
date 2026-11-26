@@ -123,10 +123,10 @@ export function closeTask(cwd, issue) {
 }
 
 export function checkCandidate(cwd, { base, head, scope }) {
-  const relation = ancestry(cwd, base, head);
-  check(relation && relation.leftOnly === 0 && relation.rightOnly > 0,
-    "Candidate must contain the exact integration base and advance it.");
-  const paths = trackedDelta(cwd, base, head);
+  check(isCommit(cwd, base) && isCommit(cwd, head), "Candidate base and head must be commits.");
+  const mergeBase = git(cwd, "merge-base", base, head).trim();
+  check(mergeBase !== head, "Candidate head must advance the common ancestor.");
+  const paths = trackedDelta(cwd, mergeBase, head);
   check(paths.length, "Candidate has no changes.");
   if (scope === "hosting") {
     check(!paths.some((path) => path.startsWith(".github/")

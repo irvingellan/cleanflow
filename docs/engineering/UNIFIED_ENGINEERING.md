@@ -30,11 +30,10 @@ Irving Hub note `2026-11-09-5dbclm` provides shared context. Git holds the sourc
    Keep the claim until work is handed off. Inspect a stale claim and its
    worktree before deciding to clear it.
 3. Commit the scoped change. Review the outgoing history before pushing
-   to the public repository. Open one PR against `main`. Bring the exact
-   current `main` into the candidate before review. Have the other agent review affected shared
-   interfaces. The Actions workflow checks the PR event base against the
-   fetched target branch, runs the scope policy from fetched `main` and tests the
-   merge candidate without cloud credentials. A bootstrap PR against a base
+   to the public repository. Open one PR against `main`. Have the other agent
+   review affected shared interfaces. The Actions workflow runs the scope
+   policy from fetched `main` and tests GitHub's PR event merge commit without
+   cloud credentials. A bootstrap PR against a base
    without the policy still requires `scope:full` and manual review of the policy
    and workflow.
 4. Generate a shareable checkpoint from the task checkout:
@@ -51,16 +50,18 @@ Irving Hub note `2026-11-09-5dbclm` provides shared context. Git holds the sourc
    sanitized conclusion to the Irving Hub when the task authorizes it. This
    command does not send a message or infer acceptance of a release.
 
-The **Integration scope** job checks the exact GitHub event merge commit and
-its two parents. It uses `hosting` when the diff qualifies under the Hosting
-policy and `full` otherwise. Scope labels are optional. Add `scope:full` to
-force full scope. `scope:hosting` still requires an eligible diff. Applying
-both labels fails the job.
+For PRs, the **Integration scope** job checks the GitHub event merge commit
+and its two parents. It classifies the diff from the common ancestor of the
+event base and PR head to the PR head. It uses `hosting` when the diff
+qualifies under the Hosting policy and `full` otherwise. Scope labels are
+optional. Add `scope:full` to force full scope. `scope:hosting` still requires
+an eligible diff. Applying both labels fails the job. A push to `main` runs
+full CI on the pushed SHA.
 
 Editing the PR or changing its labels does not trigger CI. After changing a
 scope label, push a commit or re-run **Integration scope**. A rerun reads the
-current labels and checks the original event's commits. If the base has
-advanced, update the PR branch and push it.
+current labels and checks the original event's commits even if the target
+branch has advanced.
 
 The manager browser suite (`npm run test:e2e`) uses isolated local Auth, Firestore
 and Functions for `demo-cleanflow`, with synthetic secret overrides and no
@@ -69,12 +70,18 @@ Use a task worktree without an existing Functions secret override file.
 
 The default branch is the integration line after canonization. An agent task
 branch is a review candidate. GitHub branch protections should be set after
-the first observed passing checks. Require a PR, approved review, exact
-current base and the two Engineering checks. Block force push and deletion.
+the first observed passing checks. Require a PR, approved review and the two
+Engineering checks. Use loose required status checks so PRs can merge with an
+older base. Block force push and deletion.
 Keep these settings separate from Firebase deployment permissions. See
 [GitHub branch protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
 
 ## Production
+
+Release requires a green CI run on the exact main commit being published.
+Require a completed, successful `push` run of `.github/workflows/engineering.yml`
+in the official repository with `head_branch: main` and `head_sha` equal to
+the candidate release SHA.
 
 Before each release, collect a fresh snapshot of Hosting, Functions, Rules,
 schedules and pilot configuration. Match the plan, manifest, rollback and

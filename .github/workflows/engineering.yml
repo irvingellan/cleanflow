@@ -1,6 +1,8 @@
 name: Engineering checks
 
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
     branches: [main, "codex/pkg2-*"]
@@ -9,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: engineering-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: engineering-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   scope:
@@ -27,7 +29,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22.12.0'
-      - name: Verify the submitted head and exact PR base
+      - name: Verify the event checkout and determine scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -37,11 +39,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          [[ "$(git rev-parse --verify "refs/remotes/origin/$GITHUB_BASE_REF")" == "$BASE_SHA" ]] ||
-            { echo 'The target branch advanced before checkout. Refresh the PR against the new base.'; exit 1; }
-          git merge-base --is-ancestor refs/remotes/origin/main "$BASE_SHA"
-          [[ "$(git rev-parse --verify HEAD)" == "$GITHUB_SHA" &&
-             "$(git show --no-patch --format=%P HEAD)" == "$BASE_SHA $HEAD_SHA" ]] ||
+          [[ "$(git rev-parse --verify HEAD)" == "$GITHUB_SHA" ]] ||
+            { echo 'Checkout does not match the event SHA.'; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main ]] ||
+              { echo 'Push verification requires main.'; exit 1; }
+            {
+              echo '## CleanFlow integration checkpoint'
+              printf -- '- Main commit: `%s`\n- Scope: full\n' "$GITHUB_SHA"
+              echo '- Scope verification: passed'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [[ "$(git show --no-patch --format=%P HEAD)" == "$BASE_SHA $HEAD_SHA" ]] ||
             { echo 'Checkout is not the event merge commit for the exact PR base and head.'; exit 1; }
           # A rerun retains the event commits. Refresh only the labels.
           if [[ "$GITHUB_RUN_ATTEMPT" != 1 ]]; then
@@ -56,6 +66,9 @@ jobs:
             exit 1
           fi
           scope=full
+          # Keep working with the policy on main while it still expects an ancestor.
+          DIFF_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          export DIFF_BASE
           policy_sha="$(git rev-parse --verify refs/remotes/origin/main)"
           if git cat-file -e "$policy_sha:scripts/engineering.mjs" 2>/dev/null &&
             git cat-file -e "$policy_sha:scripts/releaseHostingScope.mjs" 2>/dev/null; then
@@ -67,7 +80,7 @@ jobs:
           import { pathToFileURL } from "node:url";
 
           const { checkCandidate } = await import(pathToFileURL(join(process.argv[2], "scripts/engineering.mjs")));
-          const { BASE_SHA: base, HEAD_SHA: head, FULL } = process.env;
+          const { DIFF_BASE: base, HEAD_SHA: head, FULL } = process.env;
           const candidate = { base, head, scope: FULL === "true" ? "full" : "hosting" };
           try {
             console.log(checkCandidate(process.cwd(), candidate).scope);
@@ -80,9 +93,8 @@ jobs:
           NODE
             )"
           else
-            [[ "$FULL" == true && "$HEAD_SHA" != "$BASE_SHA" ]] ||
+            [[ "$FULL" == true && "$HEAD_SHA" != "$DIFF_BASE" ]] ||
               { echo 'A base without scope policy requires a scope:full bootstrap PR.'; exit 1; }
-            git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
           fi
           {
             echo '## CleanFlow integration checkpoint'
