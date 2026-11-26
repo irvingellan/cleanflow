@@ -5,6 +5,7 @@ import { requireOrganizationManager } from "../managerAuthorization.js";
 import { deactivateCleanerDevice, getCleanerDeviceStatus, registerCleanerDevice } from "../cleanerPushDevices.js";
 import { awaitCleanerPushTest, cleanerPushOverview, requestCleanerPushTest } from "../cleanerPushTest.js";
 import { processCleanerNotification } from "../cleanerPushDelivery.js";
+import { recordCleanerPushReceipts } from "../cleanerPushReceipts.js";
 import { resolveCleanerPushMode } from "../cleanerPushPilot.js";
 import { requireActiveCleaner } from "../cleanerHubAccess.js";
 import { notificationOutcomeLog } from "../notificationOutcomeLog.js";
@@ -34,6 +35,10 @@ export async function deactivateCleanerPushDevice(request) {
 
 export async function getCleanerPushDeviceStatus(request) {
   return getCleanerDeviceStatus(db, await cleanerPushIdentity(request), request.data, cleanerPushMode());
+}
+
+export async function reportCleanerPushReceipts(request) {
+  return recordCleanerPushReceipts(db, await cleanerPushIdentity(request), request.data);
 }
 
 /**

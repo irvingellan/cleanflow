@@ -1,4 +1,5 @@
 import { cleanerInboxTypes, managerInboxTypes } from "./notificationInboxEvents.js";
+import { projectCleanerPhoneReceipt } from "./cleanerPushReceipts.js";
 import { managerOperationalNotificationTypes } from "./managerOperationalNotifications.js";
 import { notificationHealthErrorStages, notificationHealthErrorCodes } from "./notificationLab.js";
 
@@ -54,6 +55,7 @@ function cleanerDeliveryProjection({ data }) {
       || ["FCM_ACCEPTED", "STALE_EVENT", "RECIPIENT_INELIGIBLE"].includes(data.deliveryStatus)
       ? data.deliveryStatus : "UNKNOWN",
     recordedAt: timestampToIso(data.recordedAt),
+    attemptedAt: timestampToIso(data.attemptedAt),
     targetDeviceCount: safeNullableCount(data.targetDeviceCount),
     acceptedByFcmDevices: safeNullableCount(data.acceptedByFcmDevices),
     rejectedDevices: safeNullableCount(data.rejectedDevices),
@@ -65,6 +67,7 @@ function cleanerDeliveryProjection({ data }) {
         installation: device.installationKey.slice(0, 12),
         registrationRevision: safeNullableCount(device.registrationRevision),
         outcome: outcomes.includes(device.outcome) ? device.outcome : "UNKNOWN",
+        receipt: projectCleanerPhoneReceipt(data.phoneReceipts?.[device.installationKey]),
       })) : [],
   };
 }

@@ -318,7 +318,7 @@ async function preflight(options) {
       // /agenda scope; the push worker keeps its separate registration scope.
       check("cleanerPilotHosting", agenda.id === "/agenda" && agenda.start_url === "/agenda"
         && agenda.scope === "/agenda" && agenda.display === "standalone"
-        && headers?.some((row) => row.key === "Service-Worker-Allowed" && row.value === "/cleaner-messaging-push/")
+        && headers?.some((row) => row.key === "Service-Worker-Allowed" && row.value === "/agenda/push/")
         && headers.some((row) => row.key === "Cache-Control" && row.value.includes("no-store")),
       "Cleaner manifest or scoped worker Hosting headers differ.");
     }
@@ -327,7 +327,7 @@ async function preflight(options) {
     "The built manager worker has a different Firebase binding or SDK.");
     execFileSync(process.execPath, ["--check", resolve(dist, "cleaner-messaging-sw.js")], { stdio: "ignore" });
     const workerMatches = stage === "A" ? worker === "// Cleaner push is disabled for this build.\n"
-      : worker.includes(JSON.stringify(cleaner.appId)) && worker.includes(`firebasejs/${sdkVersion}/`);
+      : worker.includes('addEventListener("push"') && worker.includes("showNotification") && !worker.includes("importScripts");
     check("cleanerWorker", workerMatches, "The built cleaner worker does not match the selected release stage.");
     check("manifest", JSON.stringify(current) === JSON.stringify(JSON.parse(preparedBytes).files),
       "Prepared Hosting manifest does not match the built files.");

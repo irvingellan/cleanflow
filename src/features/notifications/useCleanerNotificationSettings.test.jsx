@@ -4,7 +4,7 @@ import { useCleanerNotificationSettings } from "./useCleanerNotificationSettings
 
 const service = vi.hoisted(() => ({
   cleanerPushCanEnable: vi.fn(), cleanerPushPairingReference: vi.fn(), enableCleanerPush: vi.fn(),
-  inspectCleanerPush: vi.fn(), refreshCleanerPush: vi.fn(),
+  inspectCleanerPush: vi.fn(), refreshCleanerPush: vi.fn(), sendCleanerPushSelfTest: vi.fn(), syncCleanerPushReceipts: vi.fn(),
 }));
 vi.mock("./cleanerPushService.js", () => service);
 
@@ -15,8 +15,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   service.cleanerPushCanEnable.mockReturnValue(false);
   service.cleanerPushPairingReference.mockImplementation((current) => `${current.sessionId}.synthetic-device`);
-  service.inspectCleanerPush.mockResolvedValue("pilot-ineligible");
+  service.refreshCleanerPush.mockResolvedValue("pilot-ineligible");
   service.enableCleanerPush.mockResolvedValue("registered");
+  service.syncCleanerPushReceipts.mockResolvedValue(null);
 });
 
 describe("Cleaner pilot notification settings lifecycle", () => {
@@ -35,10 +36,10 @@ describe("Cleaner pilot notification settings lifecycle", () => {
 
   it.each([true, false])("discards a previous session's pending check during account replacement (same UID: %s)", async (sameUid) => {
     let finish;
-    service.inspectCleanerPush.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    service.refreshCleanerPush.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const { result, rerender } = renderHook((value) => useCleanerNotificationSettings(value), { initialProps: props });
     const replacement = { ...session, uid: sameUid ? session.uid : "synthetic-cleaner-b", sessionId: "synthetic-session-b" };
-    service.inspectCleanerPush.mockResolvedValue("missing");
+    service.refreshCleanerPush.mockResolvedValue("missing");
     service.cleanerPushCanEnable.mockReturnValue(true);
     rerender({ ...props, session: replacement });
     await waitFor(() => expect(result.current.state).toBe("missing"));
@@ -52,5 +53,28 @@ describe("Cleaner pilot notification settings lifecycle", () => {
       platform: "android", standalone: true, language: "pt",
     });
     await waitFor(() => expect(result.current.state).toBe("registered"));
+  });
+
+  it("rechecks receipts on return after an aborted test and shows a neutral status", async () => {
+    let fail;
+    service.sendCleanerPushSelfTest.mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const { result } = renderHook(() => useCleanerNotificationSettings(props));
+    await waitFor(() => expect(service.syncCleanerPushReceipts).toHaveBeenCalledWith(session));
+    act(() => { void result.current.test(); });
+    act(() => {
+      visibility.mockReturnValue("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => fail(new DOMException("aborted", "AbortError")));
+    expect(result.current.testState).toBe("interrupted");
+    const latestTest = { attemptedAt: "2026-11-25T19:00:00Z", receipt: { outcome: "shown" } };
+    service.syncCleanerPushReceipts.mockResolvedValue(latestTest);
+    act(() => {
+      visibility.mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(result.current.latestTest).toEqual(latestTest));
+    visibility.mockRestore();
   });
 });

@@ -1,5 +1,5 @@
 export const cleanerMessagingWorkerPath = "/cleaner-messaging-sw.js";
-export const cleanerMessagingWorkerScope = "/cleaner-messaging-push/";
+export const cleanerMessagingWorkerScope = "/agenda/push/";
 export const cleanerPushReceiptEvent = "cleanflow-cleaner-push-received";
 // Sent on notification tap to an already open Minha agenda, which iOS does not navigate.
 export const cleanerPushOpenInboxEvent = "cleanflow-cleaner-open-inbox";
@@ -19,16 +19,28 @@ export function cleanerMessagingConfig(firebaseConfig, appId) {
 /** One browser-local binding, distinct from Firebase's token storage. A conditional
  * IDB transaction prevents a stale registration result from replacing a new owner.
  * Self-contained so the same storage protocol runs in the generated worker. */
-export async function cleanerPushBinding(action, sessionId, bindingId, language, registrationRevision) {
-  const db = await new Promise((resolve, reject) => {
-    const request = indexedDB.open("cleanflow-cleaner-push-binding", 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("installation");
+export function openCleanerPushDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("cleanflow-cleaner-push-binding", 2);
+    request.onupgradeneeded = ({ oldVersion }) => {
+      if (oldVersion === 0) request.result.createObjectStore("installation");
+      request.result.createObjectStore("receipts", { autoIncrement: true });
+    };
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
   });
+}
+
+export async function cleanerPushBinding(action, sessionId, bindingId, language, registrationRevision) {
+  const db = await openCleanerPushDatabase();
   try {
     return await new Promise((resolve, reject) => {
-      const tx = db.transaction("installation", action === "read" ? "readonly" : "readwrite");
+      const clearsReceipts = ["clear", "invalidate", "revokePermission"].includes(action);
+      const tx = db.transaction(clearsReceipts ? ["installation", "receipts"] : "installation",
+        action === "read" ? "readonly" : "readwrite");
       const store = tx.objectStore("installation");
       const read = store.get("active");
       let result = null;
@@ -53,10 +65,15 @@ export async function cleanerPushBinding(action, sessionId, bindingId, language,
           result = current;
           store.put({ sessionId, bindingId, language, registrationRevision, noticeVersion: 2 }, "active");
         }
+        if (action === "startMigration" && current?.sessionId === sessionId) {
+          result = current;
+          store.put({ ...current, scopeMigrationPending: true }, "active");
+        }
         if (action === "invalidate" && current?.sessionId === sessionId
           && (registrationRevision == null || current.registrationRevision === registrationRevision)) {
           result = current;
-          store.put({ sessionId, registrationRevision: current.registrationRevision }, "active");
+          store.put({ sessionId, registrationRevision: current.registrationRevision,
+            ...(current.scopeMigrationPending && { scopeMigrationPending: true }) }, "active");
         }
         if (action === "revokePermission" && current?.sessionId === sessionId) {
           result = current;
@@ -69,6 +86,44 @@ export async function cleanerPushBinding(action, sessionId, bindingId, language,
         if (action === "clear" && current?.sessionId === sessionId) {
           store.put({ blockedSessionId: sessionId }, "active");
           result = current;
+        }
+        if (clearsReceipts && result) tx.objectStore("receipts").clear();
+      };
+      tx.oncomplete = () => resolve(result);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+/** Queue entries carry only receipt fields. Check ownership in the same
+ * transaction so a late worker or upload cannot cross an account switch. */
+export async function cleanerPushReceipts(action, sessionId, value) {
+  const db = await openCleanerPushDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(["installation", "receipts"], action === "read" ? "readonly" : "readwrite");
+      const store = tx.objectStore("receipts");
+      const owner = tx.objectStore("installation").get("active");
+      let result = [];
+      owner.onsuccess = () => {
+        if (!sessionId || owner.result?.sessionId !== sessionId) return;
+        if (action === "append") {
+          if (!owner.result.bindingId) return;
+          store.add(value);
+          const keys = store.getAllKeys();
+          keys.onsuccess = () => {
+            for (const key of keys.result.slice(0, Math.max(0, keys.result.length - 30))) store.delete(key);
+          };
+        }
+        if (action === "read") {
+          const keys = store.getAllKeys(undefined, 20);
+          const entries = store.getAll(undefined, 20);
+          entries.onsuccess = () => { result = entries.result.map((receipt, index) => ({ key: keys.result[index], receipt })); };
+        }
+        if (action === "acknowledge") {
+          for (const key of value) store.delete(key);
         }
       };
       tx.oncomplete = () => resolve(result);
