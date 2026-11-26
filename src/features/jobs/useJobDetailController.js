@@ -239,7 +239,8 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
 
     setDetailData((currentData) => ({
       ...currentData,
-      ...(manual ? { isRefreshingChecklistRun: true } : { isLoadingChecklistRun: true }),
+      isRefreshingChecklistRun: manual,
+      isLoadingChecklistRun: !manual,
       hasChecklistRunError: false,
     }));
 
@@ -731,6 +732,9 @@ export function useJobDetailController({ view, onJobUpdated, actorUid }) {
       const result = await issueChecklistCapabilityRequest({ jobId, cleanerId });
       if (selectedJobEpochRef.current === epoch && selectedJobIdRef.current === jobId) {
         setDetailData((currentData) => ({ ...currentData, checklistCapability: result.capability }));
+        if (result.checklistRefresh === "refreshed") {
+          void refreshChecklistRun(selectedJob, { manual: true });
+        }
       }
       return result;
     } catch (error) {

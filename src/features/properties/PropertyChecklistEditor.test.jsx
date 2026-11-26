@@ -13,7 +13,7 @@ describe("FB07 property checklist editor", () => {
     renderIn(<PropertyChecklistEditor property={{ id: "p", checklistSettings: {} }} onSave={onSave} />);
     expect(screen.getByText(/0 change\(s\) from the standard checklist/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Edit checklist" }));
-    expect(screen.getByText(/A checklist already created, in progress or under review keeps its own version/)).toBeVisible();
+    expect(screen.getByText(/To update a service whose checklist has not been started, create a new cleaner link/)).toBeVisible();
     fireEvent.click(screen.getByText("Bedrooms & linens"));
     const bedrooms = screen.getByRole("group", { name: "Bedrooms & linens" });
     const [first] = within(bedrooms).getAllByRole("textbox", { name: "Item text" });

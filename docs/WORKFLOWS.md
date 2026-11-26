@@ -436,6 +436,14 @@ one active capability, this bundled handoff cannot give multiple team members
 simultaneously usable checklist links. It remains a manual send with no
 sent/delivered state.
 
+When the manager issues a link for an existing Draft Run, either from Job
+Detail or the reminder, the same transaction resolves the current Property
+settings and checklist template if there is no saved work. It updates the
+snapshot only when it differs and rotates the link on the same Run. Saved
+answers or photo activity preserve the existing snapshot. The manager sees
+whether the checklist was updated or kept because work had started. An
+untouched Run requires a valid Property to issue the link.
+
 **CURRENT (DEPLOYED 2026-09-28):** the reminder's system-generated text and
 date formatting use the assigned Cleaner's allowlisted `preferredLanguage`,
 not the manager UI language. A manager-facing label identifies the message

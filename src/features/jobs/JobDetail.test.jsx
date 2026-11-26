@@ -1498,7 +1498,7 @@ describe("JobDetail lifecycle actions", () => {
     const url = "https://cleanflow.example/checklist?t=synthetic-token";
     const onPrepareChecklistReminder = vi.fn().mockImplementation(async (cleanerId) => {
       Object.assign(capability, { state: "ACTIVE", cleanerId, issuedAt: "2026-09-29T12:00:00Z" });
-      return { url, capability: { ...capability } };
+      return { url, capability: { ...capability }, checklistRefresh: "work-started" };
     });
     renderJobDetail("ASSIGNED", {
       schemaVersion: 2, propertyId: "property-a", assignedCleanerIds: ["cleaner-a"],
@@ -1519,6 +1519,7 @@ describe("JobDetail lifecycle actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Prepare checklist link" }));
     await waitFor(() => expect(onPrepareChecklistReminder).toHaveBeenCalledWith("cleaner-a"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Copy reminder" })).toBeEnabled());
+    expect(screen.getByText(/The cleaner already started, so the checklist on this service was kept/)).toBeVisible();
     const whatsappLink = screen.getByRole("link", { name: "Open in WhatsApp" });
     const message = screen.getByText(/Checklist da limpeza:/).textContent;
     expect(message).toContain(url);

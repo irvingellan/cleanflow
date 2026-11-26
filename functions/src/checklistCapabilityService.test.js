@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
 import {
   checklistCapabilityState,
@@ -6,6 +6,7 @@ import {
   loadPublicChecklistCapability,
   projectChecklistCapabilityForManager,
 } from "./checklistCapabilityService.js";
+import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
 
 const now = new Date("2026-09-20T12:00:00Z");
 const activeCapability = {
@@ -115,7 +116,7 @@ describe("public checklist language projection", () => {
 });
 
 describe("stale checklist capability reissue", () => {
-  it("keeps the existing DRAFT and saved answers while replacing a link after context revision advances", async () => {
+  function setup() {
     const reissueNow = new Date("2030-09-20T12:00:00Z");
     const organizationId = "org-a";
     const jobId = "job-a";
@@ -124,27 +125,33 @@ describe("stale checklist capability reissue", () => {
     const runPath = `${jobPath}/checklistRuns/${runId}`;
     const capabilityPath = `${runPath}/checklistCapabilities/active`;
     const draftPath = `${runPath}/drafts/current`;
-    const savedRun = {
-      status: "DRAFT",
-      resolvedDefinition: { sections: [], inventoryItems: [], requiredPhotoTypes: [] },
-      propertySnapshot: { propertyName: "Fictional Property" },
+    const propertyPath = `organizations/${organizationId}/properties/property-a`;
+    const job = {
+      operationalStatus: "ASSIGNED", assignedCleanerId: "cleaner-a", checklistContextRevision: 3,
+      organizationId, propertyId: "property-a",
     };
-    const savedDraft = { revision: 2, checklistAnswers: {}, inventoryAnswers: {}, generalNotes: "Saved answer" };
+    const property = { id: "property-a", name: "Sample property", organizationId };
+    const savedRun = {
+      ...buildChecklistRunSnapshot({ job, property }),
+      status: "DRAFT", jobId, organizationId, createdByUid: "manager-a", evidencePolicy: { version: 2 },
+    };
+    const currentProperty = {
+      ...property,
+      checklistSettings: {
+        additionalChecklistItems: [{ id: "custom-check-latch", sectionId: "kitchen", label: "Check latch" }],
+      },
+    };
     const records = new Map([
-      [jobPath, {
-        operationalStatus: "ASSIGNED",
-        assignedCleanerId: "cleaner-a",
-        assignedCleanerName: "Fictional Cleaner",
-        checklistContextRevision: 3,
-      }],
+      [jobPath, job],
       [runPath, savedRun],
-      [draftPath, savedDraft],
+      [propertyPath, currentProperty],
       [capabilityPath, {
         status: "ACTIVE", cleanerId: "cleaner-a", contextRevision: 1,
         tokenHash: "old-hash", expiresAt: Timestamp.fromMillis(reissueNow.getTime() + 60_000),
       }],
     ]);
     const snapshot = (path) => ({
+      id: path.split("/").at(-1),
       exists: records.has(path),
       data: () => records.get(path),
     });
@@ -153,6 +160,7 @@ describe("stale checklist capability reissue", () => {
       get: async () => snapshot(path),
       collection: (name) => ({ doc: (id) => reference(`${path}/${name}/${id}`) }),
     });
+    const update = vi.fn();
     const database = {
       doc: reference,
       collectionGroup: () => ({
@@ -170,39 +178,114 @@ describe("stale checklist capability reissue", () => {
       runTransaction: async (callback) => {
         const writes = [];
         const result = await callback({
-          get: async (ref) => snapshot(ref.path),
+          get: async (ref) => {
+            expect(writes).toHaveLength(0);
+            return snapshot(ref.path);
+          },
           set: (ref, data) => writes.push({ path: ref.path, data }),
+          update: (ref, data) => {
+            update(ref.path, data);
+            writes.push({ path: ref.path, data: { ...records.get(ref.path), ...data } });
+          },
         });
         for (const write of writes) records.set(write.path, write.data);
         return result;
       },
     };
 
-    const oldLinkBefore = await loadPublicChecklistCapability(database, {
-      organizationId, tokenHash: "old-hash", now: reissueNow,
+    const issue = (tokenHash = "new-hash", org = organizationId) => issueChecklistCapabilityForManager(database, {
+      organizationId: org, jobId, runId, cleanerId: "cleaner-a", actorUid: "manager-a",
+      token: "new-token", tokenHash, now: reissueNow,
     });
-    expect(oldLinkBefore.state).toBe("stale");
+    const open = (tokenHash) => loadPublicChecklistCapability(database, { organizationId, tokenHash, now: reissueNow });
+    return { job, currentProperty, savedRun, records, jobPath, runPath, draftPath, propertyPath, capabilityPath, update, issue, open };
+  }
 
-    const reissue = await issueChecklistCapabilityForManager(database, {
-      organizationId, jobId, runId, cleanerId: "cleaner-a", actorUid: "manager-a",
-      token: "new-token", tokenHash: "new-hash", now: reissueNow,
-    });
+  it("keeps the existing DRAFT and saved answers while replacing a link after context revision advances", async () => {
+    const { savedRun, records, runPath, draftPath, capabilityPath, update, issue, open } = setup();
+    const savedDraft = { revision: 2, checklistAnswers: {}, inventoryAnswers: {}, generalNotes: "Saved answer" };
+    records.set(draftPath, savedDraft);
+    expect((await open("old-hash")).state).toBe("stale");
+
+    const reissue = await issue();
     expect(reissue.capability.state).toBe("ACTIVE");
+    expect(reissue.checklistRefresh).toBe("work-started");
     expect(records.get(capabilityPath)).toMatchObject({
       status: "ACTIVE", contextRevision: 3, cleanerId: "cleaner-a", tokenHash: "new-hash", rotation: 1,
     });
     expect(records.get(runPath)).toEqual(savedRun);
     expect(records.get(draftPath)).toEqual(savedDraft);
+    expect(update).not.toHaveBeenCalled();
 
-    const oldLinkAfter = await loadPublicChecklistCapability(database, {
-      organizationId, tokenHash: "old-hash", now: reissueNow,
-    });
-    const newLink = await loadPublicChecklistCapability(database, {
-      organizationId, tokenHash: "new-hash", now: reissueNow,
-    });
+    const oldLinkAfter = await open("old-hash");
+    const newLink = await open("new-hash");
     expect(oldLinkAfter.state).toBe("not-found");
     expect(newLink.state).toBe("active");
     expect(newLink.draft.generalNotes).toBe("Saved answer");
     expect(newLink.draft.revision).toBe(2);
+  });
+
+  it("uses the current property items on the new link and skips rewriting an identical snapshot on repeat", async () => {
+    const { job, currentProperty, savedRun, records, jobPath, runPath, capabilityPath, update, issue, open } = setup();
+    const current = buildChecklistRunSnapshot({ job, property: currentProperty });
+
+    expect((await issue()).checklistRefresh).toBe("refreshed");
+    expect(update).toHaveBeenCalledExactlyOnceWith(runPath, current);
+    expect(records.get(runPath)).toEqual({ ...savedRun, ...current });
+    expect(records.get(jobPath)).toBe(job);
+    expect((await open("old-hash")).state).toBe("not-found");
+    const result = await open("new-hash");
+    expect(result.state).toBe("active");
+    expect(result.checklist.sections.flatMap((section) => section.items)).toContainEqual(
+      expect.objectContaining({ id: "custom-check-latch", label: "Check latch" }),
+    );
+
+    expect((await issue("repeat-hash")).checklistRefresh).toBeNull();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(records.get(capabilityPath)).toMatchObject({ tokenHash: "repeat-hash", rotation: 2 });
+  });
+
+  it("still issues the link and keeps the snapshot when the Job's Property is gone", async () => {
+    const { records, propertyPath, runPath, savedRun, capabilityPath, update, issue } = setup();
+    records.delete(propertyPath);
+    const reissue = await issue();
+    expect(reissue.checklistRefresh).toBeNull();
+    expect(update).not.toHaveBeenCalled();
+    expect(records.get(runPath)).toEqual(savedRun);
+    expect(records.get(capabilityPath)).toMatchObject({ tokenHash: "new-hash" });
+  });
+
+  it("refreshes a retired template even when the Property settings match", async () => {
+    const { job, currentProperty, savedRun, records, runPath, update, issue } = setup();
+    const current = buildChecklistRunSnapshot({ job, property: currentProperty });
+    records.set(runPath, {
+      ...savedRun, ...current,
+      resolvedDefinition: { ...current.resolvedDefinition, sections: [] },
+    });
+
+    expect((await issue()).checklistRefresh).toBe("refreshed");
+    expect(update).toHaveBeenCalledExactlyOnceWith(runPath, current);
+  });
+
+  it("keeps the Run and existing evidence when photo work is present", async () => {
+    const { savedRun, records, runPath, update, issue } = setup();
+    const evidencePath = `${runPath}/evidenceState/current`;
+    const evidence = { revision: 1, photos: [{ evidenceId: "photo-a" }] };
+    records.set(evidencePath, evidence);
+
+    expect((await issue()).checklistRefresh).toBe("work-started");
+    expect(records.get(runPath)).toBe(savedRun);
+    expect(records.get(evidencePath)).toBe(evidence);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("denies another organization's Job and leaves the current link and Run intact", async () => {
+    const { records, job, jobPath, capabilityPath, issue, update } = setup();
+    const previous = records.get(capabilityPath);
+    await expect(issue("foreign-hash", "org-b")).rejects.toMatchObject({ code: "not-found" });
+    records.set(jobPath, { ...job, organizationId: "org-b" });
+    await expect(issue()).rejects.toMatchObject({ code: "permission-denied" });
+    expect(records.get(capabilityPath)).toBe(previous);
+    expect(update).not.toHaveBeenCalled();
   });
 });

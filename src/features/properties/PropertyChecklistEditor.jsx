@@ -4,10 +4,6 @@ import { withChecklistInventoryMessages } from "../../i18n/checklistInventoryMes
 import { globalChecklistDefinition } from "../checklists/checklistDefinition.js";
 import { normalizePropertyChecklistSettings, resolveChecklistDefinition } from "../checklists/checklistRunDefinition.js";
 
-// FB07: the manager edits this Property's checklist without code. Changes are
-// a template for checklists created afterwards; a Run already created keeps
-// its own frozen copy, so work in progress or under review is never rewritten.
-
 const requiredPhotoItemId = "living-belongings";
 
 function slug(text, taken) {

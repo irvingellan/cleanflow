@@ -50,7 +50,7 @@ export function ChecklistCapabilityControls({
       setNewLink(result?.capability?.state === "ACTIVE"
         && result.capability.cleanerId === cleanerId
         && result.capability.issuedAt
-        ? { url: result.url, jobId: job.id, cleanerId, issuedAt: result.capability.issuedAt }
+        ? { url: result.url, jobId: job.id, cleanerId, issuedAt: result.capability.issuedAt, checklistRefresh: result.checklistRefresh }
         : null);
       setCopied(false);
     } catch { /* controller exposes a localized error state */ }
@@ -106,6 +106,9 @@ export function ChecklistCapabilityControls({
             </div>
           )}
           {currentNewLink && <div className="button-row"><button className="button" type="button" onClick={copyLink}>{copied ? translate("checklists.linkCopied") : translate("checklists.copyLink")}</button></div>}
+          {currentNewLink && newLink.checklistRefresh && (
+            <p className="form-hint" role="status">{translate(`checklists.linkSnapshot.${newLink.checklistRefresh}`)}</p>
+          )}
           {hasIssueError && <p className="form-error" role="alert">{translate("checklists.linkCreateError")}</p>}
           {hasRevokeError && <p className="form-error" role="alert">{translate("checklists.linkRevokeError")}</p>}
         </>

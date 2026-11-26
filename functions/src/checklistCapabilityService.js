@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { createManagerInboxItem, managerInboxTypes } from "./notificationInboxEvents.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -7,6 +8,8 @@ import {
   checklistReviewNotificationType,
 } from "./checklistReviewNotifications.js";
 import { projectChecklistRunForCleaner } from "./checklistRunDefinition.js";
+import { loadChecklistRunSnapshot } from "./checklistRunService.js";
+import { checklistWorkStarted } from "./checklistWork.js";
 import {
   applyChecklistDraftMutation,
   checklistDraftReviewRequirements,
@@ -136,21 +139,38 @@ export async function issueChecklistCapabilityForManager(database, {
   const runRef = runReference(database, organizationId, jobId, runId);
   const capabilityRef = capabilityReference(database, organizationId, jobId, runId);
 
-  await database.runTransaction(async (transaction) => {
+  const checklistRefresh = await database.runTransaction(async (transaction) => {
     const [jobSnapshot, runSnapshot, capabilitySnapshot] = await Promise.all([
       transaction.get(jobRef), transaction.get(runRef), transaction.get(capabilityRef),
     ]);
     const job = jobSnapshot.exists ? jobSnapshot.data() : null;
     const run = runSnapshot.exists ? runSnapshot.data() : null;
+    if ((job?.organizationId != null && job.organizationId !== organizationId)
+      || (run?.organizationId != null && run.organizationId !== organizationId)
+      || (run?.jobId != null && run.jobId !== jobId)) {
+      throw new HttpsError("permission-denied", "Checklist Run is outside the Job context.");
+    }
     const previous = capabilitySnapshot.data();
     const capability = buildChecklistCapability({
       organizationId, jobId, runId, cleanerId, actorUid, tokenHash, job, run, previous, now,
     });
+    const started = await checklistWorkStarted(transaction, runRef, run);
+    // Refreshing is best effort: a Job whose Property is gone or that can no
+    // longer start a checklist keeps its current snapshot, and the link is still issued.
+    const snapshot = started || !run ? null
+      : await loadChecklistRunSnapshot(transaction, database, { organizationId, job }).catch((error) => {
+        if (error instanceof HttpsError && error.code === "failed-precondition") return null;
+        throw error;
+      });
+    const changed = snapshot && Object.entries(snapshot).some(([key, value]) => !isDeepStrictEqual(run[key], value));
+
     await beforeIssue?.({ transaction, job, run, capability: previous, expiresAt: capability.expiresAt });
+    if (changed) transaction.update(runRef, snapshot);
     transaction.set(capabilityRef, capability);
+    return started ? "work-started" : changed ? "refreshed" : null;
   });
 
-  return { token, capability: await getChecklistCapabilityForManager(database, { organizationId, jobId, runId }) };
+  return { token, checklistRefresh, capability: await getChecklistCapabilityForManager(database, { organizationId, jobId, runId }) };
 }
 
 export async function getChecklistCapabilityForManager(database, { organizationId, jobId, runId }) {

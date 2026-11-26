@@ -44,7 +44,11 @@ export async function issueChecklistCapability({ jobId, cleanerId }) {
   const result = await issueChecklistCapabilityCall({ jobId, cleanerId });
   const token = result.data?.token;
   if (typeof token !== "string" || !token) throw new Error("Checklist capability token is missing.");
-  return { capability: result.data.capability, url: buildPublicChecklistUrl(token) };
+  return {
+    capability: result.data.capability,
+    checklistRefresh: result.data.checklistRefresh,
+    url: buildPublicChecklistUrl(token),
+  };
 }
 
 export async function revokeChecklistCapability(jobId) {

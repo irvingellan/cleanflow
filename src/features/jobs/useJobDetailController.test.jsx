@@ -411,7 +411,7 @@ describe("useJobDetailController operation telemetry", () => {
     expect(mocks.trackers[2].options.pageVisitId).not.toBe(mocks.trackers[1].options.pageVisitId);
   });
 
-  it("loads a Draft and stale link in one visit, then reissues without creating another Run", async () => {
+  it("loads a Draft and stale link in one visit, then reloads the refreshed Run after reissue", async () => {
     const draft = { id: "initial", status: "DRAFT" };
     const stale = { state: "STALE", cleanerId: "cleaner-1" };
     mocks.getChecklistRun.mockResolvedValue(draft);
@@ -428,13 +428,19 @@ describe("useJobDetailController operation telemetry", () => {
     expect(tracker.track.mock.calls.map(([operation]) => operation)).toContain("checklist-run");
     expect(tracker.track.mock.calls.map(([operation]) => operation)).toContain("checklist-capability");
 
-    const issued = { capability: { state: "ACTIVE", cleanerId: "cleaner-1" }, url: "synthetic-link" };
+    const refreshedRun = { ...draft, checklistItemCount: 32 };
+    const issued = {
+      capability: { state: "ACTIVE", cleanerId: "cleaner-1" },
+      url: "synthetic-link",
+      checklistRefresh: "refreshed",
+    };
+    mocks.getChecklistRun.mockResolvedValue(refreshedRun);
     mocks.issueChecklistCapability.mockResolvedValue(issued);
     await act(async () => {
       await result.current.actions.issueChecklistCapability("cleaner-1");
     });
     expect(mocks.createChecklistRun).not.toHaveBeenCalled();
-    expect(result.current.detail.checklistRun).toEqual(draft);
+    expect(result.current.detail.checklistRun).toEqual(refreshedRun);
     expect(result.current.detail.checklistCapability).toEqual(issued.capability);
   });
 
