@@ -5,6 +5,7 @@ import {
   issueChecklistCapabilityForManager,
   loadPublicChecklistCapability,
   projectChecklistCapabilityForManager,
+  savePublicChecklistDraft,
 } from "./checklistCapabilityService.js";
 import { buildChecklistRunSnapshot } from "./checklistRunDefinition.js";
 
@@ -183,6 +184,7 @@ describe("stale checklist capability reissue", () => {
             return snapshot(ref.path);
           },
           set: (ref, data) => writes.push({ path: ref.path, data }),
+          create: (ref, data) => writes.push({ path: ref.path, data }),
           update: (ref, data) => {
             update(ref.path, data);
             writes.push({ path: ref.path, data: { ...records.get(ref.path), ...data } });
@@ -198,8 +200,33 @@ describe("stale checklist capability reissue", () => {
       token: "new-token", tokenHash, now: reissueNow,
     });
     const open = (tokenHash) => loadPublicChecklistCapability(database, { organizationId, tokenHash, now: reissueNow });
-    return { job, currentProperty, savedRun, records, jobPath, runPath, draftPath, propertyPath, capabilityPath, update, issue, open };
+    const save = (tokenHash, request) => savePublicChecklistDraft(database, {
+      organizationId, tokenHash, request, now: reissueNow,
+    });
+    return { job, currentProperty, savedRun, records, jobPath, runPath, draftPath, propertyPath, capabilityPath, update, issue, open, save };
   }
+
+  it("keeps the original items and legacy inventory definition on first issuance", async () => {
+    const { savedRun, records, runPath, capabilityPath, update, issue, open } = setup();
+    const legacyRun = {
+      ...savedRun,
+      definitionVersion: 1,
+      resolvedDefinition: { ...savedRun.resolvedDefinition, definitionVersion: 1 },
+    };
+    records.set(runPath, legacyRun);
+    records.delete(capabilityPath);
+
+    const first = await issue();
+    expect(first.capability.state).toBe("ACTIVE");
+    expect(first.checklistRefresh).toBeNull();
+    expect(records.get(runPath)).toBe(legacyRun);
+    expect(update).not.toHaveBeenCalled();
+    const result = await open("new-hash");
+    expect(result.state).toBe("active");
+    expect(result.draft.revision).toBe(0);
+    expect(result.draft.checklistAnswers).not.toHaveProperty("custom-check-latch");
+    expect(result.draft).not.toHaveProperty("inventoryQuantities");
+  });
 
   it("keeps the existing DRAFT and saved answers while replacing a link after context revision advances", async () => {
     const { savedRun, records, runPath, draftPath, capabilityPath, update, issue, open } = setup();
@@ -245,14 +272,60 @@ describe("stale checklist capability reissue", () => {
     expect(records.get(capabilityPath)).toMatchObject({ tokenHash: "repeat-hash", rotation: 2 });
   });
 
-  it("still issues the link and keeps the snapshot when the Job's Property is gone", async () => {
-    const { records, propertyPath, runPath, savedRun, capabilityPath, update, issue } = setup();
-    records.delete(propertyPath);
+  it.each(["missing Property", "missing Property ID"])("keeps issuing a link with a %s", async (reason) => {
+    const { records, job, jobPath, propertyPath, runPath, savedRun, capabilityPath, update, issue } = setup();
+    if (reason === "missing Property") records.delete(propertyPath);
+    else records.set(jobPath, { ...job, propertyId: null });
     const reissue = await issue();
     expect(reissue.checklistRefresh).toBeNull();
+    expect(reissue.capability.state).toBe("ACTIVE");
     expect(update).not.toHaveBeenCalled();
     expect(records.get(runPath)).toEqual(savedRun);
     expect(records.get(capabilityPath)).toMatchObject({ tokenHash: "new-hash" });
+  });
+
+  it("keeps an existing revision-zero draft on reissue", async () => {
+    const { records, savedRun, runPath, draftPath, update, issue, open } = setup();
+    const storedDraft = { revision: 0, checklistAnswers: { "bed-remake": "DONE" } };
+    records.set(draftPath, storedDraft);
+
+    expect((await issue()).checklistRefresh).toBe("work-started");
+    expect(update).not.toHaveBeenCalled();
+    expect(records.get(runPath)).toBe(savedRun);
+    expect(records.get(draftPath)).toBe(storedDraft);
+    expect((await open("new-hash")).draft).toMatchObject({
+      revision: 0,
+      checklistAnswers: { "bed-remake": "DONE" },
+    });
+  });
+
+  it("keeps the draft revision and stored receipts after its answers are cleared", async () => {
+    const { records, savedRun, runPath, draftPath, capabilityPath, update, issue, open, save } = setup();
+    records.delete(capabilityPath);
+    await issue("first-hash");
+    const answer = { mutationId: "draft-answer-0001", baseRevision: 0, changes: { checklistAnswers: { "bed-remake": "DONE" } } };
+    const clear = { mutationId: "draft-answer-0002", baseRevision: 1, changes: { checklistAnswers: { "bed-remake": "UNANSWERED" } } };
+    await save("first-hash", answer);
+    await save("first-hash", clear);
+    await expect(save("first-hash", clear)).resolves.toMatchObject({ duplicate: true, revision: 2 });
+    const answerReceiptPath = `${runPath}/draftMutations/${answer.mutationId}`;
+    const clearReceiptPath = `${runPath}/draftMutations/${clear.mutationId}`;
+    const storedDraft = records.get(draftPath);
+    const answerReceipt = records.get(answerReceiptPath);
+    const clearReceipt = records.get(clearReceiptPath);
+    expect(answerReceipt.revision).toBe(1);
+    expect(clearReceipt.revision).toBe(2);
+
+    expect((await issue()).checklistRefresh).toBe("work-started");
+    expect(update).not.toHaveBeenCalled();
+    expect(records.get(runPath)).toBe(savedRun);
+    expect(records.get(draftPath)).toBe(storedDraft);
+    expect(records.get(answerReceiptPath)).toBe(answerReceipt);
+    expect(records.get(clearReceiptPath)).toBe(clearReceipt);
+    expect((await open("new-hash")).draft).toMatchObject({
+      revision: 2,
+      checklistAnswers: { "bed-remake": "UNANSWERED" },
+    });
   });
 
   it("refreshes a retired template even when the Property settings match", async () => {

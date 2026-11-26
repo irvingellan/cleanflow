@@ -154,10 +154,14 @@ export async function issueChecklistCapabilityForManager(database, {
     const capability = buildChecklistCapability({
       organizationId, jobId, runId, cleanerId, actorUid, tokenHash, job, run, previous, now,
     });
-    const started = await checklistWorkStarted(transaction, runRef, run);
+    // For refreshing, any persisted draft counts as started: a cleaner with an open
+    // page holds that draft, and a new snapshot would reject her next save.
+    const started = await checklistWorkStarted(transaction, runRef, run)
+      || (await transaction.get(runRef.collection("drafts").doc("current"))).exists;
     // Refreshing is best effort: a Job whose Property is gone or that can no
     // longer start a checklist keeps its current snapshot, and the link is still issued.
-    const snapshot = started || !run ? null
+    // The first link uses the snapshot frozen when the Run was created.
+    const snapshot = started || !run || !capabilitySnapshot.exists ? null
       : await loadChecklistRunSnapshot(transaction, database, { organizationId, job }).catch((error) => {
         if (error instanceof HttpsError && error.code === "failed-precondition") return null;
         throw error;
