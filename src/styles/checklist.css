@@ -45,7 +45,7 @@
 
 :root[data-theme="dark"] .public-checklist__mark {
   color: var(--cf-shell);
-  background: linear-gradient(160deg, #c9e8d5, #8fc6a6);
+  background: var(--cf-brand);
 }
 
 .public-checklist__header .panel__title {
