@@ -25,12 +25,20 @@ export function AccessPhotoPreview({ photo, loadPhoto, translate, onOpen }) {
   useEffect(() => {
     if (!visible) return undefined;
     let current = true;
-    loadPhoto(photo.id).then((result) => {
+    let timer;
+    // A cold server or a sign-in that is still settling can fail the first
+    // request; retry twice on its own before asking the person to tap.
+    const run = (tries) => loadPhoto(photo.id).then((result) => {
       if (!current) return;
       setPreview(result?.contentType === "image/jpeg" && result.dataBase64
         ? `data:image/jpeg;base64,${result.dataBase64}` : false);
-    }).catch(() => { if (current) setPreview(false); });
-    return () => { current = false; };
+    }).catch(() => {
+      if (!current) return;
+      if (tries < 2) timer = setTimeout(() => run(tries + 1), 1500 * (tries + 1));
+      else setPreview(false);
+    });
+    run(0);
+    return () => { current = false; clearTimeout(timer); };
   }, [visible, photo.id, loadPhoto, attempt]);
 
   const label = photo.caption || translate("accessPhoto.label");
