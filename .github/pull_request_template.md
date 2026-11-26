@@ -2,7 +2,7 @@
 
 - Issue and owner
 - Worktree branch, exact base and head
-- Declared scope label, `scope:hosting` or `scope:full`
+- Scope is inferred from the diff. Add `scope:full` to force full scope.
 - Changed behavior and paths that another task may own
 
 ## Verification and release
