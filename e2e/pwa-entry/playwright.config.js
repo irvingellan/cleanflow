@@ -11,7 +11,8 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   workers: 1,
-  retries: 0,
+  // One retry in CI only; Playwright reports any test that needed it as flaky.
+  retries: process.env.CI ? 1 : 0,
   outputDir: process.env.PWA_ENTRY_OUTPUT_DIR,
   reporter: [["list"], ["json", { outputFile: process.env.PWA_ENTRY_REPORT }]],
   use: { baseURL, locale: "pt-BR", serviceWorkers: "allow", actionTimeout: 10_000 },
