@@ -14,6 +14,7 @@ const platformOverview = () => import("./handlers/platformOverview.js");
 const devCenter = () => import("./handlers/devCenter.js");
 const feedback = () => import("./handlers/feedback.js");
 const managerDevices = () => import("./handlers/managerDevices.js");
+const jobPriceCorrection = () => import("./handlers/jobPriceCorrection.js");
 const checklistRuns = () => import("./handlers/checklistRuns.js");
 const assignments = () => import("./handlers/assignments.js");
 const checklistAccess = () => import("./handlers/checklistAccess.js");
@@ -110,6 +111,7 @@ export const createAutomaticJobOffers = onCall(
 );
 
 export const setJobCleanerSpots = onCall({ region: "us-central1" }, lazyHandler(assignments, "setJobCleanerSpots"));
+export const correctJobPrices = onCall({ region: "us-central1" }, lazyHandler(jobPriceCorrection, "correctJobPrices"));
 
 export const assignCleanerDirectly = onCall(
   { region: "us-central1" },

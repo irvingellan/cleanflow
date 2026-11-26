@@ -104,6 +104,18 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "correctJobPrices",
+    {
+      "callableTrigger": {},
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+    },
+  ],
+  [
     "createAutomaticJobOffers",
     {
       "callableTrigger": {},

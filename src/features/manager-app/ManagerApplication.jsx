@@ -167,6 +167,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
       submitChecklistRunForReview,
       abandonChecklistRunAndCompleteJob,
       saveJobPrices,
+      saveJobPriceCorrection,
       saveJobDetails,
       saveJobSchedule,
       offerManualReplacement,
@@ -884,6 +885,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           startCleaning={startCleaning}
           completeCleaning={completeCleaning}
           saveJobPrices={saveJobPrices}
+          saveJobPriceCorrection={saveJobPriceCorrection}
           saveJobDetails={saveJobDetails}
           saveJobSchedule={saveJobSchedule}
           offerManualReplacement={offerManualReplacement}

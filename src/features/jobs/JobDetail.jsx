@@ -6,6 +6,7 @@ import { JobHistorySection } from "./JobHistorySection.jsx";
 import { JobFinancialSection } from "./JobFinancialSection.jsx";
 import { JobIssuesSection } from "./JobIssuesSection.jsx";
 import { JobDetailsSection } from "./JobDetailsSection.jsx";
+import { JobPriceCorrections } from "./JobPriceCorrection.jsx";
 import { JobChecklistSection } from "./JobChecklistSection.jsx";
 import { JobReminderPreview } from "./JobReminderPreview.jsx";
 import { JobAssignmentRoster } from "./JobAssignmentRoster.jsx";
@@ -109,6 +110,7 @@ export function JobDetail({
   onStartCleaning,
   onCompleteCleaning,
   onUpdatePrices,
+  onCorrectPrice,
   onUpdateDetails,
   onUpdateSchedule,
   onOfferManualReplacement,
@@ -1155,7 +1157,10 @@ export function JobDetail({
         isSavingPrices={isSavingPrices}
         setIsEditingPrices={setIsEditingPrices}
         setPriceSaveError={setPriceSaveError}
+        onCorrectPrice={onCorrectPrice}
       />
+
+      {onCorrectPrice && <JobPriceCorrections key={job.id} jobId={job.id} translate={translate} language={language} />}
 
       <JobHistorySection
         job={job}

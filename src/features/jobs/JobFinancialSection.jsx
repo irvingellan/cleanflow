@@ -5,7 +5,8 @@ import { formatPrice } from "../../lib/presentation.js";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
 import { formatPricingRate, pricingMessage } from "../pricing/pricingMessages.js";
 import { JobPriceFields } from "./JobPriceFields.jsx";
-import { jobPricesLocked } from "./jobPricingForm.js";
+import { JobPriceCorrectionForm } from "./JobPriceCorrection.jsx";
+import { jobHasRecordedPayout, jobPricesLocked } from "./jobPricingForm.js";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
 
 /** The Financial section of Job Detail: the financial snapshot and the price edit form. */
@@ -24,9 +25,11 @@ export function JobFinancialSection({
   isSavingPrices,
   setIsEditingPrices,
   setPriceSaveError,
+  onCorrectPrice,
 }) {
   const { client, cleaner } = resolveJobPricing(job);
   const locked = jobPricesLocked(job);
+  const canCorrectPrice = Boolean(onCorrectPrice && jobHasRecordedPayout(job));
   return (
     <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")}>
     <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
@@ -38,14 +41,15 @@ export function JobFinancialSection({
           ? translate("jobs.notSet") : formatPrice(grossMargin, translate, language)} />
       </dl>
     </section>
-    <section className="job-pricing" aria-label={translate("jobs.editPrices")}>
-      {!isEditingPrices && (
+    <section className="job-pricing" aria-label={translate(canCorrectPrice ? "jobs.correctPrice" : "jobs.editPrices")}>
+      {canCorrectPrice && <JobPriceCorrectionForm key={job.id} job={job} translate={translate} onCorrectPrice={onCorrectPrice} />}
+      {!canCorrectPrice && !isEditingPrices && (
         <button className="button" type="button" disabled={locked} onClick={startPriceEdit}>
           {translate("jobs.editPrices")}
         </button>
       )}
-      {locked && <p className="form-hint">{serviceTypeMessage(language, "paidPrices")}</p>}
-      {hasSavedPrices && !isEditingPrices && (
+      {locked && !canCorrectPrice && <p className="form-hint">{serviceTypeMessage(language, "paidPrices")}</p>}
+      {hasSavedPrices && !isEditingPrices && !canCorrectPrice && (
         <p className="form-success" role="status">{translate("jobs.pricesSaved")}</p>
       )}
       {isEditingPrices && !locked && (
