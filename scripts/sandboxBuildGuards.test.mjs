@@ -102,7 +102,7 @@ test("Explicit Sandbox push pilot builds the dedicated worker with isolated bind
   assert.equal(marker.deploymentId, `${fixtureBuildId}-cleaner-push`);
   assert.equal(marker.projectId, sandboxProjectId);
   const worker = fs.readFileSync(path.join(result.output, "cleaner-messaging-sw.js"), "utf8");
-  assert.ok(worker.includes(JSON.stringify(cleanerApp)) && worker.includes(JSON.stringify(sandboxProjectId)));
+  assert.ok(worker.includes('addEventListener("push"') && !worker.includes("importScripts"));
   assert.ok(worker.includes("/agenda?inbox=1"));
   assert.notEqual(build(root, { ...env, VITE_CLEANFLOW_SANDBOX_PUSH_PILOT: "" }, "sandbox-push-no-opt-in").status, 0);
   fs.writeFileSync(path.join(root, ".env.production"), `VITE_FIREBASE_PROJECT_ID=clean-flow-prototipo\nVITE_FIREBASE_VAPID_KEY=${vapid}\n`);

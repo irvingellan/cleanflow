@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n/translations.js";
+import { cleanerPushReceiptText } from "../notifications/cleanerPushReceiptText.js";
 import { readLocalNotificationHealth } from "../notifications/notificationHealthService.js";
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
 import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
@@ -275,7 +276,11 @@ export function NotificationDiagnostics({ diagnostics, isLoading, hasError, onRe
                       <span>{formatTimestamp(delivery.recordedAt, language, translate)}</span>
                       <span>{translate("devCenter.attempted")}: {countOrUnknown(delivery.targetDeviceCount, translate)} · {translate("devCenter.fcmAccepted")}: {countOrUnknown(delivery.acceptedByFcmDevices, translate)}</span>
                       {delivery.devices.map((device) => (
-                        <span key={device.installation}>{device.installation} · {device.outcome}</span>
+                        <span key={device.installation}>
+                          {device.installation} · {device.outcome} · {cleanerPushReceiptText(
+                            { attemptedAt: delivery.attemptedAt, receipt: device.receipt }, language,
+                          )}
+                        </span>
                       ))}
                     </li>
                   ))}

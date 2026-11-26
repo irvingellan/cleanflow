@@ -55,7 +55,7 @@ test("Hosting sends privacy headers on public link pages and frame and content-t
   }
   // The broad rule must not replace the caching rules of the entry files.
   expect((await request.get("/sw.js")).headers()["cache-control"]).toContain("no-store");
-  expect((await request.get("/cleaner-messaging-sw.js")).headers()["service-worker-allowed"]).toBe("/cleaner-messaging-push/");
+  expect((await request.get("/cleaner-messaging-sw.js")).headers()["service-worker-allowed"]).toBe("/agenda/push/");
 });
 
 test("manifests keep distinct start identities and independently available icons", async ({ request, baseURL }) => {
