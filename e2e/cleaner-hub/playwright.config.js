@@ -7,7 +7,8 @@ export default defineConfig({
   testMatch: "*.spec.js",
   timeout: 300_000,
   expect: { timeout: 20_000 },
-  retries: 0,
+  // One retry in CI only; Playwright reports any test that needed it as flaky.
+  retries: process.env.CI ? 1 : 0,
   workers: 1,
   outputDir: "../../test-results/cleaner-hub",
   reporter: [["list"]],
