@@ -53,7 +53,7 @@ const {
   publicClientPortal,
   clientPortalAccess,
   correctChecklistAnswer,
-  correctJobPrices,
+  correctJobPrices, updateJobPricing,
   rescheduleJob, setJobCleanerSpots, respondToMyOffer,
   getMyJobAccess, getMyJobAccessPhoto, getPropertyAccessPhoto, removePropertyAccessPhoto, uploadPropertyAccessPhoto,
 } = await import("../functions/src/index.js");
@@ -161,6 +161,22 @@ test("active manager can read/query/create/update only supported operational doc
   }
 });
 
+test("manual offer pay is editable while pending and is frozen after response", async () => {
+  const path = `${root}/jobs/job/offers/offer`;
+  await admin.doc(path).update({ status: "PENDING", offeredCompensation: 40 });
+  const managerOffer = account("manager").firestore().doc(path);
+  await assertSucceeds(managerOffer.update({ offeredCompensation: 45 }));
+  await assertFails(managerOffer.update({ status: "INTERESTED", offeredCompensation: 55 }));
+  await assertSucceeds(managerOffer.update({ status: "INTERESTED" }));
+  for (const patch of [
+    { offeredCompensation: 55 }, { offeredPay: { mode: "HOURLY", rateCents: 2500 } },
+    { offeredFirstSlotExtraCents: 1 }, { fixedHousePay: { totalCents: 9000, teamSize: 2 } }, { status: "PENDING" },
+  ]) {
+    await assertFails(managerOffer.update(patch));
+  }
+  await assertSucceeds(managerOffer.update({ managerDecision: "NOT_SELECTED" }));
+});
+
 test("Job price correction records are readable only by active managers of that organization", async () => {
   const path = `${root}/jobs/job/corrections`;
   await admin.doc(`${path}/correction`).set({ kind: "CLIENT_PRICE" });
@@ -182,10 +198,10 @@ test("the paid Job client price changes through the callable with an auditable h
   const path = `${root}/jobs/job`;
   const job = admin.doc(path);
   const hours = { approved: true, quantity: 3 };
-  const cleanerFields = { cleanerPayout: 80, pay: { mode: "FIXED", perCleanerCents: 8000 } };
+  const cleanerFields = { pay: { mode: "FIXED", perCleanerCents: 8000 } };
   await job.update({ clientPrice: 100, billing: { hours }, ...cleanerFields });
   const browser = account("manager").firestore().doc(path);
-  await assertSucceeds(browser.update({ clientPrice: 120 }));
+  await updateJobPricing.run(request("manager", { jobId: "job", prices: { clientPrice: 120, pay: cleanerFields.pay } }));
   await assertSucceeds(browser.update({ payoutId: "payout", payoutPaidAt: serverTimestamp() }));
   const { payoutPaidAt } = (await job.get()).data();
   await assertFails(browser.update({ clientPrice: 150 }));
@@ -318,8 +334,15 @@ test("only an active manager can update Job price snapshots without changing che
   const managerJob = account("manager").firestore().doc(`${root}/jobs/job`);
   const cleanerJob = account("cleaner").firestore().doc(`${root}/jobs/job`);
 
-  await assertSucceeds(managerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
-  await assertFails(cleanerJob.update({ clientPrice: 350, cleanerPayout: 200 }));
+  const prices = { clientPrice: 350, cleanerPayout: 200 };
+  await assertFails(managerJob.update(prices));
+  await assertFails(cleanerJob.update(prices));
+  await assert.rejects(updateJobPricing.run(request("cleaner", { jobId: "job", prices })), { code: "permission-denied" });
+  await updateJobPricing.run(request("manager", { jobId: "job", prices }));
+  const updated = (await admin.doc(managerJob.path).get()).data();
+  assert.equal(updated.clientPrice, 350);
+  assert.equal(updated.cleanerPayout, 200);
+  assert.equal(updated.checklistContextRevision, undefined);
 });
 
 test("only a manager can write a known Job service type without changing the checklist access revision", async () => {

@@ -71,6 +71,7 @@ export function JobViews({
   refreshJobOffers,
   refreshJobIssues,
   refreshChecklistRun,
+  refreshWorkedTime,
   createAndOpenChecklistRun,
   openChecklistRun,
   refreshChecklistCapability,
@@ -216,6 +217,7 @@ export function JobViews({
           onRefreshOffers={refreshJobOffers}
           onRefreshIssues={refreshJobIssues}
           onRefreshChecklistRun={refreshChecklistRun}
+          onRefreshWorkedTime={refreshWorkedTime}
           onCreateChecklistRun={createAndOpenChecklistRun}
           onOpenChecklistRun={openChecklistRun}
           onRefreshChecklistCapability={refreshChecklistCapability}

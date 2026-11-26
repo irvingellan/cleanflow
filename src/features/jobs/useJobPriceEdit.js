@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
-import { jobPriceFormValues, readJobPriceForm } from "./jobPricingForm.js";
+import { jobHasRecordedPayout, jobPriceFormValues, readJobPriceForm } from "./jobPricingForm.js";
 
 /** State of the price edit form in Job Detail's Financial section. Resets when another Job is shown. */
 export function useJobPriceEdit({ job, translate, onUpdatePrices }) {
@@ -27,10 +27,12 @@ export function useJobPriceEdit({ job, translate, onUpdatePrices }) {
 
   async function savePrices(event) {
     event.preventDefault();
-    const prices = readJobPriceForm(priceValues);
+    const cleanerOnly = jobHasRecordedPayout(job);
+    const prices = readJobPriceForm(cleanerOnly
+      ? { ...priceValues, clientMode: "FIXED", clientPrice: "" } : priceValues);
 
     const { client, cleaner } = resolveJobPricing(job);
-    if (!prices || (client.reason === "invalid_rate" && !priceValues.clientPrice) ||
+    if (!prices || (!cleanerOnly && client.reason === "invalid_rate" && !priceValues.clientPrice) ||
         (cleaner.reason === "invalid_rate" && !priceValues.cleanerPayout)) {
       setPriceSaveError(translate("jobs.priceInvalid"));
       return;
@@ -41,7 +43,7 @@ export function useJobPriceEdit({ job, translate, onUpdatePrices }) {
     setHasSavedPrices(false);
 
     try {
-      await onUpdatePrices(prices);
+      await onUpdatePrices(cleanerOnly ? { ...prices, cleanerOnly } : prices);
       setIsEditingPrices(false);
       setHasSavedPrices(true);
     } catch {

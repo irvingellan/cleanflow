@@ -1,3 +1,4 @@
+import { JobWorkedTime } from "../pricing/JobWorkedTime.jsx";
 import { offerPayForRecipient } from "../../../functions/src/offerPay.js";
 import { JobDetailSection, revealJobDetailSection } from "./JobDetailSection.jsx";
 import { useEffect, useRef, useState } from "react";
@@ -91,6 +92,7 @@ export function JobDetail({
   onRefreshOffers,
   onRefreshIssues,
   onRefreshChecklistRun,
+  onRefreshWorkedTime,
   onCreateChecklistRun,
   onOpenChecklistRun,
   onRefreshChecklistCapability,
@@ -1141,6 +1143,10 @@ export function JobDetail({
         isResolvingIssue={isResolvingIssue}
         closeResolutionForm={closeResolutionForm}
       />
+
+      <JobWorkedTime job={job} assignments={activeAssignments} roster={summaryCleanerIds} offers={offers}
+        names={summaryCleanerNames} language={language} checklistStatus={checklistRun?.status}
+        loading={isLoadingAssignments} failed={hasAssignmentsError} onRefresh={onRefreshWorkedTime} />
 
       <JobFinancialSection
         job={job}

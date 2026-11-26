@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  billableMinutes, buildStatementDraft, centsFromDollars, hourlyAmountCents,
+  billableJobMinutes, billableMinutes, buildStatementDraft, centsFromDollars, hourlyAmountCents,
   issueStatement, statementBalance, statementLine, statementMessage,
 } from "./billingStatementModel.js";
 
@@ -144,4 +144,22 @@ describe("issued statement and payments", () => {
     expect(message).toContain("2 cleanings · Total $360.00");
     expect(message).not.toContain("Example St");
   });
+});
+
+it("accepts the rounded aggregate of approved crew minutes including zero and more than a day", () => {
+  const hours = { source: "APPROVED_ASSIGNMENTS", approved: true, roster: ["a", "b"] };
+  expect(billableMinutes({ ...hours, approvedMinutes: 0 })).toBe(0);
+  expect(billableMinutes({ ...hours, approvedMinutes: 1800 })).toBe(1800);
+  expect(billableMinutes({ ...hours, approvedMinutes: 3000 })).toBeNull();
+  expect(billableMinutes({ approved: true, approvedMinutes: 1800 })).toBeNull();
+});
+
+it("ties crew totals to the approved assignments when the same cleaner returns", () => {
+  const hours = { source: "APPROVED_ASSIGNMENTS", approved: true, roster: ["cleaner"], approvedMinutes: 60 };
+  const legacy = { assignedCleanerIds: ["cleaner"], billing: { hours } };
+  expect(billableJobMinutes(legacy)).toBe(60);
+  const current = { ...legacy, billing: { hours: { ...hours, assignmentIds: ["current"] } },
+    approvedAssignments: { current: "cleaner" } };
+  expect(billableJobMinutes(current)).toBe(60);
+  expect(billableJobMinutes({ ...current, approvedAssignments: { previous: "cleaner" } })).toBeNull();
 });

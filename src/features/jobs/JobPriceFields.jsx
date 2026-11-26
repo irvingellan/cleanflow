@@ -4,9 +4,9 @@ import { defaultHourlyRates } from "../pricing/hourlyDefaults.js";
 import { pricingMessage } from "../pricing/pricingMessages.js";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
 
-export function JobPriceFields({ values, onChange, disabled, clientOnly = false }) {
+export function JobPriceFields({ values, onChange, disabled, clientOnly = false, cleanerOnly = false }) {
   const { translate, language } = useTranslation();
-  const fields = [["clientMode", "clientPrice"]];
+  const fields = cleanerOnly ? [] : [["clientMode", "clientPrice"]];
   if (!clientOnly) fields.push(["cleanerMode", "cleanerPayout"]);
   // Switching to hourly prefills the standard rate; a fixed amount is not an hourly rate.
   function changeMode(event, amountKey) {

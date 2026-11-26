@@ -73,7 +73,7 @@ async function ownOffer(jobRef, offerId, cleanerId, readInTransaction) {
 
 async function enrichJob(job, organizationId, cleanerIds, readInTransaction, signal) {
   // Only these freshly verified terms may be consumed by financial models.
-  const enriched = { ...job, payoutAgreementsByCleaner: {} };
+  const enriched = { ...job, payoutAgreementsByCleaner: {}, payoutApprovedWorkByCleaner: {} };
   if (job.operationalStatus !== "COMPLETED" || !cleanerIds.length) return enriched;
   if (!validRosterId(organizationId) || !validRosterId(job.id) || (job.organizationId != null && job.organizationId !== organizationId)) {
     enriched.payoutAgreementsByCleaner = Object.fromEntries(cleanerIds.map(id => [id, null]));
@@ -82,7 +82,7 @@ async function enrichJob(job, organizationId, cleanerIds, readInTransaction, sig
   signal?.throwIfAborted();
   const jobRef = doc(serverFirestore(), "organizations", organizationId, "jobs", job.id);
   let assignments = [];
-  if (isAssignmentAwareJob(job)) {
+  if (isAssignmentAwareJob(job) || job.pay?.mode === "HOURLY" || job.billing?.mode === "HOURLY") {
     const selected = await getDocs(assignmentQuery(jobRef, cleanerIds));
     assignments = await Promise.all(selected.docs.map(async candidate => {
       const snapshot = readInTransaction ? await readInTransaction("assignments", candidate.id) : candidate;
@@ -99,6 +99,17 @@ async function enrichJob(job, organizationId, cleanerIds, readInTransaction, sig
     return [cleanerId, value];
   }));
   enriched.payoutAgreementsByCleaner = Object.fromEntries(entries.filter(([, value]) => value !== undefined));
+  if (assignments.length <= cleanerIds.length) {
+    enriched.payoutApprovedWorkByCleaner = Object.fromEntries(assignments.flatMap(assignment => {
+      const { cleanerId, approvedWork, payoutCents } = assignment;
+      if (!cleanerIds.includes(cleanerId) || !belongsTo(assignment, job.id, organizationId, cleanerId)
+        || assignment.isActive !== true || !approvedWork?.approvedByUid || !approvedWork.approvedAt
+        || assignments.some(other => other !== assignment && other.cleanerId === cleanerId)
+        || !Number.isInteger(approvedWork.minutes) || approvedWork.minutes < 0
+        || approvedWork.minutes > 1440 || approvedWork.minutes % 5 !== 0) return [];
+      return [[cleanerId, { minutes: approvedWork.minutes, payoutCents }]];
+    }));
+  }
   return enriched;
 }
 

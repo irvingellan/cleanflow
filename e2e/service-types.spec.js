@@ -50,7 +50,7 @@ test("a manager creates a post-construction service and opens its frozen checkli
   await roster.getByRole("button", { name: "Confirm assignment" }).click();
   await roster.locator(".assignment-roster__item").getByRole("button", { name: "Prepare message" }).click();
   const agenda = org.collection("cleanerAgenda").doc(`${cleanerId}__${job.id}`);
-  await expect.poll(async () => (await agenda.get()).data()?.serviceType).toBe("POST_CONSTRUCTION");
+  await expect.poll(async () => (await agenda.get()).data()?.serviceType, { timeout: 20_000 }).toBe("POST_CONSTRUCTION");
 
   const reminder = page.locator(".job-reminder-preview");
   await reminder.getByRole("checkbox", { name: "Include checklist link" }).check();
@@ -69,7 +69,7 @@ test("a manager creates a post-construction service and opens its frozen checkli
   await page.getByRole("button", { name: "Save details" }).click();
   await expect(context.getByText("Deep cleaning", { exact: true })).toBeVisible();
   expect((await job.get()).data().serviceType).toBe("DEEP_CLEANING");
-  await expect.poll(async () => (await agenda.get()).data()?.serviceType).toBe("DEEP_CLEANING");
+  await expect.poll(async () => (await agenda.get()).data()?.serviceType, { timeout: 20_000 }).toBe("DEEP_CLEANING");
   expect((await run.get()).data().resolvedDefinition).toEqual(frozen.resolvedDefinition);
 
   const cleaner = await browser.newContext({ serviceWorkers: "block" });

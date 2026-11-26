@@ -501,3 +501,31 @@ state and open currently authorized targets. An event remains in history when
 push fails. The manager can issue a one-time additional-device code to preserve
 a cleaner's existing sessions. Replacement and revocation retain their
 access-reset meaning. See the [notification runbook](NOTIFICATIONS_V1_85.md).
+
+### Reporting and approving hourly work
+
+In the Cleaner Hub, an assigned cleaner can submit her elapsed time while the
+Job is in progress, after its checklist is submitted, or after completion.
+She confirms before sending. The Hub then displays the submitted time and
+approval status. An identical retry returns the original result. Time rounds
+to the nearest five minutes, so two minutes round to zero and three to five.
+Touch-ups default to 120 minutes. A longer duration requires a deliberate
+manager entry.
+
+Managers review each person's minutes in Job Detail and can correct or remove
+an approval until that cleaner is paid. An hourly client pays for the sum of
+the roster's approved minutes. Each hourly cleaner's own approved minutes
+determine her pay. Weekly close lists Jobs that still need approval.
+A completed Job can record payment for an approved individual share while
+someone else's hours are pending.
+
+The manager can edit prices after approval. Updating Job-based cleaner rates
+recalculates approved, unpaid shares and records the changes together. Saved
+cleaner agreements keep their terms. After a payout is recorded, the manager
+uses **Correct client price** and provides a reason to update the client
+charge. Weekly close uses verified receipts for the amounts already paid.
+The app records payments made outside CleanFlow.
+
+**Remove approval** retains the cleaner's submitted time and clears the
+approval and derived client hours. It remains available for unpaid work and
+for the separate roster changes that require approval removal.

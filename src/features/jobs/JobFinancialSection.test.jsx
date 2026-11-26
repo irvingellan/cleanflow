@@ -64,6 +64,27 @@ describe("Job financial section", () => {
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
   });
 
+  it("allows the standard price editor after worked time approval", async () => {
+    const save = vi.fn();
+    show({ clientPrice: 35, cleanerPayout: 20, approvedAssignments: { assignment: "cleaner" },
+      billing: { hours: { approved: true } } }, save);
+    fireEvent.click(screen.getByRole("button", { name: "Edit prices" }));
+    fireEvent.change(screen.getByLabelText("Client price"), { target: { value: "42" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ clientPrice: 42, cleanerPayout: 20 }));
+  });
+
+  it("only exposes cleaner pay in the standard editor once one cleaner is recorded as paid", async () => {
+    const save = vi.fn();
+    show({ schemaVersion: 2, assignedCleanerIds: ["a", "b"], payoutIdsByCleaner: { a: "receipt" },
+      clientPrice: 35, cleanerPayout: 20 }, save);
+    fireEvent.click(screen.getByRole("button", { name: "Edit cleaner pay" }));
+    expect(screen.queryByLabelText("Client price")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Cleaner payout"), { target: { value: "24" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ clientPrice: undefined, cleanerPayout: 24, cleanerOnly: true }));
+  });
+
   it("keeps the recorded legacy amount visible and locks editing after payment", () => {
     show({ payoutId: "example-payout", cleanerPayout: 200 });
     expect(screen.getByText("$200.00")).toBeVisible();

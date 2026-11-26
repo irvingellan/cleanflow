@@ -133,6 +133,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
       isCreatingChecklistRun,
       hasCreateChecklistRunError,
       refreshChecklistRun,
+      refreshWorkedTime,
       checklistCapability,
       isLoadingChecklistCapability,
       hasChecklistCapabilityError,
@@ -866,6 +867,7 @@ export function ManagerApplication({ authUser, hasSignOutError, isSigningOut, on
           refreshJobOffers={refreshJobOffers}
           refreshJobIssues={refreshJobIssues}
           refreshChecklistRun={refreshChecklistRun}
+          refreshWorkedTime={refreshWorkedTime}
           createAndOpenChecklistRun={createAndOpenChecklistRun}
           openChecklistRun={openChecklistRun}
           refreshChecklistCapability={refreshChecklistCapability}

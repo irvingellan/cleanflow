@@ -6,7 +6,7 @@ import { resolveJobPricing } from "../pricing/pricingModel.js";
 import { formatPricingRate, pricingMessage } from "../pricing/pricingMessages.js";
 import { JobPriceFields } from "./JobPriceFields.jsx";
 import { JobPriceCorrectionForm } from "./JobPriceCorrection.jsx";
-import { jobHasRecordedPayout, jobPricesLocked } from "./jobPricingForm.js";
+import { canEditJobCleanerPay, jobHasRecordedPayout } from "./jobPricingForm.js";
 import { serviceTypeMessage } from "./serviceTypeMessages.js";
 
 /** The Financial section of Job Detail: the financial snapshot and the price edit form. */
@@ -28,8 +28,10 @@ export function JobFinancialSection({
   onCorrectPrice,
 }) {
   const { client, cleaner } = resolveJobPricing(job);
-  const locked = jobPricesLocked(job);
-  const canCorrectPrice = Boolean(onCorrectPrice && jobHasRecordedPayout(job));
+  const paid = jobHasRecordedPayout(job);
+  const canEdit = canEditJobCleanerPay(job);
+  const canCorrectPrice = Boolean(onCorrectPrice && paid);
+  const editLabel = paid && canEdit ? "jobs.editCleanerPay" : "jobs.editPrices";
   return (
     <JobDetailSection jobId={job.id} title={translate("jobs.section.financial")}>
     <section className="service-financial-summary" aria-label={translate("lifecycle.financialSnapshot")}>
@@ -43,18 +45,18 @@ export function JobFinancialSection({
     </section>
     <section className="job-pricing" aria-label={translate(canCorrectPrice ? "jobs.correctPrice" : "jobs.editPrices")}>
       {canCorrectPrice && <JobPriceCorrectionForm key={job.id} job={job} translate={translate} onCorrectPrice={onCorrectPrice} />}
-      {!canCorrectPrice && !isEditingPrices && (
-        <button className="button" type="button" disabled={locked} onClick={startPriceEdit}>
-          {translate("jobs.editPrices")}
+      {(!canCorrectPrice || canEdit) && !isEditingPrices && (
+        <button className="button" type="button" disabled={!canEdit} onClick={startPriceEdit}>
+          {translate(editLabel)}
         </button>
       )}
-      {locked && !canCorrectPrice && <p className="form-hint">{serviceTypeMessage(language, "paidPrices")}</p>}
-      {hasSavedPrices && !isEditingPrices && !canCorrectPrice && (
+      {!canEdit && !canCorrectPrice && <p className="form-hint">{serviceTypeMessage(language, "paidPrices")}</p>}
+      {hasSavedPrices && !isEditingPrices && (
         <p className="form-success" role="status">{translate("jobs.pricesSaved")}</p>
       )}
-      {isEditingPrices && !locked && (
+      {isEditingPrices && canEdit && (
         <form className="cleaning-form" noValidate onSubmit={savePrices}>
-          <JobPriceFields values={priceValues} disabled={isSavingPrices} onChange={(event) => {
+          <JobPriceFields cleanerOnly={paid} values={priceValues} disabled={isSavingPrices} onChange={(event) => {
             const { name, value } = event.target;
             setPriceValues((current) => ({ ...current, [name]: value, ...(name === "cleanerMode" ? { fixedPerCleaner: false } : {}) }));
           }} />

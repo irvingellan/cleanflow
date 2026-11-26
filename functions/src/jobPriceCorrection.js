@@ -1,6 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { requireOrganizationManager } from "./managerAuthorization.js";
+import { activeApprovedAssignments, approvedAssignmentBillingUpdate } from "./approvedAssignmentBilling.js";
+import { appendJobCorrection, jobHasPayoutMarker } from "./jobCorrections.js";
 import { resolveJobPricing } from "./pricingModel.js";
 
 function clientPriceSnapshot(job) {
@@ -59,22 +61,28 @@ export async function correctJobPricesForManager(database, request, organization
     const org = database.doc(`organizations/${organizationId}`);
     const jobRef = org.collection("jobs").doc(jobId);
     const job = (await transaction.get(jobRef)).data();
-    if (!job || job.organizationId !== organizationId) throw new HttpsError("not-found", "Job not found.");
+    if (!job || (job.organizationId != null && job.organizationId !== organizationId)) throw new HttpsError("not-found", "Job not found.");
 
     const before = clientPriceSnapshot(job);
     if (before.mode === after.mode && before.amountCents === after.amountCents
       && before.hourlyRateCents === after.hourlyRateCents) return { unchanged: true };
 
-    const afterPayout = Boolean(job.payoutId || job.payoutPaidAt || Object.keys(job.payoutIdsByCleaner ?? {}).length)
+    const afterPayout = jobHasPayoutMarker(job)
       || !(await transaction.get(org.collection("payouts").where("jobIds", "array-contains", jobId).limit(1))).empty;
-    transaction.update(jobRef, clientPriceUpdate(job, after));
-    transaction.create(jobRef.collection("corrections").doc(), {
+    const updates = clientPriceUpdate(job, after);
+    if (after.mode === "HOURLY" && Object.keys(job.approvedAssignments ?? {}).length) {
+      const approved = await activeApprovedAssignments(transaction, jobRef, job, { jobId, organizationId });
+      Object.assign(updates, approvedAssignmentBillingUpdate(job, true, approved.map(doc => ({
+        assignmentId: doc.id, cleanerId: doc.data().cleanerId, minutes: doc.data().approvedWork.minutes,
+      }))));
+    }
+    transaction.update(jobRef, updates);
+    appendJobCorrection(transaction, jobRef, {
       kind: "CLIENT_PRICE",
       before,
       after,
       reason: note,
       byUid: request.auth.uid,
-      at: FieldValue.serverTimestamp(),
       afterPayout,
     });
     return { unchanged: false };
