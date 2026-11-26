@@ -7,6 +7,7 @@ import { NotificationInbox, NotificationInboxBadge, useNotificationInbox } from 
 import { inboxMessage } from "../notifications/notificationInboxMessages.js";
 import { notificationInboxEnabled } from "../notifications/notificationInboxMode.js";
 import { useCleanerNotificationSettings } from "../notifications/useCleanerNotificationSettings.js";
+import { cleanerPushReceiptText } from "../notifications/cleanerPushReceiptText.js";
 import { cleanerMessagingWorkerPath, cleanerPushOpenInboxEvent } from "../notifications/cleanerPushBinding.js";
 import { InstallGuide } from "./InstallGuide.jsx";
 import { JobAccessPhotos } from "./JobAccessPhotos.jsx";
@@ -669,8 +670,11 @@ export function CleanerPushSettings({ t, push, go }) {
             {t(push.testState === "sending" ? "hb.push.testSending" : "hb.push.test")}
           </button>
           {push.testState && push.testState !== "sending" && <p className="mw-hint" role="status">
-            {t(`hb.push.test.${["sent", "not-delivered", "pending", "rate-limited", "daily-limit", "no-devices"].includes(push.testState) ? push.testState : "error"}`)
+            {t(`hb.push.test.${["sent", "interrupted", "not-delivered", "pending", "rate-limited", "daily-limit", "no-devices"].includes(push.testState) ? push.testState : "error"}`)
               .replace("{seconds}", String(push.testRetryAfterSeconds))}
+          </p>}
+          {push.latestTest && <p className="mw-hint" role="status">
+            {cleanerPushReceiptText(push.latestTest, t.lang, { lastTest: true })}
           </p>}
         </>}
         {state === "ios-standalone-required" && <button type="button" className="mw-linkbtn" onClick={() => go({ type: "install" })}>{t("hb.acc.install")}</button>}

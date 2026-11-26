@@ -6,8 +6,8 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { assertBuildEnvironment, webPushVapidKey } from './src/environment.js'
 import {
-  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerPushBinding, cleanerPushDisplay, cleanerPushOpenInboxEvent,
-  cleanerPushReceiptEvent, isCleanerVapidKey,
+  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerMessagingWorkerScope, cleanerPushBinding, cleanerPushDisplay, cleanerPushOpenInboxEvent,
+  cleanerPushReceiptEvent, cleanerPushReceipts, isCleanerVapidKey, openCleanerPushDatabase,
 } from './src/features/notifications/cleanerPushBinding.js'
 
 const firebaseConfigKeys = [
@@ -65,15 +65,20 @@ firebase.messaging().onBackgroundMessage((payload) => {
 
 export function cleanerMessagingWorkerSource(firebaseConfig) {
   if (!firebaseConfig) return "// Cleaner push is disabled for this build.\n";
-  return `// Isolated Firebase Messaging worker for Cleaner Hub.
+  return `// Self-contained data-only push worker for Cleaner Hub.
+const openCleanerPushDatabase = ${openCleanerPushDatabase.toString()};
 const binding = ${cleanerPushBinding.toString()};
+const receipts = ${cleanerPushReceipts.toString()};
 const display = ${cleanerPushDisplay.toString()};
+const errorName = (error) => error instanceof DOMException && /^[A-Za-z]{1,50}$/.test(error.name) ? error.name : "Error";
+const logFailure = (stage, error) => console.warn("Cleaner push " + stage, errorName(error));
 const inboxUrl = new URL("/agenda?inbox=1", self.location.origin);
 const agendaClients = async () => {
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   return windows.filter((client) => {
     const url = new URL(client.url);
-    return url.origin === inboxUrl.origin && ["/agenda", "/agenda/"].includes(url.pathname);
+    return url.origin === inboxUrl.origin
+      && (["/agenda", "/agenda.html"].includes(url.pathname) || url.pathname.startsWith("/agenda/"));
   });
 };
 
@@ -92,39 +97,52 @@ self.addEventListener("notificationclick", (event) => {
     } else {
       await self.clients.openWindow(inboxUrl.href);
     }
-  })().catch(() => {}));
+  })().catch((error) => logFailure("click failed", error)));
 });
 
-// Own the data-only PushEvent on this isolated scope. FCM's default worker
-// considers a visible manager tab foreground and otherwise skips display.
 self.addEventListener("push", (event) => {
   event.stopImmediatePropagation();
+  const receivedAtMs = Date.now();
   event.waitUntil((async () => {
-    const payload = event.data?.json();
-    const current = await binding("read");
-    const message = display(payload, current);
-    if (!message) return;
-    await self.registration.showNotification(message.title, message.options);
-    const latest = await binding("read").catch(() => null);
-    if (latest?.bindingId !== current.bindingId) {
-      const notifications = await self.registration.getNotifications({ tag: message.options.tag });
-      for (const notification of notifications) {
-        if (notification.data?.cleanerBindingId === current.bindingId) notification.close();
+    const windows = agendaClients().catch((error) => {
+      logFailure("client lookup failed", error);
+      return [];
+    });
+    let eventId, current, failure;
+    let outcome = "suppressed";
+    try {
+      const payload = event.data?.json();
+      eventId = payload?.data?.eventId;
+      current = await binding("read");
+      const message = display(payload, current);
+      if (message) {
+        await self.registration.showNotification(message.title, message.options);
+        outcome = "shown";
+        const latest = await binding("read").catch(() => null);
+        if (latest?.bindingId !== current.bindingId) {
+          outcome = "suppressed";
+          const notifications = await self.registration.getNotifications({ tag: message.options.tag });
+          for (const notification of notifications) {
+            if (notification.data?.cleanerBindingId === current.bindingId) notification.close();
+          }
+        }
       }
-      return;
+    } catch (error) {
+      outcome = "error";
+      failure = errorName(error);
+      logFailure("display failed", error);
     }
-    for (const agenda of await agendaClients()) {
+    const clients = await windows;
+    if (!current?.bindingId || typeof eventId !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(eventId)) return;
+    await receipts("append", current.sessionId, {
+      eventId, receivedAtMs, clientVisible: clients.some((client) => client.visibilityState === "visible"),
+      outcome, errorName: failure ?? null,
+    });
+    for (const agenda of clients) {
       agenda.postMessage({ type: ${JSON.stringify(cleanerPushReceiptEvent)} });
     }
-  })().catch(() => {}));
+  })().catch((error) => logFailure("receipt failed", error)));
 });
-
-importScripts("https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging-compat.js");
-
-firebase.initializeApp(${JSON.stringify(firebaseConfig)});
-// Keep FCM's subscription-change handling. Only this worker handles display.
-firebase.messaging();
 `
 }
 
@@ -203,6 +221,7 @@ function cleanflowServiceWorkers(buildInfo) {
         response.end(source)
       })
       server.middlewares.use(cleanerMessagingWorkerPath, (_request, response) => {
+        response.setHeader('Service-Worker-Allowed', cleanerMessagingWorkerScope)
         response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
         response.setHeader('Cache-Control', 'no-cache')
         response.end(cleanerSource)

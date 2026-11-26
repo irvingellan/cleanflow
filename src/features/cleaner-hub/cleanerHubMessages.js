@@ -175,6 +175,7 @@ const M = {
   "hb.push.recheck": ["Verificar de novo", "Check again", "Verificar de nuevo"],
   "hb.push.test": ["Testar neste aparelho", "Test on this device", "Probar en este dispositivo"],
   "hb.push.testSending": ["Enviando teste…", "Sending test…", "Enviando prueba…"],
+  "hb.push.test.interrupted": ["Veja se o aviso apareceu. O envio ainda não foi confirmado.", "Check whether the alert appeared. Sending is still unconfirmed.", "Comprueba si apareció el aviso. El envío aún no está confirmado."],
   "hb.push.test.sent": ["Teste enviado. O aviso deve aparecer em alguns segundos.", "Test sent. The alert should appear in a few seconds.", "Prueba enviada. El aviso debería aparecer en unos segundos."],
   "hb.push.test.pending": ["Teste enviado. Se o aviso não aparecer em um minuto, toque em Verificar de novo.", "Test sent. If no alert appears within a minute, tap Check again.", "Prueba enviada. Si el aviso no aparece en un minuto, toca Verificar de nuevo."],
   "hb.push.test.not-delivered": ["O teste não chegou a este aparelho. Toque em Verificar de novo e ative os avisos se for pedido.", "The test did not reach this device. Tap Check again and enable alerts if asked.", "La prueba no llegó a este dispositivo. Toca Verificar de nuevo y activa los avisos si se pide."],

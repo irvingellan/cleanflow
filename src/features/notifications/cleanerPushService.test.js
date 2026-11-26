@@ -46,7 +46,7 @@ beforeEach(() => {
           close() {},
           transaction() {
             const request = {};
-            const tx = { objectStore: () => ({ get: () => request, put: (data) => { state = data; } }) };
+            const tx = { objectStore: () => ({ get: () => request, put: (data) => { state = data; }, clear: () => {} }) };
             queueMicrotask(() => {
               request.result = state;
               request.onsuccess();
@@ -62,7 +62,7 @@ beforeEach(() => {
   });
   const origin = window.location.origin;
   registration = {
-    scope: `${origin}/cleaner-messaging-push/`, active: { scriptURL: `${origin}/cleaner-messaging-sw.js` },
+    scope: `${origin}/agenda/push/`, active: { scriptURL: `${origin}/cleaner-messaging-sw.js` },
     pushManager: { getSubscription: vi.fn(async () => ({})) }, getNotifications: vi.fn(async () => []),
   };
   registerWorker = vi.fn(async () => registration);
@@ -85,6 +85,88 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+describe("Legacy Cleaner Hub worker migration", () => {
+  const legacyScope = "/cleaner-messaging-push/";
+  let unregister;
+
+  beforeEach(() => {
+    permission = "granted";
+    state = { sessionId: session.sessionId, bindingId, language: "pt", registrationRevision: 1, noticeVersion: 2 };
+    window.localStorage.setItem(deviceStorageKey, "synthetic-installation");
+    const { getRegistration } = navigator.serviceWorker;
+    unregister = vi.fn(async () => true);
+    const legacy = { ...registration, scope: window.location.origin + legacyScope, unregister };
+    getRegistration.mockImplementation(async (scope) => {
+      if (scope === legacyScope) return unregister.mock.calls.length ? undefined : legacy;
+      return registerWorker.mock.calls.length ? registration : undefined;
+    });
+  });
+
+  it("retires only the exact old registration and enrolls the new one without prompting", async () => {
+    const { refreshCleanerPush } = await import("./cleanerPushService.js");
+    expect(await refreshCleanerPush(session, options)).toBe("registered");
+    expect(unregister).toHaveBeenCalledOnce();
+    expect(registerWorker).toHaveBeenCalledExactlyOnceWith("/cleaner-messaging-sw.js", { scope: "/agenda/push/" });
+    expect(sdk.getToken).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ serviceWorkerRegistration: registration }));
+    expect(sdk.invoke).toHaveBeenCalledWith("registerCleanerPushDevice", expect.objectContaining({
+      deviceId: "synthetic-installation", token: "synthetic-cleaner-token",
+    }));
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(state).not.toHaveProperty("scopeMigrationPending");
+    expect(await refreshCleanerPush(session, options)).toBe("registered");
+    expect(unregister).toHaveBeenCalledOnce();
+  });
+
+  it("retries a failed migration even after removing the legacy registration", async () => {
+    sdk.getToken.mockRejectedValueOnce(new Error("interrupted"));
+    const { refreshCleanerPush } = await import("./cleanerPushService.js");
+    expect(await refreshCleanerPush(session, options)).toBe("error");
+    expect(unregister).toHaveBeenCalledOnce();
+    expect(state.scopeMigrationPending).toBe(true);
+    vi.resetModules();
+    const afterReopen = await import("./cleanerPushService.js");
+    expect(await afterReopen.refreshCleanerPush(session, options)).toBe("registered");
+    expect(state).not.toHaveProperty("scopeMigrationPending");
+    expect(unregister).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the old worker alone when permission is no longer granted", async () => {
+    permission = "default";
+    const { refreshCleanerPush } = await import("./cleanerPushService.js");
+    expect(await refreshCleanerPush(session, options)).toBe("permission-default");
+    expect(unregister).not.toHaveBeenCalled();
+    expect(registerWorker).not.toHaveBeenCalled();
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+});
+
+it("drains receipt batches of at most 20 and keeps them until the callable acknowledges them", async () => {
+  state = { sessionId: session.sessionId, bindingId };
+  window.localStorage.setItem(deviceStorageKey, "synthetic-installation");
+  let pending = Array.from({ length: 30 }, (_, key) => ({
+    key, receipt: { eventId: `event-${key}`, receivedAtMs: Date.now(), clientVisible: false, outcome: "shown", errorName: null },
+  }));
+  const storage = await import("./cleanerPushBinding.js");
+  const queue = vi.spyOn(storage, "cleanerPushReceipts").mockImplementation(async (action, _, keys) => {
+    if (action === "read") return pending.slice(0, 20);
+    pending = pending.filter(({ key }) => !keys.includes(key));
+    return [];
+  });
+  const { syncCleanerPushReceipts } = await import("./cleanerPushService.js");
+  sdk.invoke.mockRejectedValueOnce(new Error("offline"));
+  await expect(syncCleanerPushReceipts(session)).rejects.toThrow("offline");
+  expect(pending).toHaveLength(30);
+  expect(queue).not.toHaveBeenCalledWith("acknowledge", expect.anything(), expect.anything());
+
+  const latestTest = { attemptedAt: "2026-11-25T19:00:00.000Z", receipt: null };
+  sdk.invoke.mockImplementation(async (_, { receipts }) => ({
+    data: { acknowledgedEventIds: receipts.map(({ eventId }) => eventId), latestTest },
+  }));
+  await expect(syncCleanerPushReceipts(session)).resolves.toEqual(latestTest);
+  expect(pending).toEqual([]);
+  expect(sdk.invoke.mock.calls.map(([, { receipts }]) => receipts.length)).toEqual([20, 20, 10]);
 });
 
 describe("Cleaner push pilot precheck", () => {
@@ -300,7 +382,7 @@ describe("Cleaner push lifecycle", () => {
     const enable = enableCleanerPush(session, options);
     expect(requestPermission).toHaveBeenCalledOnce();
     expect(await enable).toBe("registered");
-    expect(registerWorker).toHaveBeenCalledExactlyOnceWith("/cleaner-messaging-sw.js", { scope: "/cleaner-messaging-push/" });
+    expect(registerWorker).toHaveBeenCalledExactlyOnceWith("/cleaner-messaging-sw.js", { scope: "/agenda/push/" });
     expect(sdk.initializeApp).toHaveBeenCalledWith(expect.objectContaining({ appId: "1:1234:web:cleaner" }), "cleanflow-cleaner-messaging");
     expect(state).toMatchObject({ sessionId: session.sessionId, bindingId, registrationRevision: 1 });
     expect(sdk.invoke).toHaveBeenCalledWith("registerCleanerPushDevice", {

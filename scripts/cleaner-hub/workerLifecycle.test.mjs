@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 import { chromium } from "@playwright/test";
-import { cleanerPushBinding } from "../../src/features/notifications/cleanerPushBinding.js";
+import { cleanerPushBinding, openCleanerPushDatabase } from "../../src/features/notifications/cleanerPushBinding.js";
 import { cleanerMessagingWorkerSource } from "../../vite.config.js";
 
 const workerPath = "/cleaner-messaging-sw.js";
-const workerScope = "/cleaner-messaging-push/";
-const worker = cleanerMessagingWorkerSource({ projectId: "demo-cleanflow" })
-  .replaceAll(/https:\/\/www\.gstatic\.com\/firebasejs\/[^"]+/g, "/synthetic-firebase.js");
+const workerScope = "/agenda/push/";
+const worker = cleanerMessagingWorkerSource({ projectId: "demo-cleanflow" });
 const captureDisplays = `
 self.registration.showNotification = async (title, options) => {
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
@@ -20,12 +19,8 @@ self.registration.getNotifications = async () => [];
 test("real Chromium worker and IndexedDB ignore stale pushes after logout, account replacement and rotation", async (t) => {
   const server = createServer((request, response) => {
     if (request.url === workerPath) {
-      response.writeHead(200, { "Content-Type": "application/javascript" });
+      response.writeHead(200, { "Content-Type": "application/javascript", "Service-Worker-Allowed": workerScope });
       return response.end(captureDisplays + worker);
-    }
-    if (request.url === "/synthetic-firebase.js") {
-      response.writeHead(200, { "Content-Type": "application/javascript" });
-      return response.end("self.firebase = { initializeApp() {}, messaging() {} };");
     }
     response.writeHead(200, { "Content-Type": "text/html" });
     response.end("<!doctype html><meta charset=utf-8><title>Synthetic Hub</title>");
@@ -48,8 +43,8 @@ test("real Chromium worker and IndexedDB ignore stale pushes after logout, accou
   const actualWorker = await workerStarted;
   await page.waitForFunction(async (scope) => (await navigator.serviceWorker.getRegistration(scope))?.active?.state === "activated", workerScope);
 
-  const mutate = (...args) => page.evaluate(({ source, args }) => (0, eval)(`(${source})`)(...args), {
-    source: cleanerPushBinding.toString(), args,
+  const mutate = (...args) => page.evaluate(({ source, args }) => (0, eval)(source)(...args), {
+    source: `(function () { const openCleanerPushDatabase = ${openCleanerPushDatabase.toString()}; return ${cleanerPushBinding.toString()}; })()`, args,
   });
   const dispatch = (binding, id) => actualWorker.evaluate(({ binding, id }) => {
     const event = new PushEvent("push", { data: JSON.stringify({ data: {

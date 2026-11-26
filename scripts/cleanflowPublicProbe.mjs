@@ -158,7 +158,7 @@ export async function probeHttp(origin, { expectedBuild, timeoutMs = 10_000 } = 
   const workerChecks = workers.map((path) => check(path, (headers, body) => {
     if (!javascriptType.test(contentType(headers))) return { issue: "WRONG_CONTENT_TYPE" };
     if (!hasCacheDirective(headers, "no-store")) return { issue: "MISSING_NO_STORE" };
-    if (path === "/cleaner-messaging-sw.js" && headers.get("service-worker-allowed") !== "/cleaner-messaging-push/") {
+    if (path === "/cleaner-messaging-sw.js" && headers.get("service-worker-allowed") !== "/agenda/push/") {
       return { issue: "UNEXPECTED_WORKER_SCOPE" };
     }
     if (path !== "/sw.js") return {};

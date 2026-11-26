@@ -5,7 +5,8 @@ import { deleteToken, getMessaging, getToken, isSupported } from "firebase/messa
 import { firebaseConfig, useFirebaseEmulators } from "../../services/firebase/client.js";
 import { cleanerHubFirebase } from "../cleaner-hub/cleanerHubFirebase.js";
 import {
-  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerMessagingWorkerScope, cleanerPushBinding, isCleanerVapidKey,
+  cleanerMessagingConfig, cleanerMessagingWorkerPath, cleanerMessagingWorkerScope, cleanerPushBinding, cleanerPushReceipts,
+  isCleanerVapidKey,
 } from "./cleanerPushBinding.js";
 import { messagingWorkerReadiness } from "./notificationReadiness.js";
 import { withProviderTimeout } from "./providerTimeout.js";
@@ -16,6 +17,7 @@ const vapidKey = webPushVapidKey(import.meta.env.MODE, import.meta.env);
 const messagingConfig = useFirebaseEmulators || ["test", "emulator", "e2e"].includes(import.meta.env.MODE)
   ? null : cleanerMessagingConfig(firebaseConfig, import.meta.env.VITE_FIREBASE_CLEANER_MESSAGING_APP_ID);
 const workerIdentity = { scope: cleanerMessagingWorkerScope, script: cleanerMessagingWorkerPath };
+const legacyWorkerScope = "/cleaner-messaging-push/";
 const pilotEnabled = import.meta.env.VITE_CLEANFLOW_CLEANER_PUSH_PILOT === "enabled";
 const pilotReadinessLifetimeMs = 60_000;
 const eligiblePilotStates = new Set(["active", "missing", "invalidated", "signed-out", "permission-revoked", "superseded"]);
@@ -86,6 +88,30 @@ export async function sendCleanerPushSelfTest(session) {
   if (!authorizedSession(session)) return { state: "error" };
   const response = await httpsCallable(cleanerHubFirebase().functions, "cleanerPushTest", { timeout: 30_000 })({ action: "send" });
   return response.data;
+}
+
+export async function syncCleanerPushReceipts(session) {
+  if (!window.indexedDB || !authorizedSession(session)) return null;
+  const installation = deviceId();
+  if (!installation || (await cleanerPushBinding("read"))?.sessionId !== session.sessionId) return null;
+  const user = await confirmLocalOwner(session);
+  if (!user) return null;
+  let latestTest;
+  // Two batches cover the 30-entry buffer. Later arrivals trigger another sync.
+  for (let batch = 0; batch < 2; batch += 1) {
+    const pending = await cleanerPushReceipts("read", session.sessionId);
+    if (authorizedSession(session) !== user) return null;
+    const response = await invoke("reportCleanerPushReceipts", {
+      deviceId: installation, clientNowMs: Date.now(), receipts: pending.map(({ receipt }) => receipt),
+    });
+    if (!Array.isArray(response?.acknowledgedEventIds) || authorizedSession(session) !== user) return null;
+    const acknowledged = new Set(response.acknowledgedEventIds);
+    await cleanerPushReceipts("acknowledge", session.sessionId,
+      pending.filter(({ receipt }) => acknowledged.has(receipt.eventId)).map(({ key }) => key));
+    latestTest = response.latestTest ?? null;
+    if (pending.length < 20 || pending.some(({ receipt }) => !acknowledged.has(receipt.eventId))) break;
+  }
+  return latestTest;
 }
 
 /** Display only to the current authenticated cleaner; this is never a credential or telemetry. */
@@ -195,6 +221,16 @@ async function waitForActiveWorker(registration) {
   }
 }
 
+async function legacyCleanerWorker() {
+  const worker = await navigator.serviceWorker.getRegistration(legacyWorkerScope);
+  const origin = window.location.origin;
+  if (worker?.scope === new URL(legacyWorkerScope, origin).href
+    && [worker.active, worker.waiting, worker.installing].some(
+      (candidate) => candidate?.scriptURL === new URL(cleanerMessagingWorkerPath, origin).href,
+    )) return worker;
+  return null;
+}
+
 async function enrollCleanerPush(session, options, permissionRequest) {
   if (await withProviderTimeout(permissionRequest, "Cleaner notification permission", 20_000) !== "granted") {
     return Notification.permission === "denied" ? "permission-denied" : "permission-default";
@@ -211,6 +247,14 @@ async function enrollCleanerPush(session, options, permissionRequest) {
 
   const before = await cleanerPushBinding("read");
   if (before?.sessionId !== session.sessionId || authorizedSession(session) !== user) return "superseded";
+  const legacy = await legacyCleanerWorker();
+  if (legacy) {
+    if (authorizedSession(session) !== user || Notification.permission !== "granted"
+      || !await cleanerPushBinding("startMigration", session.sessionId)) return "superseded";
+    if (authorizedSession(session) !== user || Notification.permission !== "granted") return "superseded";
+    await closeWorkerNotifications(legacy, before.bindingId).catch(() => {});
+    await legacy.unregister();
+  }
   const registration = await navigator.serviceWorker.register(cleanerMessagingWorkerPath, { scope: cleanerMessagingWorkerScope });
   await waitForActiveWorker(registration);
   const messaging = cleanerMessaging();
@@ -307,15 +351,35 @@ export function enableCleanerPush(session, options) {
 
 export async function refreshCleanerPush(session, options) {
   const state = await inspectCleanerPush(session, options);
-  if (state !== "registered" || Notification.permission !== "granted") return state;
-  // Only refresh a previously consented, currently active installation. A
-  // conclusive invalidation uses one recovery on the explicit enable path.
-  return beginEnrollment(session, options, Promise.resolve("granted"));
+  if (globalThis.Notification?.permission !== "granted"
+    || !["registered", "missing", "invalidated", "worker-missing", "worker-mismatch"].includes(state)) return state;
+  try {
+    const binding = await cleanerPushBinding("read");
+    if (binding?.sessionId !== session.sessionId || !authorizedSession(session)) return state;
+    if (state === "registered" || binding.scopeMigrationPending || await legacyCleanerWorker()
+      || (state === "missing" && binding.bindingId && workerReadiness(
+        await navigator.serviceWorker.getRegistration(cleanerMessagingWorkerScope)) === "ready")) {
+      return beginEnrollment(session, options, Promise.resolve("granted"));
+    }
+    return state;
+  } catch {
+    return "error";
+  }
 }
 
 async function closeLocalCleanerNotifications(bindingId) {
-  const worker = await navigator.serviceWorker?.getRegistration(cleanerMessagingWorkerScope);
-  if (workerReadiness(worker) !== "ready") return;
+  if (!navigator.serviceWorker) return;
+  const [worker, legacy] = await Promise.all([
+    navigator.serviceWorker.getRegistration(cleanerMessagingWorkerScope), legacyCleanerWorker(),
+  ]);
+  await Promise.all([
+    workerReadiness(worker) === "ready" && closeWorkerNotifications(worker, bindingId),
+    legacy && closeWorkerNotifications(legacy, bindingId),
+  ]);
+}
+
+async function closeWorkerNotifications(worker, bindingId) {
+  if (!bindingId) return;
   const notifications = await worker.getNotifications();
   for (const notification of notifications) {
     if (notification.data?.cleanerBindingId === bindingId) notification.close();

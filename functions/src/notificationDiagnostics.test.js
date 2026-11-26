@@ -29,20 +29,29 @@ describe("notification diagnostics projection", () => {
     expect(JSON.stringify(result)).not.toMatch(/private-token|private-property|private-event/);
   });
 
-  it("shows bounded cleaner delivery evidence without identity, token, or display claims", () => {
+  it("projects a bounded phone receipt only for the audited installation", () => {
     const { cleanerDeliveries } = buildNotificationDiagnostics({
       devices: [], deliveries: [],
       cleanerDeliveries: [{ data: {
         type: "NEW_OFFER", deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, unknownDevices: 1,
         stages: ["EVENT_CREATED", "PROVIDER_ACCEPTED", "DISPLAYED", "untrusted"],
         cleanerId: "private-cleaner", token: "private-token",
+        attemptedAt: timestamp("2026-11-03T09:00:00Z"),
         devices: [{ installationKey: "a".repeat(64), outcome: "UNKNOWN", token: "private-token" }],
+        phoneReceipts: {
+          ["a".repeat(64)]: { receivedAt: timestamp("2026-11-03T09:00:02Z"), delayMs: 2000, clientVisible: false,
+            outcome: "error", errorName: "NotAllowedError", note: "private-note" },
+          ["b".repeat(64)]: { receivedAt: timestamp("2026-11-03T09:00:04Z"), delayMs: 4000, clientVisible: true, outcome: "shown" },
+        },
       } }],
     });
     expect(cleanerDeliveries).toEqual([expect.objectContaining({
       type: "NEW_OFFER", deliveryStatus: "PARTIAL", acceptedByFcmDevices: 1, unknownDevices: 1,
       stages: ["EVENT_CREATED", "PROVIDER_ACCEPTED"],
-      devices: [expect.objectContaining({ installation: "aaaaaaaaaaaa", outcome: "UNKNOWN" })],
+      attemptedAt: "2026-11-03T09:00:00.000Z",
+      devices: [expect.objectContaining({ installation: "aaaaaaaaaaaa", outcome: "UNKNOWN", receipt: {
+        receivedAt: "2026-11-03T09:00:02.000Z", delayMs: 2000, clientVisible: false, outcome: "error", errorName: "NotAllowedError",
+      } })],
     })]);
     expect(JSON.stringify(cleanerDeliveries)).not.toMatch(/private-|DISPLAYED|untrusted/);
   });

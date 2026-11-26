@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { chooseDevices, cleanerRecipient } from "./cleanerPushDelivery.js";
-import { cleanerInbox, cleanerInboxTypes, inboxEventVersion, validInboxSegment } from "./notificationInboxEvents.js";
+import { cleanerPushTestStatus } from "./cleanerPushReceipts.js";
+import { cleanerInbox, cleanerInboxTypes, inboxEventVersion, isInboxId, validInboxSegment } from "./notificationInboxEvents.js";
 
 // A test notice is a PUSH_TEST Inbox record. The regular sender delivers it,
 // so a passing test exercises the same path as a real offer or assignment.
@@ -30,9 +31,16 @@ export async function cleanerPushOverview(database, { organizationId, cleanerId,
   if (!transportActive(mode)) return { state: "unavailable" };
   const organization = database.collection("organizations").doc(organizationId);
   return database.runTransaction(async (transaction) => {
-    const { recipient, devices } = await activeDevices(transaction, database, organization, cleanerId, mode, now);
+    const [{ recipient, devices }, limit] = await Promise.all([
+      activeDevices(transaction, database, organization, cleanerId, mode, now),
+      transaction.get(organization.collection("cleanerPushTests").doc(cleanerId)),
+    ]);
+    const eventId = limit.data()?.lastTestEventId;
+    const delivery = isInboxId(eventId)
+      ? (await transaction.get(organization.collection("cleanerNotificationDeliveries").doc(eventId))).data() : null;
     return {
       state: "ready", alertsEnabled: recipient.profile?.pushAlertsEnabled === true, activeDevices: devices.length,
+      ...(isInboxId(eventId) && { latestTest: cleanerPushTestStatus(delivery?.cleanerId === cleanerId ? delivery : null) }),
     };
   }, { readOnly: true });
 }
@@ -78,8 +86,12 @@ export async function requestCleanerPushTest(database, {
     });
     transaction.set(limitRef, {
       organizationId, cleanerId, lastAtMs: now, day: today, count: count + 1,
-      lastRequestedByRole: requester.role, lastRequestedByUid: requester.uid, updatedAt: timestamp(),
+      lastRequestedByRole: requester.role, lastRequestedByUid: requester.uid, lastTestEventId: eventId, updatedAt: timestamp(),
     });
+    if (targetSessionId) {
+      const [device] = devices;
+      transaction.update(device.ref, { latestPushTest: { eventId, deviceId: device.data().deviceId } });
+    }
     return { state: "stored", eventId, targetDeviceCount: devices.length };
   });
 }

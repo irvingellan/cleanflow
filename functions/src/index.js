@@ -358,6 +358,11 @@ export const cleanerPushTest = onCall(
   lazyHandler(cleanerPush, "cleanerPushTest"),
 );
 
+export const reportCleanerPushReceipts = onCall(
+  { region: "us-central1" },
+  lazyHandler(cleanerPush, "reportCleanerPushReceipts"),
+);
+
 export const notifyCleanerInboxEvent = onDocumentCreated(
   {
     document: "organizations/{orgId}/cleanerNotificationInboxes/{cleanerId}/items/{eventId}",

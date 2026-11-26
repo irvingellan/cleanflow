@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { translateInLanguage, useTranslation } from "../../i18n/translations.js";
+import { cleanerPushReceiptText } from "../notifications/cleanerPushReceiptText.js";
 import * as defaultService from "./cleanerHubAccessService.js";
 
 function formatWhen(iso, language) {
@@ -200,6 +201,9 @@ export function CleanerHubAccessPanel({ cleaner, service = defaultService }) {
                   {translate(testMessage, { accepted: testResult.acceptedDevices ?? 0, target: testResult.targetDevices ?? 0, seconds: testResult.retryAfterSeconds ?? 60 })}
                 </p>
               )}
+              {overview?.latestTest && <p className="property-history-state" role="status">
+                {cleanerPushReceiptText(overview.latestTest, language, { lastTest: true })}
+              </p>}
             </div>
           )}
         </div>

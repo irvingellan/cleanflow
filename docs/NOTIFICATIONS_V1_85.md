@@ -60,7 +60,17 @@ capped by eight sessions and one FCM batch per eligible event.
   exact registration. An invalid token retires only the still-matching
   registration. Token and installation bindings remain server-only.
 - The distinct cleaner messaging worker uses
-  `/cleaner-messaging-sw.js` and scope `/cleaner-messaging-push/`.
+  `/cleaner-messaging-sw.js` and scope `/agenda/push/`.
+  This scope is inside the installed Agenda and leaves `/agenda` navigation
+  outside the push worker's control. The Agenda entry removes a legacy
+  `/sw.js` root registration if present. The manager still registers its
+  root worker when its entry loads.
+  On open, an authenticated Agenda with granted permission migrates the
+  legacy `/cleaner-messaging-push/` registration through the existing device
+  enrollment flow. The local binding remembers an incomplete migration and
+  retries on the next open. The worker has no Firebase SDK imports. The Hub
+  provides the worker registration to Firebase Messaging and refreshes the
+  subscription on open.
   Cleaner Messaging needs a distinct Web app ID in the same Firebase project,
   supplied as `VITE_FIREBASE_CLEANER_MESSAGING_APP_ID`. Separate Firebase
   Web app IDs avoid the SDK's shared token-cache key for different worker
@@ -76,9 +86,23 @@ capped by eight sessions and one FCM batch per eligible event.
   in the app. The payload excludes property information, names and access details.
 - The server rechecks current event and device eligibility and claims one FCM
   attempt. A post-claim retry or ambiguous response cannot cause a second send.
-  Provider acceptance is reported as acceptance. Background display and
-  device receipt are unknown unless separately observed. Opening an Inbox
-  item records an authorized open and does not imply the push caused it.
+  Provider acceptance and phone receipt are recorded separately. The worker
+  queues up to 30 receipts with the event ID, local arrival time, Agenda
+  visibility and notification display outcome. An authenticated Hub uploads
+  them on open, on return to the foreground and on worker messages. The server
+  estimates clock skew at upload and stores the first receipt for each
+  targeted installation, with a timestamp at or after the delivery attempt.
+  The attempt timestamp comes from the delivery claim immediately before send.
+  “App closed” means no Agenda window was visible when the worker received
+  the push. “Shown” means the browser accepted the display request. The
+  manager's diagnostics and Cleaner detail expose these receipts, and the
+  cleaner's Account shows the latest test sent from that installation.
+  Opening an Inbox item records an authorized open.
+- The receipt rollout needs the new `reportCleanerPushReceipts` callable
+  and the updated sender, test and diagnostics Functions before the Hosting
+  build. The existing Firestore Rules keep the delivery collection server-only.
+  A Hosting rollback needs a worker and Hub that can read binding database
+  version 2 once an installation has opened the updated Agenda.
 
 Sources for release review: [FCM Web setup](https://firebase.google.com/docs/cloud-messaging/web/get-started),
 [FCM registration management](https://firebase.google.com/docs/cloud-messaging/manage-tokens),
