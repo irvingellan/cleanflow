@@ -17,6 +17,17 @@ import {
 } from "./jobCompatibility.js";
 
 describe("Job compatibility", () => {
+  it("stores valid guest check-in times and allows managers to clear them", () => {
+    expect(buildCurrentJobCreateData({ guestCheckInTime: "00:00" })).toHaveProperty("guestCheckInTime", "00:00");
+    expect(buildCurrentJobCreateData({ guestCheckInTime: "" })).not.toHaveProperty("guestCheckInTime");
+    expect(buildJobDetailsUpdate({ guestCheckInTime: "23:59" })).toHaveProperty("guestCheckInTime", "23:59");
+    expect(buildJobDetailsUpdate({ guestCheckInTime: "" })).toHaveProperty("guestCheckInTime", undefined);
+    for (const value of ["24:00", "9:00", "15:00:30", 1500, null]) {
+      expect(() => buildCurrentJobCreateData({ guestCheckInTime: value })).toThrow("Guest check-in time must be HH:mm.");
+      expect(() => buildJobDetailsUpdate({ guestCheckInTime: value })).toThrow("Guest check-in time must be HH:mm.");
+    }
+  });
+
   it("normalizes editable Job details and omits blank optional values", () => {
     expect(buildJobDetailsUpdate({ guestName: "  Guest  ", notes: "  Entry note  " })).toEqual({
       guestName: "Guest",

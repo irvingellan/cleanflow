@@ -263,7 +263,7 @@ describe("cleaner agenda projection", () => {
     expect(checklistAgendaSummary()).toEqual({ status: "NONE", started: false });
     expect(checklistAgendaSummary({ run: { status: "DRAFT" } })).toEqual({ status: "DRAFT", started: false });
     expect(checklistAgendaSummary({ run: { status: "DRAFT" }, draft: { revision: 3 } })).toEqual({ status: "DRAFT", started: true });
-    expect(checklistAgendaSummary({ run: { status: "DRAFT" }, evidenceState: { photos: [{}] } })).toEqual({ status: "DRAFT", started: true });
+    expect(checklistAgendaSummary({ run: { status: "DRAFT" }, evidenceState: { photos: [{}] } })).toEqual({ status: "DRAFT", started: true, photoCount: 1 });
     expect(checklistAgendaSummary({ run: { status: "READY_FOR_REVIEW" }, draft: { revision: 9 } })).toEqual({ status: "READY_FOR_REVIEW", started: false });
     expect(checklistAgendaSummary({ run: { status: "SOMETHING_ELSE" } })).toEqual({ status: "NONE", started: false });
     const checklist = { status: "DRAFT", started: true };
@@ -273,5 +273,46 @@ describe("cleaner agenda projection", () => {
     expect(entries.get("ana")).toMatchObject({ checklist, checklistStatus: "DRAFT", checklistStarted: true });
     expect(entries.get("bia")).not.toHaveProperty("checklist");
     expect(sameEntry(entries.get("ana"), { ...entries.get("ana"), checklistStarted: false })).toBe(false);
+  });
+
+  it("counts snapshot tasks, inventory answers and only saved photos for active and submitted Runs", () => {
+    const resolvedDefinition = {
+      sections: [{ items: [{ id: "done" }, { id: "skipped", canBeNotApplicable: true }, { id: "blank" }] }],
+      inventoryItems: [{ id: "stock" }],
+    };
+    const draft = { revision: 2, checklistAnswers: {
+      done: "DONE", skipped: "NOT_APPLICABLE", blank: "NOT_APPLICABLE", deleted: "DONE",
+    }, inventoryAnswers: { stock: "HIGH" } };
+    const evidenceState = { photos: [{ evidenceId: "photo" }], pending: [{ status: "RESERVED" }], contentCount: 3 };
+    for (const status of ["DRAFT", "READY_FOR_REVIEW"]) {
+      expect(checklistAgendaSummary({ run: { status, resolvedDefinition }, draft, evidenceState })).toEqual({
+        status, started: status === "DRAFT", answeredItems: 3, totalItems: 4, photoCount: 1,
+      });
+    }
+    expect(checklistAgendaSummary({ run: { status: "DRAFT", resolvedDefinition, evidencePolicy: { version: 2 } } }))
+      .toEqual({ status: "DRAFT", started: false, answeredItems: 0, totalItems: 4, photoCount: 0 });
+    expect(checklistAgendaSummary({ run: { status: "ABANDONED", resolvedDefinition }, draft, evidenceState }))
+      .toEqual({ status: "ABANDONED", started: false });
+  });
+
+  it("projects the start and guest check-in on assigned entries and detects facts changing or clearing", () => {
+    const input = {
+      organizationId: "o", jobId: "j", now,
+      job: job({ operationalStatus: "IN_PROGRESS", startedAt: { toMillis: () => now.getTime() }, guestCheckInTime: "15:00" }),
+      checklist: { status: "DRAFT", started: true, answeredItems: 1, totalItems: 3, photoCount: 0 },
+    };
+    const entry = computeAgendaEntries(input).get("ana");
+    expect(entry).toMatchObject({ startedAtMs: now.getTime(), guestCheckInTime: "15:00" });
+    expect(sameEntry(entry, { ...entry, checklist: { ...entry.checklist, answeredItems: 2 } })).toBe(false);
+    const cleared = computeAgendaEntries({ ...input, job: { ...input.job, startedAt: null, guestCheckInTime: "24:00" } }).get("ana");
+    expect(cleared).not.toHaveProperty("guestCheckInTime");
+    expect(cleared).not.toHaveProperty("startedAtMs");
+    expect(sameEntry(entry, cleared)).toBe(false);
+
+    const offer = computeAgendaEntries({ ...input, job: { ...input.job, operationalStatus: "OFFERED" },
+      offers: [{ cleanerId: "bia", status: "PENDING", publicOfferExpiresAt: future }] }).get("bia");
+    expect(offer).toBeDefined();
+    expect(offer).not.toHaveProperty("guestCheckInTime");
+    expect(offer).not.toHaveProperty("startedAtMs");
   });
 });

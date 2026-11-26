@@ -71,6 +71,11 @@ service cloud.firestore {
       ];
     }
 
+    function validGuestCheckInTime(data) {
+      return !('guestCheckInTime' in data) || (data.guestCheckInTime is string
+        && data.guestCheckInTime.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'));
+    }
+
     function jobHasPayout(data) {
       let linked = data.get('payoutIdsByCleaner', {});
       return data.get('payoutId', null) != null && data.get('payoutId', null) != ''
@@ -376,6 +381,7 @@ service cloud.firestore {
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && validJobServiceType(request.resource.data)
+            && validGuestCheckInTime(request.resource.data)
             && validJobChecklistContextRevisionCreate()
             && browserJobDoesNotCreateCompletion()
             && !request.resource.data.keys().hasAny([
@@ -390,6 +396,7 @@ service cloud.firestore {
           || (collectionName == 'jobs'
             && activeManager(orgId)
             && validJobServiceType(request.resource.data)
+            && validGuestCheckInTime(request.resource.data)
             && jobScheduleUnchanged()
             && validJobChecklistContextRevisionUpdate()
             && browserJobKeepsCompletionState()

@@ -2,7 +2,7 @@ import { serviceTypeLabel } from "./serviceTypeMessages.js";
 import { ServiceLifecycleRail } from "./ServiceLifecycleRail.jsx";
 import { ChecklistProgressSummary } from "./ChecklistProgressSummary.jsx";
 import { BackButton } from "../../components/UiPrimitives.jsx";
-import { formatDate } from "../../lib/presentation.js";
+import { formatDate, formatServiceTime } from "../../lib/presentation.js";
 
 /** The head of Job Detail: back button, title, context, the attention list, the lifecycle rail, the cleaner summary and the checklist progress summary. */
 export function JobDetailHead({
@@ -22,6 +22,7 @@ export function JobDetailHead({
   hasAssignmentsError,
   summaryCleanerNames,
 }) {
+  const checkIn = formatServiceTime(job.guestCheckInTime, language, { hourCycle: "h23" });
   return (
     <div className="cf-job__head">
     <BackButton onClick={onBack} />
@@ -36,6 +37,7 @@ export function JobDetailHead({
       <span>{serviceTypeLabel(language, job.serviceType)}</span>
       <span>{job.clientName || translate("common.notProvided")}</span>
     </p>
+    {checkIn && <p className="job-detail__context">{translate("jobs.guestCheckInAt", { time: checkIn })}</p>}
     {isCompleted && <p className="job-detail__completion">
       {translate("jobs.completedTime")}: {completedAt || translate("common.notProvided")}
     </p>}

@@ -1,5 +1,5 @@
 import { setGlobalOptions } from "firebase-functions/v2";
-import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onCall, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { pilotReminderTimezone } from "./managerReminders.js";
@@ -397,6 +397,14 @@ export const syncCleanerAgendaOnChecklistRunWrite = cleanerAgendaTrigger(
   "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}", "onChecklistRunWrite",
 );
 export const syncCleanerAgendaOnChecklistStart = onDocumentCreated(
+  {
+    document: "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}/{progressCollection}/current",
+    region: "us-central1", retry: true, timeoutSeconds: 60,
+  },
+  lazyHandler(cleanerAgendaTriggers, "onChecklistStart"),
+);
+// Keeps the cleaner's "cleaning now" progress current as the draft or photos are saved again.
+export const syncCleanerAgendaOnChecklistProgress = onDocumentUpdated(
   {
     document: "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}/{progressCollection}/current",
     region: "us-central1", retry: true, timeoutSeconds: 60,

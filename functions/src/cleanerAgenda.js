@@ -8,6 +8,8 @@ import { currentManualReplacementOffer } from "./managerManualReplacementOfferSe
 import { projectCleanerReschedule, rosterScheduleConfirmation } from "./rescheduleConfirmations.js";
 import { addCalendarDays, localDateKey } from "./managerReminders.js";
 import { normalizeServiceType } from "./serviceTypes.js";
+import { checklistItemProgress } from "./checklistItemProgress.js";
+import { normalizedChecklistDraft } from "./checklistDraftService.js";
 
 /**
  * Cleaner agenda projection (Cleaner Hub V1).
@@ -93,9 +95,19 @@ const checklistStatuses = ["DRAFT", "READY_FOR_REVIEW", "ABANDONED"];
  */
 export function checklistAgendaSummary({ run = null, draft = null, evidenceState = null } = {}) {
   if (!run || !checklistStatuses.includes(run.status)) return { status: "NONE", started: false };
+  if (run.status === "ABANDONED") return { status: run.status, started: false };
   const savedAnswers = Number.isInteger(draft?.revision) && draft.revision > 0;
-  const savedPhotos = Array.isArray(evidenceState?.photos) && evidenceState.photos.length > 0;
-  return { status: run.status, started: run.status === "DRAFT" && (savedAnswers || savedPhotos) };
+  const photoCount = Array.isArray(evidenceState?.photos) ? evidenceState.photos.length
+    : evidenceState == null && run.evidencePolicy?.version === 2 ? 0 : undefined;
+  const definition = run.resolvedDefinition;
+  const hasDefinition = Array.isArray(definition?.sections) && definition.sections.every(section => Array.isArray(section?.items))
+    && (definition.inventoryItems == null || Array.isArray(definition.inventoryItems));
+  return {
+    status: run.status,
+    started: run.status === "DRAFT" && (savedAnswers || photoCount > 0),
+    ...(hasDefinition && checklistItemProgress(definition, normalizedChecklistDraft(run, draft))),
+    ...(photoCount !== undefined && { photoCount }),
+  };
 }
 
 function belongsToJob(record, organizationId, jobId) {
@@ -123,6 +135,9 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
     notes: typeof job.notes === "string" ? job.notes.trim() || null : null,
   };
   const roster = rosterCleanerIds(job);
+  const startedAtMs = typeof job.startedAt?.toMillis === "function" ? job.startedAt.toMillis() : null;
+  const guestCheckInTime = typeof job.guestCheckInTime === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(job.guestCheckInTime)
+    ? job.guestCheckInTime : null;
   for (const cleanerId of roster) {
     const assignment = assignments.find(item => item?.cleanerId === cleanerId && item.isActive === true
       && belongsToJob(item, organizationId, jobId));
@@ -135,6 +150,8 @@ export function computeAgendaEntries({ organizationId, jobId, job, address = nul
       ...baseEntry(organizationId, jobId, cleanerId, job),
       kind: agendaKinds.assigned,
       ...holderDetails,
+      ...(job.operationalStatus === "IN_PROGRESS" && Number.isFinite(startedAtMs) && { startedAtMs: Math.trunc(startedAtMs) }),
+      ...(guestCheckInTime && { guestCheckInTime }),
       acknowledged: Boolean(assignment?.cleanerAcknowledgedAt),
       offerStatus: null,
       ...offerPayForRecipient(agreement, job, cleanerId),
@@ -196,13 +213,14 @@ export function agendaEntryId(cleanerId, jobId) {
 }
 
 const comparedFields = [
-  "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart", "completedDate",
+  "organizationId", "cleanerId", "jobId", "kind", "jobStatus", "scheduledDate", "scheduledStart", "completedDate", "startedAtMs", "guestCheckInTime",
   "propertyName", "scheduleRevision", "acknowledged", "offerStatus", "offeredCompensation", "offeredFirstSlotExtraCents", "offeredPayEstimated", "offerExpiresAtMs",
   "offerDistributionMode", "confirmationMode", "replacementOfferId", "checklistStatus", "checklistStarted", "serviceType", "address", "notes",
 ];
 
 export function sameEntry(previous, next) {
   return Boolean(previous) && isDeepStrictEqual(previous.reschedule, next.reschedule)
+    && isDeepStrictEqual(previous.checklist, next.checklist)
     && isDeepStrictEqual(previous.offeredPay, next.offeredPay)
     && comparedFields.every((field) => (previous[field] ?? null) === (next[field] ?? null));
 }

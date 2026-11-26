@@ -83,6 +83,12 @@ describe("CreateCleaningForm", () => {
     fireEvent.change(screen.getByLabelText("Scheduled time"), {
       target: { value: "10:00" },
     });
+    const checkIn = screen.getByLabelText("Guest check-in");
+    fireEvent.change(checkIn, { target: { value: "15:00:30" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Create cleaning" }).form);
+    expect(screen.getByText("Enter a valid time or leave it blank.")).toBeVisible();
+    expect(createJob).not.toHaveBeenCalled();
+    fireEvent.change(checkIn, { target: { value: "15:00" } });
     fireEvent.change(screen.getByLabelText("Guest name (optional)"), {
       target: { value: " Taylor Morgan " },
     });
@@ -100,6 +106,7 @@ describe("CreateCleaningForm", () => {
         serviceType: "DEEP_CLEANING",
         scheduledDate: "2026-09-01",
         scheduledStart: "10:00",
+        guestCheckInTime: "15:00",
         clientPrice: 350,
         cleanerPayout: 200,
         guestName: " Taylor Morgan ",

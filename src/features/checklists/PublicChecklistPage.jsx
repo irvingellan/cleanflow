@@ -1,5 +1,6 @@
 import { Icon } from "../../components/Icon.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { checklistItemProgress } from "../../../functions/src/checklistItemProgress.js";
 import {
   checklistInventoryLevels,
   supportsChecklistInventoryQuantity,
@@ -425,6 +426,7 @@ export function PublicChecklistPage({ token }) {
   }
 
   const isReadOnly = saveState === checklistSaveStates.READY_FOR_REVIEW;
+  const { answeredItems: done, totalItems: total } = checklistItemProgress(checklist, draft);
   const evidenceByRequirement = new Map((checklist.evidence || []).map((evidence) => [evidence.requirementId, evidence]));
   const missingItems = [];
   for (const section of checklist.sections) {
@@ -528,18 +530,12 @@ export function PublicChecklistPage({ token }) {
           translate={translate}
         />
 
-        {!isReadOnly && (() => {
-          const tasks = checklist.sections.flatMap((section) => section.items);
-          const inventory = checklist.inventoryItems || [];
-          const total = tasks.length + inventory.length;
-          const done = tasks.filter((item) => (draft.checklistAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length
-            + inventory.filter((item) => (draft.inventoryAnswers?.[item.id] || "UNANSWERED") !== "UNANSWERED").length;
-          if (!total) return null;
-          return <div className="public-checklist__progress" data-testid="checklist-progress">
+        {!isReadOnly && total > 0 && (
+          <div className="public-checklist__progress" data-testid="checklist-progress">
             <p>{translate("checklists.overallProgress", { done, total })}</p>
             <progress max={total} value={done} aria-label={translate("checklists.overallProgress", { done, total })} />
-          </div>;
-        })()}
+          </div>
+        )}
 
         {isReadOnly && reviewHandoff}
 

@@ -5,12 +5,36 @@ import {
   buildCleanerAgenda,
   formatAccessCodeInput,
   freshnessFor,
+  guestCheckInMinutes,
   localDateKey,
   normalizeAccessCodeInput,
+  normalizeNowCardFacts,
 } from "./cleanerAgendaModel.js";
 
 const now = new Date(2026, 10, 3, 9, 0);
 const assigned = (id, date, status = "ASSIGNED", start = "10:00") => ({ id, kind: "ASSIGNED", jobId: id, scheduledDate: date, scheduledStart: start, jobStatus: status });
+
+describe("NowCard facts", () => {
+  it("accepts bounded integers and a valid clock time", () => {
+    expect(normalizeNowCardFacts({
+      checklist: { status: "DRAFT", answeredItems: 0, totalItems: 30, photoCount: 9 },
+      startedAtMs: 1_800_000_000_000, guestCheckInTime: "15:00",
+    })).toEqual({ answeredItems: 0, totalItems: 30, photoCount: 9, startedAtMs: 1_800_000_000_000, guestCheckInTime: "15:00" });
+    expect(normalizeNowCardFacts({
+      checklist: { status: "READY_FOR_REVIEW", answeredItems: 31, totalItems: 30, photoCount: -1 },
+      startedAtMs: 1.5, guestCheckInTime: "24:00",
+    })).toEqual({ answeredItems: null, totalItems: 30, photoCount: null, startedAtMs: null, guestCheckInTime: null });
+    expect(normalizeNowCardFacts({ checklist: { status: "DRAFT", answeredItems: 2, totalItems: "30", photoCount: 1.5 } }))
+      .toEqual(normalizeNowCardFacts({}));
+  });
+
+  it("uses the service date and actual elapsed minutes across a Pacific clock change", () => {
+    expect(guestCheckInMinutes("2026-11-01", "02:30", new Date("2026-11-01T08:30:00Z"))).toBe(120);
+    expect(guestCheckInMinutes("2026-11-01", "01:30", new Date("2026-11-01T09:15:00Z"))).toBeNull();
+    expect(guestCheckInMinutes("2026-11-02", "15:00", new Date("2026-11-01T18:00:00Z"))).toBeNull();
+    expect(guestCheckInMinutes("2026-03-08", "02:30", new Date("2026-03-08T08:00:00Z"))).toBeNull();
+  });
+});
 
 describe("cleaner agenda buckets", () => {
   it("splits active, completed and offered services while excluding change history", () => {

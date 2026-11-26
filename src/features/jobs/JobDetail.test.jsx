@@ -506,6 +506,18 @@ describe("JobDetail lifecycle actions", () => {
     });
   });
 
+  it("shows guest check-in in the manager detail and lets the manager clear it", async () => {
+    const onUpdateDetails = vi.fn().mockResolvedValue({});
+    renderJobDetail("UNASSIGNED", { guestCheckInTime: "15:00" }, { onUpdateDetails });
+    expect(screen.getByText("Guest check-in at 15:00")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Edit service details" }));
+    const checkIn = screen.getByLabelText("Guest check-in");
+    expect(checkIn).toHaveValue("15:00");
+    fireEvent.change(checkIn, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+    await waitFor(() => expect(onUpdateDetails).toHaveBeenCalledWith(expect.objectContaining({ guestCheckInTime: "" })));
+  });
+
   it("previews the selected type's current rates before a manager changes service details", () => {
     const property = { serviceRates: { MOVE_IN_OUT: {
       client: { mode: "HOURLY", amountCents: 4321 }, cleaner: { mode: "FIXED", amountCents: 6500 },

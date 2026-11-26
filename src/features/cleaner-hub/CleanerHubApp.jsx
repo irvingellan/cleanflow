@@ -19,9 +19,12 @@ import {
   entriesInMonth,
   findAgendaEntry,
   formatAccessCodeInput,
+  guestCheckInMinutes,
   localDateKey,
   normalizeAccessCodeInput,
   normalizeJobAccess,
+  normalizeNowCardFacts,
+  serviceClockTime,
 } from "./cleanerAgendaModel.js";
 import { detectHubLanguage, hubLanguages, hubOfferPay, hubTranslate } from "./cleanerHubMessages.js";
 import { AvailabilityPanel } from "../availability/AvailabilityPanel.jsx";
@@ -71,7 +74,7 @@ function useTranslator(preferred) {
     const translate = (key, params) => hubTranslate(lang, key, params);
     translate.lang = lang;
     translate.locale = { pt: "pt-BR", en: "en-US", es: "es-US" }[lang];
-    translate.time = (value) => formatServiceTime(value, lang);
+    translate.time = (value, options) => formatServiceTime(value, lang, options);
     translate.clock = (date) => date ? new Intl.DateTimeFormat(translate.locale, { hour: "numeric", minute: "2-digit" }).format(date) : hubTranslate(lang, "hb.fresh.never");
     return translate;
   }, [lang]);
@@ -313,8 +316,25 @@ function nowEntry(todayEntries) {
 
 function NowCard({ t, hub, entry, onOpen }) {
   const [opening, setOpening] = useState(false);
+  const [, refreshCountdown] = useState(0);
   const situation = checklistSituation(entry);
   const inProgress = entry.jobStatus === "IN_PROGRESS";
+  const { answeredItems, totalItems, photoCount, startedAtMs, guestCheckInTime } = normalizeNowCardFacts(entry);
+  const startedTime = inProgress && startedAtMs !== null
+    ? t.time(serviceClockTime(startedAtMs), { hourCycle: "h23" }) : null;
+  const minutesRemaining = guestCheckInMinutes(entry.scheduledDate, guestCheckInTime, new Date());
+  useEffect(() => {
+    if (minutesRemaining === null) return undefined;
+    const timer = setTimeout(() => refreshCountdown(value => value + 1), 60000 - Date.now() % 60000);
+    return () => clearTimeout(timer);
+  }, [minutesRemaining]);
+  const remainingHours = Math.floor(minutesRemaining / 60);
+  const remainingMinutes = minutesRemaining % 60;
+  const hasItemProgress = answeredItems !== null && totalItems > 0;
+  const progress = [
+    hasItemProgress && t("hb.now.items", { answered: answeredItems, total: totalItems }),
+    photoCount !== null && t(photoCount === 1 ? "hb.now.photo" : "hb.now.photos", { count: photoCount }),
+  ].filter(Boolean).join(" · ");
   const service = serviceTypeLabel(t.lang, entry.serviceType);
   const amount = hubOfferPay(entry, t.lang);
   const actionKey = situation.state === "started" ? "hb.clst.started.action"
@@ -337,7 +357,10 @@ function NowCard({ t, hub, entry, onOpen }) {
   return (
     <section className="hb-now" data-now-job-id={entry.jobId} aria-label={t(inProgress ? "hb.now.inProgress" : "hb.now.next")}>
       <div className="hb-now-top">
-        <span className="hb-now-label">{t(inProgress ? "hb.now.inProgress" : "hb.now.next")}</span>
+        <div>
+          <span className="hb-now-label">{t(inProgress ? "hb.now.inProgress" : "hb.now.next")}</span>
+          {startedTime && <span className="hb-now-since tnum">{t("hb.now.since", { time: startedTime })}</span>}
+        </div>
         <span className="hb-now-time tnum">{t.time(entry.scheduledStart) || t("hb.timeNotSet")}</span>
       </div>
       <button type="button" className="hb-now-body" onClick={() => onOpen(entry)} data-job-id={entry.jobId}>
@@ -349,6 +372,26 @@ function NowCard({ t, hub, entry, onOpen }) {
           {checklistChipStates.includes(situation.state) && <span data-checklist-state={situation.state}>{t(`hb.clst.${situation.state}.chip`)}</span>}
         </span>
       </button>
+      {progress && (
+        <div className="hb-now-facts">
+          <div>{progress} <small>· {t("hb.now.lastSynced")}</small></div>
+          {hasItemProgress && (
+            <div className="hb-now-progress" role="img" aria-label={t("hb.now.itemsDone", { answered: answeredItems, total: totalItems })}>
+              <span style={{ width: `${answeredItems / totalItems * 100}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+      {minutesRemaining !== null && (
+        <p className="hb-now-check-in tnum">
+          {t("hb.now.checkIn", {
+            time: t.time(guestCheckInTime, { hourCycle: "h23" }),
+            remaining: t(remainingHours ? "hb.now.hoursMinutes" : "hb.now.minutes", {
+              hours: remainingHours, minutes: remainingHours ? String(remainingMinutes).padStart(2, "0") : remainingMinutes,
+            }),
+          })}
+        </p>
+      )}
       {canOpenChecklist && (
         <button type="button" className="hb-now-action" onClick={openChecklist} disabled={opening}>
           <HubIcon name="clipCheck" size={18} />{t(actionKey)}

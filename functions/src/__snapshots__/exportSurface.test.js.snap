@@ -941,6 +941,29 @@ exports[`Functions export surface > keeps the name, trigger and options of every
     },
   ],
   [
+    "syncCleanerAgendaOnChecklistProgress",
+    {
+      "eventTrigger": {
+        "eventFilterPathPatterns": {
+          "document": "organizations/{orgId}/jobs/{jobId}/checklistRuns/{runId}/{progressCollection}/current",
+        },
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)",
+        },
+        "eventType": "google.cloud.firestore.document.v1.updated",
+        "retry": true,
+      },
+      "labels": {},
+      "maxInstances": 20,
+      "platform": "gcfv2",
+      "region": [
+        "us-central1",
+      ],
+      "timeoutSeconds": 60,
+    },
+  ],
+  [
     "syncCleanerAgendaOnChecklistRunWrite",
     {
       "eventTrigger": {

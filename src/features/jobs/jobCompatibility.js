@@ -5,6 +5,7 @@ export const CURRENT_JOB_SCHEMA_VERSION = ASSIGNMENT_AWARE_JOB_SCHEMA_VERSION;
 export const maximumGuestNameLength = 120;
 
 import { withNormalizedDataProvenance } from "../../lib/dataProvenance.js";
+import { isServiceTime } from "../../lib/presentation.js";
 import { defaultServiceType, isServiceType, normalizeServiceType } from "../../../functions/src/serviceTypes.js";
 import { jobPriceSnapshot } from "./jobPricingForm.js";
 import { requiredCleanerCount as plannedCleanerCount } from "./offerSlots.js";
@@ -60,7 +61,13 @@ function validateServiceType(serviceType) {
   return serviceType;
 }
 
-export function buildJobDetailsUpdate({ guestName, notes, serviceType }) {
+function optionalGuestCheckInTime(value) {
+  if (value === undefined || value === "") return undefined;
+  if (!isServiceTime(value)) throw new Error("Guest check-in time must be HH:mm.");
+  return value;
+}
+
+export function buildJobDetailsUpdate({ guestName, notes, serviceType, guestCheckInTime }) {
   const normalizedGuestName = optionalText(guestName);
   if (normalizedGuestName.length > maximumGuestNameLength) {
     throw new Error("Guest name is too long.");
@@ -69,6 +76,7 @@ export function buildJobDetailsUpdate({ guestName, notes, serviceType }) {
   return {
     guestName: normalizedGuestName || undefined,
     notes: optionalText(notes) || undefined,
+    ...(guestCheckInTime === undefined ? {} : { guestCheckInTime: optionalGuestCheckInTime(guestCheckInTime) }),
     ...(serviceType === undefined ? {} : { serviceType: validateServiceType(serviceType) }),
   };
 }
@@ -151,6 +159,7 @@ export function buildCurrentJobCreateData({
   clientName,
   scheduledDate,
   scheduledStart,
+  guestCheckInTime,
   clientPrice,
   cleanerPayout,
   billing,
@@ -162,6 +171,7 @@ export function buildCurrentJobCreateData({
 }) {
   const normalizedGuestName = optionalText(guestName);
   const normalizedScheduledStart = optionalText(scheduledStart);
+  const normalizedCheckIn = optionalGuestCheckInTime(guestCheckInTime);
   const normalizedClientPrice = optionalJobPrice(clientPrice);
   const normalizedCleanerPayout = optionalJobPrice(cleanerPayout);
 
@@ -198,6 +208,8 @@ export function buildCurrentJobCreateData({
   if (normalizedScheduledStart) {
     job.scheduledStart = normalizedScheduledStart;
   }
+
+  if (normalizedCheckIn) job.guestCheckInTime = normalizedCheckIn;
 
   if (normalizedGuestName) {
     job.guestName = normalizedGuestName;

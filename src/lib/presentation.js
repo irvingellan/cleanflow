@@ -51,11 +51,15 @@ export function removedServiceParts(service, language = "en") {
   return { when: [date, time].filter(Boolean).join(" · "), where: propertyName || "" };
 }
 
-export function formatServiceTime(value, language = "en") {
-  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
+export function isServiceTime(value) {
+  return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+export function formatServiceTime(value, language = "en", { hourCycle } = {}) {
+  if (!isServiceTime(value)) return null;
   const [hour, minute] = value.split(":").map(Number);
   return new Intl.DateTimeFormat({ pt: "pt-BR", en: "en-US", es: "es-US" }[language] || "en-US", {
-    hour: "numeric", minute: "2-digit",
+    hour: hourCycle ? "2-digit" : "numeric", minute: "2-digit", hourCycle,
   }).format(new Date(2000, 0, 1, hour, minute));
 }
 

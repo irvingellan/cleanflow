@@ -621,6 +621,7 @@ export async function createJob({
   clientName,
   scheduledDate,
   scheduledStart,
+  guestCheckInTime,
   clientPrice,
   cleanerPayout,
   billing,
@@ -638,6 +639,7 @@ export async function createJob({
     clientName,
     scheduledDate,
     scheduledStart,
+    guestCheckInTime,
     clientPrice,
     cleanerPayout,
     billing,
@@ -700,7 +702,7 @@ export async function updateJobPrices(jobId, { clientPrice, cleanerPayout, billi
 }
 
 export async function updateJobDetails(jobId, details) {
-  const { guestName, notes, ...updates } = buildJobDetailsUpdate(details);
+  const { guestName, notes, guestCheckInTime, ...updates } = buildJobDetailsUpdate(details);
   const reference = jobDocument(jobId);
 
   await runTransaction(db, async (transaction) => {
@@ -725,6 +727,7 @@ export async function updateJobDetails(jobId, details) {
       ...updates,
       ...prices,
       guestName: guestName ?? deleteField(),
+      ...(details.guestCheckInTime === undefined ? {} : { guestCheckInTime: guestCheckInTime ?? deleteField() }),
       notes: notes ?? deleteField(),
     });
   });

@@ -651,6 +651,18 @@
 .hb-root .hb-now-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .hb-root .hb-now-label { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 .hb-root .hb-now-time { font-size: 34px; font-weight: 800; line-height: 1; }
+.hb-root .hb-now-since { display: block; font-size: 13px; }
+.hb-root .hb-now-facts,
+.hb-root .hb-now-check-in { font-size: 14px; }
+.hb-root .hb-now-check-in { margin: 0; }
+.hb-root .hb-now-progress {
+  height: 4px;
+  margin-top: 5px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+.hb-root .hb-now-progress > span { display: block; height: 100%; background: #0a0a0a; }
 .hb-root .hb-now-body {
   display: grid;
   gap: 6px;

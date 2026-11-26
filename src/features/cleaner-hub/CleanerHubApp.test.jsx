@@ -38,6 +38,36 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("CleanerHubApp (live data boundary)", () => {
+  it("shows synced progress, start time and a countdown on the assigned NowCard until check-in", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-25T21:42:00Z"));
+    const { service, handlers } = fakeService();
+    const entry = {
+      ...entries[0], scheduledDate: "2026-11-25", jobStatus: "IN_PROGRESS",
+      startedAtMs: Date.parse("2026-11-25T19:34:00Z"), guestCheckInTime: "15:00",
+      checklist: { status: "DRAFT", started: true, answeredItems: 22, totalItems: 30, photoCount: 9 },
+    };
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [entry], fromCache: false }));
+    const card = within(screen.getByRole("region", { name: "Limpando agora" }));
+    expect(card.getByText("desde 11:34")).toBeVisible();
+    expect(card.getByText(/22 de 30 itens · 9 fotos/)).toBeVisible();
+    expect(card.getByText(/Última sincronização/)).toBeVisible();
+    expect(card.getByRole("img", { name: "22 de 30 itens respondidos" })).toBeVisible();
+    expect(card.getByText("Hóspede entra às 15:00 · faltam 1h18")).toBeVisible();
+    act(() => vi.advanceTimersByTime(78 * 60000));
+    expect(card.queryByText(/Hóspede entra/)).not.toBeInTheDocument();
+  });
+
+  it("omits missing facts on older NowCard entries", () => {
+    const { service, handlers } = fakeService();
+    render(<CleanerHubApp hubOptions={{ service }} />);
+    act(() => handlers.agenda({ entries: [{ ...entries[0], scheduledDate: today, jobStatus: "IN_PROGRESS" }], fromCache: false }));
+    const card = within(screen.getByRole("region", { name: "Limpando agora" }));
+    expect(card.queryByText(/desde|Última sincronização|Hóspede entra/)).not.toBeInTheDocument();
+    expect(card.queryByRole("img")).not.toBeInTheDocument();
+  });
+
   it.each([
     ["Agendadas", entries[0]],
     ["Ofertas", entries[1]],

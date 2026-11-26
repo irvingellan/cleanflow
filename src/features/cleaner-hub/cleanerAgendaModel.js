@@ -3,12 +3,39 @@
  * server-written cleanerAgenda projection; nothing here decides authorization.
  */
 
+import { isServiceTime } from "../../lib/presentation.js";
+
 export const completedWindowDays = 30;
 const openStatuses = ["ASSIGNED", "IN_PROGRESS"];
 
+const serviceTimeZone = "America/Los_Angeles";
 const serviceDateFormatter = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+  timeZone: serviceTimeZone, year: "numeric", month: "2-digit", day: "2-digit",
 });
+const serviceClockFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: serviceTimeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+const serviceOffsetFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: serviceTimeZone, timeZoneName: "longOffset",
+});
+
+export function serviceClockTime(date) {
+  return serviceClockFormatter.format(date);
+}
+
+export function guestCheckInMinutes(date, time, now) {
+  if (!isServiceTime(time) || date !== localDateKey(now)) return null;
+  // Try both offsets in effect on the service date. During a clock change,
+  // use the first occurrence of a repeated time and skip nonexistent times.
+  const checkIns = ["00:00", "23:59"].flatMap((probe) => {
+    const offset = serviceOffsetFormatter.formatToParts(new Date(`${date}T${probe}Z`))
+      .find((part) => part.type === "timeZoneName").value.slice(3);
+    const instant = Date.parse(`${date}T${time}${offset}`);
+    return serviceClockTime(instant) === time ? [instant] : [];
+  });
+  const remaining = Math.min(...checkIns) - now.getTime();
+  return Number.isFinite(remaining) && remaining > 0 ? Math.ceil(remaining / 60000) : null;
+}
 
 export function localDateKey(date = new Date()) {
   const parts = serviceDateFormatter.formatToParts(date);
@@ -109,6 +136,22 @@ export function entriesInMonth(entries = [], month) {
 }
 
 const runStatuses = ["NONE", "DRAFT", "READY_FOR_REVIEW", "ABANDONED"];
+
+export function normalizeNowCardFacts(entry) {
+  const integer = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const checklist = entry.checklist;
+  const hasProgress = checklist?.status === "DRAFT" || checklist?.status === "READY_FOR_REVIEW";
+  const totalItems = hasProgress ? integer(checklist.totalItems) : null;
+  const answered = hasProgress ? integer(checklist.answeredItems) : null;
+  const startedAtMs = integer(entry.startedAtMs);
+  return {
+    totalItems,
+    answeredItems: answered !== null && totalItems !== null && answered <= totalItems ? answered : null,
+    photoCount: hasProgress ? integer(checklist.photoCount) : null,
+    startedAtMs: startedAtMs !== null && startedAtMs <= 8.64e15 ? startedAtMs : null,
+    guestCheckInTime: isServiceTime(entry.guestCheckInTime) ? entry.guestCheckInTime : null,
+  };
+}
 
 /**
  * Cleaner-facing checklist situation for an assigned agenda entry.

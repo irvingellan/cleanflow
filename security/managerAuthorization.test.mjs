@@ -545,6 +545,25 @@ test("organization A manager cannot use organization B paths regardless of paylo
     .put(new Uint8Array([1]), { contentType: "image/jpeg" }));
 });
 
+test("only managers can set or clear an optional HH:mm guest check-in time on Jobs", async () => {
+  const path = `${root}/jobs/check-in-fixture`;
+  const managerJob = account("manager").firestore().doc(path);
+  const fixture = { organizationId: org, scheduledDate: "2026-11-25", operationalStatus: "UNASSIGNED" };
+  for (const value of ["24:00", "09:60", "9:00", "15:00:30", 1500, "", null]) {
+    await assertFails(managerJob.set({ ...fixture, guestCheckInTime: value }));
+  }
+  await assertSucceeds(managerJob.set({ ...fixture, guestCheckInTime: "00:00" }));
+  await assertSucceeds(managerJob.update({ guestCheckInTime: "23:59" }));
+  await assertFails(managerJob.update({ guestCheckInTime: "24:00" }));
+  for (const actor of [account("cleaner"), account("other-manager"), environment.unauthenticatedContext()]) {
+    const job = actor.firestore().doc(path);
+    await assertFails(job.get());
+    await assertFails(job.update({ guestCheckInTime: "15:00" }));
+  }
+  await assertSucceeds(managerJob.update({ guestCheckInTime: deleteField() }));
+  assert.equal((await managerJob.get()).get("guestCheckInTime"), undefined);
+});
+
 test("Job checklist context revision is monotonic and Assignment mutations advance it atomically", async () => {
   const db = account("manager").firestore();
   const job = db.doc(`${root}/jobs/job`);

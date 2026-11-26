@@ -149,6 +149,11 @@ export function JobDetailsSection({
             </div>
           )}
           <label>
+            {translate("jobs.guestCheckIn")}
+            <input type="time" name="guestCheckInTime" value={jobDetailValues.guestCheckInTime}
+              onChange={(event) => setJobDetailValues((current) => ({ ...current, guestCheckInTime: event.target.value }))} />
+          </label>
+          <label>
             {translate("jobs.guestName")}
             <input
               type="text"

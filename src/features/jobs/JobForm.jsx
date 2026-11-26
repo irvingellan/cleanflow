@@ -2,6 +2,7 @@ import { useState } from "react";
 import { defaultServiceType } from "../../../functions/src/serviceTypes.js";
 import { BackButton } from "../../components/UiPrimitives.jsx";
 import { useTranslation } from "../../i18n/translations.js";
+import { isServiceTime } from "../../lib/presentation.js";
 import { maximumGuestNameLength } from "./jobCompatibility.js";
 import { resolveJobPricing } from "../pricing/pricingModel.js";
 import { withHourlyServiceDefaults } from "../pricing/hourlyDefaults.js";
@@ -26,6 +27,7 @@ export function CreateCleaningForm({
     serviceType: defaultServiceType,
     scheduledDate: "",
     scheduledStart: "11:00",
+    guestCheckInTime: "",
     ...jobPriceFormValues(resolveJobPricing({ serviceType: defaultServiceType }, { property })),
     guestName: "",
     notes: "",
@@ -105,6 +107,12 @@ export function CreateCleaningForm({
       return;
     }
 
+    if (event.currentTarget.elements.guestCheckInTime.validity.badInput
+      || (formValues.guestCheckInTime && !isServiceTime(formValues.guestCheckInTime))) {
+      setSaveError(translate("jobs.scheduleInvalidTime"));
+      return;
+    }
+
     const prices = readJobPriceForm(formValues);
     const notes = formValues.notes.trim();
 
@@ -123,6 +131,7 @@ export function CreateCleaningForm({
         serviceType: formValues.serviceType,
         scheduledDate: formValues.scheduledDate,
         scheduledStart: formValues.scheduledStart,
+        ...(formValues.guestCheckInTime && { guestCheckInTime: formValues.guestCheckInTime }),
         ...prices,
         notes,
         guestName: formValues.guestName,
@@ -229,6 +238,11 @@ export function CreateCleaningForm({
             value={formValues.scheduledStart}
             onChange={updateField}
           />
+        </label>
+
+        <label>
+          {translate("jobs.guestCheckIn")}
+          <input type="time" name="guestCheckInTime" value={formValues.guestCheckInTime} onChange={updateField} />
         </label>
 
         <JobPriceFields values={formValues} onChange={updateField} disabled={isSaving} />

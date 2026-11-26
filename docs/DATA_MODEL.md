@@ -124,6 +124,9 @@ Conceptual fields include:
   Checklist Run when created. See [Service types V1](SERVICE_TYPES_V1.md);
 - scheduled date/time, timezone, monotonic `scheduleRevision`, and Job-scoped
   schedule audit history;
+- optional `guestCheckInTime` (`HH:mm` on the scheduled date in the operating time
+  zone), set in the manager's Job form and visible on the assigned cleaner's
+  focus card before check-in on that day;
 - `checklistContextRevision`: a monotonic cleaner-capability invalidation value;
 - overall operational status;
 - Job-effective instructions, checklist/evidence references, and notes;

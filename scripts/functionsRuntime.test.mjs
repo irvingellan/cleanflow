@@ -110,6 +110,7 @@ test("candidate declarations produce explicit20 in actual CLI JSON and update ma
     "submitChecklistRunForReview",
     "submitFeedback",
     "syncCleanerAgendaOnAssignmentWrite",
+    "syncCleanerAgendaOnChecklistProgress",
     "syncCleanerAgendaOnChecklistRunWrite",
     "syncCleanerAgendaOnChecklistStart",
     "syncCleanerAgendaOnJobWrite",
