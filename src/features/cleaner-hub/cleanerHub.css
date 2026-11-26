@@ -329,10 +329,13 @@
   text-align: left;
 }
 .hb-job:hover { border-color: var(--v2-color-brand); }
+/* F10 (cleaners' request): service cards stay light inside the dark theme so date,
+ * address, time and pay read at a glance. Solid neutral light, black text. */
 .hb-root[data-theme="dark"] .hb-job {
-  --card-secondary: var(--v2-color-border-strong);
-  color: var(--v2-color-canvas);
-  background: var(--v2-color-text-secondary);
+  --card-secondary: #3f3f46;
+  color: #000000;
+  background: #e4e4e7;
+  border-color: #e4e4e7;
 }
 .hb-job-main { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
 .hb-job-main > strong { font-size: 17px; line-height: 1.25; }

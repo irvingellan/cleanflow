@@ -866,3 +866,24 @@ body {
     margin-right: 0;
   }
 }
+
+/* ---------- OLED dark: no gradients, blur or soft shadows (dark theme only) ---------- */
+:root[data-theme="dark"] .cf-brand__mark,
+.hb-root[data-theme="dark"] .hb-logo {
+  background: var(--cf-brand);
+}
+
+:root[data-theme="dark"] .cf-auth {
+  background: var(--cf-canvas);
+}
+
+:root[data-theme="dark"] .public-checklist__save-status p {
+  background: var(--cf-surface-elevated);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+:root[data-theme="dark"] .whats-new-dialog,
+:root[data-theme="dark"] .feedback-dialog {
+  box-shadow: var(--cf-shadow-float);
+}
