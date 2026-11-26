@@ -635,3 +635,54 @@
 .hb-root .hb-signout--confirm { display: grid; gap: 8px; text-align: left; padding: 14px; border: 1px solid var(--v2-color-border); border-radius: 16px; background: var(--v2-color-surface); }
 .hb-root .hb-signout--confirm p:first-child { font-weight: 700; }
 .hb-root .hb-signout__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* ---------- Now card (Vira-style focus card, preview) ----------
+ * One lime card for the job to focus on today. Lime background with near-black
+ * text and a black action button reads in sun and on a true-black dark theme alike. */
+.hb-root .hb-now {
+  display: grid;
+  gap: 12px;
+  margin: 4px 0 18px;
+  padding: 18px;
+  border-radius: 18px;
+  color: #0a0a0a;
+  background: #c8f542;
+}
+.hb-root .hb-now-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.hb-root .hb-now-label { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.hb-root .hb-now-time { font-size: 34px; font-weight: 800; line-height: 1; }
+.hb-root .hb-now-body {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.hb-root .hb-now-place { font-size: 22px; line-height: 1.2; overflow-wrap: anywhere; }
+.hb-root .hb-now-line { display: flex; align-items: baseline; gap: 6px; font-size: 15px; }
+.hb-root .hb-now-line .mw-icon { align-self: flex-start; margin-top: 2px; flex-shrink: 0; }
+.hb-root .hb-now-meta { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 14px; color: #2b3410; }
+.hb-root .hb-now-meta > * + *::before { content: "·"; padding-right: 8px; }
+.hb-root .hb-now-meta strong { color: #0a0a0a; }
+.hb-root .hb-now-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  border: 0;
+  border-radius: 14px;
+  color: #ffffff;
+  background: #0a0a0a;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hb-root .hb-now-action:disabled { opacity: 0.7; cursor: progress; }
+.hb-root .hb-now-body:focus-visible,
+.hb-root .hb-now-action:focus-visible { outline: 3px solid #0a0a0a; outline-offset: 3px; }

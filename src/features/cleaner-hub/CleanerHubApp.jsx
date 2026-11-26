@@ -304,6 +304,60 @@ function Scheduled({ t, entries, today, live, onOpen, onAnswer, navigation, setN
 
 /* ---------- screens ---------- */
 
+/** The one job to focus on today: the cleaning in progress, else the next one today.
+ * Vira-style focus card: big time, place, pay and a direct checklist button. */
+function nowEntry(todayEntries) {
+  const open = todayEntries.filter((entry) => entry.kind !== "OFFER" && ["ASSIGNED", "IN_PROGRESS"].includes(entry.jobStatus));
+  return open.find((entry) => entry.jobStatus === "IN_PROGRESS") || open[0] || null;
+}
+
+function NowCard({ t, hub, entry, onOpen }) {
+  const [opening, setOpening] = useState(false);
+  const situation = checklistSituation(entry);
+  const inProgress = entry.jobStatus === "IN_PROGRESS";
+  const service = serviceTypeLabel(t.lang, entry.serviceType);
+  const amount = hubOfferPay(entry, t.lang);
+  const actionKey = situation.state === "started" ? "hb.clst.started.action"
+    : situation.state === "available" ? "hb.clst.available.action" : "hb.job.openChecklist";
+  const canOpenChecklist = !["submitted", "closed"].includes(situation.state);
+
+  async function openChecklist() {
+    setOpening(true);
+    try {
+      const result = await hub.openChecklist(entry.jobId);
+      if (result?.state === "ready" && result.token) {
+        window.location.assign(`/checklist?t=${encodeURIComponent(result.token)}`);
+        return;
+      }
+    } catch { /* fall back to the job screen, which explains the checklist state */ }
+    setOpening(false);
+    onOpen(entry);
+  }
+
+  return (
+    <section className="hb-now" data-now-job-id={entry.jobId} aria-label={t(inProgress ? "hb.now.inProgress" : "hb.now.next")}>
+      <div className="hb-now-top">
+        <span className="hb-now-label">{t(inProgress ? "hb.now.inProgress" : "hb.now.next")}</span>
+        <span className="hb-now-time tnum">{t.time(entry.scheduledStart) || t("hb.timeNotSet")}</span>
+      </div>
+      <button type="button" className="hb-now-body" onClick={() => onOpen(entry)} data-job-id={entry.jobId}>
+        <strong className="hb-now-place">{entry.propertyName || entry.address || "—"}</strong>
+        {entry.address && entry.address !== entry.propertyName && <span className="hb-now-line"><HubIcon name="pin" size={15} />{entry.address}</span>}
+        <span className="hb-now-meta">
+          {service && <span>{service}</span>}
+          {amount && <strong>{amount}</strong>}
+          {checklistChipStates.includes(situation.state) && <span data-checklist-state={situation.state}>{t(`hb.clst.${situation.state}.chip`)}</span>}
+        </span>
+      </button>
+      {canOpenChecklist && (
+        <button type="button" className="hb-now-action" onClick={openChecklist} disabled={opening}>
+          <HubIcon name="clipCheck" size={18} />{t(actionKey)}
+        </button>
+      )}
+    </section>
+  );
+}
+
 function Agenda({ t, hub, name, segment, setSegment, go, today, scheduledNavigation, setScheduledNavigation }) {
   const { schedule, freshness } = hub;
   const list = segment === "today" ? schedule.today : segment === "upcoming" ? schedule.upcoming : schedule.completed;
@@ -311,6 +365,8 @@ function Agenda({ t, hub, name, segment, setSegment, go, today, scheduledNavigat
   const openJobs = [...schedule.today, ...schedule.upcoming];
   const pendingChanges = openJobs.filter(entry => entry.reschedule?.state === "PENDING");
   const pendingChecklists = openJobs.filter((entry) => checklistSituation(entry).pending);
+  const focus = segment === "today" ? nowEntry(schedule.today) : null;
+  const rest = focus ? list.filter((entry) => entry.id !== focus.id) : list;
   return (
     <div className="hb-screen">
       <header className="hb-hello">
@@ -349,10 +405,12 @@ function Agenda({ t, hub, name, segment, setSegment, go, today, scheduledNavigat
           </button>
         ))}
       </div>
+      {focus && <NowCard t={t} hub={hub} entry={focus} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} />}
       {segment === "upcoming"
         ? <Scheduled t={t} entries={list} today={today} onAnswer={hub.answerReschedule} live={freshness.state === "live"} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} navigation={scheduledNavigation} setNavigation={setScheduledNavigation} />
-        : list.length
-          ? <DayGroups t={t} entries={list} today={today} onAnswer={hub.answerReschedule} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} />
+        : rest.length
+          ? <DayGroups t={t} entries={rest} today={today} onAnswer={hub.answerReschedule} onOpen={(entry) => go({ type: "job", jobId: entry.jobId })} />
+          : focus ? null
           : (
             <div className={`hb-empty${freshness.state === "live" ? "" : " is-uncertain"}`}>
               <HubIcon name={freshness.state === "live" ? "checkCircle" : "info"} size={22} />

@@ -17,6 +17,8 @@ const M = {
   "hb.helloSub": ["Você tem {count} limpeza(s) confirmada(s) pela frente.", "You have {count} confirmed cleaning(s) ahead.", "Tiene {count} limpieza(s) confirmada(s) por delante."],
   "hb.view": ["Mostrar", "Show", "Mostrar"],
   "hb.seg.today": ["Hoje", "Today", "Hoy"],
+  "hb.now.inProgress": ["Limpando agora", "Cleaning now", "Limpiando ahora"],
+  "hb.now.next": ["Próxima limpeza", "Next cleaning", "Próxima limpieza"],
   "hb.seg.upcoming": ["Agendadas", "Scheduled", "Agendadas"],
   "hb.seg.today.aria": ["Hoje: {count} serviço(s)", "Today: {count} job(s)", "Hoy: {count} servicio(s)"],
   "hb.seg.upcoming.aria": ["Agendadas depois de hoje: {count} serviço(s)", "Scheduled after today: {count} job(s)", "Agendadas después de hoy: {count} servicio(s)"],
